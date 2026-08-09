@@ -1,0 +1,9 @@
+[package]
+name = "goldsrc-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pure Rust traits (interfaces) for GoldSrc engine interaction"
+
+[dependencies]
+goldsrc-sys = { workspace = true }

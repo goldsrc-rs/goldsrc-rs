@@ -1,0 +1,10 @@
+[package]
+name = "goldsrc-metamod-backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Metamod backend implementation for GoldSrc.rs"
+
+[dependencies]
+goldsrc-sys = { workspace = true }
+goldsrc-api = { workspace = true }

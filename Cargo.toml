@@ -17,3 +17,6 @@ repository = "https://github.com/ulquiorracode/GoldSrc.rs"
 [workspace.dependencies]
 goldsrc-sys = { path = "goldsrc-sys", version = "0.1.0" }
 goldsrc-api = { path = "goldsrc-api", version = "0.1.0" }
+goldsrc-metamod-backend = { path = "goldsrc-metamod-backend", version = "0.1.0" }
+goldsrc-wasm-host = { path = "goldsrc-wasm-host", version = "0.1.0" }
+goldsrc = { path = "goldsrc", version = "0.1.0" }
