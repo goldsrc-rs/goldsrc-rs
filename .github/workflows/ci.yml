@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-msvc
+
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "22.0"
+
+      - name: Setup references
+        run: python scripts/setup.py
+
+      - name: Build
+        run: cargo build --target i686-pc-windows-msvc --workspace
+        env:
+          LIBCLANG_PATH: ${{ env.LLVM_PATH }}\lib
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --target i686-pc-windows-msvc --workspace -- -D warnings
+
+  build-linux:
+    name: Build (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-unknown-linux-gnu
+
+      - name: Install LLVM and clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang libclang-dev
+
+      - name: Install 32-bit libraries
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib
+
+      - name: Setup references
+        run: python scripts/setup.py
+
+      - name: Build
+        run: cargo build --target i686-unknown-linux-gnu --workspace
+        env:
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --target i686-unknown-linux-gnu --workspace -- -D warnings
