@@ -1,11 +1,11 @@
 # GoldSrc.rs Roadmap
 
-## Stage 1: Foundation & FFI
+## Stage 1: Foundation & FFI — ✅ Complete
 
-- [ ] Set up Cargo Workspace and CI/CD (build for `i686-pc-windows-msvc` and `i686-unknown-linux-gnu`).
-- [ ] Collect reference headers in `references/` (HLSDK, `meta_api.h`).
-- [ ] Write `build.rs` for `goldsrc-sys` that generates Rust structs from C++ headers via `bindgen`.
-- [ ] Export entry-point functions `GiveFnptrsToDll` and `Meta_Attach` so Metamod can load our Rust library.
+- [x] Set up Cargo Workspace and CI/CD (build for `i686-pc-windows-msvc` and `i686-unknown-linux-gnu`).
+- [x] Collect reference headers in `references/` (HLSDK, `meta_api.h`).
+- [x] Write `build.rs` for `goldsrc-sys` that generates Rust structs from C++ headers via `bindgen`.
+- [x] Export entry-point functions `GiveFnptrsToDll` and `Meta_Attach` so Metamod can load our Rust library.
 
 ## Stage 2: Metamod Backend & Safe Abstractions
 
