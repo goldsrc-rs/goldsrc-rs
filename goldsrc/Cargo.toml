@@ -1,0 +1,12 @@
+[package]
+name = "goldsrc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Public framework (SDK) for GoldSrc.rs plugin developers"
+
+[dependencies]
+goldsrc-sys = { workspace = true }
+goldsrc-api = { workspace = true }
+goldsrc-metamod-backend = { workspace = true }
+goldsrc-wasm-host = { workspace = true }
