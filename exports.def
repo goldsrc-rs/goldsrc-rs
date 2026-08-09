@@ -1,5 +1,0 @@
-EXPORTS
-    GiveFnptrsToDll
-    Meta_Query
-    Meta_Attach
-    Meta_Detach
