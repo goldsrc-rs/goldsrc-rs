@@ -5,8 +5,8 @@
 mod meta_types;
 
 use goldsrc_api::{Engine, Entity, Player};
-use std::ffi::CString;
 use std::ffi::c_void;
+use std::ffi::CString;
 
 use meta_types::*;
 
@@ -263,8 +263,6 @@ static PLUGIN_INFO: plugin_info_t = plugin_info_t {
     loadable: PLUG_LOADTIME::PT_ANYTIME,
     unloadable: PLUG_LOADTIME::PT_ANYTIME,
 };
-
-
 
 /// Get the meta utility functions.
 fn get_meta_util_funcs() -> mutil_funcs_t {
