@@ -17,7 +17,10 @@ static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
 ///
 /// # Safety
 /// Must be called exactly once from `GiveFnptrsToDll`.
-pub unsafe fn init_backend(engfuncs: *const goldsrc_sys::enginefuncs_t, globals: *const goldsrc_sys::globalvars_t) {
+pub unsafe fn init_backend(
+    engfuncs: *const goldsrc_sys::enginefuncs_t,
+    globals: *const goldsrc_sys::globalvars_t,
+) {
     // SAFETY: Called once during initialization, before any reads.
     unsafe {
         if !engfuncs.is_null() {
@@ -82,10 +85,7 @@ impl Engine for MetamodBackend {
             }
             let cname = CString::new(classname).unwrap_or_default();
             call_engfunc!(funcs.pfnSetModel, edict, cname.as_ptr());
-            Some(Entity {
-                index: 0,
-                edict,
-            })
+            Some(Entity { index: 0, edict })
         }
     }
 
