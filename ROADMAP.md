@@ -1,34 +1,34 @@
 # GoldSrc.rs Roadmap
 
-## Этап 1: Фундамент и FFI (Foundation)
+## Stage 1: Foundation & FFI
 
-- [ ] Настроить Cargo Workspace и CI/CD (сборка под `i686-pc-windows-msvc` и `i686-unknown-linux-gnu`).
-- [ ] Собрать референсы в папку `references/` (HLSDK, meta_api.h).
-- [ ] Написать `build.rs` скрипт для `goldsrc-sys`, который через `bindgen` сгенерирует Rust-структуры из C++ заголовков.
-- [ ] Экспортировать базовые функции `GiveFnptrsToDll` и `Meta_Attach`, чтобы Metamod смог загрузить нашу Rust-библиотеку.
+- [ ] Set up Cargo Workspace and CI/CD (build for `i686-pc-windows-msvc` and `i686-unknown-linux-gnu`).
+- [ ] Collect reference headers in `references/` (HLSDK, `meta_api.h`).
+- [ ] Write `build.rs` for `goldsrc-sys` that generates Rust structs from C++ headers via `bindgen`.
+- [ ] Export entry-point functions `GiveFnptrsToDll` and `Meta_Attach` so Metamod can load our Rust library.
 
-## Этап 2: Metamod Backend & Safe Abstractions
+## Stage 2: Metamod Backend & Safe Abstractions
 
-- [ ] Перехват и обертка логирования (`SERVER_PRINT`, `ALERT`). Сервер должен уметь выводить "Hello from Rust!" в консоль.
-- [ ] Обертка над базовыми структурами движка: `edict_t`, `entvars_t`, `CBaseEntity`.
-- [ ] Реализация хуков (Hooks) базовых событий (`DispatchSpawn`, `ClientConnect`, `ClientCommand`) через функции Metamod.
-- [ ] Создание системы VTable-хуков (с использованием оффсетов из ReHLDS/HamSandwich для совместимости Windows/Linux).
+- [ ] Wrap logging (`SERVER_PRINT`, `ALERT`). Server should print "Hello from Rust!" to console.
+- [ ] Wrap basic engine structures: `edict_t`, `entvars_t`, `CBaseEntity`.
+- [ ] Implement hooks for basic events (`DispatchSpawn`, `ClientConnect`, `ClientCommand`) via Metamod.
+- [ ] Build VTable-hook system (using offsets from ReHLDS/HamSandwich for Windows/Linux compatibility).
 
-## Этап 3: WebAssembly Plugin Host (Изоляция и Hot-Reload)
+## Stage 3: WebAssembly Plugin Host (Isolation & Hot-Reload)
 
-- [ ] Интеграция крейта `wasmtime` в ядро.
-- [ ] Проектирование WASI-биндингов для общения Wasm-плагинов с Ядром.
-- [ ] Реализация системы Hot-Reload: автоматическое отслеживание изменений `.wasm` файлов в папке `plugins/` и их перезагрузка на лету.
-- [ ] Написание первого тестового Wasm-плагина на Rust (например, плагин, убивающий игрока по команде).
+- [ ] Integrate `wasm3` runtime into the core.
+- [ ] Design WASI bindings for Wasm plugins to communicate with the core.
+- [ ] Implement hot-reload: watch `.wasm` files in `plugins/` and reload on change.
+- [ ] Write a test Wasm plugin (e.g., a plugin that kills a player on command).
 
-## Этап 4: Разработческий Фреймворк (Developer Experience)
+## Stage 4: Developer Framework (DX)
 
-- [ ] Создание крейта `goldsrc.rs` с макросами процедурного программирования.
-- [ ] Удобная маршрутизация команд (Command Router).
-- [ ] API для работы с базой данных (переиспользование экосистемы Rust — `sqlx`, `tokio`).
-- [ ] Документация и шаблоны `cargo generate` для быстрого старта новых разработчиков.
+- [ ] Create `goldsrc` crate with procedural macros.
+- [ ] Command router.
+- [ ] Database API (reuse `sqlx`, `tokio`).
+- [ ] Documentation and `cargo generate` templates.
 
-## Этап 5: Standalone Backend (Будущее)
+## Stage 5: Standalone Backend (Future)
 
-- [ ] Разработка собственного загрузчика `mp.dll`, обходящего оригинальный Metamod.
-- [ ] Прямой перехват интерфейсов `hlds.exe` / `hlds_linux`.
+- [ ] Build a custom `mp.dll` loader that bypasses the original Metamod.
+- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces.
