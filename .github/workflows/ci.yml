@@ -24,7 +24,6 @@ jobs:
       - name: Install LLVM (winget)
         run: |
           winget install LLVM.LLVM --accept-package-agreements --accept-source-agreements
-          echo "LLVM_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
       - name: Setup references
         run: python scripts/setup.py
@@ -32,7 +31,7 @@ jobs:
       - name: Build
         run: cargo build --target i686-pc-windows-msvc --workspace
         env:
-          LIBCLANG_PATH: ${{ env.LLVM_PATH }}\lib
+          LIBCLANG_PATH: C:\Program Files\LLVM\lib
 
       - name: Check formatting
         run: cargo fmt -- --check
