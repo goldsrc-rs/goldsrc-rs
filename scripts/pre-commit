@@ -1,11 +1,32 @@
-#!/usr/bin/env bash
-# Pre-commit hook: auto-format Rust code
-# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+#!/usr/bin/env python3
+"""Pre-commit hook: auto-format Rust code.
 
-set -e
+Install:
+    cp scripts/pre-commit .git/hooks/pre-commit
+    chmod +x .git/hooks/pre-commit
 
-echo "Running cargo fmt..."
-cargo fmt --all
+Or use pre-commit framework:
+    pip install pre-commit
+    pre-commit install
+"""
 
-# Stage any formatting changes
-git add -u
+import subprocess
+import sys
+
+
+def main():
+    print("Running cargo fmt...")
+    result = subprocess.run(["cargo", "fmt", "--all"], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print("cargo fmt failed:", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        return 1
+
+    # Stage any formatting changes
+    subprocess.run(["git", "add", "-u"], capture_output=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
