@@ -1,65 +1,38 @@
 #!/usr/bin/env python3
-"""Deploy script for GoldSrc.rs Metamod plugin.
+r"""Deploy script for GoldSrc.rs Metamod plugin.
 
-Builds the plugin and deploys it to a CS 1.6 / GoldSrc server.
+Copies the built plugin to a game server and registers it in Metamod's plugins.ini.
 
 Usage:
-    python scripts/deploy.py                    # Deploy to default path
+    python scripts/deploy.py                                    # Deploy to default path
     python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient"
-    python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient" --no-build  # Skip build
+    python scripts/deploy.py --path "..." --no-build            # Skip build step
 """
 
 import argparse
-import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-
-def get_repo_root() -> Path:
-    return Path(__file__).parent.parent
-
-
-def build_plugin(target: str = "i686-pc-windows-msvc") -> Path:
-    """Build the Metamod backend plugin."""
-    print(f"Building plugin for {target}...")
-    repo_root = get_repo_root()
-
-    env = os.environ.copy()
-    env["LIBCLANG_PATH"] = r"C:\Program Files\LLVM\lib"
-
-    result = subprocess.run(
-        ["cargo", "build", "--target", target, "-p", "goldsrc-metamod-backend", "--release"],
-        cwd=repo_root,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        print("Build failed:", file=sys.stderr)
-        print(result.stderr, file=sys.stderr)
-        sys.exit(1)
-
-    # Find the built DLL
-    dll_path = repo_root / "target" / target / "release" / "goldsrc_metamod_backend.dll"
-    if not dll_path.exists():
-        print(f"Error: DLL not found at {dll_path}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"Built: {dll_path}")
-    return dll_path
+# Import build function from sibling module
+try:
+    from build import build_plugin
+except ImportError:
+    # Allow running directly without package context
+    sys.path.insert(0, str(Path(__file__).parent))
+    from build import build_plugin
 
 
 def deploy_plugin(dll_path: Path, game_path: Path) -> None:
     """Deploy the plugin to the game's addons directory."""
+    # Find addons directory
     addons_dir = game_path / "cstrike" / "addons"
     if not addons_dir.exists():
-        # Try other common paths
         addons_dir = game_path / "addons"
         if not addons_dir.exists():
-            print(f"Error: Addons directory not found at {addons_dir}", file=sys.stderr)
+            print(f"Error: Addons directory not found", file=sys.stderr)
+            print(f"  Tried: {game_path / 'cstrike' / 'addons'}", file=sys.stderr)
+            print(f"  Tried: {game_path / 'addons'}", file=sys.stderr)
             sys.exit(1)
 
     # Create our plugin directory
@@ -74,8 +47,10 @@ def deploy_plugin(dll_path: Path, game_path: Path) -> None:
     # Update plugins.ini
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
     if not plugins_ini.exists():
-        print(f"Warning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
+        print(f"\nWarning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
         print("You may need to install Metamod-r first.")
+        print("Add this line to plugins.ini manually:")
+        print(f"  metamod-rs\\metamod-rs.dll")
         return
 
     # Read existing plugins
@@ -88,9 +63,8 @@ def deploy_plugin(dll_path: Path, game_path: Path) -> None:
         return
 
     # Add our plugin to the list
-    # Find the end of the file and add our entry
     lines = content.strip().split("\n")
-    lines.append(f"our_entry ; GoldSrc.rs Metamod Backend")
+    lines.append(f"{our_entry} ; GoldSrc.rs Metamod Backend v0.1.0")
 
     plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Added to: {plugins_ini}")
@@ -102,7 +76,7 @@ def main():
         "--path",
         type=str,
         default=r"C:\Games\CS 1.6 GoldClient",
-        help="Path to the game directory",
+        help="Path to the game/server directory",
     )
     parser.add_argument(
         "--no-build",
@@ -119,23 +93,20 @@ def main():
 
     game_path = Path(args.path)
     if not game_path.exists():
-        print(f"Error: Game path not found: {game_path}", file=sys.stderr)
+        print(f"Error: Path not found: {game_path}", file=sys.stderr)
         sys.exit(1)
 
     if args.no_build:
         # Use existing DLL
-        dll_path = (
-            get_repo_root()
-            / "target"
-            / args.target
-            / "release"
-            / "goldsrc_metamod_backend.dll"
-        )
+        repo_root = Path(__file__).parent.parent
+        dll_path = repo_root / "target" / args.target / "release" / "goldsrc_metamod_backend.dll"
         if not dll_path.exists():
             print(f"Error: DLL not found at {dll_path}", file=sys.stderr)
+            print("Run without --no-build to build first.", file=sys.stderr)
             sys.exit(1)
+        print(f"Using existing DLL: {dll_path}")
     else:
-        dll_path = build_plugin(args.target)
+        dll_path = build_plugin(target=args.target, release=True)
 
     deploy_plugin(dll_path, game_path)
     print("\nDeployment complete!")
