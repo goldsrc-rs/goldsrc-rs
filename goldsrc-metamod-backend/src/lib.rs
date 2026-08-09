@@ -67,6 +67,12 @@ macro_rules! call_engfunc_ret {
 /// Metamod backend — implements `Engine` using the Metamod API.
 pub struct MetamodBackend;
 
+impl Default for MetamodBackend {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl MetamodBackend {
     /// Create a new Metamod backend instance.
     pub const fn new() -> Self {
@@ -90,12 +96,9 @@ impl Engine for MetamodBackend {
     }
 
     fn get_player(&self, index: i32) -> Option<Player> {
-        // SAFETY: Called from the game thread with valid engine functions.
-        unsafe {
-            // TODO: Get player edict by index
-            let _ = index;
-            None
-        }
+        // TODO: Get player edict by index
+        let _ = index;
+        None
     }
 
     fn server_print(&self, message: &str) {

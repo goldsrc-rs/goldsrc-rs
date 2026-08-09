@@ -4,7 +4,6 @@
 //! The runtime is abstracted behind the `PluginRuntime` trait, allowing future
 //! migration to `wasmer` or `wasmtime`.
 
-use goldsrc_api::Plugin;
 use std::path::Path;
 
 /// Plugin runtime trait — abstracts over the WASM engine.
