@@ -13,14 +13,24 @@ python scripts/setup.py --no-shallow       # Full clone (with git history)
 python scripts/setup.py --no-delete        # Keep all files (don't clean up)
 ```
 
+## build.py
+
+Builds the Metamod backend plugin.
+
+```bash
+python scripts/build.py                    # Build release for Windows
+python scripts/build.py --debug            # Build debug
+python scripts/build.py --target i686-unknown-linux-gnu  # Cross-compile for Linux
+```
+
 ## deploy.py
 
 Builds and deploys the Metamod plugin to a game server.
 
 ```bash
-python scripts/deploy.py                                        # Build and deploy to default path
-python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient"    # Deploy to specific path
-python scripts/deploy.py --path "..." --no-build                # Deploy without building
+python scripts/deploy.py                                        # Build and deploy
+python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient"    # Custom path
+python scripts/deploy.py --path "..." --no-build                # Deploy existing DLL
 ```
 
 ## pre-commit

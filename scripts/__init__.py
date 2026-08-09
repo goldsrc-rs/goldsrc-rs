@@ -1,0 +1,1 @@
+# GoldSrc.rs scripts package
