@@ -55,6 +55,63 @@ foreach ($Repo in $Repos) {
     Write-Host "  [OK] $name cloned successfully"
 }
 
+# Clean up unnecessary directories to save space
+Write-Host ""
+Write-Host "Cleaning up unnecessary directories..."
+
+# HLSDK: only need engine/, public/, common/, dlls/ for bindgen
+$hlsdkDirsToRemove = @(
+    "cl_dll",
+    "dmc",
+    "ricochet",
+    "utils",
+    "dedicated",
+    "game_shared",
+    "linux",
+    "network",
+    "pm_shared",
+    "third_party"
+)
+foreach ($dir in $hlsdkDirsToRemove) {
+    $fullPath = Join-Path $RefsDir "hlsdk\$dir"
+    if (Test-Path $fullPath) {
+        Remove-Item -Recurse -Force $fullPath
+        Write-Host "  [REMOVED] hlsdk/$dir"
+    }
+}
+
+# metamod-r: only need metamod/extra/example/include/
+$metamodPath = Join-Path $PrivateRefsDir "metamod-r"
+if (Test-Path $metamodPath) {
+    # Keep only include directory, remove everything else
+    $metamodIncludeDir = Join-Path $metamodPath "metamod\extra\example\include"
+    $metamodKeepDir = Join-Path $metamodPath "metamod"
+    
+    # Remove src/ and other unnecessary dirs
+    $metamodDirsToRemove = @(
+        "metamod\src",
+        "metamod\plugins",
+        "metamod\build",
+        "metamod\build_64",
+        "metamod\build_64_opt",
+        "metamod\build_opt",
+        "metamod\buildbot",
+        "metamod\docs",
+        "metamod\extra\example\src",
+        "metamod\extra\example\Makefile",
+        "metamod\extra\readme.txt",
+        "metamod\README.md",
+        "metamod\LICENSE"
+    )
+    foreach ($dir in $metamodDirsToRemove) {
+        $fullPath = Join-Path $metamodPath $dir
+        if (Test-Path $fullPath) {
+            Remove-Item -Recurse -Force $fullPath
+            Write-Host "  [REMOVED] metamod-r/$dir"
+        }
+    }
+}
+
 # Detect system SDK paths
 Write-Host ""
 Write-Host "Detecting system SDK paths..."

@@ -60,6 +60,31 @@ for name in "${!REPOS[@]}"; do
     echo "  [OK] $name cloned successfully"
 done
 
+# Clean up unnecessary directories to save space
+echo ""
+echo "Cleaning up unnecessary directories..."
+
+# HLSDK: only need engine/, public/, common/, dlls/ for bindgen
+for dir in cl_dll dmc ricochet utils dedicated game_shared linux network pm_shared third_party; do
+    full_path="$REFS_DIR/hlsdk/$dir"
+    if [[ -d "$full_path" ]]; then
+        rm -rf "$full_path"
+        echo "  [REMOVED] hlsdk/$dir"
+    fi
+done
+
+# metamod-r: only need metamod/extra/example/include/
+metamod_path="$PRIVATE_REFS_DIR/metamod-r"
+if [[ -d "$metamod_path" ]]; then
+    for dir in metamod/src metamod/plugins metamod/build metamod/build_64 metamod/build_64_opt metamod/build_opt metamod/buildbot metamod/docs metamod/extra/example/src metamod/extra/example/Makefile metamod/extra/readme.txt metamod/README.md metamod/LICENSE; do
+        full_path="$metamod_path/$dir"
+        if [[ -d "$full_path" ]]; then
+            rm -rf "$full_path"
+            echo "  [REMOVED] metamod-r/$dir"
+        fi
+    done
+fi
+
 # Detect system SDK paths
 echo ""
 echo "Detecting system SDK paths..."
