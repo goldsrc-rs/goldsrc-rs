@@ -57,13 +57,28 @@ fn main() {
     includes.push(format!("-I{}", metamod_parent.display()));
     includes.push(format!("-I{}", metamod.display()));
 
-    // System includes from config
+    // System includes from config (parse TOML array)
+    // Simple parser: find all quoted strings in the include_paths array
+    let mut in_include_paths = false;
     for line in config.lines() {
-        let line = line.trim();
-        if line.starts_with("include_path") {
-            let path = line.splitn(2, '=').nth(1).unwrap_or("").trim().trim_matches('"');
-            if !path.is_empty() {
-                includes.push(format!("-I{}", path));
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("include_paths") {
+            in_include_paths = true;
+        }
+
+        if in_include_paths {
+            // Check for array end
+            if trimmed.contains(']') {
+                in_include_paths = false;
+            }
+
+            // Extract quoted strings from the line
+            for part in trimmed.split('"') {
+                let part = part.trim().trim_end_matches(',').trim();
+                if !part.is_empty() && !part.starts_with('[') && !part.starts_with(']') {
+                    includes.push(format!("-I{}", part));
+                }
             }
         }
     }
