@@ -23,7 +23,18 @@ except ImportError:
     from build import build_plugin
 
 
-def deploy_plugin(dll_path: Path, game_path: Path) -> None:
+def get_platform_prefix(target: str) -> str:
+    """Get the Metamod platform prefix for a build target."""
+    if "windows" in target:
+        return "win32"
+    elif "linux" in target:
+        return "linux"
+    else:
+        # Default to win32 for unknown targets
+        return "win32"
+
+
+def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-windows-msvc") -> None:
     """Deploy the plugin to the game's addons directory."""
     # Find addons directory
     addons_dir = game_path / "cstrike" / "addons"
@@ -39,10 +50,15 @@ def deploy_plugin(dll_path: Path, game_path: Path) -> None:
     plugin_dir = addons_dir / "metamod-rs"
     plugin_dir.mkdir(exist_ok=True)
 
-    # Copy the DLL
-    dest_dll = plugin_dir / "metamod-rs.dll"
-    shutil.copy2(dll_path, dest_dll)
-    print(f"Copied to: {dest_dll}")
+    # Copy the DLL/SO
+    if "windows" in target:
+        dest_name = "metamod-rs.dll"
+    else:
+        dest_name = "metamod-rs.so"
+
+    dest_path = plugin_dir / dest_name
+    shutil.copy2(dll_path, dest_path)
+    print(f"Copied to: {dest_path}")
 
     # Update plugins.ini
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
@@ -50,21 +66,21 @@ def deploy_plugin(dll_path: Path, game_path: Path) -> None:
         print(f"\nWarning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
         print("You may need to install Metamod-r first.")
         print("Add this line to plugins.ini manually:")
-        print(f"  metamod-rs\\metamod-rs.dll")
+        print(f"  {get_platform_prefix(target)} metamod-rs\\{dest_name}")
         return
 
     # Read existing plugins
     content = plugins_ini.read_text(encoding="utf-8")
 
     # Check if our plugin is already listed
-    our_entry = "metamod-rs\\metamod-rs.dll"
-    if our_entry in content:
+    if dest_name in content:
         print(f"Plugin already listed in {plugins_ini}")
         return
 
-    # Add our plugin to the list
+    # Add our plugin to the list with platform prefix
+    prefix = get_platform_prefix(target)
     lines = content.strip().split("\n")
-    lines.append(f"{our_entry} ; GoldSrc.rs Metamod Backend v0.1.0")
+    lines.append(f"{prefix} metamod-rs\\{dest_name} ; GoldSrc.rs Metamod Backend v0.1.0")
 
     plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Added to: {plugins_ini}")
@@ -99,16 +115,20 @@ def main():
     if args.no_build:
         # Use existing DLL
         repo_root = Path(__file__).parent.parent
-        dll_path = repo_root / "target" / args.target / "release" / "goldsrc_metamod_backend.dll"
+        if "windows" in args.target:
+            lib_name = "goldsrc_metamod_backend.dll"
+        else:
+            lib_name = "libgoldsrc_metamod_backend.so"
+        dll_path = repo_root / "target" / args.target / "release" / lib_name
         if not dll_path.exists():
-            print(f"Error: DLL not found at {dll_path}", file=sys.stderr)
+            print(f"Error: Library not found at {dll_path}", file=sys.stderr)
             print("Run without --no-build to build first.", file=sys.stderr)
             sys.exit(1)
-        print(f"Using existing DLL: {dll_path}")
+        print(f"Using existing library: {dll_path}")
     else:
         dll_path = build_plugin(target=args.target, release=True)
 
-    deploy_plugin(dll_path, game_path)
+    deploy_plugin(dll_path, game_path, target=args.target)
     print("\nDeployment complete!")
     print("Start the server and check console for '[GoldSrc.rs] Hello from Rust!'")
 
