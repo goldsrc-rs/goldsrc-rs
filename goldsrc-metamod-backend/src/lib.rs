@@ -1,7 +1,4 @@
 //! Metamod backend implementation for GoldSrc.rs.
-//!
-//! This crate implements the `Engine` trait using the Metamod API.
-//! It compiles as a `.dll`/`.so` plugin for classic Metamod-r.
 
 #![allow(static_mut_refs)]
 
@@ -13,8 +10,7 @@ use std::ffi::c_void;
 
 use meta_types::*;
 
-// SAFETY: These are written once during DLL initialization (GiveFnptrsToDll)
-// and only read afterwards from the game thread. No concurrent access.
+// SAFETY: Written once during init, only read afterwards from game thread.
 static mut G_ENGFUNCS: Option<goldsrc_sys::enginefuncs_t> = None;
 static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
 static mut G_META_UTILS: Option<mutil_funcs_t> = None;
@@ -28,7 +24,6 @@ pub unsafe fn init_backend(
     engfuncs: *const goldsrc_sys::enginefuncs_t,
     globals: *const goldsrc_sys::globalvars_t,
 ) {
-    // SAFETY: Called once during initialization, before any reads.
     unsafe {
         if !engfuncs.is_null() {
             G_ENGFUNCS = Some(*engfuncs);
@@ -44,7 +39,6 @@ pub unsafe fn init_backend(
 /// # Safety
 /// Must be called exactly once from `Meta_Attach`.
 pub unsafe fn init_meta_utils(utils: *const mutil_funcs_t, meta_globals: *mut meta_globals_t) {
-    // SAFETY: Called once during initialization, before any reads.
     unsafe {
         if !utils.is_null() {
             G_META_UTILS = Some(*utils);
@@ -55,25 +49,21 @@ pub unsafe fn init_meta_utils(utils: *const mutil_funcs_t, meta_globals: *mut me
 
 /// Get the engine functions.
 pub fn engfuncs() -> &'static goldsrc_sys::enginefuncs_t {
-    // SAFETY: After init_backend, the value is only read, never modified.
     unsafe { G_ENGFUNCS.as_ref().expect("Backend not initialized") }
 }
 
 /// Get the global variables.
 pub fn globals() -> &'static goldsrc_sys::globalvars_t {
-    // SAFETY: After init_backend, the value is only read, never modified.
     unsafe { G_GLOBALS.as_ref().expect("Backend not initialized") }
 }
 
 /// Get the Metamod utility functions.
 pub fn meta_utils() -> &'static mutil_funcs_t {
-    // SAFETY: After init_meta_utils, the value is only read, never modified.
     unsafe { G_META_UTILS.as_ref().expect("Meta utils not initialized") }
 }
 
 /// Get the Metamod globals pointer.
 pub fn meta_globals() -> &'static mut meta_globals_t {
-    // SAFETY: After init_meta_utils, the value is only read, never modified.
     unsafe {
         G_META_GLOBALS
             .expect("Meta globals not initialized")
@@ -120,7 +110,6 @@ impl MetamodBackend {
 
 impl Engine for MetamodBackend {
     fn spawn_entity(&self, classname: &str) -> Option<Entity> {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let funcs = engfuncs();
             let edict = (funcs.pfnCreateEntity)?();
@@ -135,7 +124,6 @@ impl Engine for MetamodBackend {
     }
 
     fn get_player(&self, index: i32) -> Option<Player> {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let funcs = engfuncs();
             let edict = (funcs.pfnPEntityOfEntIndex)?(index);
@@ -147,7 +135,6 @@ impl Engine for MetamodBackend {
     }
 
     fn server_print(&self, message: &str) {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let msg = CString::new(message).unwrap_or_default();
             call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
@@ -155,7 +142,6 @@ impl Engine for MetamodBackend {
     }
 
     fn server_command(&self, command: &str) {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let cmd = CString::new(command).unwrap_or_default();
             call_engfunc!(engfuncs().pfnServerCommand, cmd.as_ptr());
@@ -163,7 +149,6 @@ impl Engine for MetamodBackend {
     }
 
     fn cvar_get_float(&self, name: &str) -> f32 {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let cname = CString::new(name).unwrap_or_default();
             call_engfunc_ret!(engfuncs().pfnCVarGetFloat, cname.as_ptr())
@@ -171,7 +156,6 @@ impl Engine for MetamodBackend {
     }
 
     fn cvar_set_float(&self, name: &str, value: f32) {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let cname = CString::new(name).unwrap_or_default();
             call_engfunc!(engfuncs().pfnCVarSetFloat, cname.as_ptr(), value);
@@ -195,8 +179,9 @@ pub fn backend() -> &'static MetamodBackend {
 ///
 /// # Safety
 /// Called by the engine during DLL loading.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn GiveFnptrsToDll(
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "system" fn GiveFnptrsToDll(
     engfuncs: *const goldsrc_sys::enginefuncs_t,
     globals: *const goldsrc_sys::globalvars_t,
 ) {
@@ -210,33 +195,31 @@ pub unsafe extern "C" fn GiveFnptrsToDll(
 ///
 /// # Safety
 /// Called by Metamod during plugin loading.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn Meta_Query(
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn Meta_Query(
     _ifvers: *const std::os::raw::c_char,
     plugin_info: *mut *const plugin_info_t,
     meta_util_functions: *mut mutil_funcs_t,
 ) -> std::os::raw::c_int {
-    // SAFETY: plugin_info and meta_util_functions are provided by Metamod.
     unsafe {
         if plugin_info.is_null() || meta_util_functions.is_null() {
             return 0;
         }
-
-        // Set plugin info
         *plugin_info = &PLUGIN_INFO;
         *meta_util_functions = get_meta_util_funcs();
     }
-
     backend().server_print("[GoldSrc.rs] Meta_Query called.\n");
-    1 // success
+    1
 }
 
 /// Called by Metamod to attach the plugin.
 ///
 /// # Safety
 /// Called by Metamod after Meta_Query.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn Meta_Attach(
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
     _meta_functions: *mut meta_function_t,
     meta_globals: *mut meta_globals_t,
@@ -246,28 +229,25 @@ pub unsafe extern "C" fn Meta_Attach(
         if meta_globals.is_null() {
             return 0;
         }
-
-        // Initialize meta utils
         init_meta_utils(std::ptr::null(), meta_globals);
-
         backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
         backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
     }
-
-    1 // success
+    1
 }
 
 /// Called by Metamod to detach the plugin.
 ///
 /// # Safety
 /// Called by Metamod during plugin unloading.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn Meta_Detach(
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn Meta_Detach(
     _now: PLUG_LOADTIME,
     _reason: PL_UNLOAD_REASON,
 ) -> std::os::raw::c_int {
     backend().server_print("[GoldSrc.rs] Meta_Detach called. Goodbye!\n");
-    1 // success
+    1
 }
 
 /// Plugin info structure.
@@ -283,6 +263,8 @@ static PLUGIN_INFO: plugin_info_t = plugin_info_t {
     loadable: PLUG_LOADTIME::PT_ANYTIME,
     unloadable: PLUG_LOADTIME::PT_ANYTIME,
 };
+
+
 
 /// Get the meta utility functions.
 fn get_meta_util_funcs() -> mutil_funcs_t {
@@ -308,18 +290,16 @@ fn get_meta_util_funcs() -> mutil_funcs_t {
     }
 }
 
-unsafe extern "C" fn meta_log_console(_plid: *const plugin_info_t, _fmt: *const i8) {
-    // TODO: Implement logging
-}
+unsafe extern "C" fn meta_log_console(_plid: *const plugin_info_t, _fmt: *const i8) {}
+unsafe extern "C" fn meta_log_message(_plid: *const plugin_info_t, _fmt: *const i8) {}
+unsafe extern "C" fn meta_log_error(_plid: *const plugin_info_t, _fmt: *const i8) {}
+unsafe extern "C" fn meta_log_developer(_plid: *const plugin_info_t, _fmt: *const i8) {}
 
-unsafe extern "C" fn meta_log_message(_plid: *const plugin_info_t, _fmt: *const i8) {
-    // TODO: Implement logging
-}
-
-unsafe extern "C" fn meta_log_error(_plid: *const plugin_info_t, _fmt: *const i8) {
-    // TODO: Implement logging
-}
-
-unsafe extern "C" fn meta_log_developer(_plid: *const plugin_info_t, _fmt: *const i8) {
-    // TODO: Implement logging
-}
+// Prevent the linker from stripping exported functions
+#[used]
+static EXPORT_POINTERS: &[unsafe extern "C" fn()] = &[
+    unsafe { std::mem::transmute(GiveFnptrsToDll as *const ()) },
+    unsafe { std::mem::transmute(Meta_Query as *const ()) },
+    unsafe { std::mem::transmute(Meta_Attach as *const ()) },
+    unsafe { std::mem::transmute(Meta_Detach as *const ()) },
+];

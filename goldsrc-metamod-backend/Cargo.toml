@@ -1,12 +1,12 @@
 [package]
 name = "goldsrc-metamod-backend"
-version.workspace = true
-edition.workspace = true
+version = "0.1.0"
+edition = "2021"
 license.workspace = true
 description = "Metamod backend implementation for GoldSrc.rs"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["staticlib"]
 
 [dependencies]
 goldsrc-sys = { workspace = true }
