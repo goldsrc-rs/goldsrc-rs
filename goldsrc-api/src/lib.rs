@@ -3,6 +3,8 @@
 //! This crate defines the abstract interface that plugin developers use.
 //! It has no dependency on any specific backend (Metamod or Standalone).
 
+use std::ffi::CStr;
+
 /// Engine interface — provides access to engine functions.
 pub trait Engine {
     /// Spawn an entity by classname.
@@ -24,18 +26,127 @@ pub trait Engine {
     fn cvar_set_float(&self, name: &str, value: f32);
 }
 
-/// Entity handle.
+/// Safe wrapper around `edict_t` (entity dictionary).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Entity {
     pub index: i32,
-    pub edict: *mut goldsrc_sys::edict_t,
+    edict: *mut goldsrc_sys::edict_t,
 }
 
-/// Player handle.
+impl Entity {
+    /// Create a new Entity from a raw pointer.
+    ///
+    /// # Safety
+    /// The pointer must be a valid `edict_t` pointer.
+    pub unsafe fn from_raw(index: i32, edict: *mut goldsrc_sys::edict_t) -> Self {
+        Self { index, edict }
+    }
+
+    /// Get the entity index (1-based).
+    pub fn index(&self) -> i32 {
+        self.index
+    }
+
+    /// Check if the entity is valid (not null).
+    pub fn is_valid(&self) -> bool {
+        !self.edict.is_null()
+    }
+
+    /// Get the entity's classname.
+    pub fn classname(&self) -> Option<String> {
+        // SAFETY: edict is valid, v is always present
+        unsafe {
+            let classname = (*self.edict).v.classname;
+            if classname == 0 {
+                return None;
+            }
+            let cstr = CStr::from_ptr(classname as *const i8);
+            Some(cstr.to_string_lossy().into_owned())
+        }
+    }
+
+    /// Get the entity's origin (position).
+    pub fn origin(&self) -> [f32; 3] {
+        // SAFETY: edict is valid, v is always present
+        unsafe { (*self.edict).v.origin }
+    }
+
+    /// Get the entity's health.
+    pub fn health(&self) -> f32 {
+        // SAFETY: edict is valid, v is always present
+        unsafe { (*self.edict).v.health }
+    }
+
+    /// Get the raw edict pointer.
+    pub fn as_ptr(&self) -> *mut goldsrc_sys::edict_t {
+        self.edict
+    }
+}
+
+/// Safe wrapper around a player entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Player {
     pub index: i32,
-    pub edict: *mut goldsrc_sys::edict_t,
+    edict: *mut goldsrc_sys::edict_t,
+}
+
+impl Player {
+    /// Create a new Player from a raw pointer.
+    ///
+    /// # Safety
+    /// The pointer must be a valid `edict_t` pointer.
+    pub unsafe fn from_raw(index: i32, edict: *mut goldsrc_sys::edict_t) -> Self {
+        Self { index, edict }
+    }
+
+    /// Get the player index (1-based).
+    pub fn index(&self) -> i32 {
+        self.index
+    }
+
+    /// Check if the player is valid (not null).
+    pub fn is_valid(&self) -> bool {
+        !self.edict.is_null()
+    }
+
+    /// Get the player's name.
+    pub fn name(&self) -> Option<String> {
+        // SAFETY: edict is valid, v is always present
+        unsafe {
+            let netname = (*self.edict).v.netname;
+            if netname == 0 {
+                return None;
+            }
+            let cstr = CStr::from_ptr(netname as *const i8);
+            Some(cstr.to_string_lossy().into_owned())
+        }
+    }
+
+    /// Get the player's origin (position).
+    pub fn origin(&self) -> [f32; 3] {
+        // SAFETY: edict is valid, v is always present
+        unsafe { (*self.edict).v.origin }
+    }
+
+    /// Get the player's health.
+    pub fn health(&self) -> f32 {
+        // SAFETY: edict is valid, v is always present
+        unsafe { (*self.edict).v.health }
+    }
+
+    /// Get the raw edict pointer.
+    pub fn as_ptr(&self) -> *mut goldsrc_sys::edict_t {
+        self.edict
+    }
+}
+
+impl From<Player> for Entity {
+    fn from(player: Player) -> Self {
+        Entity {
+            index: player.index,
+            edict: player.edict,
+        }
+    }
 }
 
 /// Plugin trait — implement this for your plugin.
