@@ -7,7 +7,6 @@ fn main() {
 
     let hlsdk = repo_root.join("references").join("hlsdk");
     let metamod = repo_root
-        .join("private")
         .join("references")
         .join("metamod-r")
         .join("metamod")
@@ -21,8 +20,7 @@ fn main() {
         panic!(
             "\n\nERROR: HLSDK not found at {}\n\
              Run the setup script first:\n\
-               pwsh scripts/setup.ps1        (Windows)\n\
-               bash scripts/setup.sh         (Linux/macOS)\n\n",
+               python3 scripts/setup.py\n\n",
             hlsdk.display()
         );
     }
@@ -31,8 +29,7 @@ fn main() {
         panic!(
             "\n\nERROR: metamod-r not found at {}\n\
              Run the setup script first:\n\
-               pwsh scripts/setup.ps1        (Windows)\n\
-               bash scripts/setup.sh         (Linux/macOS)\n\n",
+               python3 scripts/setup.py\n\n",
             metamod.display()
         );
     }

@@ -69,5 +69,13 @@ Examples:
 
 ### References
 
-- `references/hlsdk/` — HLSDK headers, tracked as a git submodule. Required for `bindgen` at build time.
-- `private/references/` — ReHLDS, metamod-r, GoldSrcMod.Net sources. For reference only, gitignored, not tracked.
+All reference repositories are downloaded via `python3 scripts/setup.py` and gitignored.
+
+- `references/hlsdk/` — HLSDK headers. Required for `bindgen` at build time.
+- `references/metamod-r/` — metamod-r headers. Required for `bindgen` at build time.
+- `references/rehlds/` — ReHLDS source. For reference only.
+- `references/goldsrcmod-net/` — GoldSrcMod.Net source. For reference only.
+
+### Agent Work
+
+All agent work, notes, and local documentation go in `private/`. Never commit agent traces to the main repo.
