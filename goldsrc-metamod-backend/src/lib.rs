@@ -9,6 +9,7 @@ mod meta_types;
 
 use goldsrc_api::{Engine, Entity, Player};
 use std::ffi::CString;
+use std::ffi::c_void;
 
 use meta_types::*;
 
@@ -270,14 +271,15 @@ pub unsafe extern "C" fn Meta_Detach(
 }
 
 /// Plugin info structure.
+#[allow(non_upper_case_globals)]
 static PLUGIN_INFO: plugin_info_t = plugin_info_t {
     ifvers: META_INTERFACE_VERSION.as_ptr() as *const i8,
-    name: b"GoldSrc.rs Metamod Backend\0".as_ptr() as *const i8,
-    version: b"0.1.0\0".as_ptr() as *const i8,
-    date: b"2026-08-10\0".as_ptr() as *const i8,
-    author: b"GoldSrc.rs Contributors\0".as_ptr() as *const i8,
-    url: b"https://github.com/ulquiorracode/GoldSrc.rs\0".as_ptr() as *const i8,
-    logtag: b"GOLDSRC.RS\0".as_ptr() as *const i8,
+    name: c"GoldSrc.rs Metamod Backend".as_ptr(),
+    version: c"0.1.0".as_ptr(),
+    date: c"2026-08-10".as_ptr(),
+    author: c"GoldSrc.rs Contributors".as_ptr(),
+    url: c"https://github.com/ulquiorracode/GoldSrc.rs".as_ptr(),
+    logtag: c"GOLDSRC.RS".as_ptr(),
     loadable: PLUG_LOADTIME::PT_ANYTIME,
     unloadable: PLUG_LOADTIME::PT_ANYTIME,
 };
@@ -321,5 +323,3 @@ unsafe extern "C" fn meta_log_error(_plid: *const plugin_info_t, _fmt: *const i8
 unsafe extern "C" fn meta_log_developer(_plid: *const plugin_info_t, _fmt: *const i8) {
     // TODO: Implement logging
 }
-
-type c_void = ();
