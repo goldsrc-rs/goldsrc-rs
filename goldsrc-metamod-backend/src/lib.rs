@@ -491,6 +491,9 @@ fn print_mrs_help() {
 }
 
 fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
+    const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+    const GIT_HASH: &str = env!("GIT_HASH");
+    const BUILD_TARGET: &str = env!("BUILD_TARGET");
     let manager = match wasm_manager() {
         Some(m) => m,
         None => {
@@ -713,7 +716,11 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
         "status" => {
             let (plugins_count, watchers_count) = manager.get_status_info();
             backend().server_print("--- GoldSrc.rs Host Engine Status ---\n");
-            backend().server_print("  Version:    0.1.0\n");
+            backend().server_print(&format!(
+                "  Version:    v{} (git: {})\n",
+                CARGO_PKG_VERSION, GIT_HASH
+            ));
+            backend().server_print(&format!("  Target:     {}\n", BUILD_TARGET));
             backend().server_print("  WASM Engine: wasmi (Pure Rust Interpreter)\n");
             backend().server_print(&format!("  Plugins:    {} loaded\n", plugins_count));
             backend().server_print(&format!(
@@ -722,7 +729,10 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
             ));
         }
         "version" => {
-            backend().server_print("[GoldSrc.rs] meta-rs v0.1.0 (built for GoldSrc / Metamod-r)\n");
+            backend().server_print(&format!(
+                "[GoldSrc.rs] meta-rs v{} (git: {}, target: {})\n",
+                CARGO_PKG_VERSION, GIT_HASH, BUILD_TARGET
+            ));
         }
         _ => {
             print_mrs_help();
@@ -836,8 +846,8 @@ pub extern "C" fn Meta_Detach(
 static PLUGIN_INFO: plugin_info_t = plugin_info_t {
     ifvers: META_INTERFACE_VERSION.as_ptr() as *const i8,
     name: c"GoldSrc.rs Metamod Backend".as_ptr(),
-    version: c"0.1.0".as_ptr(),
-    date: c"2026-08-10".as_ptr(),
+    version: concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const i8,
+    date: concat!(env!("GIT_HASH"), "\0").as_ptr() as *const i8,
     author: c"GoldSrc.rs Contributors".as_ptr(),
     url: c"https://github.com/ulquiorracode/GoldSrc.rs".as_ptr(),
     logtag: c"GOLDSRC.RS".as_ptr(),
