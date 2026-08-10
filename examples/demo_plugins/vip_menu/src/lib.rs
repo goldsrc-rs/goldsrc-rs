@@ -47,6 +47,9 @@ pub extern "C" fn on_event(
 
 #[command(name = "vipmenu")]
 pub fn handle_vipmenu(cmd: &str, args: &str) {
-    let msg = format!("[VIP Menu] Command '{}' called with args: '{}'\n", cmd, args);
+    let msg = format!(
+        "[VIP Menu] Command '{}' called with args: '{}'\n",
+        cmd, args
+    );
     log(&msg);
 }

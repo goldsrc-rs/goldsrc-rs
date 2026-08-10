@@ -386,7 +386,9 @@ unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {
     if !cmd_ptr.is_null() {
         if let Ok(cmd_str) = std::ffi::CStr::from_ptr(cmd_ptr).to_str() {
             let args_str = if !args_ptr.is_null() {
-                std::ffi::CStr::from_ptr(args_ptr).to_str().unwrap_or_default()
+                std::ffi::CStr::from_ptr(args_ptr)
+                    .to_str()
+                    .unwrap_or_default()
             } else {
                 ""
             };
