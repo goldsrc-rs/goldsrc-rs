@@ -377,32 +377,49 @@ unsafe extern "C" fn hook_client_disconnect_post(_entity: *mut goldsrc_sys::edic
 /// `_entity` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
 unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {
-    let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
-    if argc == 0 {
-        return;
-    }
-    let cmd_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, 0);
-    let args_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Args);
-    if !cmd_ptr.is_null() {
-        if let Ok(cmd_str) = std::ffi::CStr::from_ptr(cmd_ptr).to_str() {
-            let args_str = if !args_ptr.is_null() {
-                std::ffi::CStr::from_ptr(args_ptr)
-                    .to_str()
-                    .unwrap_or_default()
-            } else {
-                ""
-            };
-            if let Some(manager) = wasm_manager() {
-                manager.dispatch_command(cmd_str, args_str);
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
+        if argc == 0 {
+            return;
+        }
+        let cmd_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, 0);
+        let args_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Args);
+        if !cmd_ptr.is_null() {
+            if let Ok(cmd_str) = std::ffi::CStr::from_ptr(cmd_ptr).to_str() {
+                let args_str = if !args_ptr.is_null() {
+                    std::ffi::CStr::from_ptr(args_ptr)
+                        .to_str()
+                        .unwrap_or_default()
+                } else {
+                    ""
+                };
+                if let Some(manager) = wasm_manager() {
+                    manager.dispatch_command(cmd_str, args_str);
+                }
             }
         }
-    }
+    }));
 }
 
 /// Hook for StartFrame - called every server frame.
 unsafe extern "C" fn hook_start_frame() {
-    if let Some(manager) = wasm_manager() {
-        manager.on_server_frame();
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if let Some(manager) = wasm_manager() {
+            manager.on_server_frame();
+        }
+    }));
+    if let Err(err) = res {
+        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = err.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+        backend().server_print(&format!(
+            "[GoldSrc.rs PANIC] Caught panic in StartFrame: {}\n",
+            err_msg
+        ));
     }
 }
 
@@ -410,22 +427,37 @@ use lexopt::Arg;
 
 /// Server command handler for `meta-rs` and `mrs` console commands.
 unsafe extern "C" fn handle_mrs_command() {
-    let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
-    if argc == 0 {
-        return;
-    }
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
+        if argc == 0 {
+            return;
+        }
 
-    let mut raw_args = Vec::new();
-    for i in 0..argc {
-        let arg_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, i);
-        if !arg_ptr.is_null() {
-            if let Ok(cstr) = std::ffi::CStr::from_ptr(arg_ptr).to_str() {
-                raw_args.push(std::ffi::OsString::from(cstr));
+        let mut raw_args = Vec::new();
+        for i in 0..argc {
+            let arg_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, i);
+            if !arg_ptr.is_null() {
+                if let Ok(cstr) = std::ffi::CStr::from_ptr(arg_ptr).to_str() {
+                    raw_args.push(std::ffi::OsString::from(cstr));
+                }
             }
         }
-    }
 
-    dispatch_mrs_command(raw_args);
+        dispatch_mrs_command(raw_args);
+    }));
+    if let Err(err) = res {
+        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = err.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+        backend().server_print(&format!(
+            "[GoldSrc.rs PANIC] Caught panic in CLI Command: {}\n",
+            err_msg
+        ));
+    }
 }
 
 fn print_mrs_help() {
