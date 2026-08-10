@@ -90,14 +90,19 @@ def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-window
     print(f"Added to: {plugins_ini}")
 
 
-def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-windows-msvc") -> bool:
-    """Verify that the plugin is correctly deployed."""
+def verify_deploy(
+    game_path: Path,
+    dll_path: Path,
+    wasm_paths: list[Path],
+    target: str = "i686-pc-windows-msvc",
+) -> bool:
+    """Verify that the plugin and WASM modules are correctly deployed."""
     addons_dir = game_path / "cstrike" / "addons"
     if not addons_dir.exists():
         addons_dir = game_path / "addons"
 
     if not addons_dir.exists():
-        print(f"Error: Addons directory not found", file=sys.stderr)
+        print("Error: Addons directory not found", file=sys.stderr)
         return False
 
     if "windows" in target:
@@ -107,6 +112,7 @@ def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-window
 
     dest_path = addons_dir / "metamod-rs" / dest_name
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
+    wasm_target_dir = addons_dir / "metamod-rs" / "plugins"
 
     all_ok = True
 
@@ -140,10 +146,25 @@ def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-window
                 break
 
         if found:
-            print(f"  [OK]   Plugin listed in plugins.ini")
+            print("  [OK]   Plugin listed in plugins.ini")
         else:
             print(f"  [FAIL] Plugin not found in plugins.ini (expected: {expected_line})")
             all_ok = False
+
+    # Check 4: WASM plugins hashes
+    for wasm_src in wasm_paths:
+        wasm_dst = wasm_target_dir / wasm_src.name
+        if not wasm_dst.exists():
+            print(f"  [FAIL] WASM plugin not found: {wasm_dst.name}")
+            all_ok = False
+        else:
+            src_hash = hashlib.md5(wasm_src.read_bytes()).hexdigest()
+            dst_hash = hashlib.md5(wasm_dst.read_bytes()).hexdigest()
+            if src_hash == dst_hash:
+                print(f"  [OK]   WASM {wasm_src.name} hash matches ({dst_hash[:8]}...)")
+            else:
+                print(f"  [FAIL] WASM {wasm_src.name} hash mismatch: src={src_hash[:8]} dst={dst_hash[:8]}")
+                all_ok = False
 
     return all_ok
 
@@ -201,10 +222,12 @@ def main():
     else:
         lib_name = "libgoldsrc_metamod_backend.so"
     dll_path = repo_root / "target" / args.target / "release" / lib_name
+    wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / "debug"
+    wasm_plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
 
     if args.verify:
         print("Verifying deployment...")
-        if verify_deploy(game_path, dll_path, args.target):
+        if verify_deploy(game_path, dll_path, wasm_plugins, args.target):
             print("\nAll checks passed!")
         else:
             print("\nSome checks failed!")
@@ -216,8 +239,6 @@ def main():
             print(f"Error: Library not found at {dll_path}", file=sys.stderr)
             sys.exit(1)
         print(f"Using existing library: {dll_path}")
-        wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / "debug"
-        wasm_plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
     else:
         dll_path = build_plugin(target=args.target, release=True)
         wasm_plugins = build_wasm_plugins(release=False)
@@ -226,7 +247,7 @@ def main():
     deploy_wasm_plugins(wasm_plugins, game_path)
 
     print("\nVerifying deployment...")
-    if verify_deploy(game_path, dll_path, args.target):
+    if verify_deploy(game_path, dll_path, wasm_plugins, args.target):
         print("\nDeployment verified successfully!")
     else:
         print("\nDeployment verification failed!")
