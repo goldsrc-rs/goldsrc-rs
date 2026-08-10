@@ -27,10 +27,28 @@ pub fn init_wasm_host() {
     });
     unsafe {
         let mut manager = goldsrc_wasm_host::PluginManager::new();
-        let _ = manager.enable_hot_reload("cstrike/addons/metamod-rs/plugins");
-        let _ = manager.enable_hot_reload("addons/metamod-rs/plugins");
-        let _ = manager.enable_config_watcher("cstrike/addons/metamod-rs/configs");
-        let _ = manager.enable_config_watcher("addons/metamod-rs/configs");
+        
+        let plugin_dirs = ["cstrike/addons/metamod-rs/plugins", "addons/metamod-rs/plugins"];
+        for dir in plugin_dirs {
+            if std::path::Path::new(dir).exists() {
+                let _ = manager.enable_hot_reload(dir);
+                break;
+            }
+        }
+
+        let config_dirs = ["cstrike/addons/metamod-rs/configs", "addons/metamod-rs/configs"];
+        let mut watched_config = false;
+        for dir in config_dirs {
+            if std::path::Path::new(dir).exists() {
+                let _ = manager.enable_config_watcher(dir);
+                watched_config = true;
+                break;
+            }
+        }
+        if !watched_config {
+            let _ = manager.enable_config_watcher("cstrike/addons/metamod-rs/configs");
+        }
+
         WASM_MANAGER = Some(manager);
     }
 }
