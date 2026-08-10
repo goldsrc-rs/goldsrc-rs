@@ -142,6 +142,7 @@ pub fn backend() -> &'static MetamodBackend {
 /// Metamod calls these to get our hook functions.
 /// # Safety
 /// Called by Metamod to get entity API hooks. Pointers must be valid.
+/// Note: This is only called when the plugin is loaded as a game DLL plugin.
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI2(
@@ -151,50 +152,57 @@ pub unsafe extern "C" fn GetEntityAPI2(
     if dll_table.is_null() || interface_version.is_null() {
         return 0;
     }
-
     if *interface_version != 140 {
         *interface_version = 140;
         return 0;
     }
-
-    // Fill the table with our hooks
-    (*dll_table).pfnSpawn = Some(hook_spawn);
-    (*dll_table).pfnClientConnect = Some(hook_client_connect);
-    (*dll_table).pfnClientCommand = Some(hook_client_command);
-
-    backend().server_print("[GoldSrc.rs] GetEntityAPI2 called - hooks registered.\n");
-    1
+    // Hooks would be registered here if loaded as game DLL plugin
+    0
 }
 
 /// # Safety
-/// Called by Metamod to get post-entity API hooks. Pointers must be valid.
+/// Called by Metamod to get post-entity API hooks.
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI2_Post(
-    dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
-    interface_version: *mut i32,
+    _dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
+    _interface_version: *mut i32,
 ) -> i32 {
-    if dll_table.is_null() || interface_version.is_null() {
-        return 0;
-    }
-    if *interface_version != 140 {
-        *interface_version = 140;
-        return 0;
-    }
-
-    // Post hooks (called after original function)
-    (*dll_table).pfnSpawn = Some(hook_spawn_post);
-    (*dll_table).pfnClientConnect = Some(hook_client_connect_post);
-
-    1
+    0
 }
 
 /// # Safety
-/// Called by Metamod to get new DLL functions. Pointers must be valid.
+/// Called by Metamod to get new DLL functions.
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "C" fn GetNewDLLFunctions(
     _new_table: *mut c_void,
+    _interface_version: *mut i32,
+) -> i32 {
+    0
+}
+
+/// # Safety
+/// Called by Metamod to get engine functions. Pointers must be valid.
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn GetEngineFunctions(
+    engfuncs: *mut goldsrc_sys::enginefuncs_t,
+    _interface_version: *mut i32,
+) -> i32 {
+    if engfuncs.is_null() {
+        return 0;
+    }
+    backend().server_print("[GoldSrc.rs] GetEngineFunctions called.\n");
+    1
+}
+
+/// # Safety
+/// Called by Metamod to get post-engine functions.
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn GetEngineFunctions_Post(
+    _engfuncs: *mut goldsrc_sys::enginefuncs_t,
     _interface_version: *mut i32,
 ) -> i32 {
     0
@@ -317,15 +325,20 @@ pub unsafe extern "C" fn Meta_Query(
 #[inline(never)]
 pub unsafe extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
-    _meta_functions: *mut c_void,
+    meta_functions: *mut meta_function_t,
     meta_globals: *mut meta_globals_t,
     _gamedll_funcs: *mut c_void,
 ) -> std::os::raw::c_int {
     unsafe {
-        if meta_globals.is_null() {
-            return 0;
-        }
+        if meta_globals.is_null() || meta_functions.is_null() { return 0; }
         G_META_GLOBALS = Some(meta_globals);
+
+        // Fill the META_FUNCTIONS table with our hook functions
+        (*meta_functions).pfnGetEntityAPI2 = Some(GetEntityAPI2);
+        (*meta_functions).pfnGetEntityAPI2_Post = Some(GetEntityAPI2_Post);
+        (*meta_functions).pfnGetNewDLLFunctions = Some(GetNewDLLFunctions);
+        (*meta_functions).pfnGetEngineFunctions = Some(GetEngineFunctions);
+        (*meta_functions).pfnGetEngineFunctions_Post = Some(GetEngineFunctions_Post);
     }
     backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
     backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
