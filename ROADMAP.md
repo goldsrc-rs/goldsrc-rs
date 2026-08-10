@@ -16,16 +16,17 @@
 
 ## Stage 3: WebAssembly Plugin Host (Isolation & Hot-Reload) — ✅ Complete
 
-- [x] Integrate `wasmi` runtime into the core.
-- [x] Design WASI bindings for Wasm plugins to communicate with the core.
-- [x] Implement hot-reload: watch `.wasm` files in `plugins/` and reload on change.
-- [x] Write a test Wasm host integration and file watcher.
+- [x] Integrate `wasmi` (pure-Rust interpreter runtime) into the core.
+- [x] Design WASI / host bindings (`server_print`) for WASM plugins to communicate with the core.
+- [x] Implement hot-reload: watch `.wasm` files in `addons/metamod-rs/plugins/` and reload on change.
+- [x] Complete plugin lifecycle management (Create, Modify, Delete, Error handling, `on_unload` callback).
 
-## Stage 4: Developer Framework (DX)
+## Stage 4: Developer Framework & Host CLI (DX)
 
-- [ ] Create `goldsrc` crate with procedural macros.
-- [ ] Command router.
-- [ ] Database API (reuse `sqlx`, `tokio`).
+- [ ] Host Console CLI (`rs list`, `rs load`, `rs unload`, `rs reload`, `rs info`, `rs status`).
+- [ ] Create `goldsrc` crate with procedural macros (`#[plugin]`, `#[command]`).
+- [ ] Command router for in-game client and server commands.
+- [ ] Database API (`sqlx`, async runtime integration).
 - [ ] Documentation and `cargo generate` templates.
 
 ## Stage 5: Standalone Backend (Future)

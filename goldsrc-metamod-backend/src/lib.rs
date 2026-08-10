@@ -22,6 +22,9 @@ static mut WASM_MANAGER: Option<goldsrc_wasm_host::PluginManager> = None;
 
 /// Initialize WASM plugin subsystem
 pub fn init_wasm_host() {
+    goldsrc_wasm_host::set_print_callback(|msg| {
+        backend().server_print(msg);
+    });
     unsafe {
         let mut manager = goldsrc_wasm_host::PluginManager::new();
         let _ = manager.enable_hot_reload("cstrike/addons/metamod-rs/plugins");
@@ -182,6 +185,7 @@ pub unsafe extern "C" fn GetEntityAPI2(
     table.pfnClientConnect = Some(hook_client_connect);
     table.pfnClientDisconnect = Some(hook_client_disconnect);
     table.pfnClientCommand = Some(hook_client_command);
+    table.pfnStartFrame = Some(hook_start_frame);
 
     1
 }
@@ -397,6 +401,13 @@ unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::edict
 unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
     if !entity.is_null() {
         backend().server_print("[GoldSrc.rs] Client command received.\n");
+    }
+}
+
+/// Hook for StartFrame - called every server frame.
+unsafe extern "C" fn hook_start_frame() {
+    if let Some(manager) = wasm_manager() {
+        manager.on_server_frame();
     }
 }
 

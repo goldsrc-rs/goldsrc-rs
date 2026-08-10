@@ -6,9 +6,9 @@ The project aims to fully replace outdated C++ / AMX Mod X / Pawn stacks, provid
 
 ## Philosophy
 
-1. **Dependency Inversion:** A unified `goldsrc.rs-core` API that can run on top of the legacy C++ Metamod (compatibility mode) or as a standalone core (Standalone mode).
+1. **Dependency Inversion:** A unified `goldsrc-api` trait interface that can run on top of the legacy C++ Metamod (compatibility mode) or as a standalone core (Standalone mode).
 2. **Zero Reverse Engineering:** We don't guess memory offsets. We leverage community knowledge (ReHLDS, Metamod-r, Orpheu, HamSandwich) and automate FFI generation via `rust-bindgen`.
-3. **Safety First:** Plugins must not crash the server (segfault). In the future, plugins will be sandboxed via a WASM runtime (`wasm3`).
+3. **Safety First:** Plugins must not crash the server (segfault). Plugins are sandboxed via a pure-Rust WASM runtime (`wasmi`), ensuring zero C/Clang native dependencies and 100% memory safety.
 
 ## Architecture (Workspace)
 
