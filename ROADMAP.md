@@ -7,12 +7,12 @@
 - [x] Write `build.rs` for `goldsrc-sys` that generates Rust structs from C++ headers via `bindgen`.
 - [x] Export entry-point functions `GiveFnptrsToDll` and `Meta_Attach` so Metamod can load our Rust library.
 
-## Stage 2: Metamod Backend & Safe Abstractions
+## Stage 2: Metamod Backend & Safe Abstractions — ✅ Complete
 
-- [ ] Wrap logging (`SERVER_PRINT`, `ALERT`). Server should print "Hello from Rust!" to console.
-- [ ] Wrap basic engine structures: `edict_t`, `entvars_t`, `CBaseEntity`.
-- [ ] Implement hooks for basic events (`DispatchSpawn`, `ClientConnect`, `ClientCommand`) via Metamod.
-- [ ] Build VTable-hook system (using offsets from ReHLDS/HamSandwich for Windows/Linux compatibility).
+- [x] Wrap logging (`SERVER_PRINT`, `ALERT`). Server should print "Hello from Rust!" to console.
+- [x] Wrap basic engine structures: `edict_t`, `entvars_t`, `CBaseEntity`.
+- [x] Implement hooks for basic events (`DispatchSpawn`, `ClientConnect`, `ClientCommand`) via Metamod.
+- [x] Build VTable-hook system (using offsets from ReHLDS/HamSandwich for Windows/Linux compatibility).
 
 ## Stage 3: WebAssembly Plugin Host (Isolation & Hot-Reload)
 

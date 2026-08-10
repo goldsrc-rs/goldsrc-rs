@@ -2,7 +2,12 @@
 
 #![allow(static_mut_refs)]
 
+mod entity;
 mod meta_types;
+mod vtable;
+
+pub use entity::*;
+pub use vtable::*;
 
 use goldsrc_api::Engine;
 use std::ffi::c_void;
@@ -156,8 +161,14 @@ pub unsafe extern "C" fn GetEntityAPI2(
         *interface_version = 140;
         return 0;
     }
-    // Hooks would be registered here if loaded as game DLL plugin
-    0
+
+    let table = &mut *dll_table;
+    table.pfnSpawn = Some(hook_spawn);
+    table.pfnClientConnect = Some(hook_client_connect);
+    table.pfnClientDisconnect = Some(hook_client_disconnect);
+    table.pfnClientCommand = Some(hook_client_command);
+
+    1
 }
 
 /// # Safety
@@ -165,8 +176,50 @@ pub unsafe extern "C" fn GetEntityAPI2(
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI2_Post(
+    dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
+    interface_version: *mut i32,
+) -> i32 {
+    if dll_table.is_null() || interface_version.is_null() {
+        return 0;
+    }
+    if *interface_version != 140 {
+        *interface_version = 140;
+        return 0;
+    }
+
+    let table = &mut *dll_table;
+    table.pfnSpawn = Some(hook_spawn_post);
+    table.pfnClientConnect = Some(hook_client_connect_post);
+    table.pfnClientDisconnect = Some(hook_client_disconnect_post);
+
+    1
+}
+
+/// # Safety
+/// Called by Metamod to get entity API hooks (old interface).
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn GetEntityAPI(
+    dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
+    interface_version: i32,
+) -> i32 {
+    if dll_table.is_null() {
+        return 0;
+    }
+    if interface_version != 140 {
+        return 0;
+    }
+    backend().server_print("[GoldSrc.rs] GetEntityAPI called.\n");
+    1
+}
+
+/// # Safety
+/// Called by Metamod to get post-entity API hooks (old interface).
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn GetEntityAPI_Post(
     _dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
-    _interface_version: *mut i32,
+    _interface_version: i32,
 ) -> i32 {
     0
 }
@@ -176,6 +229,17 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "C" fn GetNewDLLFunctions(
+    _new_table: *mut c_void,
+    _interface_version: *mut i32,
+) -> i32 {
+    0
+}
+
+/// # Safety
+/// Called by Metamod to get post-new DLL functions.
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn GetNewDLLFunctions_Post(
     _new_table: *mut c_void,
     _interface_version: *mut i32,
 ) -> i32 {
@@ -208,9 +272,14 @@ pub unsafe extern "C" fn GetEngineFunctions_Post(
     0
 }
 
-// ============================================================================
-// Hook Functions
-// ============================================================================
+/// Helper for Metamod ALERT logging.
+pub fn alert(level: goldsrc_sys::ALERT_TYPE, message: &str) {
+    // SAFETY: engfuncs() pointer valid after initialization.
+    unsafe {
+        let msg = CString::new(message).unwrap_or_default();
+        call_engfunc!(engfuncs().pfnAlertMessage, level, msg.as_ptr());
+    }
+}
 
 /// Hook for DispatchSpawn - called when an entity spawns.
 ///
@@ -219,7 +288,16 @@ pub unsafe extern "C" fn GetEngineFunctions_Post(
 #[allow(dead_code)]
 unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     if !edict.is_null() {
-        backend().server_print("[GoldSrc.rs] Entity spawned (pre).\n");
+        if let Some(edict_ref) = EdictRef::from_raw(edict) {
+            if let Some(vars) = edict_ref.vars() {
+                if let Some(cname) = vars.classname() {
+                    let msg = format!("[GoldSrc.rs] Entity {} spawned (pre).\n", cname);
+                    backend().server_print(&msg);
+                } else {
+                    backend().server_print("[GoldSrc.rs] Entity spawned (pre).\n");
+                }
+            }
+        }
     }
     0
 }
@@ -247,8 +325,7 @@ unsafe extern "C" fn hook_client_connect(
     if !name.is_null() {
         let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
         let msg = format!("[GoldSrc.rs] Player {} connecting (pre)...\n", name_str);
-        let cmsg = CString::new(msg).unwrap_or_default();
-        call_engfunc!(engfuncs().pfnServerPrint, cmsg.as_ptr());
+        backend().server_print(&msg);
     }
     0
 }
@@ -264,10 +341,37 @@ unsafe extern "C" fn hook_client_connect_post(
     if !name.is_null() {
         let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
         let msg = format!("[GoldSrc.rs] Player {} connected (post).\n", name_str);
-        let cmsg = CString::new(msg).unwrap_or_default();
-        call_engfunc!(engfuncs().pfnServerPrint, cmsg.as_ptr());
+        backend().server_print(&msg);
     }
     0
+}
+
+/// Hook for ClientDisconnect - called when a player disconnects.
+///
+/// # Safety
+/// `entity` must be valid player edict pointer or null.
+#[allow(dead_code)]
+unsafe extern "C" fn hook_client_disconnect(entity: *mut goldsrc_sys::edict_t) {
+    if !entity.is_null() {
+        if let Some(edict_ref) = EdictRef::from_raw(entity) {
+            if let Some(vars) = edict_ref.vars() {
+                if let Some(name) = vars.netname() {
+                    let msg = format!("[GoldSrc.rs] Player {} disconnected (pre).\n", name);
+                    backend().server_print(&msg);
+                    return;
+                }
+            }
+        }
+        backend().server_print("[GoldSrc.rs] Player disconnected (pre).\n");
+    }
+}
+
+/// Post-hook for ClientDisconnect.
+#[allow(dead_code)]
+unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::edict_t) {
+    if !entity.is_null() {
+        backend().server_print("[GoldSrc.rs] Player disconnected (post).\n");
+    }
 }
 
 /// Hook for ClientCommand - called when a player issues a command.
@@ -334,9 +438,12 @@ pub unsafe extern "C" fn Meta_Attach(
         G_META_GLOBALS = Some(meta_globals);
 
         // Fill the META_FUNCTIONS table with our hook functions
+        (*meta_functions).pfnGetEntityAPI = Some(GetEntityAPI);
+        (*meta_functions).pfnGetEntityAPI_Post = Some(GetEntityAPI_Post);
         (*meta_functions).pfnGetEntityAPI2 = Some(GetEntityAPI2);
         (*meta_functions).pfnGetEntityAPI2_Post = Some(GetEntityAPI2_Post);
         (*meta_functions).pfnGetNewDLLFunctions = Some(GetNewDLLFunctions);
+        (*meta_functions).pfnGetNewDLLFunctions_Post = Some(GetNewDLLFunctions_Post);
         (*meta_functions).pfnGetEngineFunctions = Some(GetEngineFunctions);
         (*meta_functions).pfnGetEngineFunctions_Post = Some(GetEngineFunctions_Post);
     }
