@@ -23,8 +23,6 @@ references/
 
 # Temporary build files
 *.bat
-*.def
-*.c
 *.o
 *.exp
 *.lib
