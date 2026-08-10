@@ -157,10 +157,10 @@ pub unsafe extern "C" fn GetEntityAPI2(
         return 0;
     }
 
-    // TODO: Hook assignment requires platform-specific type handling
-    // (*dll_table).pfnSpawn = Some(hook_spawn);
-    // (*dll_table).pfnClientConnect = Some(hook_client_connect);
-    // (*dll_table).pfnClientCommand = Some(hook_client_command);
+    // Fill the table with our hooks (type inferred from field)
+    (*dll_table).pfnSpawn = Some(hook_spawn as _);
+    (*dll_table).pfnClientConnect = Some(hook_client_connect as _);
+    (*dll_table).pfnClientCommand = Some(hook_client_command as _);
 
     backend().server_print("[GoldSrc.rs] GetEntityAPI2 called - hooks registered.\n");
     1
@@ -182,9 +182,9 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
         return 0;
     }
 
-    // TODO: Hook assignment requires platform-specific type handling
-    // (*dll_table).pfnSpawn = Some(hook_spawn_post);
-    // (*dll_table).pfnClientConnect = Some(hook_client_connect_post);
+    // Post hooks (called after original function)
+    (*dll_table).pfnSpawn = Some(hook_spawn_post as _);
+    (*dll_table).pfnClientConnect = Some(hook_client_connect_post as _);
 
     1
 }
