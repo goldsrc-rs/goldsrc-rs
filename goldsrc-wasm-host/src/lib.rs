@@ -267,6 +267,15 @@ fn scan_wasm_files_recursive(dir: &Path, wasm_paths: &mut Vec<PathBuf>) {
     }
 }
 
+fn clean_path<P: AsRef<Path>>(p: P) -> String {
+    let s = p.as_ref().to_string_lossy().replace('\\', "/");
+    if let Some(stripped) = s.strip_prefix("//?/") {
+        stripped.to_string()
+    } else {
+        s
+    }
+}
+
 impl PluginManager {
     pub fn new() -> Self {
         let engine = Engine::default();
@@ -563,9 +572,10 @@ impl PluginManager {
             let _ = fs::create_dir_all(dir_ref);
         }
 
-        let canonical_dir = dir_ref
-            .canonicalize()
-            .unwrap_or_else(|_| dir_ref.to_path_buf());
+        let Ok(canonical_dir) = dir_ref.canonicalize() else {
+            return Ok(());
+        };
+
         if self.watched_dirs.contains(&canonical_dir) {
             return Ok(());
         }
@@ -583,14 +593,20 @@ impl PluginManager {
         self._watchers.push(watcher);
 
         host_log(&format!(
-            "[GoldSrc.rs WASM Host] Watching config directory {:?}\n",
-            canonical_dir
+            "[GoldSrc.rs WASM Host] Watching config directory \"{}\"\n",
+            clean_path(&canonical_dir)
         ));
         Ok(())
     }
 
     /// Poll for file changes and handle plugin reloading or config updates.
     pub fn process_hot_reload(&mut self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.do_process_hot_reload();
+        }));
+    }
+
+    fn do_process_hot_reload(&mut self) {
         let mut reload_paths = Vec::new();
         let mut config_paths = Vec::new();
 
@@ -616,7 +632,7 @@ impl PluginManager {
         config_paths.dedup();
 
         for config_path in config_paths {
-            if config_path.exists() {
+            if config_path.is_file() {
                 if let Ok(content) = fs::read_to_string(&config_path) {
                     if content.trim().is_empty() {
                         continue;
@@ -641,22 +657,22 @@ impl PluginManager {
         }
 
         for path in reload_paths {
-            if path.exists() {
+            if path.is_file() {
                 // Scenario 1 & 2: Plugin Created or Overwritten/Modified
                 let is_reload = self.plugins.iter().any(|p| p.path == path);
                 self.unload_plugin(&path);
 
                 if let Err(err) = self.load_plugin(&path) {
                     host_log(&format!(
-                        "[GoldSrc.rs WASM Host] Failed to {} {:?}: {}\n",
+                        "[GoldSrc.rs WASM Host] Failed to {} \"{}\": {}\n",
                         if is_reload { "reload" } else { "load" },
-                        path,
+                        clean_path(&path),
                         err
                     ));
                 } else if is_reload {
                     host_log(&format!(
-                        "[GoldSrc.rs WASM Host] Reloaded plugin {:?}\n",
-                        path
+                        "[GoldSrc.rs WASM Host] Reloaded plugin \"{}\"\n",
+                        clean_path(&path)
                     ));
                 }
             } else {
