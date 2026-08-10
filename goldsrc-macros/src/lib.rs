@@ -33,15 +33,13 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     plugin_version = s.value();
                                 }
                             }
-                        }
-                    }
-                    Meta::List(list) if list.path.is_ident("systems") => {
-                        let inner_parser = Punctuated::<Expr, Token![,]>::parse_terminated;
-                        if let Ok(exprs) = list.parse_args_with(inner_parser) {
-                            for expr in exprs {
-                                if let Expr::Lit(expr_lit) = expr {
-                                    if let Lit::Str(s) = expr_lit.lit {
-                                        systems.push(s.value());
+                        } else if nv.path.is_ident("systems") {
+                            if let Expr::Array(arr) = &nv.value {
+                                for elem in &arr.elems {
+                                    if let Expr::Lit(expr_lit) = elem {
+                                        if let Lit::Str(s) = &expr_lit.lit {
+                                            systems.push(s.value());
+                                        }
                                     }
                                 }
                             }
