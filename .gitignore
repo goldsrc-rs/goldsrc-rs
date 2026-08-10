@@ -1,7 +1,8 @@
 # Rust
-/target
+target/
 **/*.rs.bk
 Cargo.lock
+.cargo/
 
 # IDE
 .vscode/
@@ -35,3 +36,4 @@ private/
 # Environment
 .env
 .env.*
+__pycache__/
