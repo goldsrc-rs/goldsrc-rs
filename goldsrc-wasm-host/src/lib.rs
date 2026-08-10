@@ -190,7 +190,7 @@ impl PluginManager {
         if let Some(rx) = &self.watcher_rx {
             while let Ok(Ok(event)) = rx.try_recv() {
                 for path in event.paths {
-                    if path.extension().map_or(false, |ext| ext == "wasm") {
+                    if path.extension().is_some_and(|ext| ext == "wasm") {
                         reload_paths.push(path);
                     }
                 }
