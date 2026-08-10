@@ -157,10 +157,10 @@ pub unsafe extern "C" fn GetEntityAPI2(
         return 0;
     }
 
-    // Fill the table with our hooks (type inferred from field)
-    (*dll_table).pfnSpawn = Some(hook_spawn as _);
-    (*dll_table).pfnClientConnect = Some(hook_client_connect as _);
-    (*dll_table).pfnClientCommand = Some(hook_client_command as _);
+    // Fill the table with our hooks
+    (*dll_table).pfnSpawn = Some(hook_spawn);
+    (*dll_table).pfnClientConnect = Some(hook_client_connect);
+    (*dll_table).pfnClientCommand = Some(hook_client_command);
 
     backend().server_print("[GoldSrc.rs] GetEntityAPI2 called - hooks registered.\n");
     1
@@ -183,8 +183,8 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
     }
 
     // Post hooks (called after original function)
-    (*dll_table).pfnSpawn = Some(hook_spawn_post as _);
-    (*dll_table).pfnClientConnect = Some(hook_client_connect_post as _);
+    (*dll_table).pfnSpawn = Some(hook_spawn_post);
+    (*dll_table).pfnClientConnect = Some(hook_client_connect_post);
 
     1
 }
@@ -209,7 +209,7 @@ pub unsafe extern "C" fn GetNewDLLFunctions(
 /// # Safety
 /// `edict` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> goldsrc_sys::qboolean {
+unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     if !edict.is_null() {
         backend().server_print("[GoldSrc.rs] Entity spawned (pre).\n");
     }
@@ -218,7 +218,7 @@ unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> goldsrc_sys
 
 /// Post-hook for DispatchSpawn.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> goldsrc_sys::qboolean {
+unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> i32 {
     if !edict.is_null() {
         backend().server_print("[GoldSrc.rs] Entity spawned (post).\n");
     }
@@ -235,7 +235,7 @@ unsafe extern "C" fn hook_client_connect(
     name: *const std::os::raw::c_char,
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
-) -> i32 {
+) -> goldsrc_sys::qboolean {
     if !name.is_null() {
         let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
         let msg = format!("[GoldSrc.rs] Player {} connecting (pre)...\n", name_str);
@@ -252,7 +252,7 @@ unsafe extern "C" fn hook_client_connect_post(
     name: *const std::os::raw::c_char,
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
-) -> i32 {
+) -> goldsrc_sys::qboolean {
     if !name.is_null() {
         let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
         let msg = format!("[GoldSrc.rs] Player {} connected (post).\n", name_str);
