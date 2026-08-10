@@ -18,6 +18,21 @@ use meta_types::*;
 static mut G_ENGFUNCS: Option<goldsrc_sys::enginefuncs_t> = None;
 static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
 static mut G_META_GLOBALS: Option<*mut meta_globals_t> = None;
+static mut WASM_MANAGER: Option<goldsrc_wasm_host::PluginManager> = None;
+
+/// Initialize WASM plugin subsystem
+pub fn init_wasm_host() {
+    unsafe {
+        let mut manager = goldsrc_wasm_host::PluginManager::new();
+        let _ = manager.enable_hot_reload("cstrike/addons/metamod-rs/plugins");
+        let _ = manager.enable_hot_reload("addons/metamod-rs/plugins");
+        WASM_MANAGER = Some(manager);
+    }
+}
+
+pub fn wasm_manager() -> Option<&'static mut goldsrc_wasm_host::PluginManager> {
+    unsafe { WASM_MANAGER.as_mut() }
+}
 
 /// # Safety
 /// Called once from `GiveFnptrsToDll`.
@@ -449,7 +464,9 @@ pub unsafe extern "C" fn Meta_Attach(
         (*meta_functions).pfnGetEngineFunctions = Some(GetEngineFunctions);
         (*meta_functions).pfnGetEngineFunctions_Post = Some(GetEngineFunctions_Post);
     }
+    init_wasm_host();
     backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
+    backend().server_print("[GoldSrc.rs] WASM Host Engine initialized.\n");
     backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
     1
 }
