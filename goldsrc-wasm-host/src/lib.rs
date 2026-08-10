@@ -463,9 +463,7 @@ impl PluginManager {
     /// Load a WASM plugin module from a file.
     pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<(), RuntimeError> {
         let path_buf = path.as_ref().to_path_buf();
-        let canonical_path = path_buf
-            .canonicalize()
-            .unwrap_or_else(|_| path_buf.clone());
+        let canonical_path = path_buf.canonicalize().unwrap_or_else(|_| path_buf.clone());
 
         if self
             .plugins
