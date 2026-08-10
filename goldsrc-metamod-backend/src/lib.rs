@@ -141,7 +141,7 @@ pub fn backend() -> &'static MetamodBackend {
 
 /// Original function pointers that we hook.
 static mut ORIGINAL_SPAWN: Option<
-    unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> std::os::raw::c_int,
+    unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> goldsrc_sys::qboolean,
 > = None;
 static mut ORIGINAL_CLIENT_CONNECT: Option<
     unsafe extern "C" fn(
@@ -149,7 +149,7 @@ static mut ORIGINAL_CLIENT_CONNECT: Option<
         *const std::os::raw::c_char,
         *const std::os::raw::c_char,
         *mut std::os::raw::c_char,
-    ) -> std::os::raw::c_int,
+    ) -> goldsrc_sys::qboolean,
 > = None;
 static mut ORIGINAL_CLIENT_COMMAND: Option<unsafe extern "C" fn(*mut goldsrc_sys::edict_t)> = None;
 
@@ -158,7 +158,7 @@ static mut ORIGINAL_CLIENT_COMMAND: Option<unsafe extern "C" fn(*mut goldsrc_sys
 /// # Safety
 /// `edict` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> std::os::raw::c_int {
+unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> goldsrc_sys::qboolean {
     if !edict.is_null() {
         backend().server_print("[GoldSrc.rs] Entity spawned.\n");
     }
@@ -178,7 +178,7 @@ unsafe extern "C" fn hook_client_connect(
     name: *const std::os::raw::c_char,
     address: *const std::os::raw::c_char,
     reject_reason: *mut std::os::raw::c_char,
-) -> std::os::raw::c_int {
+) -> goldsrc_sys::qboolean {
     if !name.is_null() {
         let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
         let msg = format!("[GoldSrc.rs] Player {} connecting...\n", name_str);
