@@ -130,21 +130,33 @@ impl LoadedPlugin {
                 let name_len = name_bytes.len() as i32;
                 let data_len = data.len() as i32;
 
+                let alloc_name_len = name_len.max(1);
+                let alloc_data_len = data_len.max(1);
+
                 if let (Ok(name_ptr), Ok(data_ptr)) = (
-                    alloc.call(&mut self.store, (name_len,)),
-                    alloc.call(&mut self.store, (data_len,)),
+                    alloc.call(&mut self.store, (alloc_name_len,)),
+                    alloc.call(&mut self.store, (alloc_data_len,)),
                 ) {
                     if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
                     {
-                        let _ = mem.write(&mut self.store, name_ptr as usize, name_bytes);
-                        let _ = mem.write(&mut self.store, data_ptr as usize, data);
+                        if name_len > 0 {
+                            let _ = mem.write(&mut self.store, name_ptr as usize, name_bytes);
+                        }
+                        if data_len > 0 {
+                            let _ = mem.write(&mut self.store, data_ptr as usize, data);
+                        }
 
                         let res = f.call(&mut self.store, (name_ptr, name_len, data_ptr, data_len));
 
-                        let _ = dealloc.call(&mut self.store, (name_ptr, name_len));
-                        let _ = dealloc.call(&mut self.store, (data_ptr, data_len));
+                        let _ = dealloc.call(&mut self.store, (name_ptr, alloc_name_len));
+                        let _ = dealloc.call(&mut self.store, (data_ptr, alloc_data_len));
 
-                        res.map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+                        if let Err(err) = res {
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Error in on_event (plugin {}): {}\n",
+                                self.name, err
+                            ));
+                        }
                     }
                 }
             }
@@ -170,21 +182,33 @@ impl LoadedPlugin {
                 let args_bytes = args.as_bytes();
                 let args_len = args_bytes.len() as i32;
 
+                let alloc_cmd_len = cmd_len.max(1);
+                let alloc_args_len = args_len.max(1);
+
                 if let (Ok(cmd_ptr), Ok(args_ptr)) = (
-                    alloc.call(&mut self.store, (cmd_len,)),
-                    alloc.call(&mut self.store, (args_len,)),
+                    alloc.call(&mut self.store, (alloc_cmd_len,)),
+                    alloc.call(&mut self.store, (alloc_args_len,)),
                 ) {
                     if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
                     {
-                        let _ = mem.write(&mut self.store, cmd_ptr as usize, cmd_bytes);
-                        let _ = mem.write(&mut self.store, args_ptr as usize, args_bytes);
+                        if cmd_len > 0 {
+                            let _ = mem.write(&mut self.store, cmd_ptr as usize, cmd_bytes);
+                        }
+                        if args_len > 0 {
+                            let _ = mem.write(&mut self.store, args_ptr as usize, args_bytes);
+                        }
 
                         let res = f.call(&mut self.store, (cmd_ptr, cmd_len, args_ptr, args_len));
 
-                        let _ = dealloc.call(&mut self.store, (cmd_ptr, cmd_len));
-                        let _ = dealloc.call(&mut self.store, (args_ptr, args_len));
+                        let _ = dealloc.call(&mut self.store, (cmd_ptr, alloc_cmd_len));
+                        let _ = dealloc.call(&mut self.store, (args_ptr, alloc_args_len));
 
-                        res.map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+                        if let Err(err) = res {
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Error in on_command (plugin {}): {}\n",
+                                self.name, err
+                            ));
+                        }
                     }
                 }
             }
@@ -546,10 +570,13 @@ impl PluginManager {
         while let Ok(Ok(event)) = self.watcher_rx.try_recv() {
             for path in event.paths {
                 if let Some(ext) = path.extension() {
-                    if ext == "wasm" {
-                        reload_paths.push(path);
-                    } else if ext == "json" || ext == "toml" || ext == "cfg" {
-                        config_paths.push(path);
+                    let name = path.file_name().unwrap_or_default().to_string_lossy();
+                    if !name.starts_with('.') && !name.ends_with(".tmp") && !name.ends_with('~') {
+                        if ext == "wasm" {
+                            reload_paths.push(path);
+                        } else if ext == "json" || ext == "toml" || ext == "cfg" {
+                            config_paths.push(path);
+                        }
                     }
                 }
             }

@@ -76,7 +76,8 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #[unsafe(no_mangle)]
         pub extern "C" fn __goldsrc_alloc(size: usize) -> *mut u8 {
-            let mut buf = vec![0u8; size];
+            let actual_size = size.max(1);
+            let mut buf = vec![0u8; actual_size];
             let ptr = buf.as_mut_ptr();
             std::mem::forget(buf);
             ptr
@@ -85,7 +86,8 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn __goldsrc_dealloc(ptr: *mut u8, size: usize) {
             if !ptr.is_null() {
-                let _ = unsafe { Vec::from_raw_parts(ptr, size, size) };
+                let actual_size = size.max(1);
+                let _ = unsafe { Vec::from_raw_parts(ptr, actual_size, actual_size) };
             }
         }
     };
