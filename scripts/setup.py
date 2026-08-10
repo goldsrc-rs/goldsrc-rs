@@ -61,8 +61,11 @@ def cleanup_hlsdk(hlsdk_dir: Path) -> None:
     for d in dirs_to_remove:
         full_path = hlsdk_dir / d
         if full_path.exists():
-            shutil.rmtree(full_path)
-            print(f"  [REMOVED] hlsdk/{d}")
+            try:
+                shutil.rmtree(full_path, onexc=remove_readonly)
+                print(f"  [REMOVED] hlsdk/{d}")
+            except PermissionError:
+                print(f"  [SKIP] hlsdk/{d} (permission denied)")
 
 
 def cleanup_metamod(metamod_dir: Path) -> None:
@@ -80,13 +83,19 @@ def cleanup_metamod(metamod_dir: Path) -> None:
     for d in dirs_to_remove:
         full_path = metamod_dir / d
         if full_path.exists():
-            shutil.rmtree(full_path)
-            print(f"  [REMOVED] metamod-r/{d}")
+            try:
+                shutil.rmtree(full_path, onexc=remove_readonly)
+                print(f"  [REMOVED] metamod-r/{d}")
+            except PermissionError:
+                print(f"  [SKIP] metamod-r/{d} (permission denied)")
     for f in files_to_remove:
         full_path = metamod_dir / f
         if full_path.exists():
-            full_path.unlink()
-            print(f"  [REMOVED] metamod-r/{f}")
+            try:
+                full_path.unlink()
+                print(f"  [REMOVED] metamod-r/{f}")
+            except PermissionError:
+                print(f"  [SKIP] metamod-r/{f} (permission denied)")
 
 
 def cleanup_rehlds(rehlds_dir: Path) -> None:
@@ -100,13 +109,19 @@ def cleanup_rehlds(rehlds_dir: Path) -> None:
     for d in dirs_to_remove:
         full_path = rehlds_dir / d
         if full_path.exists():
-            shutil.rmtree(full_path)
-            print(f"  [REMOVED] rehlds/{d}")
+            try:
+                shutil.rmtree(full_path, onexc=remove_readonly)
+                print(f"  [REMOVED] rehlds/{d}")
+            except PermissionError:
+                print(f"  [SKIP] rehlds/{d} (permission denied)")
     for f in files_to_remove:
         full_path = rehlds_dir / f
         if full_path.exists():
-            full_path.unlink()
-            print(f"  [REMOVED] rehlds/{f}")
+            try:
+                full_path.unlink()
+                print(f"  [REMOVED] rehlds/{f}")
+            except PermissionError:
+                print(f"  [SKIP] rehlds/{f} (permission denied)")
 
 
 def cleanup_goldsrcmod_net(goldsrcmod_dir: Path) -> None:
@@ -117,8 +132,11 @@ def cleanup_goldsrcmod_net(goldsrcmod_dir: Path) -> None:
     for d in dirs_to_remove:
         full_path = goldsrcmod_dir / d
         if full_path.exists():
-            shutil.rmtree(full_path)
-            print(f"  [REMOVED] goldsrcmod-net/{d}")
+            try:
+                shutil.rmtree(full_path, onexc=remove_readonly)
+                print(f"  [REMOVED] goldsrcmod-net/{d}")
+            except PermissionError:
+                print(f"  [SKIP] goldsrcmod-net/{d} (permission denied)")
 
 
 # Files that are not needed for bindgen or reference
