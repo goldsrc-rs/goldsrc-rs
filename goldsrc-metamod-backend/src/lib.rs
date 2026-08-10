@@ -5,7 +5,6 @@
 mod meta_types;
 
 use goldsrc_api::Engine;
-use goldsrc_sys;
 use std::ffi::c_void;
 use std::ffi::CString;
 
@@ -141,61 +140,63 @@ pub fn backend() -> &'static MetamodBackend {
 
 /// Function tables that we provide to Metamod.
 /// Metamod calls these to get our hook functions.
-
+/// # Safety
+/// Called by Metamod to get entity API hooks. Pointers must be valid.
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn GetEntityAPI2(
+pub unsafe extern "C" fn GetEntityAPI2(
     dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
     interface_version: *mut i32,
 ) -> i32 {
-    unsafe {
-        if dll_table.is_null() || interface_version.is_null() {
-            return 0;
-        }
-
-        // Check interface version
-        if *interface_version != 140 {
-            *interface_version = 140;
-            return 0;
-        }
-
-        // Fill the table with our hooks
-        (*dll_table).pfnSpawn = Some(hook_spawn);
-        (*dll_table).pfnClientConnect = Some(hook_client_connect);
-        (*dll_table).pfnClientCommand = Some(hook_client_command);
-
-        backend().server_print("[GoldSrc.rs] GetEntityAPI2 called - hooks registered.\n");
-        1
+    if dll_table.is_null() || interface_version.is_null() {
+        return 0;
     }
+
+    if *interface_version != 140 {
+        *interface_version = 140;
+        return 0;
+    }
+
+    // Fill the table with our hooks (cast to expected type)
+    (*dll_table).pfnSpawn = Some(hook_spawn as unsafe extern "C" fn(_) -> i32);
+    (*dll_table).pfnClientConnect = Some(hook_client_connect as unsafe extern "C" fn(_, _, _, _) -> i32);
+    (*dll_table).pfnClientCommand = Some(hook_client_command as unsafe extern "C" fn(_));
+
+    backend().server_print("[GoldSrc.rs] GetEntityAPI2 called - hooks registered.\n");
+    1
 }
 
+/// # Safety
+/// Called by Metamod to get post-entity API hooks. Pointers must be valid.
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn GetEntityAPI2_Post(
+pub unsafe extern "C" fn GetEntityAPI2_Post(
     dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
     interface_version: *mut i32,
 ) -> i32 {
-    unsafe {
-        if dll_table.is_null() || interface_version.is_null() {
-            return 0;
-        }
-        if *interface_version != 140 {
-            *interface_version = 140;
-            return 0;
-        }
-
-        // Post hooks (called after original function)
-        (*dll_table).pfnSpawn = Some(hook_spawn_post);
-        (*dll_table).pfnClientConnect = Some(hook_client_connect_post);
-
-        1
+    if dll_table.is_null() || interface_version.is_null() {
+        return 0;
     }
+    if *interface_version != 140 {
+        *interface_version = 140;
+        return 0;
+    }
+
+    // Post hooks (called after original function)
+    (*dll_table).pfnSpawn = Some(hook_spawn_post as unsafe extern "C" fn(_) -> i32);
+    (*dll_table).pfnClientConnect = Some(hook_client_connect_post as unsafe extern "C" fn(_, _, _, _) -> i32);
+
+    1
 }
 
+/// # Safety
+/// Called by Metamod to get new DLL functions. Pointers must be valid.
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn GetNewDLLFunctions(new_table: *mut c_void, interface_version: *mut i32) -> i32 {
-    // We don't need new DLL functions for now
+pub unsafe extern "C" fn GetNewDLLFunctions(
+    _new_table: *mut c_void,
+    _interface_version: *mut i32,
+) -> i32 {
     0
 }
 
