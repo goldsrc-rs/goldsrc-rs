@@ -60,6 +60,7 @@ pub struct HostState;
 pub struct LoadedPlugin {
     pub name: String,
     pub path: PathBuf,
+    pub is_paused: bool,
     store: Store<HostState>,
     on_load_fn: Option<TypedFunc<(), ()>>,
     on_unload_fn: Option<TypedFunc<(), ()>>,
@@ -83,6 +84,9 @@ impl LoadedPlugin {
         Ok(())
     }
     pub fn call_on_frame(&mut self) -> Result<(), RuntimeError> {
+        if self.is_paused {
+            return Ok(());
+        }
         if let Some(f) = &self.on_frame_fn {
             f.call(&mut self.store, ())
                 .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
@@ -98,6 +102,7 @@ pub struct PluginManager {
     watcher_rx: Receiver<notify::Result<notify::Event>>,
     watcher_tx: std::sync::mpsc::Sender<notify::Result<notify::Event>>,
     _watchers: Vec<RecommendedWatcher>,
+    watched_dirs: Vec<PathBuf>,
 }
 
 impl Default for PluginManager {
@@ -137,6 +142,7 @@ impl PluginManager {
             watcher_rx: rx,
             watcher_tx: tx,
             _watchers: Vec::new(),
+            watched_dirs: Vec::new(),
         }
     }
 
@@ -146,6 +152,8 @@ impl PluginManager {
         if !dir_ref.exists() {
             return Ok(());
         }
+
+        self.watched_dirs.push(dir_ref.to_path_buf());
 
         host_log(&format!(
             "[GoldSrc.rs WASM Host] Watching directory {:?}\n",
@@ -248,6 +256,7 @@ impl PluginManager {
         let mut loaded = LoadedPlugin {
             name: plugin_name.clone(),
             path: path_buf,
+            is_paused: false,
             store,
             on_load_fn,
             on_unload_fn,
@@ -315,6 +324,183 @@ impl PluginManager {
             }
         }
     }
+
+    /// Get list of plugin info for CLI commands.
+    pub fn get_plugins_info(&self) -> Vec<PluginInfo> {
+        self.plugins
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| PluginInfo {
+                index: idx + 1,
+                name: p.name.clone(),
+                path: p.path.clone(),
+                is_paused: p.is_paused,
+                has_on_load: p.on_load_fn.is_some(),
+                has_on_unload: p.on_unload_fn.is_some(),
+                has_on_frame: p.on_frame_fn.is_some(),
+            })
+            .collect()
+    }
+
+    /// Find plugin index by 1-based index string or filename/name.
+    pub fn find_plugin_index(&self, query: &str) -> Option<usize> {
+        if let Some(idx) = query
+            .parse::<usize>()
+            .ok()
+            .filter(|&i| (1..=self.plugins.len()).contains(&i))
+        {
+            return Some(idx - 1);
+        }
+        let q = query.trim_end_matches(".wasm");
+        self.plugins
+            .iter()
+            .position(|p| p.name.trim_end_matches(".wasm").eq_ignore_ascii_case(q))
+    }
+
+    /// Pause or unpause a loaded plugin.
+    pub fn pause_plugin(&mut self, query: &str, pause: bool) -> Result<String, String> {
+        if let Some(idx) = self.find_plugin_index(query) {
+            self.plugins[idx].is_paused = pause;
+            let name = self.plugins[idx].name.clone();
+            let action = if pause { "Paused" } else { "Unpaused" };
+            Ok(format!(
+                "[GoldSrc.rs WASM Host] {} plugin '{}'\n",
+                action, name
+            ))
+        } else {
+            Err(format!(
+                "[GoldSrc.rs WASM Host] Plugin '{}' not found.\n",
+                query
+            ))
+        }
+    }
+
+    /// Unload a plugin by 1-based index or name.
+    pub fn unload_plugin_by_query(&mut self, query: &str) -> Result<String, String> {
+        if let Some(idx) = self.find_plugin_index(query) {
+            let mut plugin = self.plugins.remove(idx);
+            let _ = plugin.call_on_unload();
+            Ok(format!(
+                "[GoldSrc.rs WASM Host] Unloaded plugin '{}'\n",
+                plugin.name
+            ))
+        } else {
+            Err(format!(
+                "[GoldSrc.rs WASM Host] Plugin '{}' not found.\n",
+                query
+            ))
+        }
+    }
+
+    /// Reload a plugin by 1-based index or name.
+    pub fn reload_plugin_by_query(&mut self, query: &str) -> Result<String, String> {
+        if let Some(idx) = self.find_plugin_index(query) {
+            let path = self.plugins[idx].path.clone();
+            let _ = self.unload_plugin_by_query(query);
+            match self.load_plugin(&path) {
+                Ok(_) => Ok(format!(
+                    "[GoldSrc.rs WASM Host] Reloaded plugin {:?}\n",
+                    path.file_name().unwrap_or_default()
+                )),
+                Err(err) => Err(format!(
+                    "[GoldSrc.rs WASM Host] Failed to reload {:?}: {}\n",
+                    path, err
+                )),
+            }
+        } else {
+            Err(format!(
+                "[GoldSrc.rs WASM Host] Plugin '{}' not found.\n",
+                query
+            ))
+        }
+    }
+
+    /// Unload all active plugins.
+    pub fn unload_all_plugins(&mut self) -> String {
+        let count = self.plugins.len();
+        for mut plugin in self.plugins.drain(..) {
+            let _ = plugin.call_on_unload();
+        }
+        format!("[GoldSrc.rs WASM Host] Unloaded all plugins ({})\n", count)
+    }
+
+    /// Reload all active plugins.
+    pub fn reload_all_plugins(&mut self) -> String {
+        let paths: Vec<PathBuf> = self.plugins.iter().map(|p| p.path.clone()).collect();
+        let count = paths.len();
+        for mut plugin in self.plugins.drain(..) {
+            let _ = plugin.call_on_unload();
+        }
+        let mut reloaded = 0;
+        for path in &paths {
+            if self.load_plugin(path).is_ok() {
+                reloaded += 1;
+            }
+        }
+        format!(
+            "[GoldSrc.rs WASM Host] Reloaded {}/{} plugins\n",
+            reloaded, count
+        )
+    }
+
+    /// Pause or unpause all active plugins.
+    pub fn pause_all_plugins(&mut self, pause: bool) -> String {
+        let count = self.plugins.len();
+        for plugin in &mut self.plugins {
+            plugin.is_paused = pause;
+        }
+        let action = if pause { "Paused" } else { "Unpaused" };
+        format!(
+            "[GoldSrc.rs WASM Host] {} all plugins ({})\n",
+            action, count
+        )
+    }
+
+    /// Load a plugin by name or filename from watched directories.
+    pub fn load_plugin_by_name(&mut self, name: &str) -> Result<String, String> {
+        let file_name = if name.ends_with(".wasm") {
+            name.to_string()
+        } else {
+            format!("{}.wasm", name)
+        };
+
+        for dir in &self.watched_dirs {
+            let path = dir.join(&file_name);
+            if path.exists() {
+                return match self.load_plugin(&path) {
+                    Ok(_) => Ok(format!(
+                        "[GoldSrc.rs WASM Host] Loaded plugin {:?}\n",
+                        file_name
+                    )),
+                    Err(err) => Err(format!(
+                        "[GoldSrc.rs WASM Host] Failed to load {:?}: {}\n",
+                        file_name, err
+                    )),
+                };
+            }
+        }
+        Err(format!(
+            "[GoldSrc.rs WASM Host] Plugin file '{}' not found in watched directories.\n",
+            file_name
+        ))
+    }
+
+    /// Get status information (plugins count, active watchers count).
+    pub fn get_status_info(&self) -> (usize, usize) {
+        (self.plugins.len(), self._watchers.len())
+    }
+}
+
+/// Information about a loaded WASM plugin for management CLI.
+#[derive(Debug, Clone)]
+pub struct PluginInfo {
+    pub index: usize,
+    pub name: String,
+    pub path: PathBuf,
+    pub is_paused: bool,
+    pub has_on_load: bool,
+    pub has_on_unload: bool,
+    pub has_on_frame: bool,
 }
 
 #[cfg(test)]
@@ -325,5 +511,37 @@ mod tests {
     fn test_plugin_manager_creation() {
         let manager = PluginManager::new();
         assert_eq!(manager.plugins.len(), 0);
+        assert_eq!(manager.get_status_info(), (0, 0));
+    }
+
+    #[test]
+    fn test_find_plugin_index() {
+        let mut manager = PluginManager::new();
+        manager.plugins.push(LoadedPlugin {
+            name: "test_plugin.wasm".to_string(),
+            path: PathBuf::from("plugins/test_plugin.wasm"),
+            is_paused: false,
+            store: Store::new(&manager.engine, HostState),
+            on_load_fn: None,
+            on_unload_fn: None,
+            on_frame_fn: None,
+        });
+
+        assert_eq!(manager.find_plugin_index("1"), Some(0));
+        assert_eq!(manager.find_plugin_index("test_plugin"), Some(0));
+        assert_eq!(manager.find_plugin_index("test_plugin.wasm"), Some(0));
+        assert_eq!(manager.find_plugin_index("TEST_PLUGIN"), Some(0));
+        assert_eq!(manager.find_plugin_index("2"), None);
+        assert_eq!(manager.find_plugin_index("unknown"), None);
+
+        assert!(manager.pause_plugin("1", true).is_ok());
+        assert!(manager.plugins[0].is_paused);
+        assert!(manager.pause_plugin("1", false).is_ok());
+        assert!(!manager.plugins[0].is_paused);
+
+        let info = manager.get_plugins_info();
+        assert_eq!(info.len(), 1);
+        assert_eq!(info[0].name, "test_plugin.wasm");
+        assert_eq!(info[0].index, 1);
     }
 }
