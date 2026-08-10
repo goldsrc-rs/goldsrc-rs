@@ -82,7 +82,6 @@ impl LoadedPlugin {
         }
         Ok(())
     }
-
     pub fn call_on_frame(&mut self) -> Result<(), RuntimeError> {
         if let Some(f) = &self.on_frame_fn {
             f.call(&mut self.store, ())
