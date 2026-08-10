@@ -1,0 +1,25 @@
+use goldsrc::plugin;
+
+#[link(wasm_import_module = "env")]
+unsafe extern "C" {
+    fn server_print(ptr: *const u8, len: usize);
+}
+
+fn log(msg: &str) {
+    unsafe {
+        server_print(msg.as_ptr(), msg.len());
+    }
+}
+
+#[plugin(name = "vip_core", version = "1.0.0", systems = ["CoreSystem"])]
+pub struct VipCore;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn on_load() {
+    log("[VIP Core] Successfully initialized VIP Core System!\n");
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn on_frame() {
+    // Frame tick
+}

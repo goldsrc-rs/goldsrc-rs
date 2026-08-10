@@ -4,7 +4,7 @@ members = [
     "goldsrc-api",
     "goldsrc-metamod-backend",
     "goldsrc-wasm-host",
-    "goldsrc", "goldsrc-macros",
+    "goldsrc", "goldsrc-macros", "examples/demo_plugins/vip_core", "examples/demo_plugins/vip_menu",
 ]
 resolver = "3"
 
