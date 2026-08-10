@@ -323,28 +323,13 @@ pub fn alert(level: goldsrc_sys::ALERT_TYPE, message: &str) {
 /// # Safety
 /// `edict` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
-    if !edict.is_null() {
-        if let Some(edict_ref) = EdictRef::from_raw(edict) {
-            if let Some(vars) = edict_ref.vars() {
-                if let Some(cname) = vars.classname() {
-                    let msg = format!("[GoldSrc.rs] Entity {} spawned (pre).\n", cname);
-                    backend().server_print(&msg);
-                } else {
-                    backend().server_print("[GoldSrc.rs] Entity spawned (pre).\n");
-                }
-            }
-        }
-    }
+unsafe extern "C" fn hook_spawn(_edict: *mut goldsrc_sys::edict_t) -> i32 {
     0
 }
 
 /// Post-hook for DispatchSpawn.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> i32 {
-    if !edict.is_null() {
-        backend().server_print("[GoldSrc.rs] Entity spawned (post).\n");
-    }
+unsafe extern "C" fn hook_spawn_post(_edict: *mut goldsrc_sys::edict_t) -> i32 {
     0
 }
 
@@ -355,15 +340,10 @@ unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> i32 {
 #[allow(dead_code)]
 unsafe extern "C" fn hook_client_connect(
     _entity: *mut goldsrc_sys::edict_t,
-    name: *const std::os::raw::c_char,
+    _name: *const std::os::raw::c_char,
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
 ) -> goldsrc_sys::qboolean {
-    if !name.is_null() {
-        let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
-        let msg = format!("[GoldSrc.rs] Player {} connecting (pre)...\n", name_str);
-        backend().server_print(&msg);
-    }
     0
 }
 
@@ -371,15 +351,10 @@ unsafe extern "C" fn hook_client_connect(
 #[allow(dead_code)]
 unsafe extern "C" fn hook_client_connect_post(
     _entity: *mut goldsrc_sys::edict_t,
-    name: *const std::os::raw::c_char,
+    _name: *const std::os::raw::c_char,
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
 ) -> goldsrc_sys::qboolean {
-    if !name.is_null() {
-        let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
-        let msg = format!("[GoldSrc.rs] Player {} connected (post).\n", name_str);
-        backend().server_print(&msg);
-    }
     0
 }
 
@@ -388,39 +363,18 @@ unsafe extern "C" fn hook_client_connect_post(
 /// # Safety
 /// `entity` must be valid player edict pointer or null.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_client_disconnect(entity: *mut goldsrc_sys::edict_t) {
-    if !entity.is_null() {
-        if let Some(edict_ref) = EdictRef::from_raw(entity) {
-            if let Some(vars) = edict_ref.vars() {
-                if let Some(name) = vars.netname() {
-                    let msg = format!("[GoldSrc.rs] Player {} disconnected (pre).\n", name);
-                    backend().server_print(&msg);
-                    return;
-                }
-            }
-        }
-        backend().server_print("[GoldSrc.rs] Player disconnected (pre).\n");
-    }
-}
+unsafe extern "C" fn hook_client_disconnect(_entity: *mut goldsrc_sys::edict_t) {}
 
 /// Post-hook for ClientDisconnect.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::edict_t) {
-    if !entity.is_null() {
-        backend().server_print("[GoldSrc.rs] Player disconnected (post).\n");
-    }
-}
+unsafe extern "C" fn hook_client_disconnect_post(_entity: *mut goldsrc_sys::edict_t) {}
 
 /// Hook for ClientCommand - called when a player issues a command.
 ///
 /// # Safety
 /// `entity` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
-    if !entity.is_null() {
-        backend().server_print("[GoldSrc.rs] Client command received.\n");
-    }
-}
+unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {}
 
 /// Hook for StartFrame - called every server frame.
 unsafe extern "C" fn hook_start_frame() {
@@ -879,7 +833,8 @@ pub unsafe extern "C" fn Meta_Attach(
     register_cli_commands();
     backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
     backend().server_print("[GoldSrc.rs] WASM Host Engine initialized.\n");
-    backend().server_print("[GoldSrc.rs] Host Management CLI registered (`rs` / `goldsrc`).\n");
+    backend()
+        .server_print("[GoldSrc.rs] Host Management CLI registered (`meta-rs` / `goldsrc`).\n");
     backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
     1
 }
