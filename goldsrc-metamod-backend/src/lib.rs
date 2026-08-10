@@ -434,7 +434,9 @@ pub unsafe extern "C" fn Meta_Attach(
     _gamedll_funcs: *mut c_void,
 ) -> std::os::raw::c_int {
     unsafe {
-        if meta_globals.is_null() || meta_functions.is_null() { return 0; }
+        if meta_globals.is_null() || meta_functions.is_null() {
+            return 0;
+        }
         G_META_GLOBALS = Some(meta_globals);
 
         // Fill the META_FUNCTIONS table with our hook functions

@@ -72,11 +72,16 @@ pub struct mutil_funcs_t {
 #[allow(non_snake_case)]
 pub struct meta_function_t {
     pub pfnGetEntityAPI: Option<unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, i32) -> i32>,
-    pub pfnGetEntityAPI_Post: Option<unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, i32) -> i32>,
-    pub pfnGetEntityAPI2: Option<unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, *mut i32) -> i32>,
-    pub pfnGetEntityAPI2_Post: Option<unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, *mut i32) -> i32>,
+    pub pfnGetEntityAPI_Post:
+        Option<unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, i32) -> i32>,
+    pub pfnGetEntityAPI2:
+        Option<unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, *mut i32) -> i32>,
+    pub pfnGetEntityAPI2_Post:
+        Option<unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, *mut i32) -> i32>,
     pub pfnGetNewDLLFunctions: Option<unsafe extern "C" fn(*mut c_void, *mut i32) -> i32>,
     pub pfnGetNewDLLFunctions_Post: Option<unsafe extern "C" fn(*mut c_void, *mut i32) -> i32>,
-    pub pfnGetEngineFunctions: Option<unsafe extern "C" fn(*mut goldsrc_sys::enginefuncs_t, *mut i32) -> i32>,
-    pub pfnGetEngineFunctions_Post: Option<unsafe extern "C" fn(*mut goldsrc_sys::enginefuncs_t, *mut i32) -> i32>,
+    pub pfnGetEngineFunctions:
+        Option<unsafe extern "C" fn(*mut goldsrc_sys::enginefuncs_t, *mut i32) -> i32>,
+    pub pfnGetEngineFunctions_Post:
+        Option<unsafe extern "C" fn(*mut goldsrc_sys::enginefuncs_t, *mut i32) -> i32>,
 }

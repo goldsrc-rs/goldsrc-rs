@@ -73,7 +73,10 @@ impl VTableHook {
 
         #[cfg(not(windows))]
         {
-            use libc::{c_void as libc_void, mprotect, sysconf, PROT_READ, PROT_WRITE, PROT_EXEC, _SC_PAGESIZE};
+            use libc::{
+                c_void as libc_void, mprotect, sysconf, _SC_PAGESIZE, PROT_EXEC, PROT_READ,
+                PROT_WRITE,
+            };
             let page_size = sysconf(_SC_PAGESIZE) as usize;
             let slot_addr = slot as usize;
             let page_start = (slot_addr & !(page_size - 1)) as *mut libc_void;
@@ -111,10 +114,8 @@ mod tests {
     #[test]
     fn test_vtable_hook_swap() {
         unsafe {
-            let mut fake_vtable: [*mut c_void; 2] = [
-                original_fn as *mut c_void,
-                core::ptr::null_mut(),
-            ];
+            let mut fake_vtable: [*mut c_void; 2] =
+                [original_fn as *mut c_void, core::ptr::null_mut()];
             let vtable_ptr = fake_vtable.as_mut_ptr();
             let mut object_ptr = vtable_ptr;
             let target_obj = &mut object_ptr as *mut _ as *mut c_void;
@@ -128,4 +129,3 @@ mod tests {
         }
     }
 }
-

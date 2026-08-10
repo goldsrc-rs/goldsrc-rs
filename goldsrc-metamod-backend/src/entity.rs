@@ -1,7 +1,7 @@
 //! Safe abstractions over core GoldSrc engine entities and types.
 
-use std::ffi::CStr;
 use goldsrc_sys::{edict_t, entvars_t};
+use std::ffi::CStr;
 
 /// Safe wrapper around raw GoldSrc `edict_t`.
 #[derive(Debug, Clone, Copy)]
@@ -232,4 +232,3 @@ impl BaseEntityRef {
         self.ptr
     }
 }
-
