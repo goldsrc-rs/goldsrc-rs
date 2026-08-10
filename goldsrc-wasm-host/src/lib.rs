@@ -62,6 +62,7 @@ pub struct LoadedPlugin {
     pub path: PathBuf,
     store: Store<HostState>,
     on_load_fn: Option<TypedFunc<(), ()>>,
+    on_unload_fn: Option<TypedFunc<(), ()>>,
     on_frame_fn: Option<TypedFunc<(), ()>>,
 }
 
@@ -74,6 +75,13 @@ impl LoadedPlugin {
         Ok(())
     }
 
+    pub fn call_on_unload(&mut self) -> Result<(), RuntimeError> {
+        if let Some(f) = &self.on_unload_fn {
+            f.call(&mut self.store, ())
+                .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+        }
+        Ok(())
+    }
     pub fn call_on_frame(&mut self) -> Result<(), RuntimeError> {
         if let Some(f) = &self.on_frame_fn {
             f.call(&mut self.store, ())
@@ -87,8 +95,9 @@ impl LoadedPlugin {
 pub struct PluginManager {
     engine: Engine,
     plugins: Vec<LoadedPlugin>,
-    watcher_rx: Option<Receiver<notify::Result<notify::Event>>>,
-    _watcher: Option<RecommendedWatcher>,
+    watcher_rx: Receiver<notify::Result<notify::Event>>,
+    watcher_tx: std::sync::mpsc::Sender<notify::Result<notify::Event>>,
+    _watchers: Vec<RecommendedWatcher>,
 }
 
 impl Default for PluginManager {
@@ -97,20 +106,53 @@ impl Default for PluginManager {
     }
 }
 
+static PRINT_CALLBACK: std::sync::RwLock<Option<fn(&str)>> = std::sync::RwLock::new(None);
+
+/// Set global callback for WASM server_print calls.
+pub fn set_print_callback(f: fn(&str)) {
+    if let Ok(mut lock) = PRINT_CALLBACK.write() {
+        *lock = Some(f);
+    }
+}
+
+/// Print log message via host callback (engine server_print).
+pub fn host_log(msg: &str) {
+    #[allow(clippy::collapsible_if)]
+    if let Ok(lock) = PRINT_CALLBACK.read() {
+        if let Some(print_fn) = *lock {
+            print_fn(msg);
+            return;
+        }
+    }
+    println!("{}", msg);
+}
+
 impl PluginManager {
     pub fn new() -> Self {
         let engine = Engine::default();
+        let (tx, rx) = channel();
         Self {
             engine,
             plugins: Vec::new(),
-            watcher_rx: None,
-            _watcher: None,
+            watcher_rx: rx,
+            watcher_tx: tx,
+            _watchers: Vec::new(),
         }
     }
 
-    /// Setup hot-reload file watching on a directory.
+    /// Setup hot-reload file watching on a directory and load existing plugins.
     pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), RuntimeError> {
-        let (tx, rx) = channel();
+        let dir_ref = dir.as_ref();
+        if !dir_ref.exists() {
+            return Ok(());
+        }
+
+        host_log(&format!(
+            "[GoldSrc.rs WASM Host] Watching directory {:?}\n",
+            dir_ref
+        ));
+
+        let tx = self.watcher_tx.clone();
         let mut watcher = RecommendedWatcher::new(
             move |res| {
                 let _ = tx.send(res);
@@ -118,13 +160,38 @@ impl PluginManager {
             Config::default().with_poll_interval(Duration::from_secs(1)),
         )?;
 
-        if dir.as_ref().exists() {
-            watcher.watch(dir.as_ref(), RecursiveMode::NonRecursive)?;
+        watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
+        self._watchers.push(watcher);
+
+        if let Ok(entries) = fs::read_dir(dir_ref) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_some_and(|ext| ext == "wasm") {
+                    let res = self.load_plugin(&path);
+                    if let Err(err) = res {
+                        host_log(&format!(
+                            "[GoldSrc.rs WASM Host] Failed to load {:?}: {}\n",
+                            path, err
+                        ));
+                    }
+                }
+            }
         }
 
-        self.watcher_rx = Some(rx);
-        self._watcher = Some(watcher);
         Ok(())
+    }
+
+    /// Unload plugin by path, invoking on_unload callback if present.
+    pub fn unload_plugin<P: AsRef<Path>>(&mut self, path: P) {
+        let p_ref = path.as_ref();
+        if let Some(idx) = self.plugins.iter().position(|p| p.path == p_ref) {
+            let mut plugin = self.plugins.remove(idx);
+            let _ = plugin.call_on_unload();
+            host_log(&format!(
+                "[GoldSrc.rs WASM Host] Unloaded plugin {:?}\n",
+                plugin.name
+            ));
+        }
     }
 
     /// Load a WASM plugin module from a file.
@@ -145,12 +212,18 @@ impl PluginManager {
                 "server_print",
                 wasmi::Func::wrap(
                     &mut store,
-                    |_caller: wasmi::Caller<'_, HostState>, msg_ptr: i32, msg_len: i32| {
-                        log::info!(
-                            "[WASM Host Function] server_print called (ptr={}, len={})",
-                            msg_ptr,
-                            msg_len
-                        );
+                    |caller: wasmi::Caller<'_, HostState>, msg_ptr: i32, msg_len: i32| {
+                        let Some(wasmi::Extern::Memory(mem)) = caller.get_export("memory") else {
+                            return;
+                        };
+                        let mut buf = vec![0u8; msg_len as usize];
+                        if mem.read(&caller, msg_ptr as usize, &mut buf).is_err() {
+                            return;
+                        };
+                        let Ok(s) = std::str::from_utf8(&buf) else {
+                            return;
+                        };
+                        host_log(s);
                     },
                 ),
             )
@@ -163,6 +236,7 @@ impl PluginManager {
             .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
 
         let on_load_fn = instance.get_typed_func::<(), ()>(&store, "on_load").ok();
+        let on_unload_fn = instance.get_typed_func::<(), ()>(&store, "on_unload").ok();
         let on_frame_fn = instance.get_typed_func::<(), ()>(&store, "on_frame").ok();
 
         let plugin_name = path_buf
@@ -172,42 +246,59 @@ impl PluginManager {
             .into_owned();
 
         let mut loaded = LoadedPlugin {
-            name: plugin_name,
+            name: plugin_name.clone(),
             path: path_buf,
             store,
             on_load_fn,
+            on_unload_fn,
             on_frame_fn,
         };
 
         loaded.call_on_load()?;
+        host_log(&format!(
+            "[GoldSrc.rs WASM Host] Loaded plugin {}\n",
+            plugin_name
+        ));
         self.plugins.push(loaded);
         Ok(())
     }
 
-    /// Poll for file changes and reload updated plugins.
+    /// Poll for file changes and handle all plugin lifecycle events (Create, Modify, Delete).
     pub fn process_hot_reload(&mut self) {
         let mut reload_paths = Vec::new();
-        if let Some(rx) = &self.watcher_rx {
-            while let Ok(Ok(event)) = rx.try_recv() {
-                for path in event.paths {
-                    if path.extension().is_some_and(|ext| ext == "wasm") {
-                        reload_paths.push(path);
-                    }
+        while let Ok(Ok(event)) = self.watcher_rx.try_recv() {
+            for path in event.paths {
+                if path.extension().is_some_and(|ext| ext == "wasm") {
+                    reload_paths.push(path);
                 }
             }
         }
 
+        reload_paths.sort();
+        reload_paths.dedup();
+
         for path in reload_paths {
-            log::info!("[GoldSrc.rs WASM Host] Hot-reload triggered for {:?}", path);
-            self.plugins.retain(|p| p.path != path);
-            if let Err(err) = self.load_plugin(&path) {
-                log::error!(
-                    "[GoldSrc.rs WASM Host] Failed to reload {:?}: {}",
-                    path,
-                    err
-                );
+            if path.exists() {
+                // Scenario 1 & 2: Plugin Created or Overwritten/Modified
+                let is_reload = self.plugins.iter().any(|p| p.path == path);
+                self.unload_plugin(&path);
+
+                if let Err(err) = self.load_plugin(&path) {
+                    host_log(&format!(
+                        "[GoldSrc.rs WASM Host] Failed to {} {:?}: {}\n",
+                        if is_reload { "reload" } else { "load" },
+                        path,
+                        err
+                    ));
+                } else if is_reload {
+                    host_log(&format!(
+                        "[GoldSrc.rs WASM Host] Reloaded plugin {:?}\n",
+                        path
+                    ));
+                }
             } else {
-                log::info!("[GoldSrc.rs WASM Host] Reloaded successfully {:?}", path);
+                // Scenario 3: Plugin Deleted / Removed / Renamed away
+                self.unload_plugin(&path);
             }
         }
     }
@@ -217,11 +308,10 @@ impl PluginManager {
         self.process_hot_reload();
         for plugin in &mut self.plugins {
             if let Err(err) = plugin.call_on_frame() {
-                log::error!(
-                    "[GoldSrc.rs WASM Host] Error in plugin {}: {}",
-                    plugin.name,
-                    err
-                );
+                host_log(&format!(
+                    "[GoldSrc.rs WASM Host] Error in plugin {}: {}\n",
+                    plugin.name, err
+                ));
             }
         }
     }

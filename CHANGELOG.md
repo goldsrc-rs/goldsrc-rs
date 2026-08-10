@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.build-config.toml` generation (gitignored, machine-specific).
 - GitHub Actions CI for Windows and Linux.
 - Auto-format GitHub Action and pre-commit hook.
+- Integrated `wasmi` pure-Rust WebAssembly interpreter into `goldsrc-wasm-host`.
+- Full plugin lifecycle management for WASM modules: `on_load`, `on_unload`, `on_frame` callbacks.
+- File system watcher (`notify`) for multi-directory hot-reloading without server restarts.
+- Engine console logging (`server_print`) integration for WASM host and modules.
+- Metamod `pfnStartFrame` hook integration for WASM module frame ticks.
 
 ### Changed
 
