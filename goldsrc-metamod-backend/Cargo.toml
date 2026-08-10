@@ -17,3 +17,6 @@ goldsrc-api = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_System_Memory", "Win32_Foundation"] }
+
+[target.'cfg(not(windows))'.dependencies]
+libc = "0.2"
