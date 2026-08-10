@@ -75,6 +75,21 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             let meta = concat!(#meta_json, "\0");
             meta.as_ptr()
         }
+
+        #[no_mangle]
+        pub extern "C" fn __goldsrc_alloc(size: usize) -> *mut u8 {
+            let mut buf = vec![0u8; size];
+            let ptr = buf.as_mut_ptr();
+            std::mem::forget(buf);
+            ptr
+        }
+
+        #[no_mangle]
+        pub unsafe extern "C" fn __goldsrc_dealloc(ptr: *mut u8, size: usize) {
+            if !ptr.is_null() {
+                let _ = unsafe { Vec::from_raw_parts(ptr, size, size) };
+            }
+        }
     };
 
     TokenStream::from(expanded)

@@ -9,7 +9,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::Duration;
 
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-use wasmi::{Engine, Linker, Module, Store, TypedFunc};
+use wasmi::{Engine, Instance, Linker, Module, Store, TypedFunc};
 
 /// Errors that can occur in the WASM runtime.
 #[derive(Debug)]
@@ -79,9 +79,11 @@ pub struct LoadedPlugin {
     pub is_paused: bool,
     pub metadata: Option<PluginMetadata>,
     store: Store<HostState>,
+    instance: Option<Instance>,
     on_load_fn: Option<TypedFunc<(), ()>>,
     on_unload_fn: Option<TypedFunc<(), ()>>,
     on_frame_fn: Option<TypedFunc<(), ()>>,
+    on_event_fn: Option<TypedFunc<(i32, i32, i32, i32), ()>>,
 }
 
 impl LoadedPlugin {
@@ -107,6 +109,44 @@ impl LoadedPlugin {
         if let Some(f) = &self.on_frame_fn {
             f.call(&mut self.store, ())
                 .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+        }
+        Ok(())
+    }
+    pub fn call_on_event(&mut self, event_name: &str, data: &[u8]) -> Result<(), RuntimeError> {
+        if self.is_paused {
+            return Ok(());
+        }
+        if let (Some(f), Some(inst)) = (&self.on_event_fn, &self.instance) {
+            let alloc_fn = inst
+                .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
+                .ok();
+            let dealloc_fn = inst
+                .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
+                .ok();
+
+            if let (Some(alloc), Some(dealloc)) = (alloc_fn, dealloc_fn) {
+                let name_bytes = event_name.as_bytes();
+                let name_len = name_bytes.len() as i32;
+                let data_len = data.len() as i32;
+
+                if let (Ok(name_ptr), Ok(data_ptr)) = (
+                    alloc.call(&mut self.store, (name_len,)),
+                    alloc.call(&mut self.store, (data_len,)),
+                ) {
+                    if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
+                    {
+                        let _ = mem.write(&mut self.store, name_ptr as usize, name_bytes);
+                        let _ = mem.write(&mut self.store, data_ptr as usize, data);
+
+                        let res = f.call(&mut self.store, (name_ptr, name_len, data_ptr, data_len));
+
+                        let _ = dealloc.call(&mut self.store, (name_ptr, name_len));
+                        let _ = dealloc.call(&mut self.store, (data_ptr, data_len));
+
+                        res.map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -367,6 +407,9 @@ impl PluginManager {
         let on_load_fn = instance.get_typed_func::<(), ()>(&store, "on_load").ok();
         let on_unload_fn = instance.get_typed_func::<(), ()>(&store, "on_unload").ok();
         let on_frame_fn = instance.get_typed_func::<(), ()>(&store, "on_frame").ok();
+        let on_event_fn = instance
+            .get_typed_func::<(i32, i32, i32, i32), ()>(&store, "on_event")
+            .ok();
 
         let metadata = if let Ok(meta_fn) =
             instance.get_typed_func::<(), i32>(&store, "__goldsrc_plugin_metadata")
@@ -407,9 +450,11 @@ impl PluginManager {
             is_paused: false,
             metadata,
             store,
+            instance: Some(instance),
             on_load_fn,
             on_unload_fn,
             on_frame_fn,
+            on_event_fn,
         };
 
         loaded.call_on_load()?;
@@ -672,9 +717,11 @@ mod tests {
             is_paused: false,
             metadata: None,
             store: Store::new(&manager.engine, HostState),
+            instance: None,
             on_load_fn: None,
             on_unload_fn: None,
             on_frame_fn: None,
+            on_event_fn: None,
         });
 
         assert_eq!(manager.find_plugin_index("1"), Some(0));
@@ -714,9 +761,11 @@ mod tests {
                 dependencies: deps_child,
             }),
             store: Store::new(&manager.engine, HostState),
+            instance: None,
             on_load_fn: None,
             on_unload_fn: None,
             on_frame_fn: None,
+            on_event_fn: None,
         });
 
         manager.plugins.push(LoadedPlugin {
@@ -730,9 +779,11 @@ mod tests {
                 dependencies: std::collections::HashMap::new(),
             }),
             store: Store::new(&manager.engine, HostState),
+            instance: None,
             on_load_fn: None,
             on_unload_fn: None,
             on_frame_fn: None,
+            on_event_fn: None,
         });
 
         let errors = manager.validate_and_sort_dependencies();
