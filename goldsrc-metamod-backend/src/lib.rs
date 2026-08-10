@@ -6,8 +6,8 @@ mod meta_types;
 
 use goldsrc_api::Engine;
 
-use std::ffi::CString;
 use std::ffi::c_void;
+use std::ffi::CString;
 
 use meta_types::*;
 
@@ -63,11 +63,15 @@ macro_rules! call_engfunc_ret {
 pub struct MetamodBackend;
 
 impl Default for MetamodBackend {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl MetamodBackend {
-    pub const fn new() -> Self { Self }
+    pub const fn new() -> Self {
+        Self
+    }
 }
 
 impl Engine for MetamodBackend {
@@ -75,7 +79,9 @@ impl Engine for MetamodBackend {
         unsafe {
             let funcs = engfuncs();
             let edict = (funcs.pfnCreateEntity)?();
-            if edict.is_null() { return None; }
+            if edict.is_null() {
+                return None;
+            }
             let cname = CString::new(classname).unwrap_or_default();
             call_engfunc!(funcs.pfnSetModel, edict, cname.as_ptr());
             let index = (funcs.pfnIndexOfEdict)?(edict);
@@ -87,7 +93,9 @@ impl Engine for MetamodBackend {
         unsafe {
             let funcs = engfuncs();
             let edict = (funcs.pfnPEntityOfEntIndex)?(index);
-            if edict.is_null() { return None; }
+            if edict.is_null() {
+                return None;
+            }
             Some(goldsrc_api::Player::from_raw(index, edict))
         }
     }
@@ -123,7 +131,9 @@ impl Engine for MetamodBackend {
 
 static BACKEND: MetamodBackend = MetamodBackend::new();
 
-pub fn backend() -> &'static MetamodBackend { &BACKEND }
+pub fn backend() -> &'static MetamodBackend {
+    &BACKEND
+}
 
 // ============================================================================
 // Hook System (stubs for future implementation)
@@ -193,7 +203,9 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
     engfuncs: *mut goldsrc_sys::enginefuncs_t,
     globals: *mut goldsrc_sys::globalvars_t,
 ) {
-    unsafe { init_backend(engfuncs, globals); }
+    unsafe {
+        init_backend(engfuncs, globals);
+    }
     backend().server_print("[GoldSrc.rs] Engine functions received.\n");
 }
 
@@ -207,7 +219,9 @@ pub unsafe extern "C" fn Meta_Query(
     meta_util_functions: *mut mutil_funcs_t,
 ) -> std::os::raw::c_int {
     unsafe {
-        if plugin_info.is_null() || meta_util_functions.is_null() { return 0; }
+        if plugin_info.is_null() || meta_util_functions.is_null() {
+            return 0;
+        }
         *plugin_info = &PLUGIN_INFO;
         *meta_util_functions = get_meta_util_funcs();
     }
@@ -226,7 +240,9 @@ pub unsafe extern "C" fn Meta_Attach(
     _gamedll_funcs: *mut c_void,
 ) -> std::os::raw::c_int {
     unsafe {
-        if meta_globals.is_null() { return 0; }
+        if meta_globals.is_null() {
+            return 0;
+        }
         G_META_GLOBALS = Some(meta_globals);
         register_hooks(meta_functions);
     }
