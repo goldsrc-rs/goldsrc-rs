@@ -56,11 +56,28 @@ impl From<notify::Error> for RuntimeError {
 #[derive(Default)]
 pub struct HostState;
 
+/// Metadata structure exported by WASM plugins generated via #[plugin] macro.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct PluginMetadata {
+    pub name: String,
+    #[serde(default = "default_version")]
+    pub version: String,
+    #[serde(default)]
+    pub systems: Vec<String>,
+    #[serde(default)]
+    pub dependencies: std::collections::HashMap<String, String>,
+}
+
+fn default_version() -> String {
+    "1.0.0".to_string()
+}
+
 /// Single loaded WASM plugin module instance.
 pub struct LoadedPlugin {
     pub name: String,
     pub path: PathBuf,
     pub is_paused: bool,
+    pub metadata: Option<PluginMetadata>,
     store: Store<HostState>,
     on_load_fn: Option<TypedFunc<(), ()>>,
     on_unload_fn: Option<TypedFunc<(), ()>>,
@@ -189,6 +206,110 @@ impl PluginManager {
         Ok(())
     }
 
+    /// Validate SemVer dependencies across all loaded plugins and sort them topologically.
+    pub fn validate_and_sort_dependencies(&mut self) -> Vec<String> {
+        use semver::{Version, VersionReq};
+        use std::collections::HashMap;
+
+        let mut errors = Vec::new();
+
+        // Map plugin identifiers (metadata name or filename) to index and parsed version
+        let mut plugin_map: HashMap<String, (usize, Version)> = HashMap::new();
+
+        for (idx, plugin) in self.plugins.iter().enumerate() {
+            let (name, ver_str) = if let Some(meta) = &plugin.metadata {
+                (meta.name.clone(), meta.version.clone())
+            } else {
+                let stem = plugin
+                    .path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                (stem, "1.0.0".to_string())
+            };
+
+            let version = Version::parse(&ver_str).unwrap_or_else(|_| Version::new(1, 0, 0));
+            plugin_map.insert(name, (idx, version));
+        }
+
+        // Validate dependency constraints
+        for plugin in &self.plugins {
+            if let Some(meta) = &plugin.metadata {
+                for (dep_name, req_str) in &meta.dependencies {
+                    if let Some((_, dep_ver)) = plugin_map.get(dep_name) {
+                        if let Ok(req) = VersionReq::parse(req_str) {
+                            if !req.matches(dep_ver) {
+                                errors.push(format!(
+                                    "Plugin '{}' requires '{}' {}, but version '{}' is loaded",
+                                    meta.name, dep_name, req_str, dep_ver
+                                ));
+                            }
+                        } else {
+                            errors.push(format!(
+                                "Plugin '{}' has invalid version constraint requirement '{}' for '{}'",
+                                meta.name, req_str, dep_name
+                            ));
+                        }
+                    } else {
+                        errors.push(format!(
+                            "Plugin '{}' missing required dependency '{}'",
+                            meta.name, dep_name
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Topological Sort (Kahn's Algorithm)
+        let n = self.plugins.len();
+        let mut in_degree = vec![0usize; n];
+        let mut adj = vec![Vec::new(); n];
+
+        for (idx, plugin) in self.plugins.iter().enumerate() {
+            if let Some(meta) = &plugin.metadata {
+                for dep_name in meta.dependencies.keys() {
+                    if let Some(&(dep_idx, _)) = plugin_map.get(dep_name) {
+                        adj[dep_idx].push(idx);
+                        in_degree[idx] += 1;
+                    }
+                }
+            }
+        }
+
+        let mut queue = Vec::new();
+        for (i, degree) in in_degree.iter().enumerate() {
+            if *degree == 0 {
+                queue.push(i);
+            }
+        }
+
+        let mut sorted_indices = Vec::new();
+        while let Some(u) = queue.pop() {
+            sorted_indices.push(u);
+            for &v in &adj[u] {
+                in_degree[v] -= 1;
+                if in_degree[v] == 0 {
+                    queue.push(v);
+                }
+            }
+        }
+
+        if sorted_indices.len() == n {
+            let mut old_plugins: Vec<Option<LoadedPlugin>> =
+                self.plugins.drain(..).map(Some).collect();
+            for idx in sorted_indices {
+                if let Some(p) = old_plugins[idx].take() {
+                    self.plugins.push(p);
+                }
+            }
+        } else if errors.is_empty() {
+            errors.push("Circular dependency detected among WASM plugins".to_string());
+        }
+
+        errors
+    }
+
     /// Unload plugin by path, invoking on_unload callback if present.
     pub fn unload_plugin<P: AsRef<Path>>(&mut self, path: P) {
         let p_ref = path.as_ref();
@@ -247,6 +368,33 @@ impl PluginManager {
         let on_unload_fn = instance.get_typed_func::<(), ()>(&store, "on_unload").ok();
         let on_frame_fn = instance.get_typed_func::<(), ()>(&store, "on_frame").ok();
 
+        let metadata = if let Ok(meta_fn) =
+            instance.get_typed_func::<(), i32>(&store, "__goldsrc_plugin_metadata")
+        {
+            if let Ok(ptr) = meta_fn.call(&mut store, ()) {
+                if let Some(wasmi::Extern::Memory(mem)) = instance.get_export(&store, "memory") {
+                    let mut bytes = Vec::new();
+                    let mut offset = ptr as usize;
+                    let mut byte = [0u8; 1];
+                    while mem.read(&store, offset, &mut byte).is_ok() && byte[0] != 0 {
+                        bytes.push(byte[0]);
+                        offset += 1;
+                    }
+                    if let Ok(json_str) = std::str::from_utf8(&bytes) {
+                        serde_json::from_str::<PluginMetadata>(json_str).ok()
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let plugin_name = path_buf
             .file_name()
             .unwrap_or_default()
@@ -257,6 +405,7 @@ impl PluginManager {
             name: plugin_name.clone(),
             path: path_buf,
             is_paused: false,
+            metadata,
             store,
             on_load_fn,
             on_unload_fn,
@@ -521,6 +670,7 @@ mod tests {
             name: "test_plugin.wasm".to_string(),
             path: PathBuf::from("plugins/test_plugin.wasm"),
             is_paused: false,
+            metadata: None,
             store: Store::new(&manager.engine, HostState),
             on_load_fn: None,
             on_unload_fn: None,
@@ -543,5 +693,57 @@ mod tests {
         assert_eq!(info.len(), 1);
         assert_eq!(info[0].name, "test_plugin.wasm");
         assert_eq!(info[0].index, 1);
+    }
+
+    #[test]
+    fn test_dependency_resolution() {
+        let mut manager = PluginManager::new();
+
+        let mut deps_child = std::collections::HashMap::new();
+        deps_child.insert("parent_plugin".to_string(), "^1.0.0".to_string());
+
+        // Child loaded FIRST, parent loaded SECOND
+        manager.plugins.push(LoadedPlugin {
+            name: "child_plugin.wasm".to_string(),
+            path: PathBuf::from("plugins/child_plugin.wasm"),
+            is_paused: false,
+            metadata: Some(PluginMetadata {
+                name: "child_plugin".to_string(),
+                version: "1.0.0".to_string(),
+                systems: vec![],
+                dependencies: deps_child,
+            }),
+            store: Store::new(&manager.engine, HostState),
+            on_load_fn: None,
+            on_unload_fn: None,
+            on_frame_fn: None,
+        });
+
+        manager.plugins.push(LoadedPlugin {
+            name: "parent_plugin.wasm".to_string(),
+            path: PathBuf::from("plugins/parent_plugin.wasm"),
+            is_paused: false,
+            metadata: Some(PluginMetadata {
+                name: "parent_plugin".to_string(),
+                version: "1.2.0".to_string(),
+                systems: vec![],
+                dependencies: std::collections::HashMap::new(),
+            }),
+            store: Store::new(&manager.engine, HostState),
+            on_load_fn: None,
+            on_unload_fn: None,
+            on_frame_fn: None,
+        });
+
+        let errors = manager.validate_and_sort_dependencies();
+        assert!(
+            errors.is_empty(),
+            "Expected no dependency errors: {:?}",
+            errors
+        );
+
+        // Verify topological sorting: parent MUST come before child
+        assert_eq!(manager.plugins[0].name, "parent_plugin.wasm");
+        assert_eq!(manager.plugins[1].name, "child_plugin.wasm");
     }
 }

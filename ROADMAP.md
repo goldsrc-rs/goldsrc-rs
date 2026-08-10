@@ -30,7 +30,8 @@
 - [ ] Global Event Bus (Pub/Sub) for inter-plugin communication across WASM modules.
 - [ ] Database API (`sqlx`, async runtime integration) & JSON/TOML configuration watchers.
 
-## Stage 5: Standalone Backend (Future)
+## Stage 5: Standalone Backend & Advanced Runtimes (Future)
 
+- [ ] Transition / dual-support for `wasmtime` engine (JIT execution, WASM Component Model & Exception Handling).
 - [ ] Build a custom `mp.dll` loader that bypasses the original Metamod.
 - [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces.
