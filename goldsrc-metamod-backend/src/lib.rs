@@ -29,6 +29,8 @@ pub fn init_wasm_host() {
         let mut manager = goldsrc_wasm_host::PluginManager::new();
         let _ = manager.enable_hot_reload("cstrike/addons/metamod-rs/plugins");
         let _ = manager.enable_hot_reload("addons/metamod-rs/plugins");
+        let _ = manager.enable_config_watcher("cstrike/addons/metamod-rs/configs");
+        let _ = manager.enable_config_watcher("addons/metamod-rs/configs");
         WASM_MANAGER = Some(manager);
     }
 }
@@ -372,9 +374,28 @@ unsafe extern "C" fn hook_client_disconnect_post(_entity: *mut goldsrc_sys::edic
 /// Hook for ClientCommand - called when a player issues a command.
 ///
 /// # Safety
-/// `entity` must be a valid pointer to an edict_t.
+/// `_entity` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {}
+unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {
+    let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
+    if argc == 0 {
+        return;
+    }
+    let cmd_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, 0);
+    let args_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Args);
+    if !cmd_ptr.is_null() {
+        if let Ok(cmd_str) = std::ffi::CStr::from_ptr(cmd_ptr).to_str() {
+            let args_str = if !args_ptr.is_null() {
+                std::ffi::CStr::from_ptr(args_ptr).to_str().unwrap_or_default()
+            } else {
+                ""
+            };
+            if let Some(manager) = wasm_manager() {
+                manager.dispatch_command(cmd_str, args_str);
+            }
+        }
+    }
+}
 
 /// Hook for StartFrame - called every server frame.
 unsafe extern "C" fn hook_start_frame() {

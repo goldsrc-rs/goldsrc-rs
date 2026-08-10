@@ -1,4 +1,4 @@
-use goldsrc::plugin;
+use goldsrc::{command, plugin};
 
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "env")]
@@ -43,4 +43,10 @@ pub extern "C" fn on_event(
         );
         log(&msg);
     }
+}
+
+#[command(name = "vipmenu")]
+pub fn handle_vipmenu(cmd: &str, args: &str) {
+    let msg = format!("[VIP Menu] Command '{}' called with args: '{}'\n", cmd, args);
+    log(&msg);
 }

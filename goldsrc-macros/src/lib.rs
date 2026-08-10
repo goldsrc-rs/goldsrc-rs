@@ -94,6 +94,51 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn command(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
+pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(item as syn::ItemFn);
+    let fn_name = &input_fn.sig.ident;
+    let mut cmd_name = fn_name.to_string();
+
+    if !attr.is_empty() {
+        let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
+        if let Ok(metas) = parser.parse(attr) {
+            for meta in metas {
+                if let Meta::NameValue(nv) = meta {
+                    if nv.path.is_ident("name") {
+                        if let Expr::Lit(expr_lit) = &nv.value {
+                            if let Lit::Str(s) = &expr_lit.lit {
+                                cmd_name = s.value();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let expanded = quote! {
+        #input_fn
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn on_command(
+            cmd_ptr: *const u8,
+            cmd_len: usize,
+            args_ptr: *const u8,
+            args_len: usize,
+        ) {
+            let cmd_slice = unsafe { std::slice::from_raw_parts(cmd_ptr, cmd_len) };
+            let args_slice = unsafe { std::slice::from_raw_parts(args_ptr, args_len) };
+
+            if let (Ok(cmd_str), Ok(args_str)) = (
+                std::str::from_utf8(cmd_slice),
+                std::str::from_utf8(args_slice),
+            ) {
+                if cmd_str == #cmd_name {
+                    #fn_name(cmd_str, args_str);
+                }
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
 }

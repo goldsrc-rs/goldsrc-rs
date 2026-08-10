@@ -84,6 +84,7 @@ pub struct LoadedPlugin {
     on_unload_fn: Option<TypedFunc<(), ()>>,
     on_frame_fn: Option<TypedFunc<(), ()>>,
     on_event_fn: Option<TypedFunc<(i32, i32, i32, i32), ()>>,
+    on_command_fn: Option<TypedFunc<(i32, i32, i32, i32), ()>>,
 }
 
 impl LoadedPlugin {
@@ -142,6 +143,46 @@ impl LoadedPlugin {
 
                         let _ = dealloc.call(&mut self.store, (name_ptr, name_len));
                         let _ = dealloc.call(&mut self.store, (data_ptr, data_len));
+
+                        res.map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn call_on_command(&mut self, cmd_name: &str, args: &str) -> Result<(), RuntimeError> {
+        if self.is_paused {
+            return Ok(());
+        }
+        if let (Some(f), Some(inst)) = (&self.on_command_fn, &self.instance) {
+            let alloc_fn = inst
+                .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
+                .ok();
+            let dealloc_fn = inst
+                .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
+                .ok();
+
+            if let (Some(alloc), Some(dealloc)) = (alloc_fn, dealloc_fn) {
+                let cmd_bytes = cmd_name.as_bytes();
+                let cmd_len = cmd_bytes.len() as i32;
+                let args_bytes = args.as_bytes();
+                let args_len = args_bytes.len() as i32;
+
+                if let (Ok(cmd_ptr), Ok(args_ptr)) = (
+                    alloc.call(&mut self.store, (cmd_len,)),
+                    alloc.call(&mut self.store, (args_len,)),
+                ) {
+                    if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
+                    {
+                        let _ = mem.write(&mut self.store, cmd_ptr as usize, cmd_bytes);
+                        let _ = mem.write(&mut self.store, args_ptr as usize, args_bytes);
+
+                        let res = f.call(&mut self.store, (cmd_ptr, cmd_len, args_ptr, args_len));
+
+                        let _ = dealloc.call(&mut self.store, (cmd_ptr, cmd_len));
+                        let _ = dealloc.call(&mut self.store, (args_ptr, args_len));
 
                         res.map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
                     }
@@ -410,6 +451,9 @@ impl PluginManager {
         let on_event_fn = instance
             .get_typed_func::<(i32, i32, i32, i32), ()>(&store, "on_event")
             .ok();
+        let on_command_fn = instance
+            .get_typed_func::<(i32, i32, i32, i32), ()>(&store, "on_command")
+            .ok();
 
         let metadata = if let Ok(meta_fn) =
             instance.get_typed_func::<(), i32>(&store, "__goldsrc_plugin_metadata")
@@ -455,6 +499,7 @@ impl PluginManager {
             on_unload_fn,
             on_frame_fn,
             on_event_fn,
+            on_command_fn,
         };
 
         loaded.call_on_load()?;
@@ -466,19 +511,77 @@ impl PluginManager {
         Ok(())
     }
 
-    /// Poll for file changes and handle all plugin lifecycle events (Create, Modify, Delete).
+    /// Setup file watching on a configuration directory (configs/) for .json and .toml files.
+    pub fn enable_config_watcher<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), RuntimeError> {
+        let dir_ref = dir.as_ref();
+        if !dir_ref.exists() {
+            let _ = fs::create_dir_all(dir_ref);
+        }
+
+        self.watched_dirs.push(dir_ref.to_path_buf());
+
+        let tx = self.watcher_tx.clone();
+        let mut watcher = RecommendedWatcher::new(
+            move |res| {
+                let _ = tx.send(res);
+            },
+            Config::default().with_poll_interval(Duration::from_secs(1)),
+        )?;
+
+        watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
+        self._watchers.push(watcher);
+
+        host_log(&format!(
+            "[GoldSrc.rs WASM Host] Watching config directory {:?}\n",
+            dir_ref
+        ));
+        Ok(())
+    }
+
+    /// Poll for file changes and handle plugin reloading or config updates.
     pub fn process_hot_reload(&mut self) {
         let mut reload_paths = Vec::new();
+        let mut config_paths = Vec::new();
+
         while let Ok(Ok(event)) = self.watcher_rx.try_recv() {
             for path in event.paths {
-                if path.extension().is_some_and(|ext| ext == "wasm") {
-                    reload_paths.push(path);
+                if let Some(ext) = path.extension() {
+                    if ext == "wasm" {
+                        reload_paths.push(path);
+                    } else if ext == "json" || ext == "toml" || ext == "cfg" {
+                        config_paths.push(path);
+                    }
                 }
             }
         }
 
         reload_paths.sort();
         reload_paths.dedup();
+
+        config_paths.sort();
+        config_paths.dedup();
+
+        for config_path in config_paths {
+            if config_path.exists() {
+                if let Ok(content) = fs::read_to_string(&config_path) {
+                    let file_name = config_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    host_log(&format!(
+                        "[GoldSrc.rs WASM Host] Config updated: {}\n",
+                        file_name
+                    ));
+                    let payload = format!(
+                        "{{\"file\":\"{}\",\"content\":{}}}",
+                        file_name,
+                        serde_json::to_string(&content).unwrap_or_default()
+                    );
+                    self.broadcast_event("config_changed", payload.as_bytes());
+                }
+            }
+        }
 
         for path in reload_paths {
             if path.exists() {
@@ -680,6 +783,20 @@ impl PluginManager {
         ))
     }
 
+    /// Broadcast an event to all active WASM plugins.
+    pub fn broadcast_event(&mut self, event_name: &str, data: &[u8]) {
+        for plugin in &mut self.plugins {
+            let _ = plugin.call_on_event(event_name, data);
+        }
+    }
+
+    /// Dispatch a command to all active WASM plugins.
+    pub fn dispatch_command(&mut self, cmd_name: &str, args: &str) {
+        for plugin in &mut self.plugins {
+            let _ = plugin.call_on_command(cmd_name, args);
+        }
+    }
+
     /// Get status information (plugins count, active watchers count).
     pub fn get_status_info(&self) -> (usize, usize) {
         (self.plugins.len(), self._watchers.len())
@@ -724,6 +841,7 @@ mod tests {
             on_unload_fn: None,
             on_frame_fn: None,
             on_event_fn: None,
+            on_command_fn: None,
         });
 
         assert_eq!(manager.find_plugin_index("1"), Some(0));
@@ -768,6 +886,7 @@ mod tests {
             on_unload_fn: None,
             on_frame_fn: None,
             on_event_fn: None,
+            on_command_fn: None,
         });
 
         manager.plugins.push(LoadedPlugin {
@@ -786,6 +905,7 @@ mod tests {
             on_unload_fn: None,
             on_frame_fn: None,
             on_event_fn: None,
+            on_command_fn: None,
         });
 
         let errors = manager.validate_and_sort_dependencies();
