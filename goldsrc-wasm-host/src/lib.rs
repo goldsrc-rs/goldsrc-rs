@@ -106,6 +106,18 @@ pub fn set_print_callback(f: fn(&str)) {
     }
 }
 
+/// Print log message via host callback (engine server_print).
+pub fn host_log(msg: &str) {
+    #[allow(clippy::collapsible_if)]
+    if let Ok(lock) = PRINT_CALLBACK.read() {
+        if let Some(print_fn) = *lock {
+            print_fn(msg);
+            return;
+        }
+    }
+    println!("{}", msg);
+}
+
 impl PluginManager {
     pub fn new() -> Self {
         let engine = Engine::default();
@@ -127,17 +139,34 @@ impl PluginManager {
             Config::default().with_poll_interval(Duration::from_secs(1)),
         )?;
 
-        if dir.as_ref().exists() {
-            watcher.watch(dir.as_ref(), RecursiveMode::NonRecursive)?;
-            if let Ok(entries) = fs::read_dir(dir.as_ref()) {
+        let dir_ref = dir.as_ref();
+        let exists = dir_ref.exists();
+        host_log(&format!(
+            "[GoldSrc.rs WASM Host] Checking dir {:?} (exists: {})\n",
+            dir_ref, exists
+        ));
+
+        if exists {
+            watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
+            if let Ok(entries) = fs::read_dir(dir_ref) {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().is_some_and(|ext| ext == "wasm") {
-                        log::info!(
-                            "[GoldSrc.rs WASM Host] Loading initial WASM plugin {:?}",
+                        host_log(&format!(
+                            "[GoldSrc.rs WASM Host] Loading WASM plugin {:?}...\n",
                             path
-                        );
-                        let _ = self.load_plugin(&path);
+                        ));
+                        if let Err(err) = self.load_plugin(&path) {
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Failed to load {:?}: {}\n",
+                                path, err
+                            ));
+                        } else {
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Loaded WASM plugin {:?}\n",
+                                path
+                            ));
+                        }
                     }
                 }
             }
@@ -177,14 +206,7 @@ impl PluginManager {
                         let Ok(s) = std::str::from_utf8(&buf) else {
                             return;
                         };
-                        #[allow(clippy::collapsible_if)]
-                        if let Ok(lock) = PRINT_CALLBACK.read() {
-                            if let Some(print_fn) = *lock {
-                                print_fn(s);
-                                return;
-                            }
-                        }
-                        log::info!("[WASM Host Function] server_print: {}", s);
+                        host_log(s);
                     },
                 ),
             )
@@ -232,16 +254,21 @@ impl PluginManager {
         }
 
         for path in reload_paths {
-            log::info!("[GoldSrc.rs WASM Host] Hot-reload triggered for {:?}", path);
+            host_log(&format!(
+                "[GoldSrc.rs WASM Host] Hot-reload triggered for {:?}\n",
+                path
+            ));
             self.plugins.retain(|p| p.path != path);
             if let Err(err) = self.load_plugin(&path) {
-                log::error!(
-                    "[GoldSrc.rs WASM Host] Failed to reload {:?}: {}",
-                    path,
-                    err
-                );
+                host_log(&format!(
+                    "[GoldSrc.rs WASM Host] Failed to reload {:?}: {}\n",
+                    path, err
+                ));
             } else {
-                log::info!("[GoldSrc.rs WASM Host] Reloaded successfully {:?}", path);
+                host_log(&format!(
+                    "[GoldSrc.rs WASM Host] Reloaded successfully {:?}\n",
+                    path
+                ));
             }
         }
     }
@@ -251,11 +278,10 @@ impl PluginManager {
         self.process_hot_reload();
         for plugin in &mut self.plugins {
             if let Err(err) = plugin.call_on_frame() {
-                log::error!(
-                    "[GoldSrc.rs WASM Host] Error in plugin {}: {}",
-                    plugin.name,
-                    err
-                );
+                host_log(&format!(
+                    "[GoldSrc.rs WASM Host] Error in plugin {}: {}\n",
+                    plugin.name, err
+                ));
             }
         }
     }
