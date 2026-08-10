@@ -15,6 +15,7 @@ cc = "1.0"
 goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
 goldsrc-wasm-host = { workspace = true }
+lexopt = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_System_Memory", "Win32_Foundation"] }
