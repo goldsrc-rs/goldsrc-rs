@@ -23,8 +23,8 @@
 
 ## Stage 4: Developer Framework & Host CLI (DX)
 
-- [ ] Host Console CLI (`rs list`, `rs load`, `rs unload`, `rs reload`, `rs info`, `rs status`).
-- [ ] Create `goldsrc` crate with procedural macros (`#[plugin]`, `#[command]`).
+- [x] Host Console Management CLI (`meta-rs` / `mrs` with `lexopt`, `-a/--all` flags, pagination, multi-target).
+- [ ] Create `goldsrc-macros` crate with procedural macros (`#[plugin]`, `#[command]`).
 - [ ] Command router for in-game client and server commands.
 - [ ] Database API (`sqlx`, async runtime integration).
 - [ ] Documentation and `cargo generate` templates.
