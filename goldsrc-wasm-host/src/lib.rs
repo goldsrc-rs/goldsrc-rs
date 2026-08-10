@@ -62,12 +62,21 @@ pub struct LoadedPlugin {
     pub path: PathBuf,
     store: Store<HostState>,
     on_load_fn: Option<TypedFunc<(), ()>>,
+    on_unload_fn: Option<TypedFunc<(), ()>>,
     on_frame_fn: Option<TypedFunc<(), ()>>,
 }
 
 impl LoadedPlugin {
     pub fn call_on_load(&mut self) -> Result<(), RuntimeError> {
         if let Some(f) = &self.on_load_fn {
+            f.call(&mut self.store, ())
+                .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    pub fn call_on_unload(&mut self) -> Result<(), RuntimeError> {
+        if let Some(f) = &self.on_unload_fn {
             f.call(&mut self.store, ())
                 .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
         }
@@ -83,7 +92,6 @@ impl LoadedPlugin {
     }
 }
 
-/// WASM Plugin Manager — handles runtime execution, host imports, and hot-reload.
 /// WASM Plugin Manager — handles runtime execution, host imports, and hot-reload.
 pub struct PluginManager {
     engine: Engine,
@@ -136,49 +144,55 @@ impl PluginManager {
     /// Setup hot-reload file watching on a directory and load existing plugins.
     pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), RuntimeError> {
         let dir_ref = dir.as_ref();
-        let exists = dir_ref.exists();
+        if !dir_ref.exists() {
+            return Ok(());
+        }
+
         host_log(&format!(
-            "[GoldSrc.rs WASM Host] Checking dir {:?} (exists: {})\n",
-            dir_ref, exists
+            "[GoldSrc.rs WASM Host] Watching directory {:?}\n",
+            dir_ref
         ));
 
-        if exists {
-            let tx = self.watcher_tx.clone();
-            let mut watcher = RecommendedWatcher::new(
-                move |res| {
-                    let _ = tx.send(res);
-                },
-                Config::default().with_poll_interval(Duration::from_secs(1)),
-            )?;
+        let tx = self.watcher_tx.clone();
+        let mut watcher = RecommendedWatcher::new(
+            move |res| {
+                let _ = tx.send(res);
+            },
+            Config::default().with_poll_interval(Duration::from_secs(1)),
+        )?;
 
-            watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
-            self._watchers.push(watcher);
+        watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
+        self._watchers.push(watcher);
 
-            if let Ok(entries) = fs::read_dir(dir_ref) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().is_some_and(|ext| ext == "wasm") {
+        if let Ok(entries) = fs::read_dir(dir_ref) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_some_and(|ext| ext == "wasm") {
+                    let res = self.load_plugin(&path);
+                    if let Err(err) = res {
                         host_log(&format!(
-                            "[GoldSrc.rs WASM Host] Loading WASM plugin {:?}...\n",
-                            path
+                            "[GoldSrc.rs WASM Host] Failed to load {:?}: {}\n",
+                            path, err
                         ));
-                        if let Err(err) = self.load_plugin(&path) {
-                            host_log(&format!(
-                                "[GoldSrc.rs WASM Host] Failed to load {:?}: {}\n",
-                                path, err
-                            ));
-                        } else {
-                            host_log(&format!(
-                                "[GoldSrc.rs WASM Host] Loaded WASM plugin {:?}\n",
-                                path
-                            ));
-                        }
                     }
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// Unload plugin by path, invoking on_unload callback if present.
+    pub fn unload_plugin<P: AsRef<Path>>(&mut self, path: P) {
+        let p_ref = path.as_ref();
+        if let Some(idx) = self.plugins.iter().position(|p| p.path == p_ref) {
+            let mut plugin = self.plugins.remove(idx);
+            let _ = plugin.call_on_unload();
+            host_log(&format!(
+                "[GoldSrc.rs WASM Host] Unloaded plugin {:?}\n",
+                plugin.name
+            ));
+        }
     }
 
     /// Load a WASM plugin module from a file.
@@ -223,6 +237,7 @@ impl PluginManager {
             .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
 
         let on_load_fn = instance.get_typed_func::<(), ()>(&store, "on_load").ok();
+        let on_unload_fn = instance.get_typed_func::<(), ()>(&store, "on_unload").ok();
         let on_frame_fn = instance.get_typed_func::<(), ()>(&store, "on_frame").ok();
 
         let plugin_name = path_buf
@@ -232,19 +247,24 @@ impl PluginManager {
             .into_owned();
 
         let mut loaded = LoadedPlugin {
-            name: plugin_name,
+            name: plugin_name.clone(),
             path: path_buf,
             store,
             on_load_fn,
+            on_unload_fn,
             on_frame_fn,
         };
 
         loaded.call_on_load()?;
+        host_log(&format!(
+            "[GoldSrc.rs WASM Host] Loaded plugin {}\n",
+            plugin_name
+        ));
         self.plugins.push(loaded);
         Ok(())
     }
 
-    /// Poll for file changes and reload updated plugins.
+    /// Poll for file changes and handle all plugin lifecycle events (Create, Modify, Delete).
     pub fn process_hot_reload(&mut self) {
         let mut reload_paths = Vec::new();
         while let Ok(Ok(event)) = self.watcher_rx.try_recv() {
@@ -259,21 +279,27 @@ impl PluginManager {
         reload_paths.dedup();
 
         for path in reload_paths {
-            host_log(&format!(
-                "[GoldSrc.rs WASM Host] Hot-reload triggered for {:?}\n",
-                path
-            ));
-            self.plugins.retain(|p| p.path != path);
-            if let Err(err) = self.load_plugin(&path) {
-                host_log(&format!(
-                    "[GoldSrc.rs WASM Host] Failed to reload {:?}: {}\n",
-                    path, err
-                ));
+            if path.exists() {
+                // Scenario 1 & 2: Plugin Created or Overwritten/Modified
+                let is_reload = self.plugins.iter().any(|p| p.path == path);
+                self.unload_plugin(&path);
+
+                if let Err(err) = self.load_plugin(&path) {
+                    host_log(&format!(
+                        "[GoldSrc.rs WASM Host] Failed to {} {:?}: {}\n",
+                        if is_reload { "reload" } else { "load" },
+                        path,
+                        err
+                    ));
+                } else if is_reload {
+                    host_log(&format!(
+                        "[GoldSrc.rs WASM Host] Reloaded plugin {:?}\n",
+                        path
+                    ));
+                }
             } else {
-                host_log(&format!(
-                    "[GoldSrc.rs WASM Host] Reloaded successfully {:?}\n",
-                    path
-                ));
+                // Scenario 3: Plugin Deleted / Removed / Renamed away
+                self.unload_plugin(&path);
             }
         }
     }
