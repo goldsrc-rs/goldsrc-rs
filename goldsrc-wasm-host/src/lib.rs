@@ -84,11 +84,13 @@ impl LoadedPlugin {
 }
 
 /// WASM Plugin Manager — handles runtime execution, host imports, and hot-reload.
+/// WASM Plugin Manager — handles runtime execution, host imports, and hot-reload.
 pub struct PluginManager {
     engine: Engine,
     plugins: Vec<LoadedPlugin>,
-    watcher_rx: Option<Receiver<notify::Result<notify::Event>>>,
-    _watcher: Option<RecommendedWatcher>,
+    watcher_rx: Receiver<notify::Result<notify::Event>>,
+    watcher_tx: std::sync::mpsc::Sender<notify::Result<notify::Event>>,
+    _watchers: Vec<RecommendedWatcher>,
 }
 
 impl Default for PluginManager {
@@ -121,24 +123,18 @@ pub fn host_log(msg: &str) {
 impl PluginManager {
     pub fn new() -> Self {
         let engine = Engine::default();
+        let (tx, rx) = channel();
         Self {
             engine,
             plugins: Vec::new(),
-            watcher_rx: None,
-            _watcher: None,
+            watcher_rx: rx,
+            watcher_tx: tx,
+            _watchers: Vec::new(),
         }
     }
 
     /// Setup hot-reload file watching on a directory and load existing plugins.
     pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), RuntimeError> {
-        let (tx, rx) = channel();
-        let mut watcher = RecommendedWatcher::new(
-            move |res| {
-                let _ = tx.send(res);
-            },
-            Config::default().with_poll_interval(Duration::from_secs(1)),
-        )?;
-
         let dir_ref = dir.as_ref();
         let exists = dir_ref.exists();
         host_log(&format!(
@@ -147,7 +143,17 @@ impl PluginManager {
         ));
 
         if exists {
+            let tx = self.watcher_tx.clone();
+            let mut watcher = RecommendedWatcher::new(
+                move |res| {
+                    let _ = tx.send(res);
+                },
+                Config::default().with_poll_interval(Duration::from_secs(1)),
+            )?;
+
             watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
+            self._watchers.push(watcher);
+
             if let Ok(entries) = fs::read_dir(dir_ref) {
                 for entry in entries.flatten() {
                     let path = entry.path();
@@ -172,8 +178,6 @@ impl PluginManager {
             }
         }
 
-        self.watcher_rx = Some(rx);
-        self._watcher = Some(watcher);
         Ok(())
     }
 
@@ -243,15 +247,16 @@ impl PluginManager {
     /// Poll for file changes and reload updated plugins.
     pub fn process_hot_reload(&mut self) {
         let mut reload_paths = Vec::new();
-        if let Some(rx) = &self.watcher_rx {
-            while let Ok(Ok(event)) = rx.try_recv() {
-                for path in event.paths {
-                    if path.extension().is_some_and(|ext| ext == "wasm") {
-                        reload_paths.push(path);
-                    }
+        while let Ok(Ok(event)) = self.watcher_rx.try_recv() {
+            for path in event.paths {
+                if path.extension().is_some_and(|ext| ext == "wasm") {
+                    reload_paths.push(path);
                 }
             }
         }
+
+        reload_paths.sort();
+        reload_paths.dedup();
 
         for path in reload_paths {
             host_log(&format!(
