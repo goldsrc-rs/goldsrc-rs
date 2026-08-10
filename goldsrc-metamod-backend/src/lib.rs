@@ -71,14 +71,32 @@ pub fn meta_globals() -> &'static mut meta_globals_t {
 }
 
 macro_rules! call_engfunc {
+    ($func:expr) => {
+        if let Some(f) = $func {
+            f();
+        }
+    };
     ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func { f($($arg),*); }
+        if let Some(f) = $func {
+            f($($arg),*);
+        }
     };
 }
 
 macro_rules! call_engfunc_ret {
+    ($func:expr) => {
+        if let Some(f) = $func {
+            f()
+        } else {
+            Default::default()
+        }
+    };
     ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func { f($($arg),*) } else { Default::default() }
+        if let Some(f) = $func {
+            f($($arg),*)
+        } else {
+            Default::default()
+        }
     };
 }
 
@@ -411,6 +429,213 @@ unsafe extern "C" fn hook_start_frame() {
     }
 }
 
+/// Server command handler for `rs` and `goldsrc` console commands.
+unsafe extern "C" fn handle_rs_command() {
+    let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
+    if argc == 0 {
+        return;
+    }
+
+    let mut args = Vec::new();
+    for i in 0..argc {
+        let arg_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, i);
+        if !arg_ptr.is_null() {
+            if let Ok(cstr) = std::ffi::CStr::from_ptr(arg_ptr).to_str() {
+                args.push(cstr);
+            }
+        }
+    }
+
+    dispatch_rs_command(&args);
+}
+
+fn dispatch_rs_command(args: &[&str]) {
+    let subcmd = args.get(1).copied().unwrap_or("help");
+    let manager = match wasm_manager() {
+        Some(m) => m,
+        None => {
+            backend().server_print("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+            return;
+        }
+    };
+
+    match subcmd.to_lowercase().as_str() {
+        "list" => {
+            let plugins = manager.get_plugins_info();
+            backend().server_print(&format!(
+                "[GoldSrc.rs] Currently loaded WASM plugins ({}):\n",
+                plugins.len()
+            ));
+            if plugins.is_empty() {
+                backend().server_print("  (No plugins loaded)\n");
+            } else {
+                for p in plugins {
+                    let status = if p.is_paused { "PAUSED" } else { "RUNNING" };
+                    let mut exports = Vec::new();
+                    if p.has_on_load {
+                        exports.push("on_load");
+                    }
+                    if p.has_on_unload {
+                        exports.push("on_unload");
+                    }
+                    if p.has_on_frame {
+                        exports.push("on_frame");
+                    }
+                    let exports_str = if exports.is_empty() {
+                        "none".to_string()
+                    } else {
+                        exports.join(", ")
+                    };
+                    backend().server_print(&format!(
+                        "  [#{}] {:<20} | Status: {:<7} | Exports: {}\n",
+                        p.index, p.name, status, exports_str
+                    ));
+                }
+            }
+        }
+        "load" => {
+            let target = match args.get(2) {
+                Some(t) => t,
+                None => {
+                    backend().server_print("Usage: rs load <filename>\n");
+                    return;
+                }
+            };
+            match manager.load_plugin_by_name(target) {
+                Ok(msg) => backend().server_print(&msg),
+                Err(err) => backend().server_print(&err),
+            }
+        }
+        "unload" => {
+            let target = match args.get(2) {
+                Some(t) => t,
+                None => {
+                    backend().server_print("Usage: rs unload <name|index>\n");
+                    return;
+                }
+            };
+            match manager.unload_plugin_by_query(target) {
+                Ok(msg) => backend().server_print(&msg),
+                Err(err) => backend().server_print(&err),
+            }
+        }
+        "reload" => {
+            let target = match args.get(2) {
+                Some(t) => t,
+                None => {
+                    backend().server_print("Usage: rs reload <name|index>\n");
+                    return;
+                }
+            };
+            match manager.reload_plugin_by_query(target) {
+                Ok(msg) => backend().server_print(&msg),
+                Err(err) => backend().server_print(&err),
+            }
+        }
+        "pause" => {
+            let target = match args.get(2) {
+                Some(t) => t,
+                None => {
+                    backend().server_print("Usage: rs pause <name|index>\n");
+                    return;
+                }
+            };
+            match manager.pause_plugin(target, true) {
+                Ok(msg) => backend().server_print(&msg),
+                Err(err) => backend().server_print(&err),
+            }
+        }
+        "unpause" => {
+            let target = match args.get(2) {
+                Some(t) => t,
+                None => {
+                    backend().server_print("Usage: rs unpause <name|index>\n");
+                    return;
+                }
+            };
+            match manager.pause_plugin(target, false) {
+                Ok(msg) => backend().server_print(&msg),
+                Err(err) => backend().server_print(&err),
+            }
+        }
+        "info" => {
+            let target = match args.get(2) {
+                Some(t) => t,
+                None => {
+                    backend().server_print("Usage: rs info <name|index>\n");
+                    return;
+                }
+            };
+            if let Some(idx) = manager.find_plugin_index(target) {
+                let info = &manager.get_plugins_info()[idx];
+                backend().server_print(&format!("--- Plugin Info: {} ---\n", info.name));
+                backend().server_print(&format!("  Index:      #{}\n", info.index));
+                backend().server_print(&format!("  Path:       {:?}\n", info.path));
+                backend().server_print(&format!(
+                    "  Status:     {}\n",
+                    if info.is_paused { "Paused" } else { "Running" }
+                ));
+                backend().server_print(&format!("  on_load:    {}\n", info.has_on_load));
+                backend().server_print(&format!("  on_unload:  {}\n", info.has_on_unload));
+                backend().server_print(&format!("  on_frame:   {}\n", info.has_on_frame));
+            } else {
+                backend().server_print(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", target));
+            }
+        }
+        "status" | "version" => {
+            let (plugins_count, watchers_count) = manager.get_status_info();
+            backend().server_print("--- GoldSrc.rs Host Engine Status ---\n");
+            backend().server_print("  Version:    0.1.0\n");
+            backend().server_print("  WASM Engine: wasmi (Pure Rust Interpreter)\n");
+            backend().server_print(&format!("  Plugins:    {} loaded\n", plugins_count));
+            backend().server_print(&format!(
+                "  Watchers:   {} active directory watcher(s)\n",
+                watchers_count
+            ));
+        }
+        _ => {
+            backend().server_print("--- GoldSrc.rs Management CLI ---\n");
+            backend().server_print("Usage: rs <command> [args]\n");
+            backend().server_print("Commands:\n");
+            backend().server_print(
+                "  list               - List all loaded WASM plugins and their statuses\n",
+            );
+            backend().server_print(
+                "  load <filename>    - Load WASM plugin from watched plugins directory\n",
+            );
+            backend().server_print(
+                "  unload <name|idx>  - Gracefully unload a plugin (invokes on_unload)\n",
+            );
+            backend().server_print("  reload <name|idx>  - Reload a plugin\n");
+            backend().server_print("  info <name|idx>    - Show detailed info about a plugin\n");
+            backend().server_print(
+                "  pause <name|idx>   - Pause plugin execution (skip on_frame ticks)\n",
+            );
+            backend().server_print("  unpause <name|idx> - Unpause plugin execution\n");
+            backend().server_print(
+                "  status / version   - Show host engine version and watcher status\n",
+            );
+        }
+    }
+}
+
+pub fn register_cli_commands() {
+    let cmd_rs = CString::new("rs").unwrap();
+    let cmd_goldsrc = CString::new("goldsrc").unwrap();
+    unsafe {
+        call_engfunc!(
+            engfuncs().pfnAddServerCommand,
+            cmd_rs.as_ptr(),
+            Some(handle_rs_command)
+        );
+        call_engfunc!(
+            engfuncs().pfnAddServerCommand,
+            cmd_goldsrc.as_ptr(),
+            Some(handle_rs_command)
+        );
+    }
+}
+
 // ============================================================================
 // Metamod Entry Points
 // ============================================================================
@@ -476,8 +701,10 @@ pub unsafe extern "C" fn Meta_Attach(
         (*meta_functions).pfnGetEngineFunctions_Post = Some(GetEngineFunctions_Post);
     }
     init_wasm_host();
+    register_cli_commands();
     backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
     backend().server_print("[GoldSrc.rs] WASM Host Engine initialized.\n");
+    backend().server_print("[GoldSrc.rs] Host Management CLI registered (`rs` / `goldsrc`).\n");
     backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
     1
 }
