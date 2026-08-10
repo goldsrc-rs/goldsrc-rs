@@ -5,7 +5,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{Receiver, channel};
 use std::time::Duration;
 
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
@@ -68,14 +68,16 @@ pub struct LoadedPlugin {
 impl LoadedPlugin {
     pub fn call_on_load(&mut self) -> Result<(), RuntimeError> {
         if let Some(f) = &self.on_load_fn {
-            f.call(&mut self.store, ()).map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+            f.call(&mut self.store, ())
+                .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
         }
         Ok(())
     }
 
     pub fn call_on_frame(&mut self) -> Result<(), RuntimeError> {
         if let Some(f) = &self.on_frame_fn {
-            f.call(&mut self.store, ()).map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
+            f.call(&mut self.store, ())
+                .map_err(|e| RuntimeError::ExecutionError(e.to_string()))?;
         }
         Ok(())
     }
@@ -141,9 +143,16 @@ impl PluginManager {
             .define(
                 "env",
                 "server_print",
-                wasmi::Func::wrap(&mut store, |_caller: wasmi::Caller<'_, HostState>, msg_ptr: i32, msg_len: i32| {
-                    log::info!("[WASM Host Function] server_print called (ptr={}, len={})", msg_ptr, msg_len);
-                }),
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>, msg_ptr: i32, msg_len: i32| {
+                        log::info!(
+                            "[WASM Host Function] server_print called (ptr={}, len={})",
+                            msg_ptr,
+                            msg_len
+                        );
+                    },
+                ),
             )
             .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
 
@@ -192,7 +201,11 @@ impl PluginManager {
             log::info!("[GoldSrc.rs WASM Host] Hot-reload triggered for {:?}", path);
             self.plugins.retain(|p| p.path != path);
             if let Err(err) = self.load_plugin(&path) {
-                log::error!("[GoldSrc.rs WASM Host] Failed to reload {:?}: {}", path, err);
+                log::error!(
+                    "[GoldSrc.rs WASM Host] Failed to reload {:?}: {}",
+                    path,
+                    err
+                );
             } else {
                 log::info!("[GoldSrc.rs WASM Host] Reloaded successfully {:?}", path);
             }
@@ -204,7 +217,11 @@ impl PluginManager {
         self.process_hot_reload();
         for plugin in &mut self.plugins {
             if let Err(err) = plugin.call_on_frame() {
-                log::error!("[GoldSrc.rs WASM Host] Error in plugin {}: {}", plugin.name, err);
+                log::error!(
+                    "[GoldSrc.rs WASM Host] Error in plugin {}: {}",
+                    plugin.name,
+                    err
+                );
             }
         }
     }
@@ -220,4 +237,3 @@ mod tests {
         assert_eq!(manager.plugins.len(), 0);
     }
 }
-
