@@ -18,11 +18,11 @@ from pathlib import Path
 
 # Import build function from sibling module
 try:
-    from build import build_plugin
+    from build import build_plugin, build_wasm_plugins
 except ImportError:
     # Allow running directly without package context
     sys.path.insert(0, str(Path(__file__).parent))
-    from build import build_plugin
+    from build import build_plugin, build_wasm_plugins
 
 
 def get_platform_prefix(target: str) -> str:
@@ -148,8 +148,24 @@ def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-window
     return all_ok
 
 
+def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path) -> None:
+    """Copy WASM plugins to the server's plugins/ directory."""
+    addons_dir = game_path / "cstrike" / "addons"
+    if not addons_dir.exists():
+        addons_dir = game_path / "addons"
+
+    wasm_target_dir = addons_dir / "metamod-rs" / "plugins"
+    wasm_target_dir.mkdir(parents=True, exist_ok=True)
+
+    for wasm_file in wasm_paths:
+        if wasm_file.exists():
+            dest = wasm_target_dir / wasm_file.name
+            shutil.copy2(wasm_file, dest)
+            print(f"Copied WASM plugin: {dest}")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs Metamod plugin")
+    parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs Metamod plugin and WASM modules")
     parser.add_argument(
         "--path",
         type=str,
@@ -159,13 +175,13 @@ def main():
     parser.add_argument(
         "--no-build",
         action="store_true",
-        help="Skip building (use existing DLL)",
+        help="Skip building (use existing DLL & WASM binaries)",
     )
     parser.add_argument(
         "--target",
         type=str,
         default="i686-pc-windows-msvc",
-        help="Build target (default: i686-pc-windows-msvc)",
+        help="Build target for host DLL (default: i686-pc-windows-msvc)",
     )
     parser.add_argument(
         "--verify",
@@ -195,17 +211,19 @@ def main():
             sys.exit(1)
         return
 
-    if not dll_path.exists():
-        print(f"Error: Library not found at {dll_path}", file=sys.stderr)
-        print("Run without --no-build to build first.", file=sys.stderr)
-        sys.exit(1)
-
     if args.no_build:
+        if not dll_path.exists():
+            print(f"Error: Library not found at {dll_path}", file=sys.stderr)
+            sys.exit(1)
         print(f"Using existing library: {dll_path}")
+        wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / "debug"
+        wasm_plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
     else:
         dll_path = build_plugin(target=args.target, release=True)
+        wasm_plugins = build_wasm_plugins(release=False)
 
     deploy_plugin(dll_path, game_path, target=args.target)
+    deploy_wasm_plugins(wasm_plugins, game_path)
 
     print("\nVerifying deployment...")
     if verify_deploy(game_path, dll_path, args.target):
