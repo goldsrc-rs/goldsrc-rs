@@ -5,8 +5,8 @@
 mod meta_types;
 
 use goldsrc_api::{Engine, Entity, Player};
-use std::ffi::c_void;
 use std::ffi::CString;
+use std::ffi::c_void;
 
 use meta_types::*;
 
@@ -182,8 +182,8 @@ pub fn backend() -> &'static MetamodBackend {
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "system" fn GiveFnptrsToDll(
-    engfuncs: *const goldsrc_sys::enginefuncs_t,
-    globals: *const goldsrc_sys::globalvars_t,
+    engfuncs: *mut goldsrc_sys::enginefuncs_t,
+    globals: *mut goldsrc_sys::globalvars_t,
 ) {
     unsafe {
         init_backend(engfuncs, globals);
@@ -221,9 +221,9 @@ pub extern "C" fn Meta_Query(
 #[inline(never)]
 pub extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
-    _meta_functions: *mut meta_function_t,
+    _meta_functions: *mut c_void,
     meta_globals: *mut meta_globals_t,
-    _gamedll_funcs: *const c_void,
+    _gamedll_funcs: *mut c_void,
 ) -> std::os::raw::c_int {
     unsafe {
         if meta_globals.is_null() {
@@ -264,6 +264,12 @@ static PLUGIN_INFO: plugin_info_t = plugin_info_t {
     unloadable: PLUG_LOADTIME::PT_ANYTIME,
 };
 
+
+
+
+
+
+
 /// Get the meta utility functions.
 fn get_meta_util_funcs() -> mutil_funcs_t {
     mutil_funcs_t {
@@ -293,11 +299,4 @@ unsafe extern "C" fn meta_log_message(_plid: *const plugin_info_t, _fmt: *const 
 unsafe extern "C" fn meta_log_error(_plid: *const plugin_info_t, _fmt: *const i8) {}
 unsafe extern "C" fn meta_log_developer(_plid: *const plugin_info_t, _fmt: *const i8) {}
 
-// Prevent the linker from stripping exported functions
-#[used]
-static EXPORT_POINTERS: &[unsafe extern "C" fn()] = &[
-    unsafe { std::mem::transmute(GiveFnptrsToDll as *const ()) },
-    unsafe { std::mem::transmute(Meta_Query as *const ()) },
-    unsafe { std::mem::transmute(Meta_Attach as *const ()) },
-    unsafe { std::mem::transmute(Meta_Detach as *const ()) },
-];
+

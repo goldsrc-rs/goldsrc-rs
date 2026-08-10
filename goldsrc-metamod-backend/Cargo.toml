@@ -6,7 +6,10 @@ license.workspace = true
 description = "Metamod backend implementation for GoldSrc.rs"
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["cdylib"]
+
+[build-dependencies]
+cc = "1.0"
 
 [dependencies]
 goldsrc-sys = { workspace = true }
