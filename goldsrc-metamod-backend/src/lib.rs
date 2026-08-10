@@ -207,7 +207,7 @@ pub extern "C" fn GetNewDLLFunctions(new_table: *mut c_void, interface_version: 
 ///
 /// # Safety
 /// `edict` must be a valid pointer to an edict_t.
-unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
+unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> goldsrc_sys::qboolean {
     if !edict.is_null() {
         backend().server_print("[GoldSrc.rs] Entity spawned (pre).\n");
     }
@@ -215,7 +215,7 @@ unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
 }
 
 /// Post-hook for DispatchSpawn.
-unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> i32 {
+unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> goldsrc_sys::qboolean {
     if !edict.is_null() {
         backend().server_print("[GoldSrc.rs] Entity spawned (post).\n");
     }
