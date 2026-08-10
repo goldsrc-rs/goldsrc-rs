@@ -14,12 +14,12 @@
 - [x] Implement hooks for basic events (`DispatchSpawn`, `ClientConnect`, `ClientCommand`) via Metamod.
 - [x] Build VTable-hook system (using offsets from ReHLDS/HamSandwich for Windows/Linux compatibility).
 
-## Stage 3: WebAssembly Plugin Host (Isolation & Hot-Reload)
+## Stage 3: WebAssembly Plugin Host (Isolation & Hot-Reload) — ✅ Complete
 
-- [ ] Integrate `wasm3` runtime into the core.
-- [ ] Design WASI bindings for Wasm plugins to communicate with the core.
-- [ ] Implement hot-reload: watch `.wasm` files in `plugins/` and reload on change.
-- [ ] Write a test Wasm plugin (e.g., a plugin that kills a player on command).
+- [x] Integrate `wasmi` runtime into the core.
+- [x] Design WASI bindings for Wasm plugins to communicate with the core.
+- [x] Implement hot-reload: watch `.wasm` files in `plugins/` and reload on change.
+- [x] Write a test Wasm host integration and file watcher.
 
 ## Stage 4: Developer Framework (DX)
 
