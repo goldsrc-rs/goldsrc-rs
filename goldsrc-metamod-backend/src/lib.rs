@@ -27,8 +27,11 @@ pub fn init_wasm_host() {
     });
     unsafe {
         let mut manager = goldsrc_wasm_host::PluginManager::new();
-        
-        let plugin_dirs = ["cstrike/addons/metamod-rs/plugins", "addons/metamod-rs/plugins"];
+
+        let plugin_dirs = [
+            "cstrike/addons/metamod-rs/plugins",
+            "addons/metamod-rs/plugins",
+        ];
         for dir in plugin_dirs {
             if std::path::Path::new(dir).exists() {
                 let _ = manager.enable_hot_reload(dir);
@@ -36,7 +39,10 @@ pub fn init_wasm_host() {
             }
         }
 
-        let config_dirs = ["cstrike/addons/metamod-rs/configs", "addons/metamod-rs/configs"];
+        let config_dirs = [
+            "cstrike/addons/metamod-rs/configs",
+            "addons/metamod-rs/configs",
+        ];
         let mut watched_config = false;
         for dir in config_dirs {
             if std::path::Path::new(dir).exists() {
