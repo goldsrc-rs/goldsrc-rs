@@ -445,11 +445,16 @@ impl PluginManager {
     /// Unload plugin by path, invoking on_unload callback if present.
     pub fn unload_plugin<P: AsRef<Path>>(&mut self, path: P) {
         let p_ref = path.as_ref();
-        if let Some(idx) = self.plugins.iter().position(|p| p.path == p_ref) {
+        let canonical = p_ref.canonicalize().unwrap_or_else(|_| p_ref.to_path_buf());
+        if let Some(idx) = self
+            .plugins
+            .iter()
+            .position(|p| p.path == p_ref || p.path == canonical)
+        {
             let mut plugin = self.plugins.remove(idx);
             let _ = plugin.call_on_unload();
             host_log(&format!(
-                "[GoldSrc.rs WASM Host] Unloaded plugin {:?}\n",
+                "[GoldSrc.rs WASM Host] Unloaded plugin {}\n",
                 plugin.name
             ));
         }
@@ -458,7 +463,19 @@ impl PluginManager {
     /// Load a WASM plugin module from a file.
     pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<(), RuntimeError> {
         let path_buf = path.as_ref().to_path_buf();
-        let bytes = fs::read(&path_buf)?;
+        let canonical_path = path_buf
+            .canonicalize()
+            .unwrap_or_else(|_| path_buf.clone());
+
+        if self
+            .plugins
+            .iter()
+            .any(|p| p.path == path_buf || p.path == canonical_path)
+        {
+            return Ok(());
+        }
+
+        let bytes = fs::read(&canonical_path)?;
 
         let module = Module::new(&self.engine, &bytes[..])
             .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
@@ -544,7 +561,7 @@ impl PluginManager {
 
         let mut loaded = LoadedPlugin {
             name: plugin_name.clone(),
-            path: path_buf,
+            path: canonical_path,
             is_paused: false,
             metadata,
             store,
