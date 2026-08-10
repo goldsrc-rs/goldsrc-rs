@@ -415,6 +415,47 @@ impl PluginManager {
         }
     }
 
+    /// Unload all active plugins.
+    pub fn unload_all_plugins(&mut self) -> String {
+        let count = self.plugins.len();
+        for mut plugin in self.plugins.drain(..) {
+            let _ = plugin.call_on_unload();
+        }
+        format!("[GoldSrc.rs WASM Host] Unloaded all plugins ({})\n", count)
+    }
+
+    /// Reload all active plugins.
+    pub fn reload_all_plugins(&mut self) -> String {
+        let paths: Vec<PathBuf> = self.plugins.iter().map(|p| p.path.clone()).collect();
+        let count = paths.len();
+        for mut plugin in self.plugins.drain(..) {
+            let _ = plugin.call_on_unload();
+        }
+        let mut reloaded = 0;
+        for path in &paths {
+            if self.load_plugin(path).is_ok() {
+                reloaded += 1;
+            }
+        }
+        format!(
+            "[GoldSrc.rs WASM Host] Reloaded {}/{} plugins\n",
+            reloaded, count
+        )
+    }
+
+    /// Pause or unpause all active plugins.
+    pub fn pause_all_plugins(&mut self, pause: bool) -> String {
+        let count = self.plugins.len();
+        for plugin in &mut self.plugins {
+            plugin.is_paused = pause;
+        }
+        let action = if pause { "Paused" } else { "Unpaused" };
+        format!(
+            "[GoldSrc.rs WASM Host] {} all plugins ({})\n",
+            action, count
+        )
+    }
+
     /// Load a plugin by name or filename from watched directories.
     pub fn load_plugin_by_name(&mut self, name: &str) -> Result<String, String> {
         let file_name = if name.ends_with(".wasm") {
