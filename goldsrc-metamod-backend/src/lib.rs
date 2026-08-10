@@ -731,16 +731,37 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
             for t in targets {
                 if let Some(idx) = manager.find_plugin_index(&t) {
                     let info = &manager.get_plugins_info()[idx];
+                    let clean_path = info.path.to_string_lossy().replace('\\', "/");
                     backend().server_print(&format!("--- Plugin Info: {} ---\n", info.name));
-                    backend().server_print(&format!("  Index:      #{}\n", info.index));
-                    backend().server_print(&format!("  Path:       {:?}\n", info.path));
+                    backend().server_print(&format!("  Index:        #{}\n", info.index));
+                    backend().server_print(&format!("  Path:         {}\n", clean_path));
                     backend().server_print(&format!(
-                        "  Status:     {}\n",
+                        "  Status:       {}\n",
                         if info.is_paused { "Paused" } else { "Running" }
                     ));
-                    backend().server_print(&format!("  on_load:    {}\n", info.has_on_load));
-                    backend().server_print(&format!("  on_unload:  {}\n", info.has_on_unload));
-                    backend().server_print(&format!("  on_frame:   {}\n", info.has_on_frame));
+                    if let Some(meta) = &info.metadata {
+                        backend().server_print(&format!("  Meta Name:    {}\n", meta.name));
+                        backend().server_print(&format!("  Version:      {}\n", meta.version));
+                        let systems_str = if meta.systems.is_empty() {
+                            "none".to_string()
+                        } else {
+                            meta.systems.join(", ")
+                        };
+                        backend().server_print(&format!("  Systems:      {}\n", systems_str));
+                        let deps_str = if meta.dependencies.is_empty() {
+                            "none".to_string()
+                        } else {
+                            meta.dependencies
+                                .iter()
+                                .map(|(k, v)| format!("{} ({})", k, v))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        };
+                        backend().server_print(&format!("  Dependencies: {}\n", deps_str));
+                    }
+                    backend().server_print(&format!("  on_load:      {}\n", info.has_on_load));
+                    backend().server_print(&format!("  on_unload:    {}\n", info.has_on_unload));
+                    backend().server_print(&format!("  on_frame:     {}\n", info.has_on_frame));
                 } else {
                     backend().server_print(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", t));
                 }

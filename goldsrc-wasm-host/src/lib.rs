@@ -532,6 +532,7 @@ impl PluginManager {
                 has_on_load: p.on_load_fn.is_some(),
                 has_on_unload: p.on_unload_fn.is_some(),
                 has_on_frame: p.on_frame_fn.is_some(),
+                metadata: p.metadata.clone(),
             })
             .collect()
     }
@@ -695,6 +696,7 @@ pub struct PluginInfo {
     pub has_on_load: bool,
     pub has_on_unload: bool,
     pub has_on_frame: bool,
+    pub metadata: Option<PluginMetadata>,
 }
 
 #[cfg(test)]

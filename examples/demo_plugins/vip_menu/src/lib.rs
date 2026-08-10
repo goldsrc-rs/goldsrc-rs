@@ -1,14 +1,18 @@
 use goldsrc::plugin;
 
+#[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
     fn server_print(ptr: *const u8, len: usize);
 }
 
 fn log(msg: &str) {
+    #[cfg(target_arch = "wasm32")]
     unsafe {
         server_print(msg.as_ptr(), msg.len());
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    println!("{}", msg);
 }
 
 #[plugin(name = "vip_menu", version = "1.0.0", systems = ["MenuSystem"])]
