@@ -275,11 +275,15 @@ impl PluginManager {
             return Ok(());
         }
 
-        self.watched_dirs.push(dir_ref.to_path_buf());
+        let canonical_dir = dir_ref.canonicalize().unwrap_or_else(|_| dir_ref.to_path_buf());
+        if self.watched_dirs.contains(&canonical_dir) {
+            return Ok(());
+        }
+        self.watched_dirs.push(canonical_dir.clone());
 
         host_log(&format!(
             "[GoldSrc.rs WASM Host] Watching directory {:?}\n",
-            dir_ref
+            canonical_dir
         ));
 
         let tx = self.watcher_tx.clone();
@@ -290,10 +294,10 @@ impl PluginManager {
             Config::default().with_poll_interval(Duration::from_secs(1)),
         )?;
 
-        watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
+        watcher.watch(&canonical_dir, RecursiveMode::NonRecursive)?;
         self._watchers.push(watcher);
 
-        if let Ok(entries) = fs::read_dir(dir_ref) {
+        if let Ok(entries) = fs::read_dir(&canonical_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().is_some_and(|ext| ext == "wasm") {
@@ -308,6 +312,7 @@ impl PluginManager {
             }
         }
 
+        let _ = self.validate_and_sort_dependencies();
         Ok(())
     }
 
@@ -447,6 +452,9 @@ impl PluginManager {
                 wasmi::Func::wrap(
                     &mut store,
                     |caller: wasmi::Caller<'_, HostState>, msg_ptr: i32, msg_len: i32| {
+                        if msg_len <= 0 || msg_len > 1_000_000 {
+                            return;
+                        }
                         let Some(wasmi::Extern::Memory(mem)) = caller.get_export("memory") else {
                             return;
                         };
@@ -542,7 +550,11 @@ impl PluginManager {
             let _ = fs::create_dir_all(dir_ref);
         }
 
-        self.watched_dirs.push(dir_ref.to_path_buf());
+        let canonical_dir = dir_ref.canonicalize().unwrap_or_else(|_| dir_ref.to_path_buf());
+        if self.watched_dirs.contains(&canonical_dir) {
+            return Ok(());
+        }
+        self.watched_dirs.push(canonical_dir.clone());
 
         let tx = self.watcher_tx.clone();
         let mut watcher = RecommendedWatcher::new(
@@ -552,12 +564,12 @@ impl PluginManager {
             Config::default().with_poll_interval(Duration::from_secs(1)),
         )?;
 
-        watcher.watch(dir_ref, RecursiveMode::NonRecursive)?;
+        watcher.watch(&canonical_dir, RecursiveMode::NonRecursive)?;
         self._watchers.push(watcher);
 
         host_log(&format!(
             "[GoldSrc.rs WASM Host] Watching config directory {:?}\n",
-            dir_ref
+            canonical_dir
         ));
         Ok(())
     }
@@ -591,6 +603,9 @@ impl PluginManager {
         for config_path in config_paths {
             if config_path.exists() {
                 if let Ok(content) = fs::read_to_string(&config_path) {
+                    if content.trim().is_empty() {
+                        continue;
+                    }
                     let file_name = config_path
                         .file_name()
                         .unwrap_or_default()
