@@ -97,6 +97,15 @@ impl Default for PluginManager {
     }
 }
 
+static PRINT_CALLBACK: std::sync::RwLock<Option<fn(&str)>> = std::sync::RwLock::new(None);
+
+/// Set global callback for WASM server_print calls.
+pub fn set_print_callback(f: fn(&str)) {
+    if let Ok(mut lock) = PRINT_CALLBACK.write() {
+        *lock = Some(f);
+    }
+}
+
 impl PluginManager {
     pub fn new() -> Self {
         let engine = Engine::default();
@@ -108,7 +117,7 @@ impl PluginManager {
         }
     }
 
-    /// Setup hot-reload file watching on a directory.
+    /// Setup hot-reload file watching on a directory and load existing plugins.
     pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), RuntimeError> {
         let (tx, rx) = channel();
         let mut watcher = RecommendedWatcher::new(
@@ -120,6 +129,18 @@ impl PluginManager {
 
         if dir.as_ref().exists() {
             watcher.watch(dir.as_ref(), RecursiveMode::NonRecursive)?;
+            if let Ok(entries) = fs::read_dir(dir.as_ref()) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().is_some_and(|ext| ext == "wasm") {
+                        log::info!(
+                            "[GoldSrc.rs WASM Host] Loading initial WASM plugin {:?}",
+                            path
+                        );
+                        let _ = self.load_plugin(&path);
+                    }
+                }
+            }
         }
 
         self.watcher_rx = Some(rx);
@@ -145,12 +166,25 @@ impl PluginManager {
                 "server_print",
                 wasmi::Func::wrap(
                     &mut store,
-                    |_caller: wasmi::Caller<'_, HostState>, msg_ptr: i32, msg_len: i32| {
-                        log::info!(
-                            "[WASM Host Function] server_print called (ptr={}, len={})",
-                            msg_ptr,
-                            msg_len
-                        );
+                    |caller: wasmi::Caller<'_, HostState>, msg_ptr: i32, msg_len: i32| {
+                        let Some(wasmi::Extern::Memory(mem)) = caller.get_export("memory") else {
+                            return;
+                        };
+                        let mut buf = vec![0u8; msg_len as usize];
+                        if mem.read(&caller, msg_ptr as usize, &mut buf).is_err() {
+                            return;
+                        };
+                        let Ok(s) = std::str::from_utf8(&buf) else {
+                            return;
+                        };
+                        #[allow(clippy::collapsible_if)]
+                        if let Ok(lock) = PRINT_CALLBACK.read() {
+                            if let Some(print_fn) = *lock {
+                                print_fn(s);
+                                return;
+                            }
+                        }
+                        log::info!("[WASM Host Function] server_print: {}", s);
                     },
                 ),
             )
