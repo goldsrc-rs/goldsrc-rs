@@ -275,7 +275,9 @@ impl PluginManager {
             return Ok(());
         }
 
-        let canonical_dir = dir_ref.canonicalize().unwrap_or_else(|_| dir_ref.to_path_buf());
+        let canonical_dir = dir_ref
+            .canonicalize()
+            .unwrap_or_else(|_| dir_ref.to_path_buf());
         if self.watched_dirs.contains(&canonical_dir) {
             return Ok(());
         }
@@ -550,7 +552,9 @@ impl PluginManager {
             let _ = fs::create_dir_all(dir_ref);
         }
 
-        let canonical_dir = dir_ref.canonicalize().unwrap_or_else(|_| dir_ref.to_path_buf());
+        let canonical_dir = dir_ref
+            .canonicalize()
+            .unwrap_or_else(|_| dir_ref.to_path_buf());
         if self.watched_dirs.contains(&canonical_dir) {
             return Ok(());
         }
