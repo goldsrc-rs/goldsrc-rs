@@ -473,7 +473,13 @@ fn print_mrs_help() {
     backend().server_print("  [ Inspection & Debugging ]\n");
     backend().server_print("    list [OPTIONS]          List loaded plugins. Options:\n");
     backend().server_print(
-        "                              -p, --page <N>    Show specific page (5 per page)\n",
+        "                              -p, --page <N>    Show specific page (default: 1)\n",
+    );
+    backend().server_print(
+        "                              -s, --size <N>    Set page size (default: 5)\n",
+    );
+    backend().server_print(
+        "                              -a, --all         Show all plugins (ignore pagination)\n",
     );
     backend()
         .server_print("                              --paused          Show only paused plugins\n");
@@ -521,7 +527,9 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
     match command.as_str() {
         "list" => {
             let mut page: usize = 1;
+            let mut size: Option<usize> = None;
             let mut only_paused = false;
+            let mut all = false;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('p') | Arg::Long("page") => {
@@ -529,6 +537,12 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                             page = val.to_string_lossy().parse().unwrap_or(1);
                         }
                     }
+                    Arg::Short('s') | Arg::Long("size") => {
+                        if let Ok(val) = parser.value() {
+                            size = Some(val.to_string_lossy().parse().unwrap_or(5));
+                        }
+                    }
+                    Arg::Short('a') | Arg::Long("all") => all = true,
                     Arg::Long("paused") => only_paused = true,
                     _ => {}
                 }
@@ -539,8 +553,12 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                 plugins.retain(|p| p.is_paused);
             }
 
-            let page_size = 5;
             let total_plugins = plugins.len();
+            let page_size = if all {
+                total_plugins.max(1)
+            } else {
+                size.unwrap_or(5)
+            };
             let total_pages = (total_plugins + page_size - 1) / page_size.max(1);
             let page_idx = page.saturating_sub(1);
 
@@ -556,7 +574,7 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                 return;
             }
 
-            let start = page_idx * page_size;
+            let start = (page_idx * page_size).min(total_plugins);
             let end = (start + page_size).min(total_plugins);
 
             for p in &plugins[start..end] {
