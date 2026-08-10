@@ -24,10 +24,11 @@
 ## Stage 4: Developer Framework & Host CLI (DX)
 
 - [x] Host Console Management CLI (`meta-rs` / `mrs` with `lexopt`, `-a/--all` flags, pagination, multi-target).
-- [ ] Create `goldsrc-macros` crate with procedural macros (`#[plugin]`, `#[command]`).
-- [ ] Command router for in-game client and server commands.
-- [ ] Database API (`sqlx`, async runtime integration).
-- [ ] Documentation and `cargo generate` templates.
+- [ ] Create `goldsrc-macros` crate with procedural macros (`#[plugin(systems=...)]`, `#[command]`).
+- [ ] SDK `goldsrc` crate with Flat / Hybrid ECS API for WASM plugins.
+- [ ] Plugin DAG Dependency Resolution with SemVer validation.
+- [ ] Global Event Bus (Pub/Sub) for inter-plugin communication across WASM modules.
+- [ ] Database API (`sqlx`, async runtime integration) & JSON/TOML configuration watchers.
 
 ## Stage 5: Standalone Backend (Future)
 

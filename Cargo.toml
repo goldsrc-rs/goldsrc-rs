@@ -4,7 +4,7 @@ members = [
     "goldsrc-api",
     "goldsrc-metamod-backend",
     "goldsrc-wasm-host",
-    "goldsrc",
+    "goldsrc", "goldsrc-macros",
 ]
 resolver = "3"
 
@@ -20,3 +20,4 @@ goldsrc-api = { path = "goldsrc-api", version = "0.1.0" }
 goldsrc-metamod-backend = { path = "goldsrc-metamod-backend", version = "0.1.0" }
 goldsrc-wasm-host = { path = "goldsrc-wasm-host", version = "0.1.0" }
 goldsrc = { path = "goldsrc", version = "0.1.0" }
+goldsrc-macros = { path = "goldsrc-macros", version = "0.1.0" }
