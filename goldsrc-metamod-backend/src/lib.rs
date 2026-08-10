@@ -144,7 +144,8 @@ impl Engine for MetamodBackend {
 
     fn server_print(&self, message: &str) {
         unsafe {
-            let msg = CString::new(message).unwrap_or_default();
+            let safe_msg = message.replace('%', "%%");
+            let msg = CString::new(safe_msg).unwrap_or_default();
             call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
         }
     }

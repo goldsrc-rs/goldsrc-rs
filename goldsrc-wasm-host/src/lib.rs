@@ -254,6 +254,19 @@ pub fn host_log(msg: &str) {
     println!("{}", msg);
 }
 
+fn scan_wasm_files_recursive(dir: &Path, wasm_paths: &mut Vec<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                scan_wasm_files_recursive(&path, wasm_paths);
+            } else if path.extension().is_some_and(|ext| ext == "wasm") {
+                wasm_paths.push(path);
+            }
+        }
+    }
+}
+
 impl PluginManager {
     pub fn new() -> Self {
         let engine = Engine::default();
@@ -268,7 +281,7 @@ impl PluginManager {
         }
     }
 
-    /// Setup hot-reload file watching on a directory and load existing plugins.
+    /// Setup hot-reload file watching on a directory (recursively) and load existing plugins.
     pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), RuntimeError> {
         let dir_ref = dir.as_ref();
         if !dir_ref.exists() {
@@ -296,21 +309,19 @@ impl PluginManager {
             Config::default().with_poll_interval(Duration::from_secs(1)),
         )?;
 
-        watcher.watch(&canonical_dir, RecursiveMode::NonRecursive)?;
+        watcher.watch(&canonical_dir, RecursiveMode::Recursive)?;
         self._watchers.push(watcher);
 
-        if let Ok(entries) = fs::read_dir(&canonical_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|ext| ext == "wasm") {
-                    let res = self.load_plugin(&path);
-                    if let Err(err) = res {
-                        host_log(&format!(
-                            "[GoldSrc.rs WASM Host] Failed to load {:?}: {}\n",
-                            path, err
-                        ));
-                    }
-                }
+        let mut wasm_paths = Vec::new();
+        scan_wasm_files_recursive(&canonical_dir, &mut wasm_paths);
+
+        for path in wasm_paths {
+            let res = self.load_plugin(&path);
+            if let Err(err) = res {
+                host_log(&format!(
+                    "[GoldSrc.rs WASM Host] Failed to load {:?}: {}\n",
+                    path, err
+                ));
             }
         }
 
@@ -568,7 +579,7 @@ impl PluginManager {
             Config::default().with_poll_interval(Duration::from_secs(1)),
         )?;
 
-        watcher.watch(&canonical_dir, RecursiveMode::NonRecursive)?;
+        watcher.watch(&canonical_dir, RecursiveMode::Recursive)?;
         self._watchers.push(watcher);
 
         host_log(&format!(
