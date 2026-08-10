@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial project scaffolding: Cargo workspace with 5 crates (`goldsrc-sys`, `goldsrc-api`, `goldsrc-metamod-backend`, `goldsrc-wasm-host`, `goldsrc`).
 - MIT license and Rust `.gitignore`.
 - Repository management rules in `AGENTS.md`: branching strategy, commit conventions, PR workflow, branch protection.
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-format GitHub Action and pre-commit hook.
 
 ### Changed
+
 - Default branch set to `dev` on GitHub.
 - Branch protection enabled on both `main` and `dev`.
 - Squash-and-merge enabled as the default merge strategy.
@@ -33,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Converted pre-commit hook from Bash to Python.
 
 ### Fixed
+
 - Corrected TOML config format (array instead of repeated keys).
 - Fixed backslash escaping in setup script.
 - Disabled bindgen layout tests (fail on 32-bit Linux with max_align_t).
