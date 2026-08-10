@@ -7,9 +7,11 @@ Usage:
     python scripts/deploy.py                                    # Deploy to default path
     python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient"
     python scripts/deploy.py --path "..." --no-build            # Skip build step
+    python scripts/deploy.py --verify                           # Verify deployment
 """
 
 import argparse
+import hashlib
 import shutil
 import sys
 from pathlib import Path
@@ -88,6 +90,64 @@ def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-window
     print(f"Added to: {plugins_ini}")
 
 
+def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-windows-msvc") -> bool:
+    """Verify that the plugin is correctly deployed."""
+    addons_dir = game_path / "cstrike" / "addons"
+    if not addons_dir.exists():
+        addons_dir = game_path / "addons"
+
+    if not addons_dir.exists():
+        print(f"Error: Addons directory not found", file=sys.stderr)
+        return False
+
+    if "windows" in target:
+        dest_name = "metamod-rs.dll"
+    else:
+        dest_name = "metamod-rs.so"
+
+    dest_path = addons_dir / "metamod-rs" / dest_name
+    plugins_ini = addons_dir / "metamod" / "plugins.ini"
+
+    all_ok = True
+
+    # Check 1: DLL exists
+    if not dest_path.exists():
+        print(f"  [FAIL] DLL not found: {dest_path}")
+        all_ok = False
+    else:
+        # Check 2: Hash matches
+        src_hash = hashlib.md5(dll_path.read_bytes()).hexdigest()
+        dst_hash = hashlib.md5(dest_path.read_bytes()).hexdigest()
+        if src_hash == dst_hash:
+            print(f"  [OK]   DLL hash matches ({dst_hash[:8]}...)")
+        else:
+            print(f"  [FAIL] DLL hash mismatch: src={src_hash[:8]} dst={dst_hash[:8]}")
+            all_ok = False
+
+    # Check 3: Plugin in plugins.ini
+    if not plugins_ini.exists():
+        print(f"  [FAIL] plugins.ini not found: {plugins_ini}")
+        all_ok = False
+    else:
+        content = plugins_ini.read_text(encoding="utf-8")
+        prefix = get_platform_prefix(target)
+        expected_line = f"{prefix} addons\\metamod-rs\\{dest_name}"
+
+        found = False
+        for line in content.split("\n"):
+            if expected_line in line and not line.strip().startswith(";"):
+                found = True
+                break
+
+        if found:
+            print(f"  [OK]   Plugin listed in plugins.ini")
+        else:
+            print(f"  [FAIL] Plugin not found in plugins.ini (expected: {expected_line})")
+            all_ok = False
+
+    return all_ok
+
+
 def main():
     parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs Metamod plugin")
     parser.add_argument(
@@ -107,6 +167,11 @@ def main():
         default="i686-pc-windows-msvc",
         help="Build target (default: i686-pc-windows-msvc)",
     )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Verify deployment without deploying",
+    )
     args = parser.parse_args()
 
     game_path = Path(args.path)
@@ -114,25 +179,40 @@ def main():
         print(f"Error: Path not found: {game_path}", file=sys.stderr)
         sys.exit(1)
 
-    if args.no_build:
-        # Use existing DLL
-        repo_root = Path(__file__).parent.parent
-        if "windows" in args.target:
-            lib_name = "goldsrc_metamod_backend.dll"
+    repo_root = Path(__file__).parent.parent
+    if "windows" in args.target:
+        lib_name = "goldsrc_metamod_backend.dll"
+    else:
+        lib_name = "libgoldsrc_metamod_backend.so"
+    dll_path = repo_root / "target" / args.target / "release" / lib_name
+
+    if args.verify:
+        print("Verifying deployment...")
+        if verify_deploy(game_path, dll_path, args.target):
+            print("\nAll checks passed!")
         else:
-            lib_name = "libgoldsrc_metamod_backend.so"
-        dll_path = repo_root / "target" / args.target / "release" / lib_name
-        if not dll_path.exists():
-            print(f"Error: Library not found at {dll_path}", file=sys.stderr)
-            print("Run without --no-build to build first.", file=sys.stderr)
+            print("\nSome checks failed!")
             sys.exit(1)
+        return
+
+    if not dll_path.exists():
+        print(f"Error: Library not found at {dll_path}", file=sys.stderr)
+        print("Run without --no-build to build first.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.no_build:
         print(f"Using existing library: {dll_path}")
     else:
         dll_path = build_plugin(target=args.target, release=True)
 
     deploy_plugin(dll_path, game_path, target=args.target)
-    print("\nDeployment complete!")
-    print("Start the server and check console for '[GoldSrc.rs] Hello from Rust!'")
+
+    print("\nVerifying deployment...")
+    if verify_deploy(game_path, dll_path, args.target):
+        print("\nDeployment verified successfully!")
+    else:
+        print("\nDeployment verification failed!")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
