@@ -10,8 +10,3 @@ pub use goldsrc_sys;
 pub fn init() {
     // TODO: Initialize logging, signal handlers, etc.
 }
-
-/// Get the current backend instance.
-pub fn backend() -> &'static goldsrc_metamod_backend::MetamodBackend {
-    goldsrc_metamod_backend::backend()
-}

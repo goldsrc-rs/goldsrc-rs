@@ -1,27 +1,26 @@
 //! Metamod backend implementation for GoldSrc.rs.
-//!
-//! This crate implements the `Engine` trait using the Metamod API.
-//! It compiles as a `.dll`/`.so` plugin for classic Metamod-r.
 
 #![allow(static_mut_refs)]
 
-use goldsrc_api::{Engine, Entity, Player};
+mod meta_types;
+
+use goldsrc_api::Engine;
+
+use std::ffi::c_void;
 use std::ffi::CString;
 
-// SAFETY: These are written once during DLL initialization (GiveFnptrsToDll)
-// and only read afterwards from the game thread. No concurrent access.
+use meta_types::*;
+
 static mut G_ENGFUNCS: Option<goldsrc_sys::enginefuncs_t> = None;
 static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
+static mut G_META_GLOBALS: Option<*mut meta_globals_t> = None;
 
-/// Initialize the backend with engine functions and global variables.
-///
 /// # Safety
-/// Must be called exactly once from `GiveFnptrsToDll`.
+/// Called once from `GiveFnptrsToDll`.
 pub unsafe fn init_backend(
-    engfuncs: *const goldsrc_sys::enginefuncs_t,
-    globals: *const goldsrc_sys::globalvars_t,
+    engfuncs: *mut goldsrc_sys::enginefuncs_t,
+    globals: *mut goldsrc_sys::globalvars_t,
 ) {
-    // SAFETY: Called once during initialization, before any reads.
     unsafe {
         if !engfuncs.is_null() {
             G_ENGFUNCS = Some(*engfuncs);
@@ -32,39 +31,35 @@ pub unsafe fn init_backend(
     }
 }
 
-/// Get the engine functions.
 pub fn engfuncs() -> &'static goldsrc_sys::enginefuncs_t {
-    // SAFETY: After init_backend, the value is only read, never modified.
     unsafe { G_ENGFUNCS.as_ref().expect("Backend not initialized") }
 }
 
-/// Get the global variables.
 pub fn globals() -> &'static goldsrc_sys::globalvars_t {
-    // SAFETY: After init_backend, the value is only read, never modified.
     unsafe { G_GLOBALS.as_ref().expect("Backend not initialized") }
 }
 
-/// Call an engine function, skipping if not available.
+pub fn meta_globals() -> &'static mut meta_globals_t {
+    unsafe {
+        G_META_GLOBALS
+            .expect("Meta globals not initialized")
+            .as_mut()
+            .expect("Meta globals pointer is null")
+    }
+}
+
 macro_rules! call_engfunc {
     ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*);
-        }
+        if let Some(f) = $func { f($($arg),*); }
     };
 }
 
-/// Call an engine function returning a value, returning default if not available.
 macro_rules! call_engfunc_ret {
     ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*)
-        } else {
-            Default::default()
-        }
+        if let Some(f) = $func { f($($arg),*) } else { Default::default() }
     };
 }
 
-/// Metamod backend — implements `Engine` using the Metamod API.
 pub struct MetamodBackend;
 
 impl Default for MetamodBackend {
@@ -74,15 +69,13 @@ impl Default for MetamodBackend {
 }
 
 impl MetamodBackend {
-    /// Create a new Metamod backend instance.
     pub const fn new() -> Self {
         Self
     }
 }
 
 impl Engine for MetamodBackend {
-    fn spawn_entity(&self, classname: &str) -> Option<Entity> {
-        // SAFETY: Called from the game thread with valid engine functions.
+    fn spawn_entity(&self, classname: &str) -> Option<goldsrc_api::Entity> {
         unsafe {
             let funcs = engfuncs();
             let edict = (funcs.pfnCreateEntity)?();
@@ -91,18 +84,23 @@ impl Engine for MetamodBackend {
             }
             let cname = CString::new(classname).unwrap_or_default();
             call_engfunc!(funcs.pfnSetModel, edict, cname.as_ptr());
-            Some(Entity { index: 0, edict })
+            let index = (funcs.pfnIndexOfEdict)?(edict);
+            Some(goldsrc_api::Entity::from_raw(index, edict))
         }
     }
 
-    fn get_player(&self, index: i32) -> Option<Player> {
-        // TODO: Get player edict by index
-        let _ = index;
-        None
+    fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
+        unsafe {
+            let funcs = engfuncs();
+            let edict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if edict.is_null() {
+                return None;
+            }
+            Some(goldsrc_api::Player::from_raw(index, edict))
+        }
     }
 
     fn server_print(&self, message: &str) {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let msg = CString::new(message).unwrap_or_default();
             call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
@@ -110,7 +108,6 @@ impl Engine for MetamodBackend {
     }
 
     fn server_command(&self, command: &str) {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let cmd = CString::new(command).unwrap_or_default();
             call_engfunc!(engfuncs().pfnServerCommand, cmd.as_ptr());
@@ -118,7 +115,6 @@ impl Engine for MetamodBackend {
     }
 
     fn cvar_get_float(&self, name: &str) -> f32 {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let cname = CString::new(name).unwrap_or_default();
             call_engfunc_ret!(engfuncs().pfnCVarGetFloat, cname.as_ptr())
@@ -126,7 +122,6 @@ impl Engine for MetamodBackend {
     }
 
     fn cvar_set_float(&self, name: &str, value: f32) {
-        // SAFETY: Called from the game thread with valid engine functions.
         unsafe {
             let cname = CString::new(name).unwrap_or_default();
             call_engfunc!(engfuncs().pfnCVarSetFloat, cname.as_ptr(), value);
@@ -134,10 +129,159 @@ impl Engine for MetamodBackend {
     }
 }
 
-/// Global backend instance.
 static BACKEND: MetamodBackend = MetamodBackend::new();
 
-/// Get the global backend instance.
 pub fn backend() -> &'static MetamodBackend {
     &BACKEND
+}
+
+// ============================================================================
+// Hook System (stubs for future implementation)
+// ============================================================================
+
+/// Hook for DispatchSpawn - called when an entity spawns.
+///
+/// # Safety
+/// `edict` must be a valid pointer to an edict_t.
+#[allow(dead_code)]
+unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
+    if !edict.is_null() {
+        backend().server_print("[GoldSrc.rs] Entity spawned.\n");
+    }
+    0
+}
+
+/// Hook for ClientConnect - called when a player connects.
+///
+/// # Safety
+/// Pointers must be valid C strings.
+#[allow(dead_code)]
+unsafe extern "C" fn hook_client_connect(
+    _entity: *mut goldsrc_sys::edict_t,
+    name: *const std::os::raw::c_char,
+    _address: *const std::os::raw::c_char,
+    _reject_reason: *mut std::os::raw::c_char,
+) -> i32 {
+    if !name.is_null() {
+        let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
+        let msg = format!("[GoldSrc.rs] Player {} connecting...\n", name_str);
+        let cmsg = CString::new(msg).unwrap_or_default();
+        call_engfunc!(engfuncs().pfnServerPrint, cmsg.as_ptr());
+    }
+    0
+}
+
+/// Hook for ClientCommand - called when a player issues a command.
+///
+/// # Safety
+/// `entity` must be a valid pointer to an edict_t.
+#[allow(dead_code)]
+unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
+    if !entity.is_null() {
+        backend().server_print("[GoldSrc.rs] Client command received.\n");
+    }
+}
+
+/// Register hooks for entity functions.
+///
+/// # Safety
+/// `meta_functions` must be a valid pointer to a META_FUNCTIONS struct.
+unsafe fn register_hooks(_meta_functions: *mut c_void) {
+    // TODO: Implement full hook registration using META_FUNCTIONS table
+    backend().server_print("[GoldSrc.rs] Hook system initialized.\n");
+}
+
+// ============================================================================
+// Metamod Entry Points
+// ============================================================================
+
+/// # Safety
+/// Called by the engine during DLL loading. Pointers must be valid.
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "system" fn GiveFnptrsToDll(
+    engfuncs: *mut goldsrc_sys::enginefuncs_t,
+    globals: *mut goldsrc_sys::globalvars_t,
+) {
+    unsafe {
+        init_backend(engfuncs, globals);
+    }
+    backend().server_print("[GoldSrc.rs] Engine functions received.\n");
+}
+
+/// # Safety
+/// Called by Metamod during plugin loading. Pointers must be valid.
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn Meta_Query(
+    _ifvers: *const std::os::raw::c_char,
+    plugin_info: *mut *const plugin_info_t,
+    meta_util_functions: *mut mutil_funcs_t,
+) -> std::os::raw::c_int {
+    unsafe {
+        if plugin_info.is_null() || meta_util_functions.is_null() {
+            return 0;
+        }
+        *plugin_info = &PLUGIN_INFO;
+        *meta_util_functions = get_meta_util_funcs();
+    }
+    backend().server_print("[GoldSrc.rs] Meta_Query called.\n");
+    1
+}
+
+/// # Safety
+/// Called by Metamod after Meta_Query. Pointers must be valid.
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn Meta_Attach(
+    _now: PLUG_LOADTIME,
+    meta_functions: *mut c_void,
+    meta_globals: *mut meta_globals_t,
+    _gamedll_funcs: *mut c_void,
+) -> std::os::raw::c_int {
+    unsafe {
+        if meta_globals.is_null() {
+            return 0;
+        }
+        G_META_GLOBALS = Some(meta_globals);
+        register_hooks(meta_functions);
+    }
+    backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
+    backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
+    1
+}
+
+/// # Safety
+/// Called by Metamod during plugin unloading.
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn Meta_Detach(
+    _now: PLUG_LOADTIME,
+    _reason: PL_UNLOAD_REASON,
+) -> std::os::raw::c_int {
+    backend().server_print("[GoldSrc.rs] Meta_Detach called. Goodbye!\n");
+    1
+}
+
+#[allow(non_upper_case_globals)]
+static PLUGIN_INFO: plugin_info_t = plugin_info_t {
+    ifvers: META_INTERFACE_VERSION.as_ptr() as *const i8,
+    name: c"GoldSrc.rs Metamod Backend".as_ptr(),
+    version: c"0.1.0".as_ptr(),
+    date: c"2026-08-10".as_ptr(),
+    author: c"GoldSrc.rs Contributors".as_ptr(),
+    url: c"https://github.com/ulquiorracode/GoldSrc.rs".as_ptr(),
+    logtag: c"GOLDSRC.RS".as_ptr(),
+    loadable: PLUG_LOADTIME::PT_ANYTIME,
+    unloadable: PLUG_LOADTIME::PT_ANYTIME,
+};
+
+fn get_meta_util_funcs() -> mutil_funcs_t {
+    mutil_funcs_t {
+        pfnLogConsole: None,
+        pfnLogMessage: None,
+        pfnLogError: None,
+        pfnLogDeveloper: None,
+        _padding: [0; 12],
+    }
 }
