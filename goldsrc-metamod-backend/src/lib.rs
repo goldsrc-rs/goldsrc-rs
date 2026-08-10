@@ -144,12 +144,8 @@ pub fn backend() -> &'static MetamodBackend {
 type EntityHookFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> i32;
 
 /// Hook callback type for client connect.
-type ClientConnectHookFn = unsafe extern "C" fn(
-    *mut goldsrc_sys::edict_t,
-    *const i8,
-    *const i8,
-    *mut [i8; 128],
-) -> i32;
+type ClientConnectHookFn =
+    unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *const i8, *const i8, *mut [i8; 128]) -> i32;
 
 /// Hook callback type for client command.
 type ClientCommandHookFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t);
