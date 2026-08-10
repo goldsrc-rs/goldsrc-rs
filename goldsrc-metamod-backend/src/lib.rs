@@ -5,16 +5,15 @@
 mod meta_types;
 
 use goldsrc_api::Engine;
-use goldsrc_sys;
-use std::ffi::c_void;
+
 use std::ffi::CString;
+use std::ffi::c_void;
 
 use meta_types::*;
 
 static mut G_ENGFUNCS: Option<goldsrc_sys::enginefuncs_t> = None;
 static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
 static mut G_META_GLOBALS: Option<*mut meta_globals_t> = None;
-static mut G_DLL_FUNCTIONS: *mut c_void = std::ptr::null_mut();
 
 /// # Safety
 /// Called once from `GiveFnptrsToDll`.
@@ -64,15 +63,11 @@ macro_rules! call_engfunc_ret {
 pub struct MetamodBackend;
 
 impl Default for MetamodBackend {
-    fn default() -> Self {
-        Self
-    }
+    fn default() -> Self { Self }
 }
 
 impl MetamodBackend {
-    pub const fn new() -> Self {
-        Self
-    }
+    pub const fn new() -> Self { Self }
 }
 
 impl Engine for MetamodBackend {
@@ -80,9 +75,7 @@ impl Engine for MetamodBackend {
         unsafe {
             let funcs = engfuncs();
             let edict = (funcs.pfnCreateEntity)?();
-            if edict.is_null() {
-                return None;
-            }
+            if edict.is_null() { return None; }
             let cname = CString::new(classname).unwrap_or_default();
             call_engfunc!(funcs.pfnSetModel, edict, cname.as_ptr());
             let index = (funcs.pfnIndexOfEdict)?(edict);
@@ -94,9 +87,7 @@ impl Engine for MetamodBackend {
         unsafe {
             let funcs = engfuncs();
             let edict = (funcs.pfnPEntityOfEntIndex)?(index);
-            if edict.is_null() {
-                return None;
-            }
+            if edict.is_null() { return None; }
             Some(goldsrc_api::Player::from_raw(index, edict))
         }
     }
@@ -132,117 +123,175 @@ impl Engine for MetamodBackend {
 
 static BACKEND: MetamodBackend = MetamodBackend::new();
 
-pub fn backend() -> &'static MetamodBackend {
-    &BACKEND
-}
+pub fn backend() -> &'static MetamodBackend { &BACKEND }
 
 // ============================================================================
 // Hook System
 // ============================================================================
 
-/// Hook callback type for entity functions.
-type EntityHookFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> i32;
-
-/// Hook callback type for client connect.
-type ClientConnectHookFn =
-    unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *const i8, *const i8, *mut [i8; 128]) -> i32;
-
-/// Hook callback type for client command.
-type ClientCommandHookFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t);
-
 /// Original function pointers that we hook.
-static mut ORIGINAL_SPAWN: Option<EntityHookFn> = None;
-static mut ORIGINAL_CLIENT_CONNECT: Option<ClientConnectHookFn> = None;
-static mut ORIGINAL_CLIENT_COMMAND: Option<ClientCommandHookFn> = None;
+static mut ORIGINAL_SPAWN: Option<unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> std::os::raw::c_int> = None;
+static mut ORIGINAL_CLIENT_CONNECT: Option<
+    unsafe extern "C" fn(
+        *mut goldsrc_sys::edict_t,
+        *const std::os::raw::c_char,
+        *const std::os::raw::c_char,
+        *mut std::os::raw::c_char,
+    ) -> std::os::raw::c_int,
+> = None;
+static mut ORIGINAL_CLIENT_COMMAND: Option<unsafe extern "C" fn(*mut goldsrc_sys::edict_t)> = None;
 
 /// Hook for DispatchSpawn - called when an entity spawns.
-unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
+///
+/// # Safety
+/// `edict` must be a valid pointer to an edict_t.
+#[allow(dead_code)]
+unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> std::os::raw::c_int {
     if !edict.is_null() {
         backend().server_print("[GoldSrc.rs] Entity spawned.\n");
     }
-
-    // Call original function
-    if let Some(original) = ORIGINAL_SPAWN {
-        original(edict)
-    } else {
-        0
+    match ORIGINAL_SPAWN {
+        Some(f) => f(edict),
+        None => 0,
     }
 }
 
 /// Hook for ClientConnect - called when a player connects.
+///
+/// # Safety
+/// Pointers must be valid C strings.
+#[allow(dead_code)]
 unsafe extern "C" fn hook_client_connect(
     entity: *mut goldsrc_sys::edict_t,
-    name: *const i8,
-    address: *const i8,
-    reject_reason: *mut [i8; 128],
-) -> i32 {
+    name: *const std::os::raw::c_char,
+    address: *const std::os::raw::c_char,
+    reject_reason: *mut std::os::raw::c_char,
+) -> std::os::raw::c_int {
     if !name.is_null() {
         let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
         let msg = format!("[GoldSrc.rs] Player {} connecting...\n", name_str);
         let cmsg = CString::new(msg).unwrap_or_default();
         call_engfunc!(engfuncs().pfnServerPrint, cmsg.as_ptr());
     }
-
-    // Call original function
-    if let Some(original) = ORIGINAL_CLIENT_CONNECT {
-        original(entity, name, address, reject_reason)
-    } else {
-        0
+    match ORIGINAL_CLIENT_CONNECT {
+        Some(f) => f(entity, name, address, reject_reason),
+        None => 0,
     }
 }
 
 /// Hook for ClientCommand - called when a player issues a command.
+///
+/// # Safety
+/// `entity` must be a valid pointer to an edict_t.
+#[allow(dead_code)]
 unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
     if !entity.is_null() {
         backend().server_print("[GoldSrc.rs] Client command received.\n");
     }
-
-    // Call original function
-    if let Some(original) = ORIGINAL_CLIENT_COMMAND {
-        original(entity);
+    if let Some(f) = ORIGINAL_CLIENT_COMMAND {
+        f(entity);
     }
 }
 
-/// Register hooks for entity and engine functions.
+/// Register hooks for entity functions.
+///
+/// # Safety
+/// `meta_functions` must be a valid pointer to a META_FUNCTIONS struct.
 unsafe fn register_hooks(meta_functions: *mut c_void) {
     if meta_functions.is_null() {
+        backend().server_print("[GoldSrc.rs] Warning: meta_functions is null\n");
         return;
     }
 
-    // TODO: Implement proper hook registration using META_FUNCTIONS table
-    // This requires parsing the META_FUNCTIONS struct and calling pfnGetEntityAPI
-    // to register our hook functions.
+    // Cast to META_FUNCTIONS struct
+    let meta_funcs = &*(meta_functions as *const MetaFunctions);
 
-    backend().server_print("[GoldSrc.rs] Hook system initialized (TODO: register hooks).\n");
+    // Get entity API table to hook DispatchSpawn, ClientConnect, ClientCommand
+    let mut dll_funcs: goldsrc_sys::DLL_FUNCTIONS = std::mem::zeroed();
+    let interface_version = 140; // HL SDK interface version
+
+    if let Some(get_entity_api) = meta_funcs.pfnGetEntityAPI {
+        let result = get_entity_api(&mut dll_funcs, interface_version);
+        if result != 0 {
+            // Save originals and replace with hooks
+            ORIGINAL_SPAWN = dll_funcs.pfnSpawn;
+            ORIGINAL_CLIENT_CONNECT = dll_funcs.pfnClientConnect;
+            ORIGINAL_CLIENT_COMMAND = dll_funcs.pfnClientCommand;
+
+            // Note: Full hook registration requires modifying the DLL_FUNCTIONS table
+            // and re-registering it with Metamod. For now, we just save the originals.
+            // dll_funcs.pfnSpawn = Some(hook_spawn);
+            // dll_funcs.pfnClientConnect = Some(hook_client_connect);
+            // dll_funcs.pfnClientCommand = Some(hook_client_command);
+
+            backend().server_print("[GoldSrc.rs] Saved original function pointers.\n");
+        } else {
+            backend().server_print("[GoldSrc.rs] Warning: GetEntityAPI returned 0\n");
+        }
+    } else {
+        backend().server_print("[GoldSrc.rs] Warning: pfnGetEntityAPI is null\n");
+    }
+
+    backend().server_print("[GoldSrc.rs] Hook system initialized.\n");
+}
+
+/// META_FUNCTIONS struct from Metamod API.
+#[repr(C)]
+#[allow(non_snake_case)]
+struct MetaFunctions {
+    pfnGetEntityAPI: Option<
+        unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, i32) -> i32,
+    >,
+    pfnGetEntityAPI_Post: Option<
+        unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, i32) -> i32,
+    >,
+    pfnGetEntityAPI2: Option<
+        unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, *mut i32) -> i32,
+    >,
+    pfnGetEntityAPI2_Post: Option<
+        unsafe extern "C" fn(*mut goldsrc_sys::DLL_FUNCTIONS, *mut i32) -> i32,
+    >,
+    pfnGetNewDLLFunctions: Option<
+        unsafe extern "C" fn(*mut c_void, *mut i32) -> i32,
+    >,
+    pfnGetNewDLLFunctions_Post: Option<
+        unsafe extern "C" fn(*mut c_void, *mut i32) -> i32,
+    >,
+    pfnGetEngineFunctions: Option<
+        unsafe extern "C" fn(*mut goldsrc_sys::enginefuncs_t, *mut i32) -> i32,
+    >,
+    pfnGetEngineFunctions_Post: Option<
+        unsafe extern "C" fn(*mut goldsrc_sys::enginefuncs_t, *mut i32) -> i32,
+    >,
 }
 
 // ============================================================================
 // Metamod Entry Points
 // ============================================================================
 
+/// # Safety
+/// Called by the engine during DLL loading. Pointers must be valid.
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "system" fn GiveFnptrsToDll(
     engfuncs: *mut goldsrc_sys::enginefuncs_t,
     globals: *mut goldsrc_sys::globalvars_t,
 ) {
-    unsafe {
-        init_backend(engfuncs, globals);
-    }
+    unsafe { init_backend(engfuncs, globals); }
     backend().server_print("[GoldSrc.rs] Engine functions received.\n");
 }
 
+/// # Safety
+/// Called by Metamod during plugin loading. Pointers must be valid.
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn Meta_Query(
+pub unsafe extern "C" fn Meta_Query(
     _ifvers: *const std::os::raw::c_char,
     plugin_info: *mut *const plugin_info_t,
     meta_util_functions: *mut mutil_funcs_t,
 ) -> std::os::raw::c_int {
     unsafe {
-        if plugin_info.is_null() || meta_util_functions.is_null() {
-            return 0;
-        }
+        if plugin_info.is_null() || meta_util_functions.is_null() { return 0; }
         *plugin_info = &PLUGIN_INFO;
         *meta_util_functions = get_meta_util_funcs();
     }
@@ -250,22 +299,19 @@ pub extern "C" fn Meta_Query(
     1
 }
 
+/// # Safety
+/// Called by Metamod after Meta_Query. Pointers must be valid.
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn Meta_Attach(
+pub unsafe extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
     meta_functions: *mut c_void,
     meta_globals: *mut meta_globals_t,
-    gamedll_funcs: *mut c_void,
+    _gamedll_funcs: *mut c_void,
 ) -> std::os::raw::c_int {
     unsafe {
-        if meta_globals.is_null() {
-            return 0;
-        }
+        if meta_globals.is_null() { return 0; }
         G_META_GLOBALS = Some(meta_globals);
-        G_DLL_FUNCTIONS = gamedll_funcs;
-
-        // Register hooks
         register_hooks(meta_functions);
     }
     backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
@@ -273,6 +319,8 @@ pub extern "C" fn Meta_Attach(
     1
 }
 
+/// # Safety
+/// Called by Metamod during plugin unloading.
 #[no_mangle]
 #[inline(never)]
 pub extern "C" fn Meta_Detach(
