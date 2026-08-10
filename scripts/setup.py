@@ -56,6 +56,7 @@ def cleanup_hlsdk(hlsdk_dir: Path) -> None:
     dirs_to_remove = [
         "cl_dll", "dmc", "ricochet", "utils", "dedicated",
         "game_shared", "linux", "network", "pm_shared", "third_party",
+        "external", "lib",
     ]
     for d in dirs_to_remove:
         full_path = hlsdk_dir / d
@@ -67,19 +68,57 @@ def cleanup_hlsdk(hlsdk_dir: Path) -> None:
 def cleanup_metamod(metamod_dir: Path) -> None:
     """Remove metamod-r source files, keep only include directory."""
     dirs_to_remove = [
+        ".git", ".github",
         "metamod/src", "metamod/plugins", "metamod/build",
         "metamod/build_64", "metamod/build_64_opt", "metamod/build_opt",
         "metamod/buildbot", "metamod/docs", "metamod/extra/example/src",
+    ]
+    files_to_remove = [
+        "build.sh", "CNAME", "version_script.lds",
         "metamod/README.md", "metamod/LICENSE",
     ]
     for d in dirs_to_remove:
         full_path = metamod_dir / d
         if full_path.exists():
-            if full_path.is_dir():
-                shutil.rmtree(full_path)
-            else:
-                full_path.unlink()
+            shutil.rmtree(full_path)
             print(f"  [REMOVED] metamod-r/{d}")
+    for f in files_to_remove:
+        full_path = metamod_dir / f
+        if full_path.exists():
+            full_path.unlink()
+            print(f"  [REMOVED] metamod-r/{f}")
+
+
+def cleanup_rehlds(rehlds_dir: Path) -> None:
+    """Remove rehlds files not needed for reference."""
+    dirs_to_remove = [
+        ".git", ".github", "dep",
+    ]
+    files_to_remove = [
+        "build.sh", "version_script.lds",
+    ]
+    for d in dirs_to_remove:
+        full_path = rehlds_dir / d
+        if full_path.exists():
+            shutil.rmtree(full_path)
+            print(f"  [REMOVED] rehlds/{d}")
+    for f in files_to_remove:
+        full_path = rehlds_dir / f
+        if full_path.exists():
+            full_path.unlink()
+            print(f"  [REMOVED] rehlds/{f}")
+
+
+def cleanup_goldsrcmod_net(goldsrcmod_dir: Path) -> None:
+    """Remove goldsrcmod-net files not needed for reference."""
+    dirs_to_remove = [
+        ".git", "Document", "Template",
+    ]
+    for d in dirs_to_remove:
+        full_path = goldsrcmod_dir / d
+        if full_path.exists():
+            shutil.rmtree(full_path)
+            print(f"  [REMOVED] goldsrcmod-net/{d}")
 
 
 # Files that are not needed for bindgen or reference
@@ -282,6 +321,8 @@ def main():
         print("\nCleaning up unnecessary directories...")
         cleanup_hlsdk(refs_dir / "hlsdk")
         cleanup_metamod(refs_dir / "metamod-r")
+        cleanup_rehlds(refs_dir / "rehlds")
+        cleanup_goldsrcmod_net(refs_dir / "goldsrcmod-net")
         cleanup_redundant_files(refs_dir)
 
     # Detect system SDK paths

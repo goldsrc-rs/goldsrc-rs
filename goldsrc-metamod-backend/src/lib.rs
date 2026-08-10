@@ -5,7 +5,7 @@
 mod meta_types;
 
 use goldsrc_api::Engine;
-
+use goldsrc_sys;
 use std::ffi::c_void;
 use std::ffi::CString;
 
@@ -136,17 +136,88 @@ pub fn backend() -> &'static MetamodBackend {
 }
 
 // ============================================================================
-// Hook System (stubs for future implementation)
+// Hook Tables
+// ============================================================================
+
+/// Function tables that we provide to Metamod.
+/// Metamod calls these to get our hook functions.
+
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn GetEntityAPI2(
+    dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
+    interface_version: *mut i32,
+) -> i32 {
+    unsafe {
+        if dll_table.is_null() || interface_version.is_null() {
+            return 0;
+        }
+
+        // Check interface version
+        if *interface_version != 140 {
+            *interface_version = 140;
+            return 0;
+        }
+
+        // Fill the table with our hooks
+        (*dll_table).pfnSpawn = Some(hook_spawn);
+        (*dll_table).pfnClientConnect = Some(hook_client_connect);
+        (*dll_table).pfnClientCommand = Some(hook_client_command);
+
+        backend().server_print("[GoldSrc.rs] GetEntityAPI2 called - hooks registered.\n");
+        1
+    }
+}
+
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn GetEntityAPI2_Post(
+    dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
+    interface_version: *mut i32,
+) -> i32 {
+    unsafe {
+        if dll_table.is_null() || interface_version.is_null() {
+            return 0;
+        }
+        if *interface_version != 140 {
+            *interface_version = 140;
+            return 0;
+        }
+
+        // Post hooks (called after original function)
+        (*dll_table).pfnSpawn = Some(hook_spawn_post);
+        (*dll_table).pfnClientConnect = Some(hook_client_connect_post);
+
+        1
+    }
+}
+
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn GetNewDLLFunctions(new_table: *mut c_void, interface_version: *mut i32) -> i32 {
+    // We don't need new DLL functions for now
+    0
+}
+
+// ============================================================================
+// Hook Functions
 // ============================================================================
 
 /// Hook for DispatchSpawn - called when an entity spawns.
 ///
 /// # Safety
 /// `edict` must be a valid pointer to an edict_t.
-#[allow(dead_code)]
 unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     if !edict.is_null() {
-        backend().server_print("[GoldSrc.rs] Entity spawned.\n");
+        backend().server_print("[GoldSrc.rs] Entity spawned (pre).\n");
+    }
+    0
+}
+
+/// Post-hook for DispatchSpawn.
+unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> i32 {
+    if !edict.is_null() {
+        backend().server_print("[GoldSrc.rs] Entity spawned (post).\n");
     }
     0
 }
@@ -155,7 +226,6 @@ unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
 ///
 /// # Safety
 /// Pointers must be valid C strings.
-#[allow(dead_code)]
 unsafe extern "C" fn hook_client_connect(
     _entity: *mut goldsrc_sys::edict_t,
     name: *const std::os::raw::c_char,
@@ -164,7 +234,23 @@ unsafe extern "C" fn hook_client_connect(
 ) -> i32 {
     if !name.is_null() {
         let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
-        let msg = format!("[GoldSrc.rs] Player {} connecting...\n", name_str);
+        let msg = format!("[GoldSrc.rs] Player {} connecting (pre)...\n", name_str);
+        let cmsg = CString::new(msg).unwrap_or_default();
+        call_engfunc!(engfuncs().pfnServerPrint, cmsg.as_ptr());
+    }
+    0
+}
+
+/// Post-hook for ClientConnect.
+unsafe extern "C" fn hook_client_connect_post(
+    _entity: *mut goldsrc_sys::edict_t,
+    name: *const std::os::raw::c_char,
+    _address: *const std::os::raw::c_char,
+    _reject_reason: *mut std::os::raw::c_char,
+) -> i32 {
+    if !name.is_null() {
+        let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
+        let msg = format!("[GoldSrc.rs] Player {} connected (post).\n", name_str);
         let cmsg = CString::new(msg).unwrap_or_default();
         call_engfunc!(engfuncs().pfnServerPrint, cmsg.as_ptr());
     }
@@ -175,20 +261,10 @@ unsafe extern "C" fn hook_client_connect(
 ///
 /// # Safety
 /// `entity` must be a valid pointer to an edict_t.
-#[allow(dead_code)]
 unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
     if !entity.is_null() {
         backend().server_print("[GoldSrc.rs] Client command received.\n");
     }
-}
-
-/// Register hooks for entity functions.
-///
-/// # Safety
-/// `meta_functions` must be a valid pointer to a META_FUNCTIONS struct.
-unsafe fn register_hooks(_meta_functions: *mut c_void) {
-    // TODO: Implement full hook registration using META_FUNCTIONS table
-    backend().server_print("[GoldSrc.rs] Hook system initialized.\n");
 }
 
 // ============================================================================
@@ -235,7 +311,7 @@ pub unsafe extern "C" fn Meta_Query(
 #[inline(never)]
 pub unsafe extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
-    meta_functions: *mut c_void,
+    _meta_functions: *mut c_void,
     meta_globals: *mut meta_globals_t,
     _gamedll_funcs: *mut c_void,
 ) -> std::os::raw::c_int {
@@ -244,7 +320,6 @@ pub unsafe extern "C" fn Meta_Attach(
             return 0;
         }
         G_META_GLOBALS = Some(meta_globals);
-        register_hooks(meta_functions);
     }
     backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
     backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
