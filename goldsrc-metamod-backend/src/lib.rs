@@ -583,134 +583,149 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
             }
         }
         "load" => {
-            let mut target = None;
+            let mut targets = Vec::new();
             while let Ok(Some(arg)) = parser.next() {
                 if let Arg::Value(val) = arg {
-                    target = Some(val.to_string_lossy().into_owned());
+                    targets.push(val.to_string_lossy().into_owned());
                 }
             }
-            let Some(t) = target else {
-                backend().server_print("Usage: mrs load <filename>\n");
+            if targets.is_empty() {
+                backend().server_print("Usage: mrs load <file1> [file2...]\n");
                 return;
-            };
-            match manager.load_plugin_by_name(&t) {
-                Ok(msg) => backend().server_print(&msg),
-                Err(err) => backend().server_print(&err),
+            }
+            for t in targets {
+                match manager.load_plugin_by_name(&t) {
+                    Ok(msg) => backend().server_print(&msg),
+                    Err(err) => backend().server_print(&err),
+                }
             }
         }
         "unload" => {
-            let mut target = None;
+            let mut targets = Vec::new();
             let mut all = false;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('a') | Arg::Long("all") => all = true,
-                    Arg::Value(val) => target = Some(val.to_string_lossy().into_owned()),
+                    Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
                     _ => {}
                 }
             }
             if all {
                 let msg = manager.unload_all_plugins();
                 backend().server_print(&msg);
-            } else if let Some(t) = target {
-                match manager.unload_plugin_by_query(&t) {
-                    Ok(msg) => backend().server_print(&msg),
-                    Err(err) => backend().server_print(&err),
+            } else if !targets.is_empty() {
+                for t in targets {
+                    match manager.unload_plugin_by_query(&t) {
+                        Ok(msg) => backend().server_print(&msg),
+                        Err(err) => backend().server_print(&err),
+                    }
                 }
             } else {
-                backend().server_print("Usage: mrs unload <name|index> or mrs unload -a/--all\n");
+                backend()
+                    .server_print("Usage: mrs unload <name|index...> or mrs unload -a/--all\n");
             }
         }
         "reload" => {
-            let mut target = None;
+            let mut targets = Vec::new();
             let mut all = false;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('a') | Arg::Long("all") => all = true,
-                    Arg::Value(val) => target = Some(val.to_string_lossy().into_owned()),
+                    Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
                     _ => {}
                 }
             }
             if all {
                 let msg = manager.reload_all_plugins();
                 backend().server_print(&msg);
-            } else if let Some(t) = target {
-                match manager.reload_plugin_by_query(&t) {
-                    Ok(msg) => backend().server_print(&msg),
-                    Err(err) => backend().server_print(&err),
+            } else if !targets.is_empty() {
+                for t in targets {
+                    match manager.reload_plugin_by_query(&t) {
+                        Ok(msg) => backend().server_print(&msg),
+                        Err(err) => backend().server_print(&err),
+                    }
                 }
             } else {
-                backend().server_print("Usage: mrs reload <name|index> or mrs reload -a/--all\n");
+                backend()
+                    .server_print("Usage: mrs reload <name|index...> or mrs reload -a/--all\n");
             }
         }
         "pause" => {
-            let mut target = None;
+            let mut targets = Vec::new();
             let mut all = false;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('a') | Arg::Long("all") => all = true,
-                    Arg::Value(val) => target = Some(val.to_string_lossy().into_owned()),
+                    Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
                     _ => {}
                 }
             }
             if all {
                 let msg = manager.pause_all_plugins(true);
                 backend().server_print(&msg);
-            } else if let Some(t) = target {
-                match manager.pause_plugin(&t, true) {
-                    Ok(msg) => backend().server_print(&msg),
-                    Err(err) => backend().server_print(&err),
+            } else if !targets.is_empty() {
+                for t in targets {
+                    match manager.pause_plugin(&t, true) {
+                        Ok(msg) => backend().server_print(&msg),
+                        Err(err) => backend().server_print(&err),
+                    }
                 }
             } else {
-                backend().server_print("Usage: mrs pause <name|index> or mrs pause -a/--all\n");
+                backend().server_print("Usage: mrs pause <name|index...> or mrs pause -a/--all\n");
             }
         }
         "unpause" => {
-            let mut target = None;
+            let mut targets = Vec::new();
             let mut all = false;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('a') | Arg::Long("all") => all = true,
-                    Arg::Value(val) => target = Some(val.to_string_lossy().into_owned()),
+                    Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
                     _ => {}
                 }
             }
             if all {
                 let msg = manager.pause_all_plugins(false);
                 backend().server_print(&msg);
-            } else if let Some(t) = target {
-                match manager.pause_plugin(&t, false) {
-                    Ok(msg) => backend().server_print(&msg),
-                    Err(err) => backend().server_print(&err),
+            } else if !targets.is_empty() {
+                for t in targets {
+                    match manager.pause_plugin(&t, false) {
+                        Ok(msg) => backend().server_print(&msg),
+                        Err(err) => backend().server_print(&err),
+                    }
                 }
             } else {
-                backend().server_print("Usage: mrs unpause <name|index> or mrs unpause -a/--all\n");
+                backend()
+                    .server_print("Usage: mrs unpause <name|index...> or mrs unpause -a/--all\n");
             }
         }
         "info" => {
-            let mut target = None;
+            let mut targets = Vec::new();
             while let Ok(Some(arg)) = parser.next() {
                 if let Arg::Value(val) = arg {
-                    target = Some(val.to_string_lossy().into_owned());
+                    targets.push(val.to_string_lossy().into_owned());
                 }
             }
-            let Some(t) = target else {
-                backend().server_print("Usage: mrs info <name|index>\n");
+            if targets.is_empty() {
+                backend().server_print("Usage: mrs info <name|index...>\n");
                 return;
-            };
-            if let Some(idx) = manager.find_plugin_index(&t) {
-                let info = &manager.get_plugins_info()[idx];
-                backend().server_print(&format!("--- Plugin Info: {} ---\n", info.name));
-                backend().server_print(&format!("  Index:      #{}\n", info.index));
-                backend().server_print(&format!("  Path:       {:?}\n", info.path));
-                backend().server_print(&format!(
-                    "  Status:     {}\n",
-                    if info.is_paused { "Paused" } else { "Running" }
-                ));
-                backend().server_print(&format!("  on_load:    {}\n", info.has_on_load));
-                backend().server_print(&format!("  on_unload:  {}\n", info.has_on_unload));
-                backend().server_print(&format!("  on_frame:   {}\n", info.has_on_frame));
-            } else {
-                backend().server_print(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", t));
+            }
+            for t in targets {
+                if let Some(idx) = manager.find_plugin_index(&t) {
+                    let info = &manager.get_plugins_info()[idx];
+                    backend().server_print(&format!("--- Plugin Info: {} ---\n", info.name));
+                    backend().server_print(&format!("  Index:      #{}\n", info.index));
+                    backend().server_print(&format!("  Path:       {:?}\n", info.path));
+                    backend().server_print(&format!(
+                        "  Status:     {}\n",
+                        if info.is_paused { "Paused" } else { "Running" }
+                    ));
+                    backend().server_print(&format!("  on_load:    {}\n", info.has_on_load));
+                    backend().server_print(&format!("  on_unload:  {}\n", info.has_on_unload));
+                    backend().server_print(&format!("  on_frame:   {}\n", info.has_on_frame));
+                } else {
+                    backend().server_print(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", t));
+                }
             }
         }
         "status" => {
