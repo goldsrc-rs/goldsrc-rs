@@ -59,8 +59,13 @@ def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-window
         dest_name = "metamod-rs.so"
 
     dest_path = plugin_dir / dest_name
-    shutil.copy2(dll_path, dest_path)
-    print(f"Copied to: {dest_path}")
+    try:
+        shutil.copy2(dll_path, dest_path)
+        print(f"Copied to: {dest_path}")
+    except PermissionError:
+        print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
+        print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
+        sys.exit(1)
 
     # Update plugins.ini
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
