@@ -20,6 +20,7 @@ The project is split into independent Cargo crates:
 | `goldsrc-api` | Pure Rust traits (interfaces) for engine interaction. |
 | `goldsrc-metamod-backend` | API implementation as a `.dll`/`.so` plugin for classic Metamod-r (preserves compatibility with Reunion, WHBlocker, etc.). |
 | `goldsrc-wasm-host` | Embedded WASM engine for loading plugins on the fly. |
+| `goldsrc-macros` | Procedural macros (`#[plugin]`, `#[command]`) for generating FFI exports and metadata. |
 | `goldsrc` | Public framework (SDK) for plugin developers with convenient macros (`#[hook]`, `#[plugin]`). |
 
 ## Branching Strategy

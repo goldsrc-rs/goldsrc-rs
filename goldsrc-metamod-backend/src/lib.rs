@@ -27,8 +27,34 @@ pub fn init_wasm_host() {
     });
     unsafe {
         let mut manager = goldsrc_wasm_host::PluginManager::new();
-        let _ = manager.enable_hot_reload("cstrike/addons/metamod-rs/plugins");
-        let _ = manager.enable_hot_reload("addons/metamod-rs/plugins");
+
+        let plugin_dirs = [
+            "cstrike/addons/metamod-rs/plugins",
+            "addons/metamod-rs/plugins",
+        ];
+        for dir in plugin_dirs {
+            if std::path::Path::new(dir).exists() {
+                let _ = manager.enable_hot_reload(dir);
+                break;
+            }
+        }
+
+        let config_dirs = [
+            "cstrike/addons/metamod-rs/configs",
+            "addons/metamod-rs/configs",
+        ];
+        let mut watched_config = false;
+        for dir in config_dirs {
+            if std::path::Path::new(dir).exists() {
+                let _ = manager.enable_config_watcher(dir);
+                watched_config = true;
+                break;
+            }
+        }
+        if !watched_config {
+            let _ = manager.enable_config_watcher("cstrike/addons/metamod-rs/configs");
+        }
+
         WASM_MANAGER = Some(manager);
     }
 }
@@ -141,9 +167,9 @@ impl Engine for MetamodBackend {
     }
 
     fn server_print(&self, message: &str) {
-        unsafe {
-            let msg = CString::new(message).unwrap_or_default();
-            call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+        // Defer printing to StartFrame_Post to avoid engine instability during StartFrame.
+        if let Ok(mut queue) = PRINT_QUEUE.lock() {
+            queue.push(message.to_string());
         }
     }
 
@@ -166,6 +192,19 @@ impl Engine for MetamodBackend {
             let cname = CString::new(name).unwrap_or_default();
             call_engfunc!(engfuncs().pfnCVarSetFloat, cname.as_ptr(), value);
         }
+    }
+}
+
+use std::fs::OpenOptions;
+use std::io::Write;
+
+pub fn file_log(msg: &str) {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("cstrike/addons/metamod-rs/debug.log")
+    {
+        let _ = writeln!(file, "{}", msg);
     }
 }
 
@@ -204,7 +243,6 @@ pub unsafe extern "C" fn GetEntityAPI2(
     table.pfnClientDisconnect = Some(hook_client_disconnect);
     table.pfnClientCommand = Some(hook_client_command);
     table.pfnStartFrame = Some(hook_start_frame);
-
     1
 }
 
@@ -228,6 +266,7 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
     table.pfnSpawn = Some(hook_spawn_post);
     table.pfnClientConnect = Some(hook_client_connect_post);
     table.pfnClientDisconnect = Some(hook_client_disconnect_post);
+    table.pfnStartFrame = Some(hook_start_frame_post);
 
     1
 }
@@ -298,6 +337,8 @@ pub unsafe extern "C" fn GetEngineFunctions(
     1
 }
 
+static PRINT_QUEUE: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
 /// # Safety
 /// Called by Metamod to get post-engine functions.
 #[no_mangle]
@@ -323,29 +364,67 @@ pub fn alert(level: goldsrc_sys::ALERT_TYPE, message: &str) {
 /// # Safety
 /// `edict` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
-    if !edict.is_null() {
-        if let Some(edict_ref) = EdictRef::from_raw(edict) {
-            if let Some(vars) = edict_ref.vars() {
-                if let Some(cname) = vars.classname() {
-                    let msg = format!("[GoldSrc.rs] Entity {} spawned (pre).\n", cname);
-                    backend().server_print(&msg);
-                } else {
-                    backend().server_print("[GoldSrc.rs] Entity spawned (pre).\n");
-                }
-            }
-        }
-    }
+unsafe extern "C" fn hook_spawn(_edict: *mut goldsrc_sys::edict_t) -> i32 {
     0
 }
 
 /// Post-hook for DispatchSpawn.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> i32 {
-    if !edict.is_null() {
-        backend().server_print("[GoldSrc.rs] Entity spawned (post).\n");
-    }
+unsafe extern "C" fn hook_spawn_post(_edict: *mut goldsrc_sys::edict_t) -> i32 {
     0
+}
+
+/// Post-hook for StartFrame.
+unsafe extern "C" fn hook_start_frame_post() {
+    let message = {
+        let mut queue = match PRINT_QUEUE.lock() {
+            Ok(q) => q,
+            Err(e) => e.into_inner(),
+        };
+        if queue.is_empty() {
+            return;
+        }
+        queue.remove(0)
+    };
+
+    // =========================================================================================
+    // WARNING! VERY IMPORTANT COSTELL AND HISTORICAL REFERENCE FOR DESCENDANTS
+    // =========================================================================================
+    // If you're reading this code, you're probably wondering: "What the fuck is going on here?"
+    //
+    // Some genius (may their code compile with errors!) decided to update the console logger
+    // in ReHLDS / HLDS to use the C++ `fmtlib` library (`std::format`),
+    // BUT FORGOT THAT STRINGS FROM PLUGINS CANNOT BE PASSED DIRECTLY AS A FORMAT!
+    //
+    // The result is that if the plugin outputs JSON or any string with curly braces `{` or `}`,
+    // `fmtlib` considers them format specifiers, throws an UNCAUGHT exception
+    // `std::format_error("invalid format string")` and THE ENTIRE SERVER CRASHES TO HELL!
+    //
+    // I spent half me life blaming StartFrame, mutexes, poor Wasmi, memory alignment and Windows,
+    // but the fault lay with a damn genius who didn't know how to use `fmt::print("{}")`!
+    //
+    // Hence:
+    // 1. PRINT_QUEUE saves from CRT buffer overflow when spamming logs for 1 frame.
+    // 2. All `{` and `}` are ESCAPED as `{{` and `}}` — so `fmt` turns them back into braces without a crash.
+    // 3. `%` is escaped as `%%`.
+    // =========================================================================================
+
+    let safe_msg = message
+        .replace("%", "%%")
+        .replace("{", "{{")
+        .replace("}", "}}")
+        .replace("\r", "")
+        .replace("\n", " ");
+
+    let mut end = safe_msg.len().min(400);
+    while end > 0 && !safe_msg.is_char_boundary(end) {
+        end -= 1;
+    }
+
+    let final_msg = format!("{}\n", safe_msg[..end].trim_end());
+    if let Ok(msg) = CString::new(final_msg) {
+        call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+    }
 }
 
 /// Hook for ClientConnect - called when a player connects.
@@ -355,15 +434,10 @@ unsafe extern "C" fn hook_spawn_post(edict: *mut goldsrc_sys::edict_t) -> i32 {
 #[allow(dead_code)]
 unsafe extern "C" fn hook_client_connect(
     _entity: *mut goldsrc_sys::edict_t,
-    name: *const std::os::raw::c_char,
+    _name: *const std::os::raw::c_char,
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
 ) -> goldsrc_sys::qboolean {
-    if !name.is_null() {
-        let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
-        let msg = format!("[GoldSrc.rs] Player {} connecting (pre)...\n", name_str);
-        backend().server_print(&msg);
-    }
     0
 }
 
@@ -371,15 +445,10 @@ unsafe extern "C" fn hook_client_connect(
 #[allow(dead_code)]
 unsafe extern "C" fn hook_client_connect_post(
     _entity: *mut goldsrc_sys::edict_t,
-    name: *const std::os::raw::c_char,
+    _name: *const std::os::raw::c_char,
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
 ) -> goldsrc_sys::qboolean {
-    if !name.is_null() {
-        let name_str = std::ffi::CStr::from_ptr(name).to_string_lossy();
-        let msg = format!("[GoldSrc.rs] Player {} connected (post).\n", name_str);
-        backend().server_print(&msg);
-    }
     0
 }
 
@@ -388,44 +457,61 @@ unsafe extern "C" fn hook_client_connect_post(
 /// # Safety
 /// `entity` must be valid player edict pointer or null.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_client_disconnect(entity: *mut goldsrc_sys::edict_t) {
-    if !entity.is_null() {
-        if let Some(edict_ref) = EdictRef::from_raw(entity) {
-            if let Some(vars) = edict_ref.vars() {
-                if let Some(name) = vars.netname() {
-                    let msg = format!("[GoldSrc.rs] Player {} disconnected (pre).\n", name);
-                    backend().server_print(&msg);
-                    return;
-                }
-            }
-        }
-        backend().server_print("[GoldSrc.rs] Player disconnected (pre).\n");
-    }
-}
+unsafe extern "C" fn hook_client_disconnect(_entity: *mut goldsrc_sys::edict_t) {}
 
 /// Post-hook for ClientDisconnect.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::edict_t) {
-    if !entity.is_null() {
-        backend().server_print("[GoldSrc.rs] Player disconnected (post).\n");
-    }
-}
+unsafe extern "C" fn hook_client_disconnect_post(_entity: *mut goldsrc_sys::edict_t) {}
 
 /// Hook for ClientCommand - called when a player issues a command.
 ///
 /// # Safety
-/// `entity` must be a valid pointer to an edict_t.
+/// `_entity` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
-unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
-    if !entity.is_null() {
-        backend().server_print("[GoldSrc.rs] Client command received.\n");
-    }
+unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
+        if argc == 0 {
+            return;
+        }
+        let cmd_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, 0);
+        let args_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Args);
+        if !cmd_ptr.is_null() {
+            if let Ok(cmd_str) = std::ffi::CStr::from_ptr(cmd_ptr).to_str() {
+                let args_str = if !args_ptr.is_null() {
+                    std::ffi::CStr::from_ptr(args_ptr)
+                        .to_str()
+                        .unwrap_or_default()
+                } else {
+                    ""
+                };
+                if let Some(manager) = wasm_manager() {
+                    manager.dispatch_command(cmd_str, args_str);
+                }
+            }
+        }
+    }));
 }
 
 /// Hook for StartFrame - called every server frame.
 unsafe extern "C" fn hook_start_frame() {
-    if let Some(manager) = wasm_manager() {
-        manager.on_server_frame();
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if let Some(manager) = wasm_manager() {
+            manager.on_server_frame();
+        }
+    }));
+    if let Err(err) = res {
+        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = err.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+        backend().server_print(&format!(
+            "[GoldSrc.rs PANIC] Caught panic in StartFrame: {}\n",
+            err_msg
+        ));
     }
 }
 
@@ -433,22 +519,37 @@ use lexopt::Arg;
 
 /// Server command handler for `meta-rs` and `mrs` console commands.
 unsafe extern "C" fn handle_mrs_command() {
-    let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
-    if argc == 0 {
-        return;
-    }
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
+        if argc == 0 {
+            return;
+        }
 
-    let mut raw_args = Vec::new();
-    for i in 0..argc {
-        let arg_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, i);
-        if !arg_ptr.is_null() {
-            if let Ok(cstr) = std::ffi::CStr::from_ptr(arg_ptr).to_str() {
-                raw_args.push(std::ffi::OsString::from(cstr));
+        let mut raw_args = Vec::new();
+        for i in 0..argc {
+            let arg_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, i);
+            if !arg_ptr.is_null() {
+                if let Ok(cstr) = std::ffi::CStr::from_ptr(arg_ptr).to_str() {
+                    raw_args.push(std::ffi::OsString::from(cstr));
+                }
             }
         }
-    }
 
-    dispatch_mrs_command(raw_args);
+        dispatch_mrs_command(raw_args);
+    }));
+    if let Err(err) = res {
+        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = err.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+        backend().server_print(&format!(
+            "[GoldSrc.rs PANIC] Caught panic in CLI Command: {}\n",
+            err_msg
+        ));
+    }
 }
 
 fn print_mrs_help() {
@@ -473,7 +574,13 @@ fn print_mrs_help() {
     backend().server_print("  [ Inspection & Debugging ]\n");
     backend().server_print("    list [OPTIONS]          List loaded plugins. Options:\n");
     backend().server_print(
-        "                              -p, --page <N>    Show specific page (5 per page)\n",
+        "                              -p, --page <N>    Show specific page (default: 1)\n",
+    );
+    backend().server_print(
+        "                              -s, --size <N>    Set page size (default: 5)\n",
+    );
+    backend().server_print(
+        "                              -a, --all         Show all plugins (ignore pagination)\n",
     );
     backend()
         .server_print("                              --paused          Show only paused plugins\n");
@@ -521,7 +628,9 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
     match command.as_str() {
         "list" => {
             let mut page: usize = 1;
+            let mut size: Option<usize> = None;
             let mut only_paused = false;
+            let mut all = false;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('p') | Arg::Long("page") => {
@@ -529,6 +638,12 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                             page = val.to_string_lossy().parse().unwrap_or(1);
                         }
                     }
+                    Arg::Short('s') | Arg::Long("size") => {
+                        if let Ok(val) = parser.value() {
+                            size = Some(val.to_string_lossy().parse().unwrap_or(5));
+                        }
+                    }
+                    Arg::Short('a') | Arg::Long("all") => all = true,
                     Arg::Long("paused") => only_paused = true,
                     _ => {}
                 }
@@ -539,8 +654,12 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                 plugins.retain(|p| p.is_paused);
             }
 
-            let page_size = 5;
             let total_plugins = plugins.len();
+            let page_size = if all {
+                total_plugins.max(1)
+            } else {
+                size.unwrap_or(5)
+            };
             let total_pages = (total_plugins + page_size - 1) / page_size.max(1);
             let page_idx = page.saturating_sub(1);
 
@@ -556,7 +675,7 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                 return;
             }
 
-            let start = page_idx * page_size;
+            let start = (page_idx * page_size).min(total_plugins);
             let end = (start + page_size).min(total_plugins);
 
             for p in &plugins[start..end] {
@@ -713,16 +832,37 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
             for t in targets {
                 if let Some(idx) = manager.find_plugin_index(&t) {
                     let info = &manager.get_plugins_info()[idx];
+                    let clean_path = info.path.to_string_lossy().replace('\\', "/");
                     backend().server_print(&format!("--- Plugin Info: {} ---\n", info.name));
-                    backend().server_print(&format!("  Index:      #{}\n", info.index));
-                    backend().server_print(&format!("  Path:       {:?}\n", info.path));
+                    backend().server_print(&format!("  Index:        #{}\n", info.index));
+                    backend().server_print(&format!("  Path:         {}\n", clean_path));
                     backend().server_print(&format!(
-                        "  Status:     {}\n",
+                        "  Status:       {}\n",
                         if info.is_paused { "Paused" } else { "Running" }
                     ));
-                    backend().server_print(&format!("  on_load:    {}\n", info.has_on_load));
-                    backend().server_print(&format!("  on_unload:  {}\n", info.has_on_unload));
-                    backend().server_print(&format!("  on_frame:   {}\n", info.has_on_frame));
+                    if let Some(meta) = &info.metadata {
+                        backend().server_print(&format!("  Meta Name:    {}\n", meta.name));
+                        backend().server_print(&format!("  Version:      {}\n", meta.version));
+                        let systems_str = if meta.systems.is_empty() {
+                            "none".to_string()
+                        } else {
+                            meta.systems.join(", ")
+                        };
+                        backend().server_print(&format!("  Systems:      {}\n", systems_str));
+                        let deps_str = if meta.dependencies.is_empty() {
+                            "none".to_string()
+                        } else {
+                            meta.dependencies
+                                .iter()
+                                .map(|(k, v)| format!("{} ({})", k, v))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        };
+                        backend().server_print(&format!("  Dependencies: {}\n", deps_str));
+                    }
+                    backend().server_print(&format!("  on_load:      {}\n", info.has_on_load));
+                    backend().server_print(&format!("  on_unload:    {}\n", info.has_on_unload));
+                    backend().server_print(&format!("  on_frame:     {}\n", info.has_on_frame));
                 } else {
                     backend().server_print(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", t));
                 }
@@ -840,7 +980,8 @@ pub unsafe extern "C" fn Meta_Attach(
     register_cli_commands();
     backend().server_print("[GoldSrc.rs] Meta_Attach called.\n");
     backend().server_print("[GoldSrc.rs] WASM Host Engine initialized.\n");
-    backend().server_print("[GoldSrc.rs] Host Management CLI registered (`rs` / `goldsrc`).\n");
+    backend()
+        .server_print("[GoldSrc.rs] Host Management CLI registered (`meta-rs` / `goldsrc`).\n");
     backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
     1
 }

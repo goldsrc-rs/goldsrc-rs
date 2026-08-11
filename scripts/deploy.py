@@ -18,11 +18,11 @@ from pathlib import Path
 
 # Import build function from sibling module
 try:
-    from build import build_plugin
+    from build import build_plugin, build_wasm_plugins
 except ImportError:
     # Allow running directly without package context
     sys.path.insert(0, str(Path(__file__).parent))
-    from build import build_plugin
+    from build import build_plugin, build_wasm_plugins
 
 
 def get_platform_prefix(target: str) -> str:
@@ -59,8 +59,13 @@ def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-window
         dest_name = "metamod-rs.so"
 
     dest_path = plugin_dir / dest_name
-    shutil.copy2(dll_path, dest_path)
-    print(f"Copied to: {dest_path}")
+    try:
+        shutil.copy2(dll_path, dest_path)
+        print(f"Copied to: {dest_path}")
+    except PermissionError:
+        print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
+        print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
+        sys.exit(1)
 
     # Update plugins.ini
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
@@ -90,14 +95,19 @@ def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-window
     print(f"Added to: {plugins_ini}")
 
 
-def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-windows-msvc") -> bool:
-    """Verify that the plugin is correctly deployed."""
+def verify_deploy(
+    game_path: Path,
+    dll_path: Path,
+    wasm_paths: list[Path],
+    target: str = "i686-pc-windows-msvc",
+) -> bool:
+    """Verify that the plugin and WASM modules are correctly deployed."""
     addons_dir = game_path / "cstrike" / "addons"
     if not addons_dir.exists():
         addons_dir = game_path / "addons"
 
     if not addons_dir.exists():
-        print(f"Error: Addons directory not found", file=sys.stderr)
+        print("Error: Addons directory not found", file=sys.stderr)
         return False
 
     if "windows" in target:
@@ -107,6 +117,7 @@ def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-window
 
     dest_path = addons_dir / "metamod-rs" / dest_name
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
+    wasm_target_dir = addons_dir / "metamod-rs" / "plugins"
 
     all_ok = True
 
@@ -140,16 +151,47 @@ def verify_deploy(game_path: Path, dll_path: Path, target: str = "i686-pc-window
                 break
 
         if found:
-            print(f"  [OK]   Plugin listed in plugins.ini")
+            print("  [OK]   Plugin listed in plugins.ini")
         else:
             print(f"  [FAIL] Plugin not found in plugins.ini (expected: {expected_line})")
             all_ok = False
 
+    # Check 4: WASM plugins hashes
+    for wasm_src in wasm_paths:
+        wasm_dst = wasm_target_dir / wasm_src.name
+        if not wasm_dst.exists():
+            print(f"  [FAIL] WASM plugin not found: {wasm_dst.name}")
+            all_ok = False
+        else:
+            src_hash = hashlib.md5(wasm_src.read_bytes()).hexdigest()
+            dst_hash = hashlib.md5(wasm_dst.read_bytes()).hexdigest()
+            if src_hash == dst_hash:
+                print(f"  [OK]   WASM {wasm_src.name} hash matches ({dst_hash[:8]}...)")
+            else:
+                print(f"  [FAIL] WASM {wasm_src.name} hash mismatch: src={src_hash[:8]} dst={dst_hash[:8]}")
+                all_ok = False
+
     return all_ok
 
 
+def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path) -> None:
+    """Copy WASM plugins to the server's plugins/ directory."""
+    addons_dir = game_path / "cstrike" / "addons"
+    if not addons_dir.exists():
+        addons_dir = game_path / "addons"
+
+    wasm_target_dir = addons_dir / "metamod-rs" / "plugins"
+    wasm_target_dir.mkdir(parents=True, exist_ok=True)
+
+    for wasm_file in wasm_paths:
+        if wasm_file.exists():
+            dest = wasm_target_dir / wasm_file.name
+            shutil.copy2(wasm_file, dest)
+            print(f"Copied WASM plugin: {dest}")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs Metamod plugin")
+    parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs Metamod plugin and WASM modules")
     parser.add_argument(
         "--path",
         type=str,
@@ -159,13 +201,13 @@ def main():
     parser.add_argument(
         "--no-build",
         action="store_true",
-        help="Skip building (use existing DLL)",
+        help="Skip building (use existing DLL & WASM binaries)",
     )
     parser.add_argument(
         "--target",
         type=str,
         default="i686-pc-windows-msvc",
-        help="Build target (default: i686-pc-windows-msvc)",
+        help="Build target for host DLL (default: i686-pc-windows-msvc)",
     )
     parser.add_argument(
         "--verify",
@@ -185,30 +227,32 @@ def main():
     else:
         lib_name = "libgoldsrc_metamod_backend.so"
     dll_path = repo_root / "target" / args.target / "release" / lib_name
+    wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / "debug"
+    wasm_plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
 
     if args.verify:
         print("Verifying deployment...")
-        if verify_deploy(game_path, dll_path, args.target):
+        if verify_deploy(game_path, dll_path, wasm_plugins, args.target):
             print("\nAll checks passed!")
         else:
             print("\nSome checks failed!")
             sys.exit(1)
         return
 
-    if not dll_path.exists():
-        print(f"Error: Library not found at {dll_path}", file=sys.stderr)
-        print("Run without --no-build to build first.", file=sys.stderr)
-        sys.exit(1)
-
     if args.no_build:
+        if not dll_path.exists():
+            print(f"Error: Library not found at {dll_path}", file=sys.stderr)
+            sys.exit(1)
         print(f"Using existing library: {dll_path}")
     else:
         dll_path = build_plugin(target=args.target, release=True)
+        wasm_plugins = build_wasm_plugins(release=False)
 
     deploy_plugin(dll_path, game_path, target=args.target)
+    deploy_wasm_plugins(wasm_plugins, game_path)
 
     print("\nVerifying deployment...")
-    if verify_deploy(game_path, dll_path, args.target):
+    if verify_deploy(game_path, dll_path, wasm_plugins, args.target):
         print("\nDeployment verified successfully!")
     else:
         print("\nDeployment verification failed!")

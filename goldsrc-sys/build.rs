@@ -2,6 +2,26 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
+    let target = env::var("TARGET").unwrap_or_default();
+    if target.contains("wasm32") {
+        let dummy = r#"
+            #[repr(C)]
+            pub struct edict_t {
+                pub v: entvars_t,
+            }
+            #[repr(C)]
+            pub struct entvars_t {
+                pub classname: usize,
+                pub netname: usize,
+                pub origin: [f32; 3],
+                pub health: f32,
+            }
+        "#;
+        let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+        std::fs::write(out_path.join("bindings.rs"), dummy).unwrap();
+        return;
+    }
+
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap();
 

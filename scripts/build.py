@@ -46,6 +46,30 @@ def build_plugin(target: str = "i686-pc-windows-msvc", release: bool = True) -> 
     return lib_path
 
 
+def build_wasm_plugins(release: bool = False) -> list[Path]:
+    """Build all WASM plugins for wasm32-unknown-unknown."""
+    print(f"Building WASM plugins ({'release' if release else 'debug'})...")
+    repo_root = get_repo_root()
+
+    cmd = ["cargo", "build", "--target", "wasm32-unknown-unknown", "-p", "vip_core", "-p", "vip_menu"]
+    if release:
+        cmd.append("--release")
+
+    result = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print("WASM plugin build failed:", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+
+    profile = "release" if release else "debug"
+    wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / profile
+    plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
+
+    print(f"Built {len(plugins)} WASM plugins: {[p.name for p in plugins]}")
+    return plugins
+
+
 if __name__ == "__main__":
     import argparse
 
