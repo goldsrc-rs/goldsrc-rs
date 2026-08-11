@@ -40,9 +40,21 @@
 - [x] Granular Config Event System (`action`: `created`/`modified`/`deleted`) with private per-plugin config isolation (`configs/plugins/<name>/`).
 - [x] Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and auto-created log directories (`logs/metamod-rs.log`).
 
-## Stage 6: Standalone Backend & Advanced Runtimes (Future)
+## Stage 6: Architecture Refactoring & Elegant DX — ✅ Completed
 
-- [ ] Transition / dual-support for `wasmtime` engine (JIT execution, WASM Component Model & Exception Handling).
+- [x] Reorganize workspace into `core/`, `backends/`, `framework/`, `tools/`.
+- [x] Rename `metamod-rs` to `goldsrc-metamod`.
+- [x] Optimize WASM payload size via Cargo `profile.release`.
+- [x] Implement WASM Host Imports for safe Engine FFI boundary crossing.
+- [x] Refactor `goldsrc-api` to provide `Player` / `Entity` structs with elegant methods for WASM.
+- [x] Add `#[on_load]` procedural macro to eliminate `unsafe` initialization.
+
+## Stage 7: Component Model, Pulley, & Declarative DX — 🏗 In Progress
+
+- [ ] Transition `goldsrc-wasm-host` from `wasmi` to `wasmtime` with `pulley32` execution engine.
+- [ ] Adopt WASM Component Model (`wit-bindgen`) to completely replace `unsafe extern "C"` bridges.
+- [ ] Implement advanced declarative macros (`#[command]`, `#[hook]`) with State Injection (`&mut World`).
+- [ ] Refactor monolithic files (e.g., `goldsrc-wasm-host/src/lib.rs`) into modular components.
+- [ ] Implement an RBAC/Capability-based Access Control system for commands and plugins.
 - [ ] Build a custom `mp.dll` / `ReHLDS` direct integration backend (bypassing Metamod).
 - [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using `references/` headers.
-
