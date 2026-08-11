@@ -131,79 +131,75 @@ impl LoadedPlugin {
         }
         Ok(())
     }
-    pub fn call_on_event(&mut self, event_name: &str, data: &[u8]) -> Result<(), RuntimeError> {
+
+    /// Helper to safely allocate WASM memory, copy two byte slices, execute a function, and deallocate memory.
+    fn invoke_two_slices(
+        &mut self,
+        fn_name: &str,
+        slice_a: &[u8],
+        slice_b: &[u8],
+        call_fn: impl FnOnce(&mut Store<HostState>, i32, i32, i32, i32) -> Result<(), wasmi::Error>,
+    ) -> Result<(), RuntimeError> {
         if self.is_paused || self.is_poisoned {
             return Ok(());
         }
-        if let (Some(f), Some(inst)) = (&self.on_event_fn, &self.instance) {
-            let alloc_fn = inst
-                .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
-                .ok();
-            let dealloc_fn = inst
-                .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
-                .ok();
+        let Some(inst) = &self.instance else {
+            return Ok(());
+        };
 
-            if let (Some(alloc), Some(dealloc)) = (alloc_fn, dealloc_fn) {
-                let name_bytes = event_name.as_bytes();
-                let name_len = name_bytes.len() as i32;
-                let data_len = data.len() as i32;
+        let alloc = inst
+            .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
+            .ok();
+        let dealloc = inst
+            .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
+            .ok();
 
-                let alloc_name_len = name_len.max(1);
-                let alloc_data_len = data_len.max(1);
+        if let (Some(alloc), Some(dealloc)) = (alloc, dealloc) {
+            let len_a = slice_a.len() as i32;
+            let len_b = slice_b.len() as i32;
+            let alloc_len_a = len_a.max(1);
+            let alloc_len_b = len_b.max(1);
 
-                if let (Ok(name_ptr), Ok(data_ptr)) = (
-                    alloc.call(&mut self.store, (alloc_name_len,)),
-                    alloc.call(&mut self.store, (alloc_data_len,)),
-                ) {
-                    if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
-                    {
-                        if name_len > 0 {
-                            let _ = mem.write(&mut self.store, name_ptr as usize, name_bytes);
+            if let (Ok(ptr_a), Ok(ptr_b)) = (
+                alloc.call(&mut self.store, (alloc_len_a,)),
+                alloc.call(&mut self.store, (alloc_len_b,)),
+            ) {
+                if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory") {
+                    if len_a > 0 {
+                        let _ = mem.write(&mut self.store, ptr_a as usize, slice_a);
+                    }
+                    if len_b > 0 {
+                        let _ = mem.write(&mut self.store, ptr_b as usize, slice_b);
+                    }
+
+                    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        call_fn(&mut self.store, ptr_a, len_a, ptr_b, len_b)
+                    }));
+
+                    let _ = dealloc.call(&mut self.store, (ptr_a, alloc_len_a));
+                    let _ = dealloc.call(&mut self.store, (ptr_b, alloc_len_b));
+
+                    match res {
+                        Ok(Ok(())) => {}
+                        Ok(Err(err)) => {
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Error in {} (plugin {}): {}\n",
+                                fn_name, self.name, err
+                            ));
                         }
-                        if data_len > 0 {
-                            let _ = mem.write(&mut self.store, data_ptr as usize, data);
-                        }
-
-                        crate::file_log(&format!(
-                            "TRACE: Calling WASM on_event for plugin {} with event {}",
-                            self.name, event_name
-                        ));
-                        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            f.call(&mut self.store, (name_ptr, name_len, data_ptr, data_len))
-                        }));
-                        crate::file_log(&format!(
-                            "TRACE: WASM on_event for plugin {} finished",
-                            self.name
-                        ));
-
-                        match res {
-                            Ok(Ok(())) => {
-                                let _ = dealloc.call(&mut self.store, (name_ptr, alloc_name_len));
-                                let _ = dealloc.call(&mut self.store, (data_ptr, alloc_data_len));
-                            }
-                            Ok(Err(err)) => {
-                                let _ = dealloc.call(&mut self.store, (name_ptr, alloc_name_len));
-                                let _ = dealloc.call(&mut self.store, (data_ptr, alloc_data_len));
-                                crate::file_log(&format!("TRACE: WASM error: {}", err));
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Error in on_event (plugin {}): {}\n",
-                                    self.name, err
-                                ));
-                            }
-                            Err(panic) => {
-                                self.is_poisoned = true;
-                                let panic_msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                                    s.to_string()
-                                } else if let Some(s) = panic.downcast_ref::<String>() {
-                                    s.clone()
-                                } else {
-                                    "Unknown panic".to_string()
-                                };
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Panic in on_event (plugin {}): {} — plugin poisoned, will not receive further calls\n",
-                                    self.name, panic_msg
-                                ));
-                            }
+                        Err(panic) => {
+                            self.is_poisoned = true;
+                            let panic_msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                                s.to_string()
+                            } else if let Some(s) = panic.downcast_ref::<String>() {
+                                s.clone()
+                            } else {
+                                "Unknown panic".to_string()
+                            };
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Panic in {} (plugin {}): {} — plugin poisoned, will not receive further calls\n",
+                                fn_name, self.name, panic_msg
+                            ));
                         }
                     }
                 }
@@ -212,77 +208,32 @@ impl LoadedPlugin {
         Ok(())
     }
 
+    pub fn call_on_event(&mut self, event_name: &str, data: &[u8]) -> Result<(), RuntimeError> {
+        let f = match &self.on_event_fn {
+            Some(func) => *func,
+            None => return Ok(()),
+        };
+
+        self.invoke_two_slices(
+            "on_event",
+            event_name.as_bytes(),
+            data,
+            |store, ptr_a, len_a, ptr_b, len_b| f.call(store, (ptr_a, len_a, ptr_b, len_b)),
+        )
+    }
+
     pub fn call_on_command(&mut self, cmd_name: &str, args: &str) -> Result<(), RuntimeError> {
-        if self.is_paused || self.is_poisoned {
-            return Ok(());
-        }
-        if let (Some(f), Some(inst)) = (&self.on_command_fn, &self.instance) {
-            let alloc_fn = inst
-                .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
-                .ok();
-            let dealloc_fn = inst
-                .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
-                .ok();
+        let f = match &self.on_command_fn {
+            Some(func) => *func,
+            None => return Ok(()),
+        };
 
-            if let (Some(alloc), Some(dealloc)) = (alloc_fn, dealloc_fn) {
-                let cmd_bytes = cmd_name.as_bytes();
-                let cmd_len = cmd_bytes.len() as i32;
-                let args_bytes = args.as_bytes();
-                let args_len = args_bytes.len() as i32;
-
-                let alloc_cmd_len = cmd_len.max(1);
-                let alloc_args_len = args_len.max(1);
-
-                if let (Ok(cmd_ptr), Ok(args_ptr)) = (
-                    alloc.call(&mut self.store, (alloc_cmd_len,)),
-                    alloc.call(&mut self.store, (alloc_args_len,)),
-                ) {
-                    if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
-                    {
-                        if cmd_len > 0 {
-                            let _ = mem.write(&mut self.store, cmd_ptr as usize, cmd_bytes);
-                        }
-                        if args_len > 0 {
-                            let _ = mem.write(&mut self.store, args_ptr as usize, args_bytes);
-                        }
-
-                        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            f.call(&mut self.store, (cmd_ptr, cmd_len, args_ptr, args_len))
-                        }));
-
-                        match res {
-                            Ok(Ok(())) => {
-                                let _ = dealloc.call(&mut self.store, (cmd_ptr, alloc_cmd_len));
-                                let _ = dealloc.call(&mut self.store, (args_ptr, alloc_args_len));
-                            }
-                            Ok(Err(err)) => {
-                                let _ = dealloc.call(&mut self.store, (cmd_ptr, alloc_cmd_len));
-                                let _ = dealloc.call(&mut self.store, (args_ptr, alloc_args_len));
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Error in on_command (plugin {}): {}\n",
-                                    self.name, err
-                                ));
-                            }
-                            Err(panic) => {
-                                self.is_poisoned = true;
-                                let panic_msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                                    s.to_string()
-                                } else if let Some(s) = panic.downcast_ref::<String>() {
-                                    s.clone()
-                                } else {
-                                    "Unknown panic".to_string()
-                                };
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Panic in on_command (plugin {}): {} — plugin poisoned, will not receive further calls\n",
-                                    self.name, panic_msg
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
+        self.invoke_two_slices(
+            "on_command",
+            cmd_name.as_bytes(),
+            args.as_bytes(),
+            |store, ptr_a, len_a, ptr_b, len_b| f.call(store, (ptr_a, len_a, ptr_b, len_b)),
+        )
     }
 }
 
