@@ -147,3 +147,34 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+#[proc_macro_attribute]
+pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(item as syn::ItemFn);
+    let fn_name = &input_fn.sig.ident;
+
+    let expanded = quote! {
+        #input_fn
+
+        #[unsafe(no_mangle)]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub unsafe extern "C" fn on_event(
+            name_ptr: *const u8,
+            name_len: usize,
+            data_ptr: *const u8,
+            data_len: usize,
+        ) {
+            let name_slice = unsafe { std::slice::from_raw_parts(name_ptr, name_len) };
+            let data_slice = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
+
+            if let (Ok(event_name), Ok(event_data)) = (
+                std::str::from_utf8(name_slice),
+                std::str::from_utf8(data_slice),
+            ) {
+                #fn_name(event_name, event_data);
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}

@@ -1,4 +1,4 @@
-use goldsrc::{EntityId, World, command, log_info, plugin};
+use goldsrc::{EntityId, World, command, event, log_info, plugin};
 
 struct VipComponent {
     level: u8,
@@ -21,25 +21,9 @@ pub extern "C" fn on_load() {
     }
 }
 
-/// # Safety
-/// Pointers must be valid WASM memory regions.
-#[unsafe(no_mangle)]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub unsafe extern "C" fn on_event(
-    name_ptr: *const u8,
-    name_len: usize,
-    data_ptr: *const u8,
-    data_len: usize,
-) {
-    let name_slice = unsafe { std::slice::from_raw_parts(name_ptr, name_len) };
-    let data_slice = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
-
-    if let (Ok(event_name), Ok(event_data)) = (
-        std::str::from_utf8(name_slice),
-        std::str::from_utf8(data_slice),
-    ) {
-        log_info!("[VIP Menu] Received Event '{}': {}", event_name, event_data);
-    }
+#[event]
+pub fn handle_event(name: &str, data: &str) {
+    log_info!("[VIP Menu] Received Event '{}': {}", name, data);
 }
 
 #[command(name = "vipmenu")]
