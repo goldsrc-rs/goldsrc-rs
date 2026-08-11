@@ -15,6 +15,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut plugin_name = struct_name.to_string();
     let mut plugin_version = "1.0.0".to_string();
+    let mut plugin_author = "Unknown".to_string();
     let mut systems: Vec<String> = Vec::new();
     let mut dependencies: Vec<String> = Vec::new();
 
@@ -34,6 +35,12 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                             if let Expr::Lit(expr_lit) = &nv.value {
                                 if let Lit::Str(s) = &expr_lit.lit {
                                     plugin_version = s.value();
+                                }
+                            }
+                        } else if nv.path.is_ident("author") {
+                            if let Expr::Lit(expr_lit) = &nv.value {
+                                if let Lit::Str(s) = &expr_lit.lit {
+                                    plugin_author = s.value();
                                 }
                             }
                         } else if nv.path.is_ident("systems") {
@@ -83,8 +90,8 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     );
 
     let meta_json = format!(
-        "{{\"name\":\"{}\",\"version\":\"{}\",\"systems\":{},\"dependencies\":{}}}",
-        plugin_name, plugin_version, systems_json, deps_json
+        "{{\"name\":\"{}\",\"version\":\"{}\",\"author\":\"{}\",\"systems\":{},\"dependencies\":{}}}",
+        plugin_name, plugin_version, plugin_author, systems_json, deps_json
     );
 
     let expanded = quote! {
@@ -193,6 +200,23 @@ pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
             ) {
                 #fn_name(event_name, event_data);
             }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_attribute]
+pub fn on_load(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(item as syn::ItemFn);
+    let fn_name = &input_fn.sig.ident;
+
+    let expanded = quote! {
+        #input_fn
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn on_load() {
+            #fn_name();
         }
     };
 

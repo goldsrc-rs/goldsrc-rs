@@ -1,5 +1,5 @@
 [package]
-name = "goldsrc-metamod-backend"
+name = "goldsrc-metamod"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true

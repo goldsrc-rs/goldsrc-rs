@@ -80,10 +80,16 @@ pub struct PluginMetadata {
     pub name: String,
     #[serde(default = "default_version")]
     pub version: String,
+    #[serde(default = "default_author")]
+    pub author: String,
     #[serde(default)]
     pub systems: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_deps")]
     pub dependencies: std::collections::HashMap<String, String>,
+}
+
+fn default_author() -> String {
+    "Unknown".to_string()
 }
 
 fn deserialize_deps<'de, D>(
@@ -569,6 +575,178 @@ impl PluginManager {
                         };
                         host_log(s);
                     },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+
+        // Player/Entity Host Imports (Mocked for now until Engine state is passed to HostState)
+        linker
+            .define(
+                "env",
+                "host_entity_is_valid",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>, _index: i32| -> i32 { 1 },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_entity_health",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>, _index: i32| -> f32 { 100.0 },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_health",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>, _index: i32| -> f32 { 100.0 },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_set_health",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>, index: i32, health: f32| {
+                        host_log(&format!(
+                            "[WASM Host] Mock host_player_set_health({}, {})",
+                            index, health
+                        ));
+                    },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_armorvalue",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>, _index: i32| -> f32 { 0.0 },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_set_armorvalue",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>, index: i32, armor: f32| {
+                        host_log(&format!(
+                            "[WASM Host] Mock host_player_set_armorvalue({}, {})",
+                            index, armor
+                        ));
+                    },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+
+        linker
+            .define(
+                "env",
+                "host_entity_classname",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>,
+                     _index: i32,
+                     _out_ptr: i32,
+                     _out_len: i32|
+                     -> i32 { 0 },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_name",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>,
+                     _index: i32,
+                     _out_ptr: i32,
+                     _out_len: i32|
+                     -> i32 { 0 },
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+
+        linker
+            .define(
+                "env",
+                "host_entity_origin",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>,
+                     _index: i32,
+                     _out_x: i32,
+                     _out_y: i32,
+                     _out_z: i32| {},
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_origin",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>,
+                     _index: i32,
+                     _out_x: i32,
+                     _out_y: i32,
+                     _out_z: i32| {},
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_set_origin",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>,
+                     _index: i32,
+                     _x: f32,
+                     _y: f32,
+                     _z: f32| {},
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_velocity",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>,
+                     _index: i32,
+                     _out_x: i32,
+                     _out_y: i32,
+                     _out_z: i32| {},
+                ),
+            )
+            .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
+        linker
+            .define(
+                "env",
+                "host_player_set_velocity",
+                wasmi::Func::wrap(
+                    &mut store,
+                    |_caller: wasmi::Caller<'_, HostState>,
+                     _index: i32,
+                     _x: f32,
+                     _y: f32,
+                     _z: f32| {},
                 ),
             )
             .map_err(|e| RuntimeError::LoadError(e.to_string()))?;
@@ -1095,6 +1273,7 @@ mod tests {
             metadata: Some(PluginMetadata {
                 name: "child_plugin".to_string(),
                 version: "1.0.0".to_string(),
+                author: "Unknown".to_string(),
                 systems: vec![],
                 dependencies: deps_child,
             }),
@@ -1115,6 +1294,7 @@ mod tests {
             metadata: Some(PluginMetadata {
                 name: "parent_plugin".to_string(),
                 version: "1.2.0".to_string(),
+                author: "Unknown".to_string(),
                 systems: vec![],
                 dependencies: std::collections::HashMap::new(),
             }),

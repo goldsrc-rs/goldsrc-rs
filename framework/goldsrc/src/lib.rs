@@ -7,7 +7,7 @@ pub mod ecs;
 
 pub use ecs::*;
 pub use goldsrc_api::{Engine, Entity, Player, Plugin, Vector3};
-pub use goldsrc_macros::{command, event, plugin};
+pub use goldsrc_macros::{command, event, on_load, plugin};
 pub use goldsrc_sys;
 
 /// Logging subsystem for WASM plugins.
@@ -50,9 +50,4 @@ macro_rules! log_err {
     ($($arg:tt)*) => {
         $crate::log::print(&format!("\x1b[31m[ERROR]\x1b[0m {}\n", format_args!($($arg)*)))
     };
-}
-
-/// Initialize the GoldSrc.rs framework.
-pub fn init() {
-    // TODO: Initialize logging, signal handlers, etc.
 }

@@ -18,7 +18,7 @@ def build_plugin(target: str = "i686-pc-windows-msvc", release: bool = True) -> 
     env = os.environ.copy()
     env["LIBCLANG_PATH"] = r"C:\Program Files\LLVM\lib"
 
-    cmd = ["cargo", "build", "--target", target, "-p", "goldsrc-metamod-backend"]
+    cmd = ["cargo", "build", "--target", target, "-p", "goldsrc-metamod"]
     if release:
         cmd.append("--release")
 
@@ -31,9 +31,9 @@ def build_plugin(target: str = "i686-pc-windows-msvc", release: bool = True) -> 
 
     # Determine the output file extension
     if "windows" in target:
-        lib_name = "goldsrc_metamod_backend.dll"
+        lib_name = "goldsrc_metamod.dll"
     else:
-        lib_name = "libgoldsrc_metamod_backend.so"
+        lib_name = "libgoldsrc_metamod.so"
 
     profile = "release" if release else "debug"
     lib_path = repo_root / "target" / target / profile / lib_name

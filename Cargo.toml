@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "goldsrc-sys",
-    "goldsrc-api",
-    "goldsrc-metamod-backend",
-    "goldsrc-wasm-host",
-    "goldsrc", "goldsrc-macros", "examples/demo_plugins/vip_core", "examples/demo_plugins/vip_menu", "examples/demo_plugins/test_suite",
+    "core/goldsrc-sys",
+    "core/goldsrc-api",
+    "backends/goldsrc-metamod",
+    "backends/goldsrc-wasm-host",
+    "framework/goldsrc", "framework/goldsrc-macros", "examples/demo_plugins/vip_core", "examples/demo_plugins/vip_menu", "examples/demo_plugins/test_suite",
 ]
 resolver = "3"
 
@@ -15,9 +15,16 @@ license = "MIT"
 repository = "https://github.com/ulquiorracode/GoldSrc.rs"
 
 [workspace.dependencies]
-goldsrc-sys = { path = "goldsrc-sys", version = "0.1.0" }
-goldsrc-api = { path = "goldsrc-api", version = "0.1.0" }
-goldsrc-metamod-backend = { path = "goldsrc-metamod-backend", version = "0.1.0" }
-goldsrc-wasm-host = { path = "goldsrc-wasm-host", version = "0.1.0" }
-goldsrc = { path = "goldsrc", version = "0.1.0" }
-goldsrc-macros = { path = "goldsrc-macros", version = "0.1.0" }
+goldsrc-sys = { path = "core/goldsrc-sys", version = "0.1.0" }
+goldsrc-api = { path = "core/goldsrc-api", version = "0.1.0" }
+goldsrc-metamod = { path = "backends/goldsrc-metamod", version = "0.1.0" }
+goldsrc-wasm-host = { path = "backends/goldsrc-wasm-host", version = "0.1.0" }
+goldsrc = { path = "framework/goldsrc", version = "0.1.0" }
+goldsrc-macros = { path = "framework/goldsrc-macros", version = "0.1.0" }
+
+[profile.release]
+lto = "fat"
+opt-level = "z"
+strip = true
+panic = "abort"
+codegen-units = 1

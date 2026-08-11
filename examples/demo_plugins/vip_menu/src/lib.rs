@@ -1,4 +1,4 @@
-use goldsrc::{EntityId, World, command, event, log_info, plugin};
+use goldsrc::{EntityId, Player, World, command, event, log_info, on_load, plugin};
 
 struct VipComponent {
     level: u8,
@@ -7,16 +7,21 @@ struct VipComponent {
 #[plugin(
     name = "vip_menu",
     version = "1.0.0",
+    author = "Oleg",
     systems = ["MenuSystem"],
     dependencies = ["vip_core@^1.0.0"]
 )]
 pub struct VipMenu;
 
-#[unsafe(no_mangle)]
-pub extern "C" fn on_load() {
+#[on_load]
+fn init() {
     let mut world = World::new();
     let player = EntityId(1);
     world.insert(player, VipComponent { level: 5 });
+
+    // Showcase elegant API usage
+    let p = Player::new(1);
+    log_info!("[VIP Menu] Player 1 health is: {}", p.health());
 
     if let Some(vip) = world.get::<VipComponent>(player) {
         log_info!(

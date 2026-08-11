@@ -1,4 +1,4 @@
-use goldsrc::{EntityId, Vector3, World, command, event, log_info, log_warn, plugin};
+use goldsrc::{EntityId, Vector3, World, command, event, log_info, log_warn, on_load, plugin};
 
 #[derive(Debug, PartialEq)]
 struct StatsComponent {
@@ -6,11 +6,16 @@ struct StatsComponent {
     deaths: u32,
 }
 
-#[plugin(name = "test_suite", version = "1.0.0", systems = ["TestSystem"])]
+#[plugin(
+    name = "test_suite",
+    version = "1.0.0",
+    author = "Oleg",
+    systems = ["TestSystem"]
+)]
 pub struct TestSuite;
 
-#[unsafe(no_mangle)]
-pub extern "C" fn on_load() {
+#[on_load]
+fn init() {
     log_info!("[Test Suite] Plugin loaded with zero unsafe code!");
 
     let mut world = World::new();

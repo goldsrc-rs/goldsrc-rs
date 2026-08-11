@@ -40,7 +40,16 @@
 - [x] Granular Config Event System (`action`: `created`/`modified`/`deleted`) with private per-plugin config isolation (`configs/plugins/<name>/`).
 - [x] Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and auto-created log directories (`logs/metamod-rs.log`).
 
-## Stage 6: Standalone Backend & Advanced Runtimes (Future)
+## Stage 6: Architecture Refactoring & Elegant DX — 🏗 In Progress
+
+- [ ] Reorganize workspace into `core/`, `backends/`, `framework/`, `tools/`.
+- [ ] Rename `metamod-rs` to `goldsrc-metamod`.
+- [ ] Optimize WASM payload size via Cargo `profile.release`.
+- [ ] Implement WASM Host Imports for safe Engine FFI boundary crossing.
+- [ ] Refactor `goldsrc-api` to provide `Player` / `Entity` structs with elegant methods for WASM.
+- [ ] Add `#[on_load]` procedural macro to eliminate `unsafe` initialization.
+
+## Stage 7: Standalone Backend & Advanced Runtimes (Future)
 
 - [ ] Transition / dual-support for `wasmtime` engine (JIT execution, WASM Component Model & Exception Handling).
 - [ ] Build a custom `mp.dll` / `ReHLDS` direct integration backend (bypassing Metamod).
