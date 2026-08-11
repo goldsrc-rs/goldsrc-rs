@@ -51,7 +51,7 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
     print(f"Building WASM plugins ({'release' if release else 'debug'})...")
     repo_root = get_repo_root()
 
-    cmd = ["cargo", "build", "--target", "wasm32-unknown-unknown", "-p", "vip_core", "-p", "vip_menu"]
+    cmd = ["cargo", "build", "--target", "wasm32-unknown-unknown", "-p", "vip_core", "-p", "vip_menu", "-p", "test_suite"]
     if release:
         cmd.append("--release")
 
