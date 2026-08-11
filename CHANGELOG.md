@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Stage 6)
+- **Architecture Restructuring**: Reorganized the workspace into `core/`, `backends/`, `framework/`, and `tools/` for better maintainability.
+- **WASM Host Imports**: Introduced a safe FFI bridge allowing WASM plugins to call engine functions directly.
+- **Elegant DX**: Added `#[on_load]` procedural macro to eliminate `unsafe` initialization code in plugins.
+- **Plugin Author Field**: Added `author` metadata to `#[plugin]` macro.
+- **Reduced Payload**: Optimized WASM payload sizes via Cargo release profile optimizations.
+
 ### Added
 
 - Initial project scaffolding: Cargo workspace with 5 crates (`goldsrc-sys`, `goldsrc-api`, `goldsrc-metamod-backend`, `goldsrc-wasm-host`, `goldsrc`).
