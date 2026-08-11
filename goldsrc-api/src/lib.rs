@@ -83,6 +83,30 @@ impl Entity {
     }
 }
 
+/// 3D Vector type for GoldSrc positions and velocities.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Vector3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl From<[f32; 3]> for Vector3 {
+    fn from(arr: [f32; 3]) -> Self {
+        Self {
+            x: arr[0],
+            y: arr[1],
+            z: arr[2],
+        }
+    }
+}
+
+impl From<Vector3> for [f32; 3] {
+    fn from(v: Vector3) -> Self {
+        [v.x, v.y, v.z]
+    }
+}
+
 /// Safe wrapper around a player entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Player {
@@ -123,15 +147,58 @@ impl Player {
     }
 
     /// Get the player's origin (position).
-    pub fn origin(&self) -> [f32; 3] {
+    pub fn origin(&self) -> Vector3 {
         // SAFETY: edict is valid, v is always present
-        unsafe { (*self.edict).v.origin }
+        unsafe { (*self.edict).v.origin.into() }
+    }
+
+    /// Set the player's origin.
+    pub fn set_origin(&mut self, pos: Vector3) {
+        unsafe {
+            (*self.edict).v.origin = pos.into();
+        }
+    }
+
+    /// Get the player's velocity.
+    pub fn velocity(&self) -> Vector3 {
+        unsafe { (*self.edict).v.velocity.into() }
+    }
+
+    /// Set the player's velocity.
+    pub fn set_velocity(&mut self, vel: Vector3) {
+        unsafe {
+            (*self.edict).v.velocity = vel.into();
+        }
     }
 
     /// Get the player's health.
     pub fn health(&self) -> f32 {
         // SAFETY: edict is valid, v is always present
         unsafe { (*self.edict).v.health }
+    }
+
+    /// Set the player's health.
+    pub fn set_health(&mut self, health: f32) {
+        unsafe {
+            (*self.edict).v.health = health;
+        }
+    }
+
+    /// Get the player's armor value.
+    pub fn armorvalue(&self) -> f32 {
+        unsafe { (*self.edict).v.armorvalue }
+    }
+
+    /// Set the player's armor value.
+    pub fn set_armorvalue(&mut self, armor: f32) {
+        unsafe {
+            (*self.edict).v.armorvalue = armor;
+        }
+    }
+
+    /// Check if player is alive (health > 0).
+    pub fn is_alive(&self) -> bool {
+        self.health() > 0.0
     }
 
     /// Get the raw edict pointer.

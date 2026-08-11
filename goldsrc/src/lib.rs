@@ -3,8 +3,11 @@
 //! This is the main entry point for plugin developers. It re-exports
 //! everything you need from the other crates.
 
-pub use goldsrc_api::{Engine, Entity, Player, Plugin};
-pub use goldsrc_macros::{command, plugin};
+pub mod ecs;
+
+pub use ecs::*;
+pub use goldsrc_api::{Engine, Entity, Player, Plugin, Vector3};
+pub use goldsrc_macros::{command, event, plugin};
 pub use goldsrc_sys;
 
 /// Logging subsystem for WASM plugins.

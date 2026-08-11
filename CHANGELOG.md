@@ -31,9 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Metamod `pfnStartFrame` hook integration for WASM module frame ticks.
 - Dynamic versioning (`CARGO_PKG_VERSION`, `GIT_HASH`, `BUILD_TARGET`) via `build.rs` environment variables.
 - Host CLI (`mrs`) commands implemented via `lexopt`: `load`, `unload`, `reload`, `pause`, `unpause`, `list`, `info`.
-- Added multi-target and pagination support (`-p`, `-s`, `-a`) to Host CLI commands.
+- Added procedural macros crate `goldsrc-macros` (`#[plugin]`, `#[command]`).
+- Added WASM SDK `goldsrc` crate with logging macros (`log_info!`, `log_warn!`, `log_err!`).
+- Added SemVer DAG plugin dependency resolution & topological sorting.
+- Added inter-plugin Pub/Sub event bus across WASM modules.
+- Added configuration hot-reloader watching `configs/` with JSON minification and broadcasting.
+- Added automated deployment script `scripts/deploy.py` with MD5 hash verification.
+- Added Git `pre-commit` hook combining `cargo fmt`, `cargo clippy` and `cargo test`.
 
-### Changed
+### Fixed
+
+- Fixed ReHLDS `fmtlib` crash when printing strings containing `{` or `}` by escaping them to `{{` and `}}`.
+- Fixed GoldSrc CRT console buffer overflow during frame ticks by implementing a rate-limited `PRINT_QUEUE` flushed in `StartFrame_Post`.
+- Resolved all Clippy warnings across the entire Cargo workspace.
 
 - Default branch set to `dev` on GitHub.
 - Branch protection enabled on both `main` and `dev`.

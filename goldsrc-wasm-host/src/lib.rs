@@ -16,10 +16,14 @@ use std::io::Write;
 use wasmi::{Engine, Instance, Linker, Module, Store, TypedFunc};
 
 pub fn file_log(msg: &str) {
+    let logs_dir = Path::new("cstrike/addons/metamod-rs/logs");
+    let _ = fs::create_dir_all(logs_dir);
+    let log_file_path = logs_dir.join("metamod-rs.log");
+
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("cstrike/addons/metamod-rs/debug.log")
+        .open(log_file_path)
     {
         let _ = writeln!(file, "{}", msg);
     }
@@ -78,8 +82,40 @@ pub struct PluginMetadata {
     pub version: String,
     #[serde(default)]
     pub systems: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_deps")]
     pub dependencies: std::collections::HashMap<String, String>,
+}
+
+fn deserialize_deps<'de, D>(
+    deserializer: D,
+) -> Result<std::collections::HashMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum RawDeps {
+        List(Vec<String>),
+        Map(std::collections::HashMap<String, String>),
+    }
+
+    let mut map = std::collections::HashMap::new();
+    match RawDeps::deserialize(deserializer)? {
+        RawDeps::Map(m) => return Ok(m),
+        RawDeps::List(list) => {
+            for item in list {
+                let parts: Vec<&str> = item.split('@').collect();
+                if parts.len() == 2 {
+                    map.insert(parts[0].to_string(), parts[1].to_string());
+                } else {
+                    map.insert(item, "*".to_string());
+                }
+            }
+        }
+    }
+    Ok(map)
 }
 
 fn default_version() -> String {
@@ -131,159 +167,117 @@ impl LoadedPlugin {
         }
         Ok(())
     }
-    pub fn call_on_event(&mut self, event_name: &str, data: &[u8]) -> Result<(), RuntimeError> {
+
+    /// Helper to safely allocate WASM memory, copy two byte slices, execute a function, and deallocate memory.
+    fn invoke_two_slices(
+        &mut self,
+        fn_name: &str,
+        slice_a: &[u8],
+        slice_b: &[u8],
+        call_fn: impl FnOnce(&mut Store<HostState>, i32, i32, i32, i32) -> Result<(), wasmi::Error>,
+    ) -> Result<(), RuntimeError> {
         if self.is_paused || self.is_poisoned {
             return Ok(());
         }
-        if let (Some(f), Some(inst)) = (&self.on_event_fn, &self.instance) {
-            let alloc_fn = inst
-                .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
-                .ok();
-            let dealloc_fn = inst
-                .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
-                .ok();
+        let Some(inst) = &self.instance else {
+            return Ok(());
+        };
 
-            if let (Some(alloc), Some(dealloc)) = (alloc_fn, dealloc_fn) {
-                let name_bytes = event_name.as_bytes();
-                let name_len = name_bytes.len() as i32;
-                let data_len = data.len() as i32;
+        let alloc = inst
+            .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
+            .ok();
+        let dealloc = inst
+            .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
+            .ok();
 
-                let alloc_name_len = name_len.max(1);
-                let alloc_data_len = data_len.max(1);
+        if let (Some(alloc), Some(dealloc)) = (alloc, dealloc) {
+            let len_a = slice_a.len() as i32;
+            let len_b = slice_b.len() as i32;
+            let alloc_len_a = len_a.max(1);
+            let alloc_len_b = len_b.max(1);
 
-                if let (Ok(name_ptr), Ok(data_ptr)) = (
-                    alloc.call(&mut self.store, (alloc_name_len,)),
-                    alloc.call(&mut self.store, (alloc_data_len,)),
-                ) {
-                    if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
-                    {
-                        if name_len > 0 {
-                            let _ = mem.write(&mut self.store, name_ptr as usize, name_bytes);
+            if let (Ok(ptr_a), Ok(ptr_b)) = (
+                alloc.call(&mut self.store, (alloc_len_a,)),
+                alloc.call(&mut self.store, (alloc_len_b,)),
+            ) {
+                if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory") {
+                    if len_a > 0 {
+                        let _ = mem.write(&mut self.store, ptr_a as usize, slice_a);
+                    }
+                    if len_b > 0 {
+                        let _ = mem.write(&mut self.store, ptr_b as usize, slice_b);
+                    }
+
+                    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        call_fn(&mut self.store, ptr_a, len_a, ptr_b, len_b)
+                    }));
+
+                    let _ = dealloc.call(&mut self.store, (ptr_a, alloc_len_a));
+                    let _ = dealloc.call(&mut self.store, (ptr_b, alloc_len_b));
+
+                    match res {
+                        Ok(Ok(())) => {}
+                        Ok(Err(err)) => {
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Error in {} (plugin {}): {}\n",
+                                fn_name, self.name, err
+                            ));
                         }
-                        if data_len > 0 {
-                            let _ = mem.write(&mut self.store, data_ptr as usize, data);
-                        }
-
-                        crate::file_log(&format!(
-                            "TRACE: Calling WASM on_event for plugin {} with event {}",
-                            self.name, event_name
-                        ));
-                        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            f.call(&mut self.store, (name_ptr, name_len, data_ptr, data_len))
-                        }));
-                        crate::file_log(&format!(
-                            "TRACE: WASM on_event for plugin {} finished",
-                            self.name
-                        ));
-
-                        match res {
-                            Ok(Ok(())) => {
-                                let _ = dealloc.call(&mut self.store, (name_ptr, alloc_name_len));
-                                let _ = dealloc.call(&mut self.store, (data_ptr, alloc_data_len));
-                            }
-                            Ok(Err(err)) => {
-                                let _ = dealloc.call(&mut self.store, (name_ptr, alloc_name_len));
-                                let _ = dealloc.call(&mut self.store, (data_ptr, alloc_data_len));
-                                crate::file_log(&format!("TRACE: WASM error: {}", err));
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Error in on_event (plugin {}): {}\n",
-                                    self.name, err
-                                ));
-                            }
-                            Err(panic) => {
-                                self.is_poisoned = true;
-                                let panic_msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                                    s.to_string()
-                                } else if let Some(s) = panic.downcast_ref::<String>() {
-                                    s.clone()
-                                } else {
-                                    "Unknown panic".to_string()
-                                };
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Panic in on_event (plugin {}): {} — plugin poisoned, will not receive further calls\n",
-                                    self.name, panic_msg
-                                ));
-                            }
+                        Err(panic) => {
+                            self.is_poisoned = true;
+                            let panic_msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                                s.to_string()
+                            } else if let Some(s) = panic.downcast_ref::<String>() {
+                                s.clone()
+                            } else {
+                                "Unknown panic".to_string()
+                            };
+                            host_log(&format!(
+                                "[GoldSrc.rs WASM Host] Panic in {} (plugin {}): {} — plugin poisoned, will not receive further calls\n",
+                                fn_name, self.name, panic_msg
+                            ));
                         }
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    pub fn call_on_event(&mut self, event_name: &str, data: &[u8]) -> Result<(), RuntimeError> {
+        let f = match &self.on_event_fn {
+            Some(func) => *func,
+            None => return Ok(()),
+        };
+
+        self.invoke_two_slices(
+            "on_event",
+            event_name.as_bytes(),
+            data,
+            |store, ptr_a, len_a, ptr_b, len_b| f.call(store, (ptr_a, len_a, ptr_b, len_b)),
+        )
     }
 
     pub fn call_on_command(&mut self, cmd_name: &str, args: &str) -> Result<(), RuntimeError> {
-        if self.is_paused || self.is_poisoned {
-            return Ok(());
-        }
-        if let (Some(f), Some(inst)) = (&self.on_command_fn, &self.instance) {
-            let alloc_fn = inst
-                .get_typed_func::<(i32,), i32>(&self.store, "__goldsrc_alloc")
-                .ok();
-            let dealloc_fn = inst
-                .get_typed_func::<(i32, i32), ()>(&self.store, "__goldsrc_dealloc")
-                .ok();
+        let f = match &self.on_command_fn {
+            Some(func) => *func,
+            None => return Ok(()),
+        };
 
-            if let (Some(alloc), Some(dealloc)) = (alloc_fn, dealloc_fn) {
-                let cmd_bytes = cmd_name.as_bytes();
-                let cmd_len = cmd_bytes.len() as i32;
-                let args_bytes = args.as_bytes();
-                let args_len = args_bytes.len() as i32;
-
-                let alloc_cmd_len = cmd_len.max(1);
-                let alloc_args_len = args_len.max(1);
-
-                if let (Ok(cmd_ptr), Ok(args_ptr)) = (
-                    alloc.call(&mut self.store, (alloc_cmd_len,)),
-                    alloc.call(&mut self.store, (alloc_args_len,)),
-                ) {
-                    if let Some(wasmi::Extern::Memory(mem)) = inst.get_export(&self.store, "memory")
-                    {
-                        if cmd_len > 0 {
-                            let _ = mem.write(&mut self.store, cmd_ptr as usize, cmd_bytes);
-                        }
-                        if args_len > 0 {
-                            let _ = mem.write(&mut self.store, args_ptr as usize, args_bytes);
-                        }
-
-                        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            f.call(&mut self.store, (cmd_ptr, cmd_len, args_ptr, args_len))
-                        }));
-
-                        match res {
-                            Ok(Ok(())) => {
-                                let _ = dealloc.call(&mut self.store, (cmd_ptr, alloc_cmd_len));
-                                let _ = dealloc.call(&mut self.store, (args_ptr, alloc_args_len));
-                            }
-                            Ok(Err(err)) => {
-                                let _ = dealloc.call(&mut self.store, (cmd_ptr, alloc_cmd_len));
-                                let _ = dealloc.call(&mut self.store, (args_ptr, alloc_args_len));
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Error in on_command (plugin {}): {}\n",
-                                    self.name, err
-                                ));
-                            }
-                            Err(panic) => {
-                                self.is_poisoned = true;
-                                let panic_msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                                    s.to_string()
-                                } else if let Some(s) = panic.downcast_ref::<String>() {
-                                    s.clone()
-                                } else {
-                                    "Unknown panic".to_string()
-                                };
-                                host_log(&format!(
-                                    "[GoldSrc.rs WASM Host] Panic in on_command (plugin {}): {} — plugin poisoned, will not receive further calls\n",
-                                    self.name, panic_msg
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
+        self.invoke_two_slices(
+            "on_command",
+            cmd_name.as_bytes(),
+            args.as_bytes(),
+            |store, ptr_a, len_a, ptr_b, len_b| f.call(store, (ptr_a, len_a, ptr_b, len_b)),
+        )
     }
+}
+
+struct PendingConfigEvent {
+    target_plugin: Option<String>,
+    file_name: String,
+    action: &'static str,
+    content: Vec<u8>,
 }
 
 /// WASM Plugin Manager — handles runtime execution, host imports, and hot-reload.
@@ -294,7 +288,7 @@ pub struct PluginManager {
     watcher_tx: std::sync::mpsc::Sender<notify::Result<notify::Event>>,
     _watchers: Vec<RecommendedWatcher>,
     watched_dirs: Vec<PathBuf>,
-    pending_config_events: Vec<(String, Vec<u8>)>,
+    pending_config_events: Vec<PendingConfigEvent>,
 }
 
 impl Default for PluginManager {
@@ -649,6 +643,15 @@ impl PluginManager {
             plugin_name
         ));
         self.plugins.push(loaded);
+
+        let dep_errors = self.validate_and_sort_dependencies();
+        for err in dep_errors {
+            host_log(&format!(
+                "[GoldSrc.rs WASM Host] Dependency Warning: {}\n",
+                err
+            ));
+        }
+
         Ok(())
     }
 
@@ -719,6 +722,20 @@ impl PluginManager {
         config_paths.dedup();
 
         for config_path in config_paths {
+            // Check if path is in configs/plugins/<plugin_name>/...
+            let mut target_plugin = None;
+            if let Ok(rel) = config_path.strip_prefix(Path::new("configs").join("plugins")) {
+                if let Some(first_comp) = rel.components().next() {
+                    target_plugin = Some(first_comp.as_os_str().to_string_lossy().to_string());
+                }
+            }
+
+            let file_name = config_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+
             if config_path.is_file() {
                 if let Ok(content) = fs::read_to_string(&config_path) {
                     let trimmed = content.trim();
@@ -730,36 +747,36 @@ impl PluginManager {
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
                             serde_json::to_string(&v).unwrap_or_else(|_| trimmed.to_string())
                         } else {
-                            crate::file_log(&format!(
-                                "TRACE: Skipping invalid/incomplete JSON in {:?}",
-                                config_path
-                            ));
                             continue;
                         }
                     } else {
                         trimmed.to_string()
                     };
 
-                    let file_name = config_path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .into_owned();
                     host_log(&format!(
                         "[GoldSrc.rs WASM Host] Config updated: {}\n",
                         file_name
                     ));
-                    crate::file_log(&format!("TRACE: Queuing config event for {}", file_name));
-                    self.pending_config_events
-                        .push((file_name, minified_content.into_bytes()));
+                    self.pending_config_events.push(PendingConfigEvent {
+                        target_plugin,
+                        file_name,
+                        action: "modified",
+                        content: minified_content.into_bytes(),
+                    });
                 }
+            } else {
+                // File deleted
+                self.pending_config_events.push(PendingConfigEvent {
+                    target_plugin,
+                    file_name,
+                    action: "deleted",
+                    content: Vec::new(),
+                });
             }
         }
 
         for path in reload_paths {
             if path.is_file() {
-                crate::file_log(&format!("TRACE: Reloading plugin {:?}", path));
-                // Scenario 1 & 2: Plugin Created or Overwritten/Modified
                 let is_reload = self.plugins.iter().any(|p| p.path == path);
                 self.unload_plugin(&path);
 
@@ -777,7 +794,6 @@ impl PluginManager {
                     ));
                 }
             } else {
-                // Scenario 3: Plugin Deleted / Removed / Renamed away
                 self.unload_plugin(&path);
             }
         }
@@ -794,18 +810,31 @@ impl PluginManager {
                 ));
             }
         }
-        let events: Vec<(String, Vec<u8>)> = self.pending_config_events.drain(..).collect();
-        for (file_name, content_bytes) in events {
+        let events: Vec<PendingConfigEvent> = self.pending_config_events.drain(..).collect();
+        for event in events {
+            let content_str = if event.content.is_empty() {
+                "{}".to_string()
+            } else {
+                String::from_utf8_lossy(&event.content).to_string()
+            };
             let payload = format!(
-                "{{\"file\":\"{}\",\"content\":{}}}",
-                file_name,
-                String::from_utf8_lossy(&content_bytes)
+                "{{\"action\":\"{}\",\"file\":\"{}\",\"content\":{}}}",
+                event.action, event.file_name, content_str
             );
-            crate::file_log(&format!(
-                "TRACE: Broadcasting deferred config event for {}",
-                file_name
-            ));
-            self.broadcast_event("config_changed", payload.as_bytes());
+
+            if let Some(target) = event.target_plugin {
+                // Private config: send ONLY to specified plugin
+                for plugin in &mut self.plugins {
+                    if plugin.name == target
+                        || plugin.metadata.as_ref().is_some_and(|m| m.name == target)
+                    {
+                        let _ = plugin.call_on_event("config_changed", payload.as_bytes());
+                    }
+                }
+            } else {
+                // Global config: broadcast to ALL plugins
+                self.broadcast_event("config_changed", payload.as_bytes());
+            }
         }
     }
 

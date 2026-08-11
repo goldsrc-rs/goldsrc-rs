@@ -14,7 +14,9 @@ fn main() {
                 pub classname: usize,
                 pub netname: usize,
                 pub origin: [f32; 3],
+                pub velocity: [f32; 3],
                 pub health: f32,
+                pub armorvalue: f32,
             }
         "#;
         let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
