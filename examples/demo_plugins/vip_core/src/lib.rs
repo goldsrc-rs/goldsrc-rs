@@ -1,26 +1,11 @@
-use goldsrc::plugin;
-
-#[cfg(target_arch = "wasm32")]
-#[link(wasm_import_module = "env")]
-unsafe extern "C" {
-    fn server_print(ptr: *const u8, len: usize);
-}
-
-fn log(msg: &str) {
-    #[cfg(target_arch = "wasm32")]
-    unsafe {
-        server_print(msg.as_ptr(), msg.len());
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    println!("{}", msg);
-}
+use goldsrc::{plugin, log_info};
 
 #[plugin(name = "vip_core", version = "1.0.0", systems = ["CoreSystem"])]
 pub struct VipCore;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn on_load() {
-    log("[VIP Core] Successfully initialized VIP Core System!\n");
+    log_info!("[VIP Core] Successfully initialized VIP Core System!");
 }
 
 #[unsafe(no_mangle)]

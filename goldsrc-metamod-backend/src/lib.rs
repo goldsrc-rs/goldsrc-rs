@@ -167,10 +167,9 @@ impl Engine for MetamodBackend {
     }
 
     fn server_print(&self, message: &str) {
-        unsafe {
-            let safe_msg = message.replace('%', "%%");
-            let msg = CString::new(safe_msg).unwrap_or_default();
-            call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+        // Defer printing to StartFrame_Post to avoid engine instability during StartFrame.
+        if let Ok(mut queue) = PRINT_QUEUE.lock() {
+            queue.push(message.to_string());
         }
     }
 
@@ -193,6 +192,19 @@ impl Engine for MetamodBackend {
             let cname = CString::new(name).unwrap_or_default();
             call_engfunc!(engfuncs().pfnCVarSetFloat, cname.as_ptr(), value);
         }
+    }
+}
+
+use std::fs::OpenOptions;
+use std::io::Write;
+
+pub fn file_log(msg: &str) {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("cstrike/addons/metamod-rs/debug.log")
+    {
+        let _ = writeln!(file, "{}", msg);
     }
 }
 
@@ -231,7 +243,6 @@ pub unsafe extern "C" fn GetEntityAPI2(
     table.pfnClientDisconnect = Some(hook_client_disconnect);
     table.pfnClientCommand = Some(hook_client_command);
     table.pfnStartFrame = Some(hook_start_frame);
-
     1
 }
 
@@ -255,6 +266,7 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
     table.pfnSpawn = Some(hook_spawn_post);
     table.pfnClientConnect = Some(hook_client_connect_post);
     table.pfnClientDisconnect = Some(hook_client_disconnect_post);
+    table.pfnStartFrame = Some(hook_start_frame_post);
 
     1
 }
@@ -325,6 +337,8 @@ pub unsafe extern "C" fn GetEngineFunctions(
     1
 }
 
+static PRINT_QUEUE: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
 /// # Safety
 /// Called by Metamod to get post-engine functions.
 #[no_mangle]
@@ -358,6 +372,59 @@ unsafe extern "C" fn hook_spawn(_edict: *mut goldsrc_sys::edict_t) -> i32 {
 #[allow(dead_code)]
 unsafe extern "C" fn hook_spawn_post(_edict: *mut goldsrc_sys::edict_t) -> i32 {
     0
+}
+
+/// Post-hook for StartFrame.
+unsafe extern "C" fn hook_start_frame_post() {
+    let message = {
+        let mut queue = match PRINT_QUEUE.lock() {
+            Ok(q) => q,
+            Err(e) => e.into_inner(),
+        };
+        if queue.is_empty() {
+            return;
+        }
+        queue.remove(0)
+    };
+
+    // =========================================================================================
+    // WARNING! VERY IMPORTANT COSTELL AND HISTORICAL REFERENCE FOR DESCENDANTS
+    // =========================================================================================
+    // If you're reading this code, you're probably wondering: "What the fuck is going on here?"
+    //
+    // Some genius (may their code compile with errors!) decided to update the console logger
+    // in ReHLDS / HLDS to use the C++ `fmtlib` library (`std::format`),
+    // BUT FORGOT THAT STRINGS FROM PLUGINS CANNOT BE PASSED DIRECTLY AS A FORMAT!
+    //
+    // The result is that if the plugin outputs JSON or any string with curly braces `{` or `}`,
+    // `fmtlib` considers them format specifiers, throws an UNCAUGHT exception
+    // `std::format_error("invalid format string")` and THE ENTIRE SERVER CRASHES TO HELL!
+    //
+    // I spent half me life blaming StartFrame, mutexes, poor Wasmi, memory alignment and Windows,
+    // but the fault lay with a damn genius who didn't know how to use `fmt::print("{}")`!
+    //
+    // Hence:
+    // 1. PRINT_QUEUE saves from CRT buffer overflow when spamming logs for 1 frame.
+    // 2. All `{` and `}` are ESCAPED as `{{` and `}}` — so `fmt` turns them back into braces without a crash.
+    // 3. `%` is escaped as `%%`.
+    // =========================================================================================
+
+    let safe_msg = message
+        .replace("%", "%%")
+        .replace("{", "{{")
+        .replace("}", "}}")
+        .replace("\r", "")
+        .replace("\n", " ");
+        
+    let mut end = safe_msg.len().min(400);
+    while end > 0 && !safe_msg.is_char_boundary(end) {
+        end -= 1;
+    }
+    
+    let final_msg = format!("{}\n", safe_msg[..end].trim_end());
+    if let Ok(msg) = CString::new(final_msg) {
+        call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+    }
 }
 
 /// Hook for ClientConnect - called when a player connects.

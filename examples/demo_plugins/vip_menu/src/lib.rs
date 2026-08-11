@@ -1,26 +1,11 @@
-use goldsrc::{command, plugin};
-
-#[cfg(target_arch = "wasm32")]
-#[link(wasm_import_module = "env")]
-unsafe extern "C" {
-    fn server_print(ptr: *const u8, len: usize);
-}
-
-fn log(msg: &str) {
-    #[cfg(target_arch = "wasm32")]
-    unsafe {
-        server_print(msg.as_ptr(), msg.len());
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    println!("{}", msg);
-}
+use goldsrc::{command, plugin, log_info};
 
 #[plugin(name = "vip_menu", version = "1.0.0", systems = ["MenuSystem"])]
 pub struct VipMenu;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn on_load() {
-    log("[VIP Menu] Initialized VIP Menu Sub-System!\n");
+    log_info!("[VIP Menu] Initialized VIP Menu Sub-System!");
 }
 
 #[unsafe(no_mangle)]
@@ -37,19 +22,11 @@ pub extern "C" fn on_event(
         std::str::from_utf8(name_slice),
         std::str::from_utf8(data_slice),
     ) {
-        let msg = format!(
-            "[VIP Menu] Received Event '{}': {}\n",
-            event_name, event_data
-        );
-        log(&msg);
+        log_info!("[VIP Menu] Received Event '{}': {}", event_name, event_data);
     }
 }
 
 #[command(name = "vipmenu")]
 pub fn handle_vipmenu(cmd: &str, args: &str) {
-    let msg = format!(
-        "[VIP Menu] Command '{}' called with args: '{}'\n",
-        cmd, args
-    );
-    log(&msg);
+    log_info!("[VIP Menu] Command '{}' called with args: '{}'", cmd, args);
 }
