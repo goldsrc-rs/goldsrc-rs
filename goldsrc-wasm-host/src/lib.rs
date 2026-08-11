@@ -9,9 +9,9 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::Duration;
 
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-use wasmi::{Engine, Instance, Linker, Module, Store, TypedFunc};
 use std::fs::OpenOptions;
 use std::io::Write;
+use wasmi::{Engine, Instance, Linker, Module, Store, TypedFunc};
 
 pub fn file_log(msg: &str) {
     if let Ok(mut file) = OpenOptions::new()
@@ -162,11 +162,17 @@ impl LoadedPlugin {
                             let _ = mem.write(&mut self.store, data_ptr as usize, data);
                         }
 
-                        crate::file_log(&format!("TRACE: Calling WASM on_event for plugin {} with event {}", self.name, event_name));
+                        crate::file_log(&format!(
+                            "TRACE: Calling WASM on_event for plugin {} with event {}",
+                            self.name, event_name
+                        ));
                         let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             f.call(&mut self.store, (name_ptr, name_len, data_ptr, data_len))
                         }));
-                        crate::file_log(&format!("TRACE: WASM on_event for plugin {} finished", self.name));
+                        crate::file_log(&format!(
+                            "TRACE: WASM on_event for plugin {} finished",
+                            self.name
+                        ));
 
                         match res {
                             Ok(Ok(())) => {
@@ -722,7 +728,10 @@ impl PluginManager {
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
                             serde_json::to_string(&v).unwrap_or_else(|_| trimmed.to_string())
                         } else {
-                            crate::file_log(&format!("TRACE: Skipping invalid/incomplete JSON in {:?}", config_path));
+                            crate::file_log(&format!(
+                                "TRACE: Skipping invalid/incomplete JSON in {:?}",
+                                config_path
+                            ));
                             continue;
                         }
                     } else {
@@ -739,7 +748,8 @@ impl PluginManager {
                         file_name
                     ));
                     crate::file_log(&format!("TRACE: Queuing config event for {}", file_name));
-                    self.pending_config_events.push((file_name, minified_content.into_bytes()));
+                    self.pending_config_events
+                        .push((file_name, minified_content.into_bytes()));
                 }
             }
         }
@@ -789,7 +799,10 @@ impl PluginManager {
                 file_name,
                 String::from_utf8_lossy(&content_bytes)
             );
-            crate::file_log(&format!("TRACE: Broadcasting deferred config event for {}", file_name));
+            crate::file_log(&format!(
+                "TRACE: Broadcasting deferred config event for {}",
+                file_name
+            ));
             self.broadcast_event("config_changed", payload.as_bytes());
         }
     }

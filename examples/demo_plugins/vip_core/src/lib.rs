@@ -1,4 +1,4 @@
-use goldsrc::{plugin, log_info};
+use goldsrc::{log_info, plugin};
 
 #[plugin(name = "vip_core", version = "1.0.0", systems = ["CoreSystem"])]
 pub struct VipCore;

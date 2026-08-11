@@ -1,4 +1,4 @@
-use goldsrc::{command, plugin, log_info};
+use goldsrc::{command, log_info, plugin};
 
 #[plugin(name = "vip_menu", version = "1.0.0", systems = ["MenuSystem"])]
 pub struct VipMenu;

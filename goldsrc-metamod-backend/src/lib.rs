@@ -415,12 +415,12 @@ unsafe extern "C" fn hook_start_frame_post() {
         .replace("}", "}}")
         .replace("\r", "")
         .replace("\n", " ");
-        
+
     let mut end = safe_msg.len().min(400);
     while end > 0 && !safe_msg.is_char_boundary(end) {
         end -= 1;
     }
-    
+
     let final_msg = format!("{}\n", safe_msg[..end].trim_end());
     if let Ok(msg) = CString::new(final_msg) {
         call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
