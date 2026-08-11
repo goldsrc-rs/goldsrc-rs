@@ -32,8 +32,18 @@
 - [x] JSON/TOML configuration file watchers (`configs/` folder auto-reload & event broadcasting).
 - [x] Automated deployment & post-deploy MD5 hash verification script (`deploy.py`).
 
-## Stage 5: Standalone Backend & Advanced Runtimes (Future)
+## Stage 5: Framework, ECS & High-Level DX — 🛠️ In Progress
+
+- [ ] Refactor Host WASM FFI layer (`LoadedPlugin::invoke_with_payload` generic helper).
+- [ ] Implement `goldsrc` Flat ECS (Sparse-Set Entity Component System for WASM plugins).
+- [ ] High-Level Player & Entity Safe API wrappers (`Player`, `Entity`, `Vector3`, `Angle`).
+- [ ] Granular Config Event System (`config_created`, `config_modified`, `config_deleted`) with private per-plugin config isolation (`configs/plugins/<name>/`).
+- [ ] Host-to-WASM Game Event Dispatcher (`RoundStart`, `RoundEnd`, `PlayerSpawn`, `PlayerKilled`).
+- [ ] Unified Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and daily log file rotation.
+
+## Stage 6: Standalone Backend & Advanced Runtimes (Future)
 
 - [ ] Transition / dual-support for `wasmtime` engine (JIT execution, WASM Component Model & Exception Handling).
-- [ ] Build a custom `mp.dll` loader that bypasses the original Metamod.
-- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces.
+- [ ] Build a custom `mp.dll` / `ReHLDS` direct integration backend (bypassing Metamod).
+- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using `references/` headers.
+
