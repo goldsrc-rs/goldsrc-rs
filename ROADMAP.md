@@ -21,15 +21,19 @@
 - [x] Implement hot-reload: watch `.wasm` files in `addons/metamod-rs/plugins/` and reload on change.
 - [x] Complete plugin lifecycle management (Create, Modify, Delete, Error handling, `on_unload` callback).
 
-## Stage 4: Developer Framework & Host CLI (DX)
+## Stage 4: Developer Framework & Host CLI (DX) — ✅ Complete
 
 - [x] Host Console Management CLI (`meta-rs` / `mrs` with `lexopt`, `-a/--all` flags, pagination, multi-target).
-- [ ] Create `goldsrc-macros` crate with procedural macros (`#[plugin]`, `#[command]`).
-- [ ] Command router for in-game client and server commands.
-- [ ] Database API (`sqlx`, async runtime integration).
-- [ ] Documentation and `cargo generate` templates.
+- [x] Create `goldsrc-macros` crate with procedural macros (`#[plugin(systems=...)]`, `#[command]`).
+- [x] SDK `goldsrc` crate with Flat / Hybrid ECS API for WASM plugins.
+- [x] Plugin DAG Dependency Resolution with SemVer validation (`semver` crate).
+- [x] Global Event Bus (Pub/Sub) for inter-plugin communication across WASM modules.
+- [x] In-game & Console Command Router (`#[command]`, `dispatch_command`).
+- [x] JSON/TOML configuration file watchers (`configs/` folder auto-reload & event broadcasting).
+- [x] Automated deployment & post-deploy MD5 hash verification script (`deploy.py`).
 
-## Stage 5: Standalone Backend (Future)
+## Stage 5: Standalone Backend & Advanced Runtimes (Future)
 
+- [ ] Transition / dual-support for `wasmtime` engine (JIT execution, WASM Component Model & Exception Handling).
 - [ ] Build a custom `mp.dll` loader that bypasses the original Metamod.
 - [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces.

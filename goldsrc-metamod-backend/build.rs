@@ -11,6 +11,8 @@ fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "dev".to_string());
 
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/refs/");
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
     println!("cargo:rustc-env=BUILD_TARGET={}-{}", target_arch, target_os);
 

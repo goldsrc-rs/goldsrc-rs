@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File system watcher (`notify`) for multi-directory hot-reloading without server restarts.
 - Engine console logging (`server_print`) integration for WASM host and modules.
 - Metamod `pfnStartFrame` hook integration for WASM module frame ticks.
+- Dynamic versioning (`CARGO_PKG_VERSION`, `GIT_HASH`, `BUILD_TARGET`) via `build.rs` environment variables.
+- Host CLI (`mrs`) commands implemented via `lexopt`: `load`, `unload`, `reload`, `pause`, `unpause`, `list`, `info`.
+- Added multi-target and pagination support (`-p`, `-s`, `-a`) to Host CLI commands.
 
 ### Changed
 
