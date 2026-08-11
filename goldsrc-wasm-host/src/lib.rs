@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+
 //! WASM plugin host for GoldSrc.rs.
 //!
 //! Uses `wasmi` as the pure-Rust WASM runtime for maximum compatibility and safety

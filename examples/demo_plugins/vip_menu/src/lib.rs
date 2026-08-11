@@ -8,8 +8,11 @@ pub extern "C" fn on_load() {
     log_info!("[VIP Menu] Initialized VIP Menu Sub-System!");
 }
 
+/// # Safety
+/// Pointers must be valid WASM memory regions.
 #[unsafe(no_mangle)]
-pub extern "C" fn on_event(
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub unsafe extern "C" fn on_event(
     name_ptr: *const u8,
     name_len: usize,
     data_ptr: *const u8,

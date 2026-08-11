@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if, clippy::single_match)]
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
@@ -122,7 +124,8 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
         #input_fn
 
         #[unsafe(no_mangle)]
-        pub extern "C" fn on_command(
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub unsafe extern "C" fn on_command(
             cmd_ptr: *const u8,
             cmd_len: usize,
             args_ptr: *const u8,
