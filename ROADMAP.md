@@ -32,14 +32,13 @@
 - [x] JSON/TOML configuration file watchers (`configs/` folder auto-reload & event broadcasting).
 - [x] Automated deployment & post-deploy MD5 hash verification script (`deploy.py`).
 
-## Stage 5: Framework, ECS & High-Level DX — 🛠️ In Progress
+## Stage 5: Framework, ECS & High-Level DX — ✅ Complete
 
-- [ ] Refactor Host WASM FFI layer (`LoadedPlugin::invoke_with_payload` generic helper).
-- [ ] Implement `goldsrc` Flat ECS (Sparse-Set Entity Component System for WASM plugins).
-- [ ] High-Level Player & Entity Safe API wrappers (`Player`, `Entity`, `Vector3`, `Angle`).
-- [ ] Granular Config Event System (`config_created`, `config_modified`, `config_deleted`) with private per-plugin config isolation (`configs/plugins/<name>/`).
-- [ ] Host-to-WASM Game Event Dispatcher (`RoundStart`, `RoundEnd`, `PlayerSpawn`, `PlayerKilled`).
-- [ ] Unified Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and daily log file rotation.
+- [x] Refactor Host WASM FFI layer (`LoadedPlugin::invoke_two_slices` generic helper).
+- [x] Implement `goldsrc` Flat ECS (Sparse-Set Entity Component System for WASM plugins).
+- [x] High-Level Player & Entity Safe API wrappers (`Player`, `Entity`, `Vector3`).
+- [x] Granular Config Event System (`action`: `created`/`modified`/`deleted`) with private per-plugin config isolation (`configs/plugins/<name>/`).
+- [x] Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and auto-created log directories (`logs/metamod-rs.log`).
 
 ## Stage 6: Standalone Backend & Advanced Runtimes (Future)
 

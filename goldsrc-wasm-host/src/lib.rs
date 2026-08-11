@@ -16,10 +16,14 @@ use std::io::Write;
 use wasmi::{Engine, Instance, Linker, Module, Store, TypedFunc};
 
 pub fn file_log(msg: &str) {
+    let logs_dir = Path::new("cstrike/addons/metamod-rs/logs");
+    let _ = fs::create_dir_all(logs_dir);
+    let log_file_path = logs_dir.join("metamod-rs.log");
+
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("cstrike/addons/metamod-rs/debug.log")
+        .open(log_file_path)
     {
         let _ = writeln!(file, "{}", msg);
     }
@@ -237,6 +241,13 @@ impl LoadedPlugin {
     }
 }
 
+struct PendingConfigEvent {
+    target_plugin: Option<String>,
+    file_name: String,
+    action: &'static str,
+    content: Vec<u8>,
+}
+
 /// WASM Plugin Manager — handles runtime execution, host imports, and hot-reload.
 pub struct PluginManager {
     engine: Engine,
@@ -245,7 +256,7 @@ pub struct PluginManager {
     watcher_tx: std::sync::mpsc::Sender<notify::Result<notify::Event>>,
     _watchers: Vec<RecommendedWatcher>,
     watched_dirs: Vec<PathBuf>,
-    pending_config_events: Vec<(String, Vec<u8>)>,
+    pending_config_events: Vec<PendingConfigEvent>,
 }
 
 impl Default for PluginManager {
@@ -670,6 +681,20 @@ impl PluginManager {
         config_paths.dedup();
 
         for config_path in config_paths {
+            // Check if path is in configs/plugins/<plugin_name>/...
+            let mut target_plugin = None;
+            if let Ok(rel) = config_path.strip_prefix(Path::new("configs").join("plugins")) {
+                if let Some(first_comp) = rel.components().next() {
+                    target_plugin = Some(first_comp.as_os_str().to_string_lossy().to_string());
+                }
+            }
+
+            let file_name = config_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+
             if config_path.is_file() {
                 if let Ok(content) = fs::read_to_string(&config_path) {
                     let trimmed = content.trim();
@@ -681,36 +706,36 @@ impl PluginManager {
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
                             serde_json::to_string(&v).unwrap_or_else(|_| trimmed.to_string())
                         } else {
-                            crate::file_log(&format!(
-                                "TRACE: Skipping invalid/incomplete JSON in {:?}",
-                                config_path
-                            ));
                             continue;
                         }
                     } else {
                         trimmed.to_string()
                     };
 
-                    let file_name = config_path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .into_owned();
                     host_log(&format!(
                         "[GoldSrc.rs WASM Host] Config updated: {}\n",
                         file_name
                     ));
-                    crate::file_log(&format!("TRACE: Queuing config event for {}", file_name));
-                    self.pending_config_events
-                        .push((file_name, minified_content.into_bytes()));
+                    self.pending_config_events.push(PendingConfigEvent {
+                        target_plugin,
+                        file_name,
+                        action: "modified",
+                        content: minified_content.into_bytes(),
+                    });
                 }
+            } else {
+                // File deleted
+                self.pending_config_events.push(PendingConfigEvent {
+                    target_plugin,
+                    file_name,
+                    action: "deleted",
+                    content: Vec::new(),
+                });
             }
         }
 
         for path in reload_paths {
             if path.is_file() {
-                crate::file_log(&format!("TRACE: Reloading plugin {:?}", path));
-                // Scenario 1 & 2: Plugin Created or Overwritten/Modified
                 let is_reload = self.plugins.iter().any(|p| p.path == path);
                 self.unload_plugin(&path);
 
@@ -728,7 +753,6 @@ impl PluginManager {
                     ));
                 }
             } else {
-                // Scenario 3: Plugin Deleted / Removed / Renamed away
                 self.unload_plugin(&path);
             }
         }
@@ -745,18 +769,31 @@ impl PluginManager {
                 ));
             }
         }
-        let events: Vec<(String, Vec<u8>)> = self.pending_config_events.drain(..).collect();
-        for (file_name, content_bytes) in events {
+        let events: Vec<PendingConfigEvent> = self.pending_config_events.drain(..).collect();
+        for event in events {
+            let content_str = if event.content.is_empty() {
+                "{}".to_string()
+            } else {
+                String::from_utf8_lossy(&event.content).to_string()
+            };
             let payload = format!(
-                "{{\"file\":\"{}\",\"content\":{}}}",
-                file_name,
-                String::from_utf8_lossy(&content_bytes)
+                "{{\"action\":\"{}\",\"file\":\"{}\",\"content\":{}}}",
+                event.action, event.file_name, content_str
             );
-            crate::file_log(&format!(
-                "TRACE: Broadcasting deferred config event for {}",
-                file_name
-            ));
-            self.broadcast_event("config_changed", payload.as_bytes());
+
+            if let Some(target) = event.target_plugin {
+                // Private config: send ONLY to specified plugin
+                for plugin in &mut self.plugins {
+                    if plugin.name == target
+                        || plugin.metadata.as_ref().is_some_and(|m| m.name == target)
+                    {
+                        let _ = plugin.call_on_event("config_changed", payload.as_bytes());
+                    }
+                }
+            } else {
+                // Global config: broadcast to ALL plugins
+                self.broadcast_event("config_changed", payload.as_bytes());
+            }
         }
     }
 
