@@ -82,8 +82,40 @@ pub struct PluginMetadata {
     pub version: String,
     #[serde(default)]
     pub systems: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_deps")]
     pub dependencies: std::collections::HashMap<String, String>,
+}
+
+fn deserialize_deps<'de, D>(
+    deserializer: D,
+) -> Result<std::collections::HashMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum RawDeps {
+        List(Vec<String>),
+        Map(std::collections::HashMap<String, String>),
+    }
+
+    let mut map = std::collections::HashMap::new();
+    match RawDeps::deserialize(deserializer)? {
+        RawDeps::Map(m) => return Ok(m),
+        RawDeps::List(list) => {
+            for item in list {
+                let parts: Vec<&str> = item.split('@').collect();
+                if parts.len() == 2 {
+                    map.insert(parts[0].to_string(), parts[1].to_string());
+                } else {
+                    map.insert(item, "*".to_string());
+                }
+            }
+        }
+    }
+    Ok(map)
 }
 
 fn default_version() -> String {
@@ -611,6 +643,15 @@ impl PluginManager {
             plugin_name
         ));
         self.plugins.push(loaded);
+
+        let dep_errors = self.validate_and_sort_dependencies();
+        for err in dep_errors {
+            host_log(&format!(
+                "[GoldSrc.rs WASM Host] Dependency Warning: {}\n",
+                err
+            ));
+        }
+
         Ok(())
     }
 

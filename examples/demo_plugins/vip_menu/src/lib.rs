@@ -4,7 +4,12 @@ struct VipComponent {
     level: u8,
 }
 
-#[plugin(name = "vip_menu", version = "1.0.0", systems = ["MenuSystem"])]
+#[plugin(
+    name = "vip_menu",
+    version = "1.0.0",
+    systems = ["MenuSystem"],
+    dependencies = ["vip_core@^1.0.0"]
+)]
 pub struct VipMenu;
 
 #[unsafe(no_mangle)]

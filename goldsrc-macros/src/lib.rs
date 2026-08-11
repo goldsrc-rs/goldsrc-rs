@@ -16,6 +16,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut plugin_name = struct_name.to_string();
     let mut plugin_version = "1.0.0".to_string();
     let mut systems: Vec<String> = Vec::new();
+    let mut dependencies: Vec<String> = Vec::new();
 
     if !attr.is_empty() {
         let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -45,6 +46,16 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     }
                                 }
                             }
+                        } else if nv.path.is_ident("dependencies") {
+                            if let Expr::Array(arr) = &nv.value {
+                                for elem in &arr.elems {
+                                    if let Expr::Lit(expr_lit) = elem {
+                                        if let Lit::Str(s) = &expr_lit.lit {
+                                            dependencies.push(s.value());
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     _ => {}
@@ -62,9 +73,18 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             .join(",")
     );
 
+    let deps_json = format!(
+        "[{}]",
+        dependencies
+            .iter()
+            .map(|s| format!("\"{}\"", s))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+
     let meta_json = format!(
-        "{{\"name\":\"{}\",\"version\":\"{}\",\"systems\":{}}}",
-        plugin_name, plugin_version, systems_json
+        "{{\"name\":\"{}\",\"version\":\"{}\",\"systems\":{},\"dependencies\":{}}}",
+        plugin_name, plugin_version, systems_json, deps_json
     );
 
     let expanded = quote! {
