@@ -1,11 +1,24 @@
-use goldsrc::{command, log_info, plugin};
+use goldsrc::{EntityId, World, command, log_info, plugin};
+
+struct VipComponent {
+    level: u8,
+}
 
 #[plugin(name = "vip_menu", version = "1.0.0", systems = ["MenuSystem"])]
 pub struct VipMenu;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn on_load() {
-    log_info!("[VIP Menu] Initialized VIP Menu Sub-System!");
+    let mut world = World::new();
+    let player = EntityId(1);
+    world.insert(player, VipComponent { level: 5 });
+
+    if let Some(vip) = world.get::<VipComponent>(player) {
+        log_info!(
+            "[VIP Menu] Initialized ECS! Player 1 VIP Level: {}",
+            vip.level
+        );
+    }
 }
 
 /// # Safety

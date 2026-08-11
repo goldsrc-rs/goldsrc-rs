@@ -3,6 +3,9 @@
 //! This is the main entry point for plugin developers. It re-exports
 //! everything you need from the other crates.
 
+pub mod ecs;
+
+pub use ecs::*;
 pub use goldsrc_api::{Engine, Entity, Player, Plugin};
 pub use goldsrc_macros::{command, plugin};
 pub use goldsrc_sys;
