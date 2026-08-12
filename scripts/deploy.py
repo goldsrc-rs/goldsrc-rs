@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 r"""Deploy script for GoldSrc.rs Metamod plugin.
 
-Copies the built plugin to a game server and registers it in Metamod's plugins.ini.
+Copies the built plugin to a game server and registers it in Metamod's plugins.ini or liblist.gam.
 
 Usage:
-    python scripts/deploy.py                                    # Deploy to default path
-    python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient"
-    python scripts/deploy.py --path "..." --no-build            # Skip build step
-    python scripts/deploy.py --verify                           # Verify deployment
+    python scripts/deploy.py --path "/path/to/hlds"              # Deploy to specified server
+    python scripts/deploy.py --backend standalone --path "..."   # Deploy standalone backend
+    python scripts/deploy.py --verify                            # Verify deployment
 """
 
 import argparse
 import hashlib
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -262,13 +262,60 @@ def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path) -> None:
             print(f"Copied WASM plugin: {dest}")
 
 
+def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
+    """Resolve HLDS server directory path from CLI, environment, or local config."""
+    # 1. Explicit CLI argument
+    if cli_path:
+        path = Path(cli_path)
+        if path.exists():
+            return path
+        print(f"Error: Path provided via --path does not exist: {cli_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # 2. Environment variable
+    env_path = os.environ.get("GOLDSRC_SERVER_DIR") or os.environ.get("HLDS_DIR")
+    if env_path:
+        path = Path(env_path)
+        if path.exists():
+            print(f"Using server path from environment variable: {path}")
+            return path
+
+    # 3. Local uncommitted config file (deploy.local.toml)
+    local_config = repo_root / "deploy.local.toml"
+    if local_config.exists():
+        try:
+            import tomllib
+        except ImportError:
+            try:
+                import tomli as tomllib
+            except ImportError:
+                tomllib = None
+
+        if tomllib:
+            data = tomllib.loads(local_config.read_text(encoding="utf-8"))
+            server_path = data.get("server_path")
+            if server_path:
+                path = Path(server_path)
+                if path.exists():
+                    print(f"Using server path from {local_config.name}: {path}")
+                    return path
+
+    # 4. Error if no valid path resolved
+    print("Error: No game server path specified!", file=sys.stderr)
+    print("\nPlease provide the server path using one of the following methods:", file=sys.stderr)
+    print('  1. Pass --path argument: python scripts/deploy.py --path "C:\\path\\to\\hlds"', file=sys.stderr)
+    print('  2. Set environment variable: set GOLDSRC_SERVER_DIR="C:\\path\\to\\hlds"', file=sys.stderr)
+    print('  3. Create deploy.local.toml with: server_path = "C:\\\\path\\\\to\\\\hlds"', file=sys.stderr)
+    sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs backend and WASM modules")
     parser.add_argument(
         "--path",
         type=str,
-        default=r"C:\Games\CS 1.6 GoldClient",
-        help="Path to the game/server directory",
+        default=None,
+        help="Path to the game/server directory (or set GOLDSRC_SERVER_DIR env var / deploy.local.toml)",
     )
     parser.add_argument(
         "--backend",
@@ -294,12 +341,8 @@ def main():
     )
     args = parser.parse_args()
 
-    game_path = Path(args.path)
-    if not game_path.exists():
-        print(f"Error: Path not found: {game_path}", file=sys.stderr)
-        sys.exit(1)
-
     repo_root = Path(__file__).parent.parent
+    game_path = resolve_game_path(args.path, repo_root)
     dest_name = get_dest_name(args.backend, args.target)
 
     dll_path = repo_root / "target" / args.target / "release" / dest_name

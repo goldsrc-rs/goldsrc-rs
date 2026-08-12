@@ -19,7 +19,10 @@ def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc",
     repo_root = get_repo_root()
 
     env = os.environ.copy()
-    env["LIBCLANG_PATH"] = r"C:\Program Files\LLVM\lib"
+    if "LIBCLANG_PATH" not in env:
+        default_llvm = Path(r"C:\Program Files\LLVM\lib")
+        if default_llvm.exists():
+            env["LIBCLANG_PATH"] = str(default_llvm)
 
     cmd = ["cargo", "build", "--target", target, "-p", crate_name]
     if release:

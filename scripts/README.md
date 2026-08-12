@@ -15,23 +15,30 @@ python scripts/setup.py --no-delete        # Keep all files (don't clean up)
 
 ## build.py
 
-Builds the Metamod backend plugin.
+Builds the backend plugin (Metamod or Standalone) and WASM plugins.
 
 ```bash
-python scripts/build.py                    # Build release for Windows
-python scripts/build.py --debug            # Build debug
-python scripts/build.py --target i686-unknown-linux-gnu  # Cross-compile for Linux
+python scripts/build.py                                        # Build Metamod release
+python scripts/build.py --backend standalone                   # Build Standalone release
+python scripts/build.py --debug                                # Build debug
+python scripts/build.py --target i686-unknown-linux-gnu       # Cross-compile for Linux
 ```
 
 ## deploy.py
 
-Builds and deploys the Metamod plugin to a game server.
+Builds and deploys the backend plugin and WASM modules to a game server.
 
 ```bash
-python scripts/deploy.py                                        # Build and deploy
-python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient"    # Custom path
-python scripts/deploy.py --path "..." --no-build                # Deploy existing DLL
+python scripts/deploy.py --path "C:\hlds"                      # Build and deploy Metamod backend
+python scripts/deploy.py --backend standalone --path "C:\hlds" # Build and deploy Standalone backend
+python scripts/deploy.py --path "C:\hlds" --no-build          # Deploy existing binaries
+python scripts/deploy.py --path "C:\hlds" --verify            # Verify deployment
 ```
+
+> **Tip:** You can avoid passing `--path` every time by setting the `GOLDSRC_SERVER_DIR` environment variable, or by creating a local uncommitted `deploy.local.toml` file in the repo root:
+> ```toml
+> server_path = "C:\\path\\to\\hlds"
+> ```
 
 ## pre-commit
 
