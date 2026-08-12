@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.0] - 2026-08-12 (Stage 7: Component Model & TOML Configs)
+
+### Added
+- **WASM Component Model (`wit-bindgen`)**: Fully migrated WASM host and SDK to WebAssembly Component Model (`wit-bindgen` 0.60.0 & `wit-component` 0.256.0), eliminating raw `extern "C"` bridges.
+- **Wasmtime & Cranelift Engine**: Replaced interpreter runtime with `wasmtime` JIT compiler running natively on `i686-pc-windows-msvc`.
+- **TOML Central Configuration (`goldsrc.toml`)**: Introduced `cstrike/addons/goldsrc/goldsrc.toml` auto-generated configuration file for managing host paths, hot-reloading, and config watchers.
+- **WASM Build Optimization**: Added automated `wasm-opt` optimization step in `build.py` reducing WASM plugin size down to ~200KB.
+- **Zero JSON Overhead**: Replaced `serde_json` with TOML for metadata and configs, completely purging `serde_json` from dependencies.
+
+### Changed
+- **Binary Directory**: Renamed plugin binary path from `dlls/` to `bin/` for modern cross-platform clarity.
+
 ## [Unreleased]
 
 ### Added (Stage 6)

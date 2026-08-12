@@ -6,129 +6,16 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{DeriveInput, Expr, Lit, Meta, Token, parse_macro_input};
+use syn::{parse_macro_input, Expr, ImplItem, ItemImpl, Lit, Meta, Token};
 
 #[proc_macro_attribute]
 pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as DeriveInput);
-    let struct_name = &input.ident;
+    let mut input_impl = parse_macro_input!(item as ItemImpl);
+    let struct_name = &input_impl.self_ty;
 
-    let mut plugin_name = struct_name.to_string();
+    let mut plugin_name = "Unknown".to_string();
     let mut plugin_version = "1.0.0".to_string();
     let mut plugin_author = "Unknown".to_string();
-    let mut systems: Vec<String> = Vec::new();
-    let mut dependencies: Vec<String> = Vec::new();
-
-    if !attr.is_empty() {
-        let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
-        if let Ok(metas) = parser.parse(attr) {
-            for meta in metas {
-                match meta {
-                    Meta::NameValue(nv) => {
-                        if nv.path.is_ident("name") {
-                            if let Expr::Lit(expr_lit) = &nv.value {
-                                if let Lit::Str(s) = &expr_lit.lit {
-                                    plugin_name = s.value();
-                                }
-                            }
-                        } else if nv.path.is_ident("version") {
-                            if let Expr::Lit(expr_lit) = &nv.value {
-                                if let Lit::Str(s) = &expr_lit.lit {
-                                    plugin_version = s.value();
-                                }
-                            }
-                        } else if nv.path.is_ident("author") {
-                            if let Expr::Lit(expr_lit) = &nv.value {
-                                if let Lit::Str(s) = &expr_lit.lit {
-                                    plugin_author = s.value();
-                                }
-                            }
-                        } else if nv.path.is_ident("systems") {
-                            if let Expr::Array(arr) = &nv.value {
-                                for elem in &arr.elems {
-                                    if let Expr::Lit(expr_lit) = elem {
-                                        if let Lit::Str(s) = &expr_lit.lit {
-                                            systems.push(s.value());
-                                        }
-                                    }
-                                }
-                            }
-                        } else if nv.path.is_ident("dependencies") {
-                            if let Expr::Array(arr) = &nv.value {
-                                for elem in &arr.elems {
-                                    if let Expr::Lit(expr_lit) = elem {
-                                        if let Lit::Str(s) = &expr_lit.lit {
-                                            dependencies.push(s.value());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    let systems_json = format!(
-        "[{}]",
-        systems
-            .iter()
-            .map(|s| format!("\"{}\"", s))
-            .collect::<Vec<_>>()
-            .join(",")
-    );
-
-    let deps_json = format!(
-        "[{}]",
-        dependencies
-            .iter()
-            .map(|s| format!("\"{}\"", s))
-            .collect::<Vec<_>>()
-            .join(",")
-    );
-
-    let meta_json = format!(
-        "{{\"name\":\"{}\",\"version\":\"{}\",\"author\":\"{}\",\"systems\":{},\"dependencies\":{}}}",
-        plugin_name, plugin_version, plugin_author, systems_json, deps_json
-    );
-
-    let expanded = quote! {
-        #input
-
-        #[unsafe(no_mangle)]
-        pub extern "C" fn __goldsrc_plugin_metadata() -> *const u8 {
-            let meta = concat!(#meta_json, "\0");
-            meta.as_ptr()
-        }
-
-        #[unsafe(no_mangle)]
-        pub extern "C" fn __goldsrc_alloc(size: usize) -> *mut u8 {
-            let actual_size = size.max(1);
-            let buf = vec![0u8; actual_size].into_boxed_slice();
-            let ptr = buf.as_ptr() as *mut u8;
-            std::mem::forget(buf);
-            ptr
-        }
-
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn __goldsrc_dealloc(ptr: *mut u8, size: usize) {
-            if !ptr.is_null() {
-                let actual_size = size.max(1);
-                let _ = unsafe { Box::from_raw(std::slice::from_raw_parts_mut(ptr, actual_size)) };
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_attribute]
-pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input_fn = parse_macro_input!(item as syn::ItemFn);
-    let fn_name = &input_fn.sig.ident;
-    let mut cmd_name = fn_name.to_string();
 
     if !attr.is_empty() {
         let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -138,7 +25,19 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
                     if nv.path.is_ident("name") {
                         if let Expr::Lit(expr_lit) = &nv.value {
                             if let Lit::Str(s) = &expr_lit.lit {
-                                cmd_name = s.value();
+                                plugin_name = s.value();
+                            }
+                        }
+                    } else if nv.path.is_ident("version") {
+                        if let Expr::Lit(expr_lit) = &nv.value {
+                            if let Lit::Str(s) = &expr_lit.lit {
+                                plugin_version = s.value();
+                            }
+                        }
+                    } else if nv.path.is_ident("author") {
+                        if let Expr::Lit(expr_lit) = &nv.value {
+                            if let Lit::Str(s) = &expr_lit.lit {
+                                plugin_author = s.value();
                             }
                         }
                     }
@@ -147,60 +46,124 @@ pub fn command(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    let expanded = quote! {
-        #input_fn
+    let meta_toml = format!(
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n",
+        plugin_name, plugin_version, plugin_author
+    );
 
-        #[unsafe(no_mangle)]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub unsafe extern "C" fn on_command(
-            cmd_ptr: *const u8,
-            cmd_len: usize,
-            args_ptr: *const u8,
-            args_len: usize,
-        ) {
-            let cmd_slice = unsafe { std::slice::from_raw_parts(cmd_ptr, cmd_len) };
-            let args_slice = unsafe { std::slice::from_raw_parts(args_ptr, args_len) };
+    let mut on_load_fn = quote! {};
+    let mut on_frame_fn = quote! {};
+    let mut on_event_fn = quote! {};
+    let mut on_command_fn = quote! {};
 
-            if let (Ok(cmd_str), Ok(args_str)) = (
-                std::str::from_utf8(cmd_slice),
-                std::str::from_utf8(args_slice),
-            ) {
-                if cmd_str == #cmd_name {
-                    #fn_name(cmd_str, args_str);
+    let mut command_matchers = Vec::new();
+
+    // Iterate over the items in the impl block to find our marker attributes
+    for item in &mut input_impl.items {
+        if let ImplItem::Fn(method) = item {
+            let mut is_on_load = false;
+            let mut is_on_frame = false;
+            let mut is_on_event = false;
+            let mut cmd_name = None;
+
+            // Retain attributes that are NOT our custom ones
+            method.attrs.retain(|attr| {
+                if attr.path().is_ident("on_load") {
+                    is_on_load = true;
+                    false
+                } else if attr.path().is_ident("on_frame") {
+                    is_on_frame = true;
+                    false
+                } else if attr.path().is_ident("event") {
+                    is_on_event = true;
+                    false
+                } else if attr.path().is_ident("command") {
+                    if let Ok(meta_list) = attr.meta.require_list() {
+                        let _ = meta_list.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("name") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_name = Some(s.value());
+                                }
+                            }
+                            Ok(())
+                        });
+                    }
+                    false
+                } else {
+                    true
                 }
+            });
+
+            let fn_name = &method.sig.ident;
+            let inputs_len = method.sig.inputs.len();
+
+            if is_on_load {
+                on_load_fn = quote! { #struct_name::#fn_name(); };
+            }
+            if is_on_frame {
+                on_frame_fn = quote! { #struct_name::#fn_name(); };
+            }
+            if is_on_event {
+                let call_expr = match inputs_len {
+                    0 => quote! { #struct_name::#fn_name() },
+                    1 => quote! { #struct_name::#fn_name(name) },
+                    _ => quote! { #struct_name::#fn_name(name, payload) },
+                };
+                on_event_fn = quote! { #call_expr; };
+            }
+            if let Some(cmd) = cmd_name {
+                let call_expr = match inputs_len {
+                    0 => quote! { #struct_name::#fn_name() },
+                    1 => quote! { #struct_name::#fn_name(args) },
+                    _ => quote! { #struct_name::#fn_name(name, args) },
+                };
+                command_matchers.push(quote! {
+                    #cmd => { #call_expr; },
+                });
             }
         }
-    };
+    }
 
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_attribute]
-pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input_fn = parse_macro_input!(item as syn::ItemFn);
-    let fn_name = &input_fn.sig.ident;
+    if !command_matchers.is_empty() {
+        on_command_fn = quote! {
+            match name.as_str() {
+                #(#command_matchers)*
+                _ => {}
+            }
+        };
+    }
 
     let expanded = quote! {
-        #input_fn
+        #input_impl
 
-        #[unsafe(no_mangle)]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub unsafe extern "C" fn on_event(
-            name_ptr: *const u8,
-            name_len: usize,
-            data_ptr: *const u8,
-            data_len: usize,
-        ) {
-            let name_slice = unsafe { std::slice::from_raw_parts(name_ptr, name_len) };
-            let data_slice = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
+        impl ::goldsrc::goldsrc_api::bindings::Guest for #struct_name {
+            fn get_metadata() -> String {
+                #meta_toml.to_string()
+            }
 
-            if let (Ok(event_name), Ok(event_data)) = (
-                std::str::from_utf8(name_slice),
-                std::str::from_utf8(data_slice),
-            ) {
-                #fn_name(event_name, event_data);
+            fn on_load() {
+                #on_load_fn
+            }
+
+            fn on_frame() {
+                #on_frame_fn
+            }
+
+            fn on_event(name: String, payload: Vec<u8>) {
+                #on_event_fn
+            }
+
+            fn on_command(name: String, args: String) {
+                #on_command_fn
             }
         }
+
+        #[allow(unsafe_attributes)]
+        ::goldsrc::goldsrc_api::bindings::export!(#struct_name with_types_in ::goldsrc::goldsrc_api::bindings);
+
+        #[unsafe(no_mangle)]
+        #[doc(hidden)]
+        pub static _KEEP_WIT_COMPONENT_TYPE: &[u8] = &::goldsrc::goldsrc_api::bindings::__WIT_BINDGEN_COMPONENT_TYPE;
     };
 
     TokenStream::from(expanded)
@@ -208,17 +171,20 @@ pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn on_load(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input_fn = parse_macro_input!(item as syn::ItemFn);
-    let fn_name = &input_fn.sig.ident;
+    item // Passed through to be parsed by #[plugin]
+}
 
-    let expanded = quote! {
-        #input_fn
+#[proc_macro_attribute]
+pub fn on_frame(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
 
-        #[unsafe(no_mangle)]
-        pub extern "C" fn on_load() {
-            #fn_name();
-        }
-    };
+#[proc_macro_attribute]
+pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
 
-    TokenStream::from(expanded)
+#[proc_macro_attribute]
+pub fn command(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
 }

@@ -3,6 +3,12 @@
 //! This crate defines the abstract interface that plugin developers use.
 //! It has no dependency on any specific backend (Metamod or Standalone).
 
+pub mod auth;
+pub mod bindings;
+pub mod events;
+
+pub use events::*;
+
 /// Engine interface — provides access to engine functions.
 pub trait Engine {
     /// Spawn an entity by classname.
@@ -22,27 +28,6 @@ pub trait Engine {
 
     /// Set a cvar value.
     fn cvar_set_float(&self, name: &str, value: f32);
-}
-
-#[cfg(target_arch = "wasm32")]
-mod host_imports {
-    #[link(wasm_import_module = "env")]
-    unsafe extern "C" {
-        pub fn host_entity_is_valid(index: i32) -> i32;
-        pub fn host_entity_classname(index: i32, out_ptr: *mut u8, out_len: i32) -> i32;
-        pub fn host_entity_origin(index: i32, out_x: *mut f32, out_y: *mut f32, out_z: *mut f32);
-        pub fn host_entity_health(index: i32) -> f32;
-
-        pub fn host_player_name(index: i32, out_ptr: *mut u8, out_len: i32) -> i32;
-        pub fn host_player_origin(index: i32, out_x: *mut f32, out_y: *mut f32, out_z: *mut f32);
-        pub fn host_player_set_origin(index: i32, x: f32, y: f32, z: f32);
-        pub fn host_player_velocity(index: i32, out_x: *mut f32, out_y: *mut f32, out_z: *mut f32);
-        pub fn host_player_set_velocity(index: i32, x: f32, y: f32, z: f32);
-        pub fn host_player_health(index: i32) -> f32;
-        pub fn host_player_set_health(index: i32, health: f32);
-        pub fn host_player_armorvalue(index: i32) -> f32;
-        pub fn host_player_set_armorvalue(index: i32, armor: f32);
-    }
 }
 
 /// Safe wrapper around `edict_t` (entity dictionary).
@@ -83,7 +68,7 @@ impl Entity {
     pub fn is_valid(&self) -> bool {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_entity_is_valid(self.index) != 0 }
+            crate::bindings::goldsrc::engine::api::host_entity_is_valid(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -94,16 +79,7 @@ impl Entity {
     pub fn classname(&self) -> Option<String> {
         #[cfg(target_arch = "wasm32")]
         {
-            let mut buf = [0u8; 64];
-            let len = unsafe {
-                host_imports::host_entity_classname(self.index, buf.as_mut_ptr(), buf.len() as i32)
-            };
-            if len > 0 {
-                if let Ok(s) = std::str::from_utf8(&buf[..len as usize]) {
-                    return Some(s.to_string());
-                }
-            }
-            None
+            crate::bindings::goldsrc::engine::api::host_entity_classname(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -116,14 +92,41 @@ impl Entity {
         }
     }
 
+    pub fn print_chat(&self, msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Just use server print for now as a mock if client print is not implemented in WIT
+            crate::bindings::goldsrc::engine::api::host_log(&format!(
+                "(mock) Print to player {}: {}",
+                self.index, msg
+            ));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = msg;
+        }
+    }
+
+    /// Checks if the player has the specified capability.
+    pub fn has_capability(&self, name: &str) -> bool {
+        crate::auth::Auth::has_capability(self.index, name)
+    }
+
+    /// Grants a capability to the player dynamically.
+    pub fn grant_capability(&self, name: &str) -> bool {
+        crate::auth::Auth::grant_capability(self.index, name)
+    }
+
+    /// Revokes a capability from the player dynamically.
+    pub fn revoke_capability(&self, name: &str) -> bool {
+        crate::auth::Auth::revoke_capability(self.index, name)
+    }
+
     pub fn origin(&self) -> [f32; 3] {
         #[cfg(target_arch = "wasm32")]
         {
-            let mut x = 0.0;
-            let mut y = 0.0;
-            let mut z = 0.0;
-            unsafe { host_imports::host_entity_origin(self.index, &mut x, &mut y, &mut z) };
-            [x, y, z]
+            let v = crate::bindings::goldsrc::engine::api::host_entity_origin(self.index);
+            [v.x, v.y, v.z]
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -134,7 +137,7 @@ impl Entity {
     pub fn health(&self) -> f32 {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_entity_health(self.index) }
+            crate::bindings::goldsrc::engine::api::host_entity_health(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -210,7 +213,7 @@ impl Player {
     pub fn is_valid(&self) -> bool {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_entity_is_valid(self.index) != 0 }
+            crate::bindings::goldsrc::engine::api::host_entity_is_valid(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -221,16 +224,7 @@ impl Player {
     pub fn name(&self) -> Option<String> {
         #[cfg(target_arch = "wasm32")]
         {
-            let mut buf = [0u8; 32];
-            let len = unsafe {
-                host_imports::host_player_name(self.index, buf.as_mut_ptr(), buf.len() as i32)
-            };
-            if len > 0 {
-                if let Ok(s) = std::str::from_utf8(&buf[..len as usize]) {
-                    return Some(s.to_string());
-                }
-            }
-            None
+            crate::bindings::goldsrc::engine::api::host_player_name(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -246,11 +240,12 @@ impl Player {
     pub fn origin(&self) -> Vector3 {
         #[cfg(target_arch = "wasm32")]
         {
-            let mut x = 0.0;
-            let mut y = 0.0;
-            let mut z = 0.0;
-            unsafe { host_imports::host_player_origin(self.index, &mut x, &mut y, &mut z) };
-            Vector3 { x, y, z }
+            let v = crate::bindings::goldsrc::engine::api::host_entity_origin(self.index);
+            Vector3 {
+                x: v.x,
+                y: v.y,
+                z: v.z,
+            }
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -261,7 +256,14 @@ impl Player {
     pub fn set_origin(&mut self, pos: Vector3) {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_player_set_origin(self.index, pos.x, pos.y, pos.z) };
+            crate::bindings::goldsrc::engine::api::host_entity_set_origin(
+                self.index,
+                crate::bindings::goldsrc::engine::api::Vector3 {
+                    x: pos.x,
+                    y: pos.y,
+                    z: pos.z,
+                },
+            );
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -272,11 +274,12 @@ impl Player {
     pub fn velocity(&self) -> Vector3 {
         #[cfg(target_arch = "wasm32")]
         {
-            let mut x = 0.0;
-            let mut y = 0.0;
-            let mut z = 0.0;
-            unsafe { host_imports::host_player_velocity(self.index, &mut x, &mut y, &mut z) };
-            Vector3 { x, y, z }
+            let v = crate::bindings::goldsrc::engine::api::host_entity_velocity(self.index);
+            Vector3 {
+                x: v.x,
+                y: v.y,
+                z: v.z,
+            }
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -287,7 +290,14 @@ impl Player {
     pub fn set_velocity(&mut self, vel: Vector3) {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_player_set_velocity(self.index, vel.x, vel.y, vel.z) };
+            crate::bindings::goldsrc::engine::api::host_entity_set_velocity(
+                self.index,
+                crate::bindings::goldsrc::engine::api::Vector3 {
+                    x: vel.x,
+                    y: vel.y,
+                    z: vel.z,
+                },
+            );
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -298,7 +308,7 @@ impl Player {
     pub fn health(&self) -> f32 {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_player_health(self.index) }
+            crate::bindings::goldsrc::engine::api::host_entity_health(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -309,7 +319,7 @@ impl Player {
     pub fn set_health(&mut self, health: f32) {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_player_set_health(self.index, health) };
+            crate::bindings::goldsrc::engine::api::host_entity_set_health(self.index, health);
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -320,7 +330,7 @@ impl Player {
     pub fn armorvalue(&self) -> f32 {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_player_armorvalue(self.index) }
+            crate::bindings::goldsrc::engine::api::host_player_armorvalue(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
@@ -331,12 +341,43 @@ impl Player {
     pub fn set_armorvalue(&mut self, armor: f32) {
         #[cfg(target_arch = "wasm32")]
         {
-            unsafe { host_imports::host_player_set_armorvalue(self.index, armor) };
+            crate::bindings::goldsrc::engine::api::host_player_set_armorvalue(self.index, armor);
         }
         #[cfg(not(target_arch = "wasm32"))]
         unsafe {
             (*self.edict).v.armorvalue = armor;
         }
+    }
+
+    pub fn print_chat(&self, msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            // TODO:
+            // Just use server print for now as a mock if client print is not implemented in WIT
+            crate::bindings::goldsrc::engine::api::host_log(&format!(
+                "(mock) Print to player {}: {}",
+                self.index, msg
+            ));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = msg;
+        }
+    }
+
+    /// Checks if the player has the specified capability.
+    pub fn has_capability(&self, name: &str) -> bool {
+        crate::auth::Auth::has_capability(self.index, name)
+    }
+
+    /// Grants a capability to the player dynamically.
+    pub fn grant_capability(&self, name: &str) -> bool {
+        crate::auth::Auth::grant_capability(self.index, name)
+    }
+
+    /// Revokes a capability from the player dynamically.
+    pub fn revoke_capability(&self, name: &str) -> bool {
+        crate::auth::Auth::revoke_capability(self.index, name)
     }
 
     pub fn is_alive(&self) -> bool {

@@ -18,7 +18,7 @@ goldsrc-wasm-host = { workspace = true }
 lexopt = "0.3"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = ["Win32_System_Memory", "Win32_Foundation"] }
+windows-sys = { version = "0.61.2", features = ["Win32_System_Memory", "Win32_Foundation"] }
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"

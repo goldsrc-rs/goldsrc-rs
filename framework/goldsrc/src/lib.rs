@@ -6,22 +6,17 @@
 pub mod ecs;
 
 pub use ecs::*;
-pub use goldsrc_api::{Engine, Entity, Player, Plugin, Vector3};
+pub use goldsrc_api;
+pub use goldsrc_api::{auth::Auth, events::*, Engine, Entity, Player, Plugin, Vector3};
 pub use goldsrc_macros::{command, event, on_load, plugin};
 pub use goldsrc_sys;
 
 /// Logging subsystem for WASM plugins.
 pub mod log {
-    #[cfg(target_arch = "wasm32")]
-    #[link(wasm_import_module = "env")]
-    unsafe extern "C" {
-        pub fn server_print(ptr: *const u8, len: usize);
-    }
-
     pub fn print(msg: &str) {
         #[cfg(target_arch = "wasm32")]
-        unsafe {
-            server_print(msg.as_ptr(), msg.len());
+        {
+            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(msg);
         }
         #[cfg(not(target_arch = "wasm32"))]
         println!("{}", msg);

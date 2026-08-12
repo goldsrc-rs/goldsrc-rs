@@ -49,12 +49,25 @@
 - [x] Refactor `goldsrc-api` to provide `Player` / `Entity` structs with elegant methods for WASM.
 - [x] Add `#[on_load]` procedural macro to eliminate `unsafe` initialization.
 
-## Stage 7: Component Model, Pulley, & Declarative DX — 🏗 In Progress
+## Stage 7: Component Model & TOML Architecture — ✅ Complete
 
-- [ ] Transition `goldsrc-wasm-host` from `wasmi` to `wasmtime` with `pulley32` execution engine.
-- [ ] Adopt WASM Component Model (`wit-bindgen`) to completely replace `unsafe extern "C"` bridges.
+- [x] Transition `goldsrc-wasm-host` from `wasmi` to `wasmtime` with native JIT execution engine.
+- [x] Adopt WASM Component Model (`wit-bindgen` & `wit-component`) to completely replace `unsafe extern "C"` bridges.
+- [x] Implement centralized TOML configuration system (`goldsrc.toml`) with dynamic path resolution.
+- [x] Integrate `wasm-opt` pipeline in `build.py` for 90% WASM payload size reduction (~200KB).
+- [x] Implement Capability-based Access Control system (RBAC) in host and SDK.
+- [x] Purge `serde_json` in favor of zero-overhead TOML & Canonical ABI.
+
+## Stage 8: Standalone Backend & Direct Engine Integration — 🏗 In Progress
+
+- [ ] Implement `goldsrc-standalone` backend bypassing Metamod dependency.
+- [ ] Implement dynamic ReHLDS (`ReHLDS_Api`) & ReGameDLL (`ReGameDLL_Api`) detection with HLSDK fallback.
+- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using reference headers.
+- [ ] Modularize `goldsrc-wasm-host` and `goldsrc-metamod` crates into clean component sub-modules.
 - [ ] Implement advanced declarative macros (`#[command]`, `#[hook]`) with State Injection (`&mut World`).
-- [ ] Refactor monolithic files (e.g., `goldsrc-wasm-host/src/lib.rs`) into modular components.
-- [ ] Implement an RBAC/Capability-based Access Control system for commands and plugins.
-- [ ] Build a custom `mp.dll` / `ReHLDS` direct integration backend (bypassing Metamod).
-- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using `references/` headers.
+
+## Stage 9: Game-Specific Framework Extensions — 📝 Planned
+
+- [ ] Split the SDK into a core engine module and game-specific extensions.
+- [ ] Create `goldsrc-cstrike` (CS 1.6 bindings) for specific entities, weapons, and game events.
+- [ ] Provide abstraction layers for game rules, map objectives, and player states.

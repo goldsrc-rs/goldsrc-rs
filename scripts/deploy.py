@@ -36,20 +36,26 @@ def get_platform_prefix(target: str) -> str:
         return "win32"
 
 
+# Framework Path Constants
+FRAMEWORK_NAME = "goldsrc"
+DEFAULT_MOD = "cstrike"
+ADDONS_DIR_NAME = "addons"
+
+
 def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-windows-msvc") -> None:
     """Deploy the plugin to the game's addons directory."""
     # Find addons directory
-    addons_dir = game_path / "cstrike" / "addons"
+    addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
     if not addons_dir.exists():
-        addons_dir = game_path / "addons"
+        addons_dir = game_path / ADDONS_DIR_NAME
         if not addons_dir.exists():
             print(f"Error: Addons directory not found", file=sys.stderr)
-            print(f"  Tried: {game_path / 'cstrike' / 'addons'}", file=sys.stderr)
-            print(f"  Tried: {game_path / 'addons'}", file=sys.stderr)
+            print(f"  Tried: {game_path / DEFAULT_MOD / ADDONS_DIR_NAME}", file=sys.stderr)
+            print(f"  Tried: {game_path / ADDONS_DIR_NAME}", file=sys.stderr)
             sys.exit(1)
 
     # Create our plugin directory
-    plugin_dir = addons_dir / "goldsrc" / "dlls"
+    plugin_dir = addons_dir / FRAMEWORK_NAME / "bin"
     plugin_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy the DLL/SO
@@ -73,26 +79,32 @@ def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-window
         print(f"\nWarning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
         print("You may need to install Metamod-r first.")
         print("Add this line to plugins.ini manually:")
-        print(f"  {get_platform_prefix(target)} addons\\goldsrc\\dlls\\{dest_name}")
+        print(f"  {get_platform_prefix(target)} addons\\goldsrc\\bin\\{dest_name}")
         return
 
     # Read existing plugins
     content = plugins_ini.read_text(encoding="utf-8")
+    prefix = get_platform_prefix(target)
+    expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
 
-    # Check if our plugin is already listed
+    lines = []
+    updated = False
     for line in content.split("\n"):
         stripped = line.strip()
-        if dest_name in stripped:
-            print(f"Plugin already listed in {plugins_ini}")
-            return
+        if dest_name in stripped and not stripped.startswith(";"):
+            if stripped == expected_line:
+                print(f"Plugin already listed in {plugins_ini}")
+                return
+            lines.append(expected_line)
+            updated = True
+        else:
+            lines.append(line)
 
-    # Add our plugin to the list with platform prefix
-    prefix = get_platform_prefix(target)
-    lines = content.strip().split("\n")
-    lines.append(f"{prefix} addons\\goldsrc\\dlls\\{dest_name}")
+    if not updated:
+        lines.append(expected_line)
 
     plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Added to: {plugins_ini}")
+    print(f"Updated plugins.ini with new path: {plugins_ini}")
 
 
 def verify_deploy(
@@ -115,7 +127,7 @@ def verify_deploy(
     else:
         dest_name = "goldsrc_metamod.so"
 
-    dest_path = addons_dir / "goldsrc" / "dlls" / dest_name
+    dest_path = addons_dir / "goldsrc" / "bin" / dest_name
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
     wasm_target_dir = addons_dir / "goldsrc" / "plugins"
 
@@ -142,7 +154,7 @@ def verify_deploy(
     else:
         content = plugins_ini.read_text(encoding="utf-8")
         prefix = get_platform_prefix(target)
-        expected_line = f"{prefix} addons\\goldsrc\\dlls\\{dest_name}"
+        expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
 
         found = False
         for line in content.split("\n"):
@@ -246,7 +258,7 @@ def main():
         print(f"Using existing library: {dll_path}")
     else:
         dll_path = build_plugin(target=args.target, release=True)
-        wasm_plugins = build_wasm_plugins(release=False)
+        wasm_plugins = build_wasm_plugins(release=True)
 
     deploy_plugin(dll_path, game_path, target=args.target)
     deploy_wasm_plugins(wasm_plugins, game_path)
