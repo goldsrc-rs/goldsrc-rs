@@ -39,7 +39,7 @@ wit-parser = "0.256.0"
 wasmi = "1.0"
 notify = "8.0"
 serde = { version = "1.0", features = ["derive"] }
-toml = "1.1.4+spec-1.1.0"
+toml = "0.8"
 semver = "1.0"
 
 [profile.release]
