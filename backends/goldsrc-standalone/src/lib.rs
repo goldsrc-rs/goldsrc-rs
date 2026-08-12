@@ -336,6 +336,11 @@ pub unsafe extern "C" fn GetEntityAPI2(
             *interface_version = 140;
             return 0;
         }
+
+        // 1. Populate the table with all function pointers from the real GameDLL (mp.dll / cs.so).
+        proxy::populate_dll_table(dll_table);
+
+        // 2. Wrap our hooks over the table callbacks.
         let table = &mut *dll_table;
         table.pfnSpawn = Some(hook_spawn);
         table.pfnClientConnect = Some(hook_client_connect);
@@ -353,9 +358,36 @@ pub unsafe extern "C" fn GetEntityAPI2(
 #[no_mangle]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI(
-    _dll_table: *mut DLL_FUNCTIONS,
-    _interface_version: i32,
+    dll_table: *mut DLL_FUNCTIONS,
+    interface_version: i32,
 ) -> i32 {
-    // Handled by GetEntityAPI2.
-    0
+    if dll_table.is_null() || interface_version != 140 {
+        return 0;
+    }
+    let mut ver = interface_version;
+    GetEntityAPI2(dll_table, &mut ver)
+}
+
+/// Called by engine for NEW_DLL_FUNCTIONS interface (ReGameDLL, Sven Co-op, HLSDK 2.x).
+///
+/// # Safety
+/// Pointers must be valid.
+#[no_mangle]
+#[inline(never)]
+pub unsafe extern "C" fn GetNewDLLFunctions(
+    new_dll_table: *mut std::ffi::c_void,
+    interface_version: *mut i32,
+) -> i32 {
+    if new_dll_table.is_null() || interface_version.is_null() {
+        return 0;
+    }
+    if *interface_version != 1 {
+        *interface_version = 1;
+        return 0;
+    }
+    if proxy::populate_new_dll_table(new_dll_table) {
+        1
+    } else {
+        0
+    }
 }
