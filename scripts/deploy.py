@@ -79,7 +79,7 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
     for line in content.split("\n"):
         stripped = line.strip()
         if (stripped.startswith(f"{key_name} ") or stripped.startswith(f'{key_name}\t')) and not stripped.startswith(";"):
-            if expected_val in stripped:
+            if stripped == expected_line:
                 print(f"Standalone backend already set in {liblist_path}")
                 return
             # Comment out old gamedll line and insert ours
@@ -221,11 +221,14 @@ def verify_deploy(
         else:
             content = liblist_path.read_text(encoding="utf-8")
             is_windows = "windows" in target
+            key_name = "gamedll" if is_windows else "gamedll_linux"
             expected_val = f"goldsrc\\bin\\{dest_name}" if is_windows else f"goldsrc/bin/{dest_name}"
-            if expected_val in content:
+            expected_line = f'{key_name} "{expected_val}"'
+            found = any(line.strip() == expected_line for line in content.split("\n"))
+            if found:
                 print("  [OK]   Standalone backend registered in liblist.gam")
             else:
-                print(f"  [FAIL] Standalone backend ({expected_val}) not found in liblist.gam")
+                print(f"  [FAIL] Standalone backend ({expected_line}) not found in liblist.gam")
                 all_ok = False
     else:
         addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
