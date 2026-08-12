@@ -53,8 +53,7 @@ toml = "0.8"
 semver = "1.0"
 
 [profile.release]
-lto = "fat"
+lto = "thin"
 opt-level = "z"
 strip = "debuginfo"
 panic = "abort"
-codegen-units = 1

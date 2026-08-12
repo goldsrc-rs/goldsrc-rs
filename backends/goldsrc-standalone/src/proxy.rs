@@ -184,7 +184,7 @@ unsafe fn try_load_game_dll(
 
         // Call GiveFnptrsToDll on the real game DLL so it receives engine functions.
         let give_fns: libloading::Symbol<
-            unsafe extern "system" fn(*mut enginefuncs_t, *mut globalvars_t),
+            unsafe extern "C" fn(*mut enginefuncs_t, *mut globalvars_t),
         > = lib.get(b"GiveFnptrsToDll\0")?;
         give_fns(engfuncs, globals);
 

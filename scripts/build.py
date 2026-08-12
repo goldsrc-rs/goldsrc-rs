@@ -28,7 +28,15 @@ def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc",
     if release:
         cmd.append("--release")
 
-    result = subprocess.run(cmd, cwd=repo_root, env=env, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd,
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
     if result.returncode != 0:
         print("Build failed:", file=sys.stderr)
@@ -74,7 +82,14 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
     if release:
         cmd.append("--release")
 
-    result = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd,
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
     if result.returncode != 0:
         print("WASM plugin build failed:", file=sys.stderr)
