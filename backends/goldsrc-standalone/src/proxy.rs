@@ -21,7 +21,15 @@ pub fn file_log(msg: &str) {
 
 /// Name of the real game DLL to proxy.
 #[cfg(target_os = "windows")]
-const GAME_DLL_NAMES: &[&str] = &["mp.dll", "server.dll", "hl.dll", "cs.so", "svencoop.dll", "dod.dll", "tfc.dll"];
+const GAME_DLL_NAMES: &[&str] = &[
+    "mp.dll",
+    "server.dll",
+    "hl.dll",
+    "cs.so",
+    "svencoop.dll",
+    "dod.dll",
+    "tfc.dll",
+];
 
 #[cfg(target_os = "linux")]
 const GAME_DLL_NAMES: &[&str] = &["cs.so", "server.so", "hl.so", "dod.so", "tfc.so"];
@@ -48,13 +56,19 @@ static PROXY: OnceLock<std::sync::Mutex<GameDllProxy>> = OnceLock::new();
 /// `engfuncs` and `globals` must be valid pointers.
 pub unsafe fn load(engfuncs: *mut enginefuncs_t, globals: *mut globalvars_t) -> bool {
     let dll_path = resolve_game_dll_path();
-    file_log(&format!("Attempting to load real GameDLL from path: {:?}", dll_path));
+    file_log(&format!(
+        "Attempting to load real GameDLL from path: {:?}",
+        dll_path
+    ));
 
     let result = unsafe { try_load_game_dll(&dll_path, engfuncs, globals) };
 
     match result {
         Ok(proxy) => {
-            file_log(&format!("Successfully loaded real GameDLL from {:?}", dll_path));
+            file_log(&format!(
+                "Successfully loaded real GameDLL from {:?}",
+                dll_path
+            ));
             let _ = PROXY.set(std::sync::Mutex::new(proxy));
             true
         }
@@ -76,7 +90,12 @@ pub unsafe fn load(engfuncs: *mut enginefuncs_t, globals: *mut globalvars_t) -> 
 /// Resolve the path to the real game DLL universally across any GoldSrc mod (CS 1.6, Sven Co-op, Half-Life, etc.).
 fn resolve_game_dll_path() -> PathBuf {
     // 1. Try reading original gamedll path from liblist.gam if present
-    for liblist in &["cstrike/liblist.gam", "liblist.gam", "svencoop/liblist.gam", "valve/liblist.gam"] {
+    for liblist in &[
+        "cstrike/liblist.gam",
+        "liblist.gam",
+        "svencoop/liblist.gam",
+        "valve/liblist.gam",
+    ] {
         let p = PathBuf::from(liblist);
         if p.exists() {
             if let Ok(content) = std::fs::read_to_string(&p) {
@@ -99,7 +118,10 @@ fn resolve_game_dll_path() -> PathBuf {
                                 let orig_path = &clean[start + 1..start + 1 + end];
                                 let target_path = PathBuf::from(orig_path);
                                 if target_path.exists() {
-                                    file_log(&format!("Resolved original GameDLL from liblist.gam: {:?}", target_path));
+                                    file_log(&format!(
+                                        "Resolved original GameDLL from liblist.gam: {:?}",
+                                        target_path
+                                    ));
                                     return target_path;
                                 }
                             }
@@ -111,7 +133,9 @@ fn resolve_game_dll_path() -> PathBuf {
     }
 
     // 2. Search common mod directories
-    let mod_dirs = ["cstrike", "svencoop", "valve", "czero", "dod", "tfc", "gearbox", "."];
+    let mod_dirs = [
+        "cstrike", "svencoop", "valve", "czero", "dod", "tfc", "gearbox", ".",
+    ];
     for mod_dir in &mod_dirs {
         for dll_name in GAME_DLL_NAMES {
             let candidate = PathBuf::from(mod_dir).join("dlls").join(dll_name);
@@ -129,7 +153,10 @@ fn resolve_game_dll_path() -> PathBuf {
                 for dll_name in GAME_DLL_NAMES {
                     let candidate = base.join(mod_dir).join("dlls").join(dll_name);
                     if candidate.exists() {
-                        file_log(&format!("Resolved GameDLL via exe base search: {:?}", candidate));
+                        file_log(&format!(
+                            "Resolved GameDLL via exe base search: {:?}",
+                            candidate
+                        ));
                         return candidate;
                     }
                 }
@@ -137,7 +164,9 @@ fn resolve_game_dll_path() -> PathBuf {
         }
     }
 
-    PathBuf::from("cstrike").join("dlls").join(GAME_DLL_NAMES[0])
+    PathBuf::from("cstrike")
+        .join("dlls")
+        .join(GAME_DLL_NAMES[0])
 }
 
 /// Load the game DLL and call `GiveFnptrsToDll` on it.
@@ -193,7 +222,9 @@ unsafe fn try_load_game_dll(
         }
 
         if !loaded_api {
-            file_log("WARNING: Neither GetEntityAPI2 nor GetEntityAPI returned 1 for real GameDLL!");
+            file_log(
+                "WARNING: Neither GetEntityAPI2 nor GetEntityAPI returned 1 for real GameDLL!",
+            );
         }
 
         // Retrieve NEW_DLL_FUNCTIONS if available
@@ -205,7 +236,10 @@ unsafe fn try_load_game_dll(
         > = lib.get(b"GetNewDLLFunctions\0");
 
         let has_new_dll_funcs = if let Ok(f) = get_new_dll_fns {
-            let ret = f(new_dll_funcs_buf.as_mut_ptr() as *mut std::ffi::c_void, &mut new_iface_ver);
+            let ret = f(
+                new_dll_funcs_buf.as_mut_ptr() as *mut std::ffi::c_void,
+                &mut new_iface_ver,
+            );
             if ret != 0 {
                 file_log("Successfully populated NEW_DLL_FUNCTIONS via GetNewDLLFunctions");
                 true
