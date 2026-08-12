@@ -294,10 +294,7 @@ unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
 /// Pointers are provided by `hlds.exe` / `hlds_linux` and are always valid at this point.
 #[no_mangle]
 #[inline(never)]
-pub unsafe extern "C" fn GiveFnptrsToDll(
-    engfuncs: *mut enginefuncs_t,
-    globals: *mut globalvars_t,
-) {
+pub unsafe extern "C" fn GiveFnptrsToDll(engfuncs: *mut enginefuncs_t, globals: *mut globalvars_t) {
     unsafe {
         // 1. Initialize our engine API layer.
         engine_api::init(engfuncs, globals);
