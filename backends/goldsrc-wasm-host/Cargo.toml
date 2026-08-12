@@ -3,12 +3,11 @@ name = "goldsrc-wasm-host"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "WASM plugin host for GoldSrc.rs (using wasm3 runtime)"
+description = "WASM plugin host for GoldSrc.rs (using wasmtime runtime)"
 
 [dependencies]
 goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
-wasmi = { workspace = true }
 wasmtime = { workspace = true }
 wit-bindgen = { workspace = true }
 wit-component = { workspace = true }

@@ -901,7 +901,7 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                 CARGO_PKG_VERSION, GIT_HASH
             ));
             backend().server_print(&format!("  Target:     {}\n", BUILD_TARGET));
-            backend().server_print("  WASM Engine: wasmi (Pure Rust Interpreter)\n");
+            backend().server_print("  WASM Engine: wasmtime (Component Model)\n");
             backend().server_print(&format!("  Plugins:    {} loaded\n", plugins_count));
             backend().server_print(&format!(
                 "  Watchers:   {} active directory watcher(s)\n",

@@ -158,12 +158,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        #[allow(unsafe_attributes)]
-        ::goldsrc::goldsrc_api::bindings::export!(#struct_name with_types_in ::goldsrc::goldsrc_api::bindings);
+        #[cfg(target_arch = "wasm32")]
+        const _: () = {
+            #[allow(unsafe_attributes)]
+            ::goldsrc::goldsrc_api::bindings::export!(#struct_name with_types_in ::goldsrc::goldsrc_api::bindings);
 
-        #[unsafe(no_mangle)]
-        #[doc(hidden)]
-        pub static _KEEP_WIT_COMPONENT_TYPE: &[u8] = &::goldsrc::goldsrc_api::bindings::__WIT_BINDGEN_COMPONENT_TYPE;
+            #[unsafe(no_mangle)]
+            #[doc(hidden)]
+            pub static _KEEP_WIT_COMPONENT_TYPE: &[u8] = &::goldsrc::goldsrc_api::bindings::__WIT_BINDGEN_COMPONENT_TYPE;
+        };
     };
 
     TokenStream::from(expanded)
