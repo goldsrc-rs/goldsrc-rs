@@ -1,0 +1,78 @@
+package goldsrc:engine;
+
+interface api {
+    record vector3 {
+        x: f32,
+        y: f32,
+        z: f32,
+    }
+
+    /// Logs a message to the server console.
+    host-log: func(msg: string);
+
+    /// Checks if an entity index is valid.
+    host-entity-is-valid: func(index: s32) -> bool;
+
+    /// Retrieves an entity's classname.
+    host-entity-classname: func(index: s32) -> option<string>;
+
+    /// Gets an entity's health.
+    host-entity-health: func(index: s32) -> f32;
+
+    /// Sets an entity's health.
+    host-entity-set-health: func(index: s32, health: f32);
+
+    /// Gets an entity's origin (position).
+    host-entity-origin: func(index: s32) -> vector3;
+
+    /// Sets an entity's origin.
+    host-entity-set-origin: func(index: s32, pos: vector3);
+
+    /// Gets an entity's velocity.
+    host-entity-velocity: func(index: s32) -> vector3;
+
+    /// Sets an entity's velocity.
+    host-entity-set-velocity: func(index: s32, vel: vector3);
+
+    /// Retrieves a player's name.
+    host-player-name: func(index: s32) -> option<string>;
+    
+    /// Gets a player's armor value.
+    host-player-armorvalue: func(index: s32) -> f32;
+
+    /// Sets a player's armor value.
+    host-player-set-armorvalue: func(index: s32, armor: f32);
+
+    /// --- Capability & Auth API ---
+
+    /// Registers a new capability in the global system.
+    host-register-capability: func(name: string, description: string) -> bool;
+
+    /// Checks if a player has a specific capability.
+    host-has-capability: func(player-index: s32, name: string) -> bool;
+
+    /// Grants a capability to a player dynamically.
+    host-grant-capability: func(player-index: s32, name: string) -> bool;
+
+    /// Revokes a capability from a player dynamically.
+    host-revoke-capability: func(player-index: s32, name: string) -> bool;
+}
+
+world goldsrc-plugin {
+    import api;
+
+    /// Invoked once when the plugin is loaded by the engine.
+    export on-load: func();
+
+    /// Invoked on every frame tick (StartFrame).
+    export on-frame: func();
+
+    /// Invoked when a subscribed event is fired.
+    export on-event: func(name: string, payload: list<u8>);
+
+    /// Invoked when a registered command is executed.
+    export on-command: func(name: string, args: string);
+
+    /// Retrieves a JSON string containing the plugin's metadata.
+    export get-metadata: func() -> string;
+}

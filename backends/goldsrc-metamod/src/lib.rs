@@ -26,35 +26,60 @@ pub fn init_wasm_host() {
         backend().server_print(msg);
     });
     unsafe {
-        let mut manager = goldsrc_wasm_host::PluginManager::new();
+        let mut manager = goldsrc_wasm_host::PluginManager::new()
+            .expect("Failed to initialize WASM PluginManager");
 
-        let plugin_dirs = [
-            "cstrike/addons/metamod-rs/plugins",
-            "addons/metamod-rs/plugins",
-        ];
-        for dir in plugin_dirs {
-            if std::path::Path::new(dir).exists() {
-                let _ = manager.enable_hot_reload(dir);
-                break;
+        use goldsrc_sys::{paths::PathResolver, GoldSrcConfig};
+
+        let sys_config = GoldSrcConfig::load_or_create();
+        let main_cfg_path = PathResolver::main_config_path();
+        backend().server_print(&format!(
+            "[GoldSrc.rs] Loaded configuration from: {:?}\n",
+            main_cfg_path
+        ));
+
+        let plugin_dir = std::path::PathBuf::from(&sys_config.core.plugins_dir);
+        let config_dir = std::path::PathBuf::from(&sys_config.core.configs_dir);
+
+        backend().server_print(&format!(
+            "[GoldSrc.rs] Plugin dir resolved to: {:?}\n",
+            plugin_dir
+        ));
+        backend().server_print(&format!(
+            "[GoldSrc.rs] Config dir resolved to: {:?}\n",
+            config_dir
+        ));
+
+        if sys_config.wasm.hot_reload {
+            let _ = manager.enable_hot_reload(&plugin_dir);
+        }
+        if sys_config.wasm.config_watcher {
+            let _ = manager.enable_config_watcher(&config_dir);
+        }
+
+        if let Ok(entries) = std::fs::read_dir(&plugin_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
+                    match manager.load_plugin(&path) {
+                        Ok(_) => backend().server_print(&format!(
+                            "[GoldSrc.rs] Loaded WASM plugin: {:?}\n",
+                            path.file_name().unwrap_or_default()
+                        )),
+                        Err(e) => backend().server_print(&format!(
+                            "[GoldSrc.rs] Failed to load WASM plugin {:?}: {}\n",
+                            path.file_name().unwrap_or_default(),
+                            e
+                        )),
+                    }
+                }
             }
+        } else {
+            backend().server_print(&format!(
+                "[GoldSrc.rs] Could not read plugin directory: {:?}\n",
+                plugin_dir
+            ));
         }
-
-        let config_dirs = [
-            "cstrike/addons/metamod-rs/configs",
-            "addons/metamod-rs/configs",
-        ];
-        let mut watched_config = false;
-        for dir in config_dirs {
-            if std::path::Path::new(dir).exists() {
-                let _ = manager.enable_config_watcher(dir);
-                watched_config = true;
-                break;
-            }
-        }
-        if !watched_config {
-            let _ = manager.enable_config_watcher("cstrike/addons/metamod-rs/configs");
-        }
-
         WASM_MANAGER = Some(manager);
     }
 }
@@ -202,7 +227,7 @@ pub fn file_log(msg: &str) {
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("cstrike/addons/metamod-rs/debug.log")
+        .open(goldsrc_sys::paths::PathResolver::debug_log_path())
     {
         let _ = writeln!(file, "{}", msg);
     }
@@ -876,7 +901,7 @@ fn dispatch_mrs_command(raw_args: Vec<std::ffi::OsString>) {
                 CARGO_PKG_VERSION, GIT_HASH
             ));
             backend().server_print(&format!("  Target:     {}\n", BUILD_TARGET));
-            backend().server_print("  WASM Engine: wasmi (Pure Rust Interpreter)\n");
+            backend().server_print("  WASM Engine: wasmtime (Component Model)\n");
             backend().server_print(&format!("  Plugins:    {} loaded\n", plugins_count));
             backend().server_print(&format!(
                 "  Watchers:   {} active directory watcher(s)\n",

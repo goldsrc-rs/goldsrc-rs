@@ -4,4 +4,9 @@
 #![allow(dead_code)]
 #![allow(clippy::type_complexity)]
 
+pub mod config;
+pub mod paths;
+
+pub use config::*;
+
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

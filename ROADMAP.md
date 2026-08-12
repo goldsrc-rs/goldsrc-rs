@@ -40,9 +40,34 @@
 - [x] Granular Config Event System (`action`: `created`/`modified`/`deleted`) with private per-plugin config isolation (`configs/plugins/<name>/`).
 - [x] Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and auto-created log directories (`logs/metamod-rs.log`).
 
-## Stage 6: Standalone Backend & Advanced Runtimes (Future)
+## Stage 6: Architecture Refactoring & Elegant DX — ✅ Completed
 
-- [ ] Transition / dual-support for `wasmtime` engine (JIT execution, WASM Component Model & Exception Handling).
-- [ ] Build a custom `mp.dll` / `ReHLDS` direct integration backend (bypassing Metamod).
-- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using `references/` headers.
+- [x] Reorganize workspace into `core/`, `backends/`, `framework/`, `tools/`.
+- [x] Rename `metamod-rs` to `goldsrc-metamod`.
+- [x] Optimize WASM payload size via Cargo `profile.release`.
+- [x] Implement WASM Host Imports for safe Engine FFI boundary crossing.
+- [x] Refactor `goldsrc-api` to provide `Player` / `Entity` structs with elegant methods for WASM.
+- [x] Add `#[on_load]` procedural macro to eliminate `unsafe` initialization.
 
+## Stage 7: Component Model & TOML Architecture — ✅ Complete
+
+- [x] Transition `goldsrc-wasm-host` from `wasmi` to `wasmtime` with native JIT execution engine.
+- [x] Adopt WASM Component Model (`wit-bindgen` & `wit-component`) to completely replace `unsafe extern "C"` bridges.
+- [x] Implement centralized TOML configuration system (`goldsrc.toml`) with dynamic path resolution.
+- [x] Integrate `wasm-opt` pipeline in `build.py` for 90% WASM payload size reduction (~200KB).
+- [x] Implement Capability-based Access Control system (RBAC) in host and SDK.
+- [x] Purge `serde_json` in favor of zero-overhead TOML & Canonical ABI.
+
+## Stage 8: Standalone Backend & Direct Engine Integration — 🏗 In Progress
+
+- [ ] Implement `goldsrc-standalone` backend bypassing Metamod dependency.
+- [ ] Implement dynamic ReHLDS (`ReHLDS_Api`) & ReGameDLL (`ReGameDLL_Api`) detection with HLSDK fallback.
+- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using reference headers.
+- [ ] Modularize `goldsrc-wasm-host` and `goldsrc-metamod` crates into clean component sub-modules.
+- [ ] Implement advanced declarative macros (`#[command]`, `#[hook]`) with State Injection (`&mut World`).
+
+## Stage 9: Game-Specific Framework Extensions — 📝 Planned
+
+- [ ] Split the SDK into a core engine module and game-specific extensions.
+- [ ] Create `goldsrc-cstrike` (CS 1.6 bindings) for specific entities, weapons, and game events.
+- [ ] Provide abstraction layers for game rules, map objectives, and player states.
