@@ -36,27 +36,33 @@ def get_platform_prefix(target: str) -> str:
         return "win32"
 
 
+# Framework Path Constants
+FRAMEWORK_NAME = "goldsrc"
+DEFAULT_MOD = "cstrike"
+ADDONS_DIR_NAME = "addons"
+
+
 def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-windows-msvc") -> None:
     """Deploy the plugin to the game's addons directory."""
     # Find addons directory
-    addons_dir = game_path / "cstrike" / "addons"
+    addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
     if not addons_dir.exists():
-        addons_dir = game_path / "addons"
+        addons_dir = game_path / ADDONS_DIR_NAME
         if not addons_dir.exists():
             print(f"Error: Addons directory not found", file=sys.stderr)
-            print(f"  Tried: {game_path / 'cstrike' / 'addons'}", file=sys.stderr)
-            print(f"  Tried: {game_path / 'addons'}", file=sys.stderr)
+            print(f"  Tried: {game_path / DEFAULT_MOD / ADDONS_DIR_NAME}", file=sys.stderr)
+            print(f"  Tried: {game_path / ADDONS_DIR_NAME}", file=sys.stderr)
             sys.exit(1)
 
     # Create our plugin directory
-    plugin_dir = addons_dir / "metamod-rs"
-    plugin_dir.mkdir(exist_ok=True)
+    plugin_dir = addons_dir / FRAMEWORK_NAME / "bin"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy the DLL/SO
     if "windows" in target:
-        dest_name = "metamod-rs.dll"
+        dest_name = "goldsrc_metamod.dll"
     else:
-        dest_name = "metamod-rs.so"
+        dest_name = "goldsrc_metamod.so"
 
     dest_path = plugin_dir / dest_name
     try:
@@ -73,26 +79,32 @@ def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-window
         print(f"\nWarning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
         print("You may need to install Metamod-r first.")
         print("Add this line to plugins.ini manually:")
-        print(f"  {get_platform_prefix(target)} addons\\metamod-rs\\{dest_name}")
+        print(f"  {get_platform_prefix(target)} addons\\goldsrc\\bin\\{dest_name}")
         return
 
     # Read existing plugins
     content = plugins_ini.read_text(encoding="utf-8")
+    prefix = get_platform_prefix(target)
+    expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
 
-    # Check if our plugin is already listed
+    lines = []
+    updated = False
     for line in content.split("\n"):
         stripped = line.strip()
-        if dest_name in stripped:
-            print(f"Plugin already listed in {plugins_ini}")
-            return
+        if dest_name in stripped and not stripped.startswith(";"):
+            if stripped == expected_line:
+                print(f"Plugin already listed in {plugins_ini}")
+                return
+            lines.append(expected_line)
+            updated = True
+        else:
+            lines.append(line)
 
-    # Add our plugin to the list with platform prefix
-    prefix = get_platform_prefix(target)
-    lines = content.strip().split("\n")
-    lines.append(f"{prefix} addons\\metamod-rs\\{dest_name}")
+    if not updated:
+        lines.append(expected_line)
 
     plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Added to: {plugins_ini}")
+    print(f"Updated plugins.ini with new path: {plugins_ini}")
 
 
 def verify_deploy(
@@ -111,13 +123,13 @@ def verify_deploy(
         return False
 
     if "windows" in target:
-        dest_name = "metamod-rs.dll"
+        dest_name = "goldsrc_metamod.dll"
     else:
-        dest_name = "metamod-rs.so"
+        dest_name = "goldsrc_metamod.so"
 
-    dest_path = addons_dir / "metamod-rs" / dest_name
+    dest_path = addons_dir / "goldsrc" / "bin" / dest_name
     plugins_ini = addons_dir / "metamod" / "plugins.ini"
-    wasm_target_dir = addons_dir / "metamod-rs" / "plugins"
+    wasm_target_dir = addons_dir / "goldsrc" / "plugins"
 
     all_ok = True
 
@@ -142,7 +154,7 @@ def verify_deploy(
     else:
         content = plugins_ini.read_text(encoding="utf-8")
         prefix = get_platform_prefix(target)
-        expected_line = f"{prefix} addons\\metamod-rs\\{dest_name}"
+        expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
 
         found = False
         for line in content.split("\n"):
@@ -180,7 +192,7 @@ def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path) -> None:
     if not addons_dir.exists():
         addons_dir = game_path / "addons"
 
-    wasm_target_dir = addons_dir / "metamod-rs" / "plugins"
+    wasm_target_dir = addons_dir / "goldsrc" / "plugins"
     wasm_target_dir.mkdir(parents=True, exist_ok=True)
 
     for wasm_file in wasm_paths:
@@ -223,11 +235,11 @@ def main():
 
     repo_root = Path(__file__).parent.parent
     if "windows" in args.target:
-        lib_name = "goldsrc_metamod_backend.dll"
+        lib_name = "goldsrc_metamod.dll"
     else:
-        lib_name = "libgoldsrc_metamod_backend.so"
+        lib_name = "libgoldsrc_metamod.so"
     dll_path = repo_root / "target" / args.target / "release" / lib_name
-    wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / "debug"
+    wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / "release"
     wasm_plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
 
     if args.verify:
@@ -246,7 +258,7 @@ def main():
         print(f"Using existing library: {dll_path}")
     else:
         dll_path = build_plugin(target=args.target, release=True)
-        wasm_plugins = build_wasm_plugins(release=False)
+        wasm_plugins = build_wasm_plugins(release=True)
 
     deploy_plugin(dll_path, game_path, target=args.target)
     deploy_wasm_plugins(wasm_plugins, game_path)

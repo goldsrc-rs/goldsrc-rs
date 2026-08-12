@@ -6,6 +6,10 @@ license.workspace = true
 description = "Raw FFI bindings for GoldSrc engine and Metamod (generated via bindgen)"
 links = "goldsrc"
 
+[dependencies]
+serde = { workspace = true }
+toml = { workspace = true }
+
 [build-dependencies]
 bindgen = "0.72"
 cc = "1.0"
