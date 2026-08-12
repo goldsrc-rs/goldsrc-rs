@@ -32,10 +32,7 @@ impl PathResolver {
                     .join(FRAMEWORK_NAME)
                     .join(PLUGINS_DIR_NAME),
             );
-            dirs.push(
-                base.join(FRAMEWORK_NAME)
-                    .join(PLUGINS_DIR_NAME),
-            );
+            dirs.push(base.join(FRAMEWORK_NAME).join(PLUGINS_DIR_NAME));
             dirs.push(
                 base.join(ADDONS_DIR_NAME)
                     .join(FRAMEWORK_NAME)
@@ -54,10 +51,7 @@ impl PathResolver {
                 .join(FRAMEWORK_NAME)
                 .join(PLUGINS_DIR_NAME),
         );
-        dirs.push(
-            PathBuf::from(FRAMEWORK_NAME)
-                .join(PLUGINS_DIR_NAME),
-        );
+        dirs.push(PathBuf::from(FRAMEWORK_NAME).join(PLUGINS_DIR_NAME));
         dirs.push(
             PathBuf::from(ADDONS_DIR_NAME)
                 .join(FRAMEWORK_NAME)
@@ -97,10 +91,7 @@ impl PathResolver {
                     .join(FRAMEWORK_NAME)
                     .join(CONFIGS_DIR_NAME),
             );
-            dirs.push(
-                base.join(FRAMEWORK_NAME)
-                    .join(CONFIGS_DIR_NAME),
-            );
+            dirs.push(base.join(FRAMEWORK_NAME).join(CONFIGS_DIR_NAME));
             dirs.push(
                 base.join(ADDONS_DIR_NAME)
                     .join(FRAMEWORK_NAME)
@@ -119,10 +110,7 @@ impl PathResolver {
                 .join(FRAMEWORK_NAME)
                 .join(CONFIGS_DIR_NAME),
         );
-        dirs.push(
-            PathBuf::from(FRAMEWORK_NAME)
-                .join(CONFIGS_DIR_NAME),
-        );
+        dirs.push(PathBuf::from(FRAMEWORK_NAME).join(CONFIGS_DIR_NAME));
         dirs.push(
             PathBuf::from(ADDONS_DIR_NAME)
                 .join(FRAMEWORK_NAME)
