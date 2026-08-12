@@ -4,6 +4,7 @@ members = [
     "core/goldsrc-api",
     "backends/goldsrc-metamod",
     "backends/goldsrc-wasm-host",
+    "backends/goldsrc-standalone",
     "framework/goldsrc",
     "framework/goldsrc-macros",
     "examples/demo_plugins/vip_core",
@@ -16,6 +17,7 @@ default-members = [
     "core/goldsrc-api",
     "backends/goldsrc-metamod",
     "backends/goldsrc-wasm-host",
+    "backends/goldsrc-standalone",
     "framework/goldsrc",
     "framework/goldsrc-macros",
 ]
@@ -44,6 +46,7 @@ wasmtime = { version = "47.0", default-features = false, features = [
 wit-bindgen = "0.60.0"
 wit-component = "0.256.0"
 wit-parser = "0.256.0"
+libloading = "0.8"
 notify = "8.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
