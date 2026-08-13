@@ -15,13 +15,4 @@ fn main() {
     println!("cargo:rerun-if-changed=.git/refs/");
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
     println!("cargo:rustc-env=BUILD_TARGET={}-{}", target_arch, target_os);
-
-    if target_arch == "x86" && std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() == "msvc" {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let exports_path = std::path::Path::new(&manifest_dir)
-            .join("src")
-            .join("exports.c");
-
-        cc::Build::new().file(exports_path).compile("msvc_exports");
-    }
 }

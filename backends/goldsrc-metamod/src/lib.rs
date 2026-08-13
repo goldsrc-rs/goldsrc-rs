@@ -2,6 +2,31 @@
 
 #![allow(static_mut_refs)]
 
+// ============================================================================
+// MSVC Linker Directives
+//
+// On i686-pc-windows-msvc, __stdcall functions are decorated by the linker as
+// `_FunctionName@N` (where N is the argument byte count). The GoldSrc engine
+// looks for undecorated names (e.g. `GiveFnptrsToDll`), so we must instruct
+// the linker to export the decorated symbol under its clean name.
+//
+// This replaces the legacy `exports.c` / `#pragma comment(linker, ...)` C file.
+// The `.drectve` section is the standard COFF mechanism for embedding linker
+// directives directly inside an object file — exactly what the C pragma did.
+// ============================================================================
+#[cfg(all(target_arch = "x86", target_env = "msvc"))]
+#[unsafe(link_section = ".drectve")]
+#[used]
+static MSVC_EXPORTS: [u8; 204] = *b"\
+ /EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8\
+ /EXPORT:Meta_Query=_Meta_Query\
+ /EXPORT:Meta_Attach=_Meta_Attach\
+ /EXPORT:Meta_Detach=_Meta_Detach\
+ /EXPORT:GetEntityAPI2=_GetEntityAPI2\
+ /EXPORT:GetEntityAPI2_Post=_GetEntityAPI2_Post\
+ /EXPORT:GetNewDLLFunctions=_GetNewDLLFunctions\
+";
+
 mod entity;
 mod meta_types;
 mod vtable;

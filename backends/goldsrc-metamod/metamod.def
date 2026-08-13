@@ -1,6 +1,0 @@
-LIBRARY goldsrc_metamod_backend
-EXPORTS
-    GiveFnptrsToDll=_GiveFnptrsToDll@8
-    Meta_Query=Meta_Query
-    Meta_Attach=Meta_Attach
-    Meta_Detach=Meta_Detach
