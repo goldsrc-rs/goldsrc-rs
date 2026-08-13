@@ -5,8 +5,10 @@
 
 pub mod auth;
 pub mod bindings;
+pub mod edict;
 pub mod events;
 
+pub use edict::EDict;
 pub use events::*;
 
 /// Engine interface — provides access to engine functions.
@@ -31,11 +33,14 @@ pub trait Engine {
 }
 
 /// Safe wrapper around `edict_t` (entity dictionary).
+///
+/// Delegates field access to [`EDict`] which validates the serial number on
+/// every access, preventing use-after-free from stale handles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Entity {
     pub index: i32,
     #[cfg(not(target_arch = "wasm32"))]
-    edict: *mut goldsrc_sys::edict_t,
+    inner: EDict,
 }
 
 impl Entity {
@@ -45,7 +50,11 @@ impl Entity {
     /// The caller must ensure that `edict` is a valid pointer to an entity in the engine.
     #[cfg(not(target_arch = "wasm32"))]
     pub unsafe fn from_raw(index: i32, edict: *mut goldsrc_sys::edict_t) -> Self {
-        Self { index, edict }
+        // SAFETY: propagated from caller.
+        Self {
+            index,
+            inner: unsafe { EDict::from_raw(index, edict) },
+        }
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -57,7 +66,7 @@ impl Entity {
     pub fn new(index: i32) -> Self {
         Self {
             index,
-            edict: std::ptr::null_mut(),
+            inner: EDict::invalid(),
         }
     }
 
@@ -72,7 +81,7 @@ impl Entity {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            !self.edict.is_null()
+            self.inner.is_valid()
         }
     }
 
@@ -82,20 +91,14 @@ impl Entity {
             crate::bindings::goldsrc::engine::api::host_entity_classname(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            let classname = (*self.edict).v.classname;
-            if classname == 0 {
-                return None;
-            }
-            let cstr = std::ffi::CStr::from_ptr(classname as *const i8);
-            Some(cstr.to_string_lossy().into_owned())
+        {
+            self.inner.classname()
         }
     }
 
     pub fn print_chat(&self, msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {
-            // Just use server print for now as a mock if client print is not implemented in WIT
             crate::bindings::goldsrc::engine::api::host_log(&format!(
                 "(mock) Print to player {}: {}",
                 self.index, msg
@@ -129,8 +132,8 @@ impl Entity {
             [v.x, v.y, v.z]
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.origin
+        {
+            self.inner.origin().unwrap_or([0.0, 0.0, 0.0])
         }
     }
 
@@ -140,14 +143,20 @@ impl Entity {
             crate::bindings::goldsrc::engine::api::host_entity_health(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.health
+        {
+            self.inner.health().unwrap_or(0.0)
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn as_ptr(&self) -> *mut goldsrc_sys::edict_t {
-        self.edict
+        self.inner.as_ptr().unwrap_or(std::ptr::null_mut())
+    }
+
+    /// Access the underlying [`EDict`] handle directly.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn edict(&self) -> EDict {
+        self.inner
     }
 }
 
@@ -176,11 +185,14 @@ impl From<Vector3> for [f32; 3] {
 }
 
 /// Safe wrapper around a player entity.
+///
+/// Delegates all edict field accesses to the underlying [`EDict`] handle,
+/// which performs serial-number validation on every read/write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Player {
     pub index: i32,
     #[cfg(not(target_arch = "wasm32"))]
-    edict: *mut goldsrc_sys::edict_t,
+    inner: EDict,
 }
 
 impl Player {
@@ -190,7 +202,10 @@ impl Player {
     /// The caller must ensure that `edict` is a valid pointer to a player entity in the engine.
     #[cfg(not(target_arch = "wasm32"))]
     pub unsafe fn from_raw(index: i32, edict: *mut goldsrc_sys::edict_t) -> Self {
-        Self { index, edict }
+        Self {
+            index,
+            inner: unsafe { EDict::from_raw(index, edict) },
+        }
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -202,7 +217,7 @@ impl Player {
     pub fn new(index: i32) -> Self {
         Self {
             index,
-            edict: std::ptr::null_mut(),
+            inner: EDict::invalid(),
         }
     }
 
@@ -217,7 +232,7 @@ impl Player {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            !self.edict.is_null()
+            self.inner.is_valid()
         }
     }
 
@@ -227,13 +242,8 @@ impl Player {
             crate::bindings::goldsrc::engine::api::host_player_name(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            let netname = (*self.edict).v.netname;
-            if netname == 0 {
-                return None;
-            }
-            let cstr = std::ffi::CStr::from_ptr(netname as *const i8);
-            Some(cstr.to_string_lossy().into_owned())
+        {
+            self.inner.netname()
         }
     }
 
@@ -248,8 +258,8 @@ impl Player {
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.origin.into()
+        {
+            self.inner.origin().unwrap_or([0.0, 0.0, 0.0]).into()
         }
     }
 
@@ -266,8 +276,8 @@ impl Player {
             );
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.origin = pos.into();
+        {
+            self.inner.set_origin(pos.into());
         }
     }
 
@@ -282,8 +292,8 @@ impl Player {
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.velocity.into()
+        {
+            self.inner.velocity().unwrap_or([0.0, 0.0, 0.0]).into()
         }
     }
 
@@ -300,8 +310,8 @@ impl Player {
             );
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.velocity = vel.into();
+        {
+            self.inner.set_velocity(vel.into());
         }
     }
 
@@ -311,8 +321,8 @@ impl Player {
             crate::bindings::goldsrc::engine::api::host_entity_health(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.health
+        {
+            self.inner.health().unwrap_or(0.0)
         }
     }
 
@@ -322,8 +332,8 @@ impl Player {
             crate::bindings::goldsrc::engine::api::host_entity_set_health(self.index, health);
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.health = health;
+        {
+            self.inner.set_health(health);
         }
     }
 
@@ -333,8 +343,8 @@ impl Player {
             crate::bindings::goldsrc::engine::api::host_player_armorvalue(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.armorvalue
+        {
+            self.inner.armorvalue().unwrap_or(0.0)
         }
     }
 
@@ -344,16 +354,14 @@ impl Player {
             crate::bindings::goldsrc::engine::api::host_player_set_armorvalue(self.index, armor);
         }
         #[cfg(not(target_arch = "wasm32"))]
-        unsafe {
-            (*self.edict).v.armorvalue = armor;
+        {
+            self.inner.set_armorvalue(armor);
         }
     }
 
     pub fn print_chat(&self, msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {
-            // TODO:
-            // Just use server print for now as a mock if client print is not implemented in WIT
             crate::bindings::goldsrc::engine::api::host_log(&format!(
                 "(mock) Print to player {}: {}",
                 self.index, msg
@@ -386,7 +394,13 @@ impl Player {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn as_ptr(&self) -> *mut goldsrc_sys::edict_t {
-        self.edict
+        self.inner.as_ptr().unwrap_or(std::ptr::null_mut())
+    }
+
+    /// Access the underlying [`EDict`] handle directly.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn edict(&self) -> EDict {
+        self.inner
     }
 }
 
@@ -396,7 +410,7 @@ impl From<Player> for Entity {
         {
             Entity {
                 index: player.index,
-                edict: player.edict,
+                inner: player.inner,
             }
         }
         #[cfg(target_arch = "wasm32")]
