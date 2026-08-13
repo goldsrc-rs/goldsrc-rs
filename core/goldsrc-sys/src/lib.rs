@@ -5,6 +5,7 @@
 #![allow(clippy::type_complexity)]
 
 pub mod config;
+pub mod ffi;
 pub mod paths;
 
 pub use config::*;
