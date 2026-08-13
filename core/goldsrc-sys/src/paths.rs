@@ -23,16 +23,10 @@ impl PathResolver {
         if let Some(ref base) = exe_dir {
             dirs.push(
                 base.join(DEFAULT_MOD_DIR)
-                    .join(FRAMEWORK_NAME)
-                    .join(PLUGINS_DIR_NAME),
-            );
-            dirs.push(
-                base.join(DEFAULT_MOD_DIR)
                     .join(ADDONS_DIR_NAME)
                     .join(FRAMEWORK_NAME)
                     .join(PLUGINS_DIR_NAME),
             );
-            dirs.push(base.join(FRAMEWORK_NAME).join(PLUGINS_DIR_NAME));
             dirs.push(
                 base.join(ADDONS_DIR_NAME)
                     .join(FRAMEWORK_NAME)
@@ -42,16 +36,10 @@ impl PathResolver {
 
         dirs.push(
             PathBuf::from(DEFAULT_MOD_DIR)
-                .join(FRAMEWORK_NAME)
-                .join(PLUGINS_DIR_NAME),
-        );
-        dirs.push(
-            PathBuf::from(DEFAULT_MOD_DIR)
                 .join(ADDONS_DIR_NAME)
                 .join(FRAMEWORK_NAME)
                 .join(PLUGINS_DIR_NAME),
         );
-        dirs.push(PathBuf::from(FRAMEWORK_NAME).join(PLUGINS_DIR_NAME));
         dirs.push(
             PathBuf::from(ADDONS_DIR_NAME)
                 .join(FRAMEWORK_NAME)
@@ -68,6 +56,7 @@ impl PathResolver {
             }
         }
         PathBuf::from(DEFAULT_MOD_DIR)
+            .join(ADDONS_DIR_NAME)
             .join(FRAMEWORK_NAME)
             .join(PLUGINS_DIR_NAME)
     }
@@ -82,16 +71,10 @@ impl PathResolver {
         if let Some(ref base) = exe_dir {
             dirs.push(
                 base.join(DEFAULT_MOD_DIR)
-                    .join(FRAMEWORK_NAME)
-                    .join(CONFIGS_DIR_NAME),
-            );
-            dirs.push(
-                base.join(DEFAULT_MOD_DIR)
                     .join(ADDONS_DIR_NAME)
                     .join(FRAMEWORK_NAME)
                     .join(CONFIGS_DIR_NAME),
             );
-            dirs.push(base.join(FRAMEWORK_NAME).join(CONFIGS_DIR_NAME));
             dirs.push(
                 base.join(ADDONS_DIR_NAME)
                     .join(FRAMEWORK_NAME)
@@ -101,16 +84,10 @@ impl PathResolver {
 
         dirs.push(
             PathBuf::from(DEFAULT_MOD_DIR)
-                .join(FRAMEWORK_NAME)
-                .join(CONFIGS_DIR_NAME),
-        );
-        dirs.push(
-            PathBuf::from(DEFAULT_MOD_DIR)
                 .join(ADDONS_DIR_NAME)
                 .join(FRAMEWORK_NAME)
                 .join(CONFIGS_DIR_NAME),
         );
-        dirs.push(PathBuf::from(FRAMEWORK_NAME).join(CONFIGS_DIR_NAME));
         dirs.push(
             PathBuf::from(ADDONS_DIR_NAME)
                 .join(FRAMEWORK_NAME)
@@ -127,6 +104,7 @@ impl PathResolver {
             }
         }
         PathBuf::from(DEFAULT_MOD_DIR)
+            .join(ADDONS_DIR_NAME)
             .join(FRAMEWORK_NAME)
             .join(CONFIGS_DIR_NAME)
     }
@@ -138,31 +116,18 @@ impl PathResolver {
             .and_then(|p| p.parent().map(|p| p.to_path_buf()));
 
         if let Some(ref base) = exe_dir {
-            let p1 = base
-                .join(DEFAULT_MOD_DIR)
-                .join(FRAMEWORK_NAME)
-                .join("goldsrc.toml");
-            if p1.exists() {
-                return p1;
-            }
-            let p2 = base
+            let path = base
                 .join(DEFAULT_MOD_DIR)
                 .join(ADDONS_DIR_NAME)
                 .join(FRAMEWORK_NAME)
                 .join("goldsrc.toml");
-            if p2.exists() {
-                return p2;
+            if path.exists() {
+                return path;
             }
         }
 
-        let p1 = PathBuf::from(DEFAULT_MOD_DIR)
-            .join(FRAMEWORK_NAME)
-            .join("goldsrc.toml");
-        if p1.exists() {
-            return p1;
-        }
-
         PathBuf::from(DEFAULT_MOD_DIR)
+            .join(ADDONS_DIR_NAME)
             .join(FRAMEWORK_NAME)
             .join("goldsrc.toml")
     }
@@ -170,6 +135,7 @@ impl PathResolver {
     /// Returns the path to debug.log.
     pub fn debug_log_path() -> PathBuf {
         PathBuf::from(DEFAULT_MOD_DIR)
+            .join(ADDONS_DIR_NAME)
             .join(FRAMEWORK_NAME)
             .join("debug.log")
     }

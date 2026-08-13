@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 r"""Deploy script for GoldSrc.rs Metamod plugin.
 
-Copies the built plugin to a game server and registers it in Metamod's plugins.ini or liblist.gam.
+Copies the built plugin to a game server and registers it in Metamod's plugins.ini.
 
 Usage:
-    python scripts/deploy.py --path "/path/to/hlds"              # Deploy to specified server
-    python scripts/deploy.py --backend standalone --path "..."   # Deploy standalone backend
-    python scripts/deploy.py --verify                            # Verify deployment
+    python scripts/deploy.py                                    # Deploy to default path
+    python scripts/deploy.py --path "C:\Games\CS 1.6 GoldClient"
+    python scripts/deploy.py --path "..." --no-build            # Skip build step
+    python scripts/deploy.py --verify                           # Verify deployment
 """
 
 import argparse
 import hashlib
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -42,48 +42,59 @@ DEFAULT_MOD = "cstrike"
 ADDONS_DIR_NAME = "addons"
 
 
-def get_dest_name(backend: str, target: str) -> str:
-    """Get the destination library filename for a given backend and build target."""
-    basename = "goldsrc_standalone" if backend == "standalone" else "goldsrc_metamod"
+def deploy_plugin(dll_path: Path, game_path: Path, target: str = "i686-pc-windows-msvc") -> None:
+    """Deploy the plugin to the game's addons directory."""
+    # Find addons directory
+    addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
+    if not addons_dir.exists():
+        addons_dir = game_path / ADDONS_DIR_NAME
+        if not addons_dir.exists():
+            print(f"Error: Addons directory not found", file=sys.stderr)
+            print(f"  Tried: {game_path / DEFAULT_MOD / ADDONS_DIR_NAME}", file=sys.stderr)
+            print(f"  Tried: {game_path / ADDONS_DIR_NAME}", file=sys.stderr)
+            sys.exit(1)
+
+    # Create our plugin directory
+    plugin_dir = addons_dir / FRAMEWORK_NAME / "bin"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy the DLL/SO
     if "windows" in target:
-        return f"{basename}.dll"
+        dest_name = "goldsrc_metamod.dll"
     else:
-        return f"lib{basename}.so"
+        dest_name = "goldsrc_metamod.so"
 
+    dest_path = plugin_dir / dest_name
+    try:
+        shutil.copy2(dll_path, dest_path)
+        print(f"Copied to: {dest_path}")
+    except PermissionError:
+        print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
+        print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
+        sys.exit(1)
 
-def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
-    """Update liblist.gam to point to goldsrc_standalone."""
-    liblist_path = game_path / DEFAULT_MOD / "liblist.gam"
-    if not liblist_path.exists():
-        liblist_path = game_path / "liblist.gam"
-
-    if not liblist_path.exists():
-        print(f"\nWarning: liblist.gam not found at {liblist_path}", file=sys.stderr)
-        print("Set gamedll in liblist.gam manually:")
-        print(f"  gamedll \"goldsrc\\bin\\{dest_name}\"")
+    # Update plugins.ini
+    plugins_ini = addons_dir / "metamod" / "plugins.ini"
+    if not plugins_ini.exists():
+        print(f"\nWarning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
+        print("You may need to install Metamod-r first.")
+        print("Add this line to plugins.ini manually:")
+        print(f"  {get_platform_prefix(target)} addons\\goldsrc\\bin\\{dest_name}")
         return
 
-    content = liblist_path.read_text(encoding="utf-8")
-    is_windows = "windows" in target
-    key_name = "gamedll" if is_windows else "gamedll_linux"
-
-    if is_windows:
-        expected_val = f"goldsrc\\bin\\{dest_name}"
-    else:
-        expected_val = f"goldsrc/bin/{dest_name}"
-
-    expected_line = f'{key_name} "{expected_val}"'
+    # Read existing plugins
+    content = plugins_ini.read_text(encoding="utf-8")
+    prefix = get_platform_prefix(target)
+    expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
 
     lines = []
     updated = False
     for line in content.split("\n"):
         stripped = line.strip()
-        if (stripped.startswith(f"{key_name} ") or stripped.startswith(f'{key_name}\t')) and not stripped.startswith(";"):
+        if dest_name in stripped and not stripped.startswith(";"):
             if stripped == expected_line:
-                print(f"Standalone backend already set in {liblist_path}")
+                print(f"Plugin already listed in {plugins_ini}")
                 return
-            # Comment out old gamedll line and insert ours
-            lines.append(f"; {line}  # Replaced by GoldSrc.rs deploy")
             lines.append(expected_line)
             updated = True
         else:
@@ -92,163 +103,70 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
     if not updated:
         lines.append(expected_line)
 
-    liblist_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Updated {liblist_path} with: {expected_line}")
-
-
-def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", target: str = "i686-pc-windows-msvc") -> None:
-    """Deploy the plugin backend to the game server."""
-    dest_name = get_dest_name(backend, target)
-
-    if backend == "standalone":
-        # Standalone lives directly under cstrike/goldsrc/bin/ (no addons/ wrapper)
-        mod_dir = game_path / DEFAULT_MOD
-        if not mod_dir.exists():
-            mod_dir = game_path
-        plugin_dir = mod_dir / FRAMEWORK_NAME / "bin"
-    else:
-        # Metamod lives under cstrike/addons/goldsrc/bin/
-        addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
-        if not addons_dir.exists():
-            addons_dir = game_path / ADDONS_DIR_NAME
-            if not addons_dir.exists():
-                print(f"Error: Addons directory not found", file=sys.stderr)
-                print(f"  Tried: {game_path / DEFAULT_MOD / ADDONS_DIR_NAME}", file=sys.stderr)
-                print(f"  Tried: {game_path / ADDONS_DIR_NAME}", file=sys.stderr)
-                sys.exit(1)
-        plugin_dir = addons_dir / FRAMEWORK_NAME / "bin"
-
-    plugin_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = plugin_dir / dest_name
-
-    try:
-        shutil.copy2(dll_path, dest_path)
-        print(f"Copied {backend} backend to: {dest_path}")
-    except PermissionError:
-        print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
-        print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
-        sys.exit(1)
-
-    if backend == "standalone":
-        update_liblist_gam(game_path, dest_name, target)
-    else:
-        # Update plugins.ini for Metamod
-        addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
-        if not addons_dir.exists():
-            addons_dir = game_path / ADDONS_DIR_NAME
-
-        plugins_ini = addons_dir / "metamod" / "plugins.ini"
-        if not plugins_ini.exists():
-            print(f"\nWarning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
-            print("You may need to install Metamod-r first.")
-            print("Add this line to plugins.ini manually:")
-            print(f"  {get_platform_prefix(target)} addons\\goldsrc\\bin\\{dest_name}")
-            return
-
-        content = plugins_ini.read_text(encoding="utf-8")
-        prefix = get_platform_prefix(target)
-        expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
-
-        lines = []
-        updated = False
-        for line in content.split("\n"):
-            stripped = line.strip()
-            if dest_name in stripped and not stripped.startswith(";"):
-                if stripped == expected_line:
-                    print(f"Plugin already listed in {plugins_ini}")
-                    return
-                lines.append(expected_line)
-                updated = True
-            else:
-                lines.append(line)
-
-        if not updated:
-            lines.append(expected_line)
-
-        plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print(f"Updated plugins.ini with new path: {plugins_ini}")
+    plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Updated plugins.ini with new path: {plugins_ini}")
 
 
 def verify_deploy(
     game_path: Path,
     dll_path: Path,
     wasm_paths: list[Path],
-    backend: str = "metamod",
     target: str = "i686-pc-windows-msvc",
 ) -> bool:
-    """Verify that the plugin backend and WASM modules are correctly deployed."""
-    dest_name = get_dest_name(backend, target)
+    """Verify that the plugin and WASM modules are correctly deployed."""
+    addons_dir = game_path / "cstrike" / "addons"
+    if not addons_dir.exists():
+        addons_dir = game_path / "addons"
 
-    if backend == "standalone":
-        mod_dir = game_path / DEFAULT_MOD
-        if not mod_dir.exists():
-            mod_dir = game_path
-        goldsrc_dir = mod_dir / FRAMEWORK_NAME
+    if not addons_dir.exists():
+        print("Error: Addons directory not found", file=sys.stderr)
+        return False
+
+    if "windows" in target:
+        dest_name = "goldsrc_metamod.dll"
     else:
-        addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
-        if not addons_dir.exists():
-            addons_dir = game_path / ADDONS_DIR_NAME
-        goldsrc_dir = addons_dir / FRAMEWORK_NAME
+        dest_name = "goldsrc_metamod.so"
 
-    dest_path = goldsrc_dir / "bin" / dest_name
-    wasm_target_dir = goldsrc_dir / "plugins"
+    dest_path = addons_dir / "goldsrc" / "bin" / dest_name
+    plugins_ini = addons_dir / "metamod" / "plugins.ini"
+    wasm_target_dir = addons_dir / "goldsrc" / "plugins"
 
     all_ok = True
 
     # Check 1: DLL exists
     if not dest_path.exists():
-        print(f"  [FAIL] Backend DLL not found: {dest_path}")
+        print(f"  [FAIL] DLL not found: {dest_path}")
         all_ok = False
     else:
         # Check 2: Hash matches
         src_hash = hashlib.md5(dll_path.read_bytes()).hexdigest()
         dst_hash = hashlib.md5(dest_path.read_bytes()).hexdigest()
         if src_hash == dst_hash:
-            print(f"  [OK]   Backend DLL hash matches ({dst_hash[:8]}...)")
+            print(f"  [OK]   DLL hash matches ({dst_hash[:8]}...)")
         else:
-            print(f"  [FAIL] Backend DLL hash mismatch: src={src_hash[:8]} dst={dst_hash[:8]}")
+            print(f"  [FAIL] DLL hash mismatch: src={src_hash[:8]} dst={dst_hash[:8]}")
             all_ok = False
 
-    # Check 3: Registration in config
-    if backend == "standalone":
-        liblist_path = game_path / DEFAULT_MOD / "liblist.gam"
-        if not liblist_path.exists():
-            liblist_path = game_path / "liblist.gam"
-
-        if not liblist_path.exists():
-            print(f"  [FAIL] liblist.gam not found: {liblist_path}")
-            all_ok = False
-        else:
-            content = liblist_path.read_text(encoding="utf-8")
-            is_windows = "windows" in target
-            key_name = "gamedll" if is_windows else "gamedll_linux"
-            expected_val = f"goldsrc\\bin\\{dest_name}" if is_windows else f"goldsrc/bin/{dest_name}"
-            expected_line = f'{key_name} "{expected_val}"'
-            found = any(line.strip() == expected_line for line in content.split("\n"))
-            if found:
-                print("  [OK]   Standalone backend registered in liblist.gam")
-            else:
-                print(f"  [FAIL] Standalone backend ({expected_line}) not found in liblist.gam")
-                all_ok = False
+    # Check 3: Plugin in plugins.ini
+    if not plugins_ini.exists():
+        print(f"  [FAIL] plugins.ini not found: {plugins_ini}")
+        all_ok = False
     else:
-        addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
-        if not addons_dir.exists():
-            addons_dir = game_path / ADDONS_DIR_NAME
-        plugins_ini = addons_dir / "metamod" / "plugins.ini"
-        if not plugins_ini.exists():
-            print(f"  [FAIL] plugins.ini not found: {plugins_ini}")
-            all_ok = False
-        else:
-            content = plugins_ini.read_text(encoding="utf-8")
-            prefix = get_platform_prefix(target)
-            expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
+        content = plugins_ini.read_text(encoding="utf-8")
+        prefix = get_platform_prefix(target)
+        expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
 
-            found = any(expected_line in line and not line.strip().startswith(";") for line in content.split("\n"))
-            if found:
-                print("  [OK]   Plugin listed in plugins.ini")
-            else:
-                print(f"  [FAIL] Plugin not found in plugins.ini (expected: {expected_line})")
-                all_ok = False
+        found = False
+        for line in content.split("\n"):
+            if expected_line in line and not line.strip().startswith(";"):
+                found = True
+                break
+
+        if found:
+            print("  [OK]   Plugin listed in plugins.ini")
+        else:
+            print(f"  [FAIL] Plugin not found in plugins.ini (expected: {expected_line})")
+            all_ok = False
 
     # Check 4: WASM plugins hashes
     for wasm_src in wasm_paths:
@@ -268,19 +186,13 @@ def verify_deploy(
     return all_ok
 
 
-def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path, backend: str = "metamod") -> None:
+def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path) -> None:
     """Copy WASM plugins to the server's plugins/ directory."""
-    if backend == "standalone":
-        mod_dir = game_path / DEFAULT_MOD
-        if not mod_dir.exists():
-            mod_dir = game_path
-        wasm_target_dir = mod_dir / FRAMEWORK_NAME / "plugins"
-    else:
-        addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
-        if not addons_dir.exists():
-            addons_dir = game_path / ADDONS_DIR_NAME
-        wasm_target_dir = addons_dir / FRAMEWORK_NAME / "plugins"
+    addons_dir = game_path / "cstrike" / "addons"
+    if not addons_dir.exists():
+        addons_dir = game_path / "addons"
 
+    wasm_target_dir = addons_dir / "goldsrc" / "plugins"
     wasm_target_dir.mkdir(parents=True, exist_ok=True)
 
     for wasm_file in wasm_paths:
@@ -290,66 +202,13 @@ def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path, backend: str = 
             print(f"Copied WASM plugin: {dest}")
 
 
-def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
-    """Resolve HLDS server directory path from CLI, environment, or local config."""
-    # 1. Explicit CLI argument
-    if cli_path:
-        path = Path(cli_path)
-        if path.exists():
-            return path
-        print(f"Error: Path provided via --path does not exist: {cli_path}", file=sys.stderr)
-        sys.exit(1)
-
-    # 2. Environment variable
-    env_path = os.environ.get("GOLDSRC_SERVER_DIR") or os.environ.get("HLDS_DIR")
-    if env_path:
-        path = Path(env_path)
-        if path.exists():
-            print(f"Using server path from environment variable: {path}")
-            return path
-
-    # 3. Local uncommitted config file (deploy.local.toml)
-    local_config = repo_root / "deploy.local.toml"
-    if local_config.exists():
-        try:
-            import tomllib
-        except ImportError:
-            try:
-                import tomli as tomllib
-            except ImportError:
-                tomllib = None
-
-        if tomllib:
-            data = tomllib.loads(local_config.read_text(encoding="utf-8"))
-            server_path = data.get("server_path")
-            if server_path:
-                path = Path(server_path)
-                if path.exists():
-                    print(f"Using server path from {local_config.name}: {path}")
-                    return path
-
-    # 4. Error if no valid path resolved
-    print("Error: No game server path specified!", file=sys.stderr)
-    print("\nPlease provide the server path using one of the following methods:", file=sys.stderr)
-    print('  1. Pass --path argument: python scripts/deploy.py --path "C:\\path\\to\\hlds"', file=sys.stderr)
-    print('  2. Set environment variable: set GOLDSRC_SERVER_DIR="C:\\path\\to\\hlds"', file=sys.stderr)
-    print('  3. Create deploy.local.toml with: server_path = "C:\\\\path\\\\to\\\\hlds"', file=sys.stderr)
-    sys.exit(1)
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs backend and WASM modules")
+    parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs Metamod plugin and WASM modules")
     parser.add_argument(
         "--path",
         type=str,
-        default=None,
-        help="Path to the game/server directory (or set GOLDSRC_SERVER_DIR env var / deploy.local.toml)",
-    )
-    parser.add_argument(
-        "--backend",
-        choices=["metamod", "standalone"],
-        default="metamod",
-        help="Backend to deploy (metamod or standalone, default: metamod)",
+        default=r"C:\Games\CS 1.6 GoldClient",
+        help="Path to the game/server directory",
     )
     parser.add_argument(
         "--no-build",
@@ -369,17 +228,23 @@ def main():
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).parent.parent
-    game_path = resolve_game_path(args.path, repo_root)
-    dest_name = get_dest_name(args.backend, args.target)
+    game_path = Path(args.path)
+    if not game_path.exists():
+        print(f"Error: Path not found: {game_path}", file=sys.stderr)
+        sys.exit(1)
 
-    dll_path = repo_root / "target" / args.target / "release" / dest_name
+    repo_root = Path(__file__).parent.parent
+    if "windows" in args.target:
+        lib_name = "goldsrc_metamod.dll"
+    else:
+        lib_name = "libgoldsrc_metamod.so"
+    dll_path = repo_root / "target" / args.target / "release" / lib_name
     wasm_dir = repo_root / "target" / "wasm32-unknown-unknown" / "release"
     wasm_plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
 
     if args.verify:
-        print(f"Verifying {args.backend} deployment...")
-        if verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target):
+        print("Verifying deployment...")
+        if verify_deploy(game_path, dll_path, wasm_plugins, args.target):
             print("\nAll checks passed!")
         else:
             print("\nSome checks failed!")
@@ -392,14 +257,14 @@ def main():
             sys.exit(1)
         print(f"Using existing library: {dll_path}")
     else:
-        dll_path = build_plugin(backend=args.backend, target=args.target, release=True)
+        dll_path = build_plugin(target=args.target, release=True)
         wasm_plugins = build_wasm_plugins(release=True)
 
-    deploy_plugin(dll_path, game_path, backend=args.backend, target=args.target)
-    deploy_wasm_plugins(wasm_plugins, game_path, backend=args.backend)
+    deploy_plugin(dll_path, game_path, target=args.target)
+    deploy_wasm_plugins(wasm_plugins, game_path)
 
-    print(f"\nVerifying {args.backend} deployment...")
-    if verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target):
+    print("\nVerifying deployment...")
+    if verify_deploy(game_path, dll_path, wasm_plugins, args.target):
         print("\nDeployment verified successfully!")
     else:
         print("\nDeployment verification failed!")
