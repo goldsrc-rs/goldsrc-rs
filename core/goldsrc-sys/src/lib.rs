@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod ffi;
+pub mod log;
 pub mod paths;
 
 pub use config::*;

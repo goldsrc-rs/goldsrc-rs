@@ -21,6 +21,7 @@ mod proxy;
 
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
+use goldsrc_sys::log::LogTarget;
 use goldsrc_sys::{enginefuncs_t, globalvars_t, DLL_FUNCTIONS};
 use std::ffi::{CStr, CString};
 
@@ -155,17 +156,26 @@ fn init_wasm_host() {
         use goldsrc_sys::{paths::PathResolver, GoldSrcConfig};
 
         let sys_config = GoldSrcConfig::load_or_create();
+
+        // ── Initialise the unified logger ──────────────────────────────────
+        goldsrc_sys::log::init(sys_config.logging.clone(), Some(|msg: &str| {
+            backend().server_print(msg);
+        }));
+
+        goldsrc_sys::log_info!(
+            LogTarget::Core,
+            "[standalone] Config loaded from: {}",
+            PathResolver::normalize(&PathResolver::main_config_path())
+        );
+
         let plugin_dir = std::path::PathBuf::from(&sys_config.core.plugins_dir);
         let config_dir = std::path::PathBuf::from(&sys_config.core.configs_dir);
 
-        backend().server_print(&format!(
-            "[GoldSrc.rs Standalone] Config loaded from: {:?}\n",
-            PathResolver::main_config_path()
-        ));
-        backend().server_print(&format!(
-            "[GoldSrc.rs Standalone] Plugin dir: {:?}\n",
-            plugin_dir
-        ));
+        goldsrc_sys::log_info!(
+            LogTarget::Core,
+            "[standalone] Plugin dir: {}",
+            PathResolver::normalize(&plugin_dir)
+        );
 
         if sys_config.wasm.hot_reload {
             let _ = manager.enable_hot_reload(&plugin_dir);
@@ -179,14 +189,16 @@ fn init_wasm_host() {
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
                     match manager.load_plugin(&path) {
-                        Ok(_) => backend().server_print(&format!(
-                            "[GoldSrc.rs Standalone] Loaded plugin: {:?}\n",
+                        Ok(_) => goldsrc_sys::log_info!(
+                            LogTarget::Wasm,
+                            "[standalone] Loaded plugin: {:?}",
                             path.file_name().unwrap_or_default()
-                        )),
-                        Err(e) => backend().server_print(&format!(
-                            "[GoldSrc.rs Standalone] Failed to load {:?}: {e}\n",
+                        ),
+                        Err(e) => goldsrc_sys::log_error!(
+                            LogTarget::Wasm,
+                            "[standalone] Failed to load {:?}: {e}",
                             path.file_name().unwrap_or_default()
-                        )),
+                        ),
                     }
                 }
             }

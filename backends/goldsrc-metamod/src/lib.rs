@@ -36,6 +36,7 @@ pub use vtable::*;
 
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
+use goldsrc_sys::log::LogTarget;
 use std::ffi::c_void;
 use std::ffi::CString;
 
@@ -46,7 +47,7 @@ static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
 static mut G_META_GLOBALS: Option<*mut meta_globals_t> = None;
 static mut WASM_MANAGER: Option<goldsrc_wasm_host::PluginManager> = None;
 
-/// Initialize WASM plugin subsystem
+/// Initialize WASM plugin subsystem and the unified logger.
 pub fn init_wasm_host() {
     goldsrc_wasm_host::set_print_callback(|msg| {
         backend().server_print(msg);
@@ -58,23 +59,37 @@ pub fn init_wasm_host() {
         use goldsrc_sys::{paths::PathResolver, GoldSrcConfig};
 
         let sys_config = GoldSrcConfig::load_or_create();
+
+        // ── Initialise the unified logger ──────────────────────────────────
+        // Register a console callback so log lines also appear in the server
+        // console (deferred via PRINT_QUEUE → hook_start_frame_post).
+        goldsrc_sys::log::init(
+            sys_config.logging.clone(),
+            Some(|msg: &str| {
+                backend().server_print(msg);
+            }),
+        );
+
         let main_cfg_path = PathResolver::main_config_path();
-        backend().server_print(&format!(
-            "[GoldSrc.rs] Loaded configuration from: {:?}\n",
-            main_cfg_path
-        ));
+        goldsrc_sys::log_info!(
+            LogTarget::Core,
+            "[metamod] Config loaded from: {}",
+            PathResolver::normalize(&main_cfg_path)
+        );
 
         let plugin_dir = std::path::PathBuf::from(&sys_config.core.plugins_dir);
         let config_dir = std::path::PathBuf::from(&sys_config.core.configs_dir);
 
-        backend().server_print(&format!(
-            "[GoldSrc.rs] Plugin dir resolved to: {:?}\n",
-            plugin_dir
-        ));
-        backend().server_print(&format!(
-            "[GoldSrc.rs] Config dir resolved to: {:?}\n",
-            config_dir
-        ));
+        goldsrc_sys::log_info!(
+            LogTarget::Core,
+            "[metamod] Plugin dir: {}",
+            PathResolver::normalize(&plugin_dir)
+        );
+        goldsrc_sys::log_info!(
+            LogTarget::Core,
+            "[metamod] Config dir: {}",
+            PathResolver::normalize(&config_dir)
+        );
 
         if sys_config.wasm.hot_reload {
             let _ = manager.enable_hot_reload(&plugin_dir);
@@ -88,23 +103,26 @@ pub fn init_wasm_host() {
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
                     match manager.load_plugin(&path) {
-                        Ok(_) => backend().server_print(&format!(
-                            "[GoldSrc.rs] Loaded WASM plugin: {:?}\n",
+                        Ok(_) => goldsrc_sys::log_info!(
+                            LogTarget::Wasm,
+                            "[metamod] Loaded WASM plugin: {:?}",
                             path.file_name().unwrap_or_default()
-                        )),
-                        Err(e) => backend().server_print(&format!(
-                            "[GoldSrc.rs] Failed to load WASM plugin {:?}: {}\n",
+                        ),
+                        Err(e) => goldsrc_sys::log_error!(
+                            LogTarget::Wasm,
+                            "[metamod] Failed to load WASM plugin {:?}: {}",
                             path.file_name().unwrap_or_default(),
                             e
-                        )),
+                        ),
                     }
                 }
             }
         } else {
-            backend().server_print(&format!(
-                "[GoldSrc.rs] Could not read plugin directory: {:?}\n",
-                plugin_dir
-            ));
+            goldsrc_sys::log_warn!(
+                LogTarget::Wasm,
+                "[metamod] Could not read plugin directory: {}",
+                PathResolver::normalize(&plugin_dir)
+            );
         }
         WASM_MANAGER = Some(manager);
     }

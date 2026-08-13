@@ -1,3 +1,4 @@
+use crate::log::LogConfig;
 use crate::paths::{PathResolver, ADDONS_DIR_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -54,6 +55,8 @@ pub struct GoldSrcConfig {
     pub core: CoreConfig,
     #[serde(default)]
     pub wasm: WasmConfig,
+    #[serde(default)]
+    pub logging: LogConfig,
 }
 
 impl Default for CoreConfig {
