@@ -1,88 +1,111 @@
 # GoldSrc.rs Roadmap
 
-## Stage 1: Foundation & FFI — ✅ Complete
+## v0.1.0 — Foundation & FFI ✅
 
-- [x] Set up Cargo Workspace and CI/CD (build for `i686-pc-windows-msvc` and `i686-unknown-linux-gnu`).
+**Goal:** Establish the Cargo workspace, CI pipeline, and raw C FFI bindings so that a Rust
+binary can be loaded by the GoldSrc engine at all.
+
+- [x] Set up Cargo workspace and CI/CD (Windows `i686-pc-windows-msvc`, Linux `i686-unknown-linux-gnu`).
 - [x] Collect reference headers in `references/` (HLSDK, `meta_api.h`).
 - [x] Write `build.rs` for `goldsrc-sys` that generates Rust structs from C++ headers via `bindgen`.
-- [x] Export entry-point functions `GiveFnptrsToDll` and `Meta_Attach` so Metamod can load our Rust library.
+- [x] Export entry-point functions `GiveFnptrsToDll` and `Meta_Attach` so Metamod can load our library.
 
-## Stage 2: Metamod Backend & Safe Abstractions — ✅ Complete
+## v0.2.0 — Metamod Backend & Engine Hooks ✅
 
-- [x] Wrap logging (`SERVER_PRINT`, `ALERT`). Server should print "Hello from Rust!" to console.
+**Goal:** Prove that Rust code can intercept real GoldSrc engine events through Metamod and interact
+with the live server.
+
+- [x] Wrap logging (`SERVER_PRINT`, `ALERT`). Server prints "Hello from Rust!" to console.
 - [x] Wrap basic engine structures: `edict_t`, `entvars_t`, `CBaseEntity`.
 - [x] Implement hooks for basic events (`DispatchSpawn`, `ClientConnect`, `ClientCommand`) via Metamod.
 - [x] Build VTable-hook system (using offsets from ReHLDS/HamSandwich for Windows/Linux compatibility).
 
-## Stage 3: WebAssembly Plugin Host (Isolation & Hot-Reload) — ✅ Complete
+## v0.3.0 — WebAssembly Plugin Host ✅
+
+**Goal:** Isolate plugin code inside a pure-Rust WASM sandbox with hot-reload, so a crashed plugin
+can never bring down the server.
 
 - [x] Integrate `wasmi` (pure-Rust interpreter runtime) into the core.
 - [x] Design WASI / host bindings (`server_print`) for WASM plugins to communicate with the core.
 - [x] Implement hot-reload: watch `.wasm` files in `addons/metamod-rs/plugins/` and reload on change.
 - [x] Complete plugin lifecycle management (Create, Modify, Delete, Error handling, `on_unload` callback).
 
-## Stage 4: Developer Framework & Host CLI (DX) — ✅ Complete
+## v0.4.0 — Developer Framework & Host CLI ✅
 
-- [x] Host Console Management CLI (`meta-rs` / `mrs` with `lexopt`, `-a/--all` flags, pagination, multi-target).
-- [x] Create `goldsrc-macros` crate with procedural macros (`#[plugin(systems=...)]`, `#[command]`).
+**Goal:** Give plugin authors a productive developer experience: macros, SDK primitives, in-game CLI,
+dependency management, event bus, and automated deployment.
+
+- [x] Host Console Management CLI (`mrs`) with `lexopt`: `load`, `unload`, `reload`, `pause`, `list`, `info`.
+- [x] `goldsrc-macros` crate with procedural macros (`#[plugin(systems=...)]`, `#[command]`).
 - [x] SDK `goldsrc` crate with Flat / Hybrid ECS API for WASM plugins.
-- [x] Plugin DAG Dependency Resolution with SemVer validation (`semver` crate).
+- [x] Plugin DAG dependency resolution with SemVer validation (`semver` crate).
 - [x] Global Event Bus (Pub/Sub) for inter-plugin communication across WASM modules.
 - [x] In-game & Console Command Router (`#[command]`, `dispatch_command`).
 - [x] JSON/TOML configuration file watchers (`configs/` folder auto-reload & event broadcasting).
 - [x] Automated deployment & post-deploy MD5 hash verification script (`deploy.py`).
 
-## Stage 5: Framework, ECS & High-Level DX — ✅ Complete
+## v0.5.0 — Framework Internals & High-Level DX ✅
+
+**Goal:** Polish the host WASM FFI layer, implement ECS, and provide clean high-level Player/Entity
+wrappers so plugin code reads like idiomatic Rust.
 
 - [x] Refactor Host WASM FFI layer (`LoadedPlugin::invoke_two_slices` generic helper).
 - [x] Implement `goldsrc` Flat ECS (Sparse-Set Entity Component System for WASM plugins).
-- [x] High-Level Player & Entity Safe API wrappers (`Player`, `Entity`, `Vector3`).
-- [x] Granular Config Event System (`action`: `created`/`modified`/`deleted`) with private per-plugin config isolation (`configs/plugins/<name>/`).
-- [x] Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and auto-created log directories (`logs/metamod-rs.log`).
+- [x] High-level `Player` & `Entity` safe API wrappers with `Vector3`.
+- [x] Granular Config Event System (`action`: `created`/`modified`/`deleted`) with per-plugin config isolation.
+- [x] Host Logger Service with structured levels (`Trace`, `Info`, `Warn`, `Error`) and auto-created log dirs.
 
-## Stage 6: Architecture Refactoring & Elegant DX — ✅ Completed
+## v0.6.0 — Architecture Restructuring ✅
+
+**Goal:** Reorganize the monolithic workspace into a layered `core / backends / framework` structure
+and eliminate all unsafe initialization boilerplate from plugin authoring.
 
 - [x] Reorganize workspace into `core/`, `backends/`, `framework/`, `tools/`.
-- [x] Rename `metamod-rs` to `goldsrc-metamod`.
+- [x] Rename `metamod-rs` → `goldsrc-metamod`.
 - [x] Optimize WASM payload size via Cargo `profile.release`.
 - [x] Implement WASM Host Imports for safe Engine FFI boundary crossing.
 - [x] Refactor `goldsrc-api` to provide `Player` / `Entity` structs with elegant methods for WASM.
-- [x] Add `#[on_load]` procedural macro to eliminate `unsafe` initialization.
+- [x] Add `#[on_load]` procedural macro to eliminate `unsafe` initialization in plugins.
 
-## Stage 7: Component Model & TOML Architecture — ✅ Complete
+## v0.7.0 — Component Model & TOML Configuration ✅
 
-- [x] Transition `goldsrc-wasm-host` from `wasmi` to `wasmtime` with native JIT execution engine.
-- [x] Adopt WASM Component Model (`wit-bindgen` & `wit-component`) to completely replace `unsafe extern "C"` bridges.
+**Goal:** Replace all raw `extern "C"` WASM bridges with the typed WASM Component Model,
+switch to a central TOML config, and cut binary size by 90% through `wasm-opt`.
+
+- [x] Transition `goldsrc-wasm-host` from `wasmi` to `wasmtime` with native JIT (Cranelift).
+- [x] Adopt WASM Component Model (`wit-bindgen` & `wit-component`) to replace `unsafe extern "C"` bridges.
 - [x] Implement centralized TOML configuration system (`goldsrc.toml`) with dynamic path resolution.
-- [x] Integrate `wasm-opt` pipeline in `build.py` for 90% WASM payload size reduction (~200KB).
+- [x] Integrate `wasm-opt` pipeline in `build.py` for 90% WASM payload size reduction (~200 KB).
 - [x] Implement Capability-based Access Control system (RBAC) in host and SDK.
 - [x] Purge `serde_json` in favor of zero-overhead TOML & Canonical ABI.
 
-## Stage 8: Standalone Backend & Direct Engine Integration — ✅ Complete
+## v0.8.0 — Standalone Backend & Direct Engine Integration ✅
 
-- [x] Implement `goldsrc-standalone` backend bypassing Metamod dependency (proxy GameDLL via `liblist.gam`).
-- [x] Fix Memory Corruption in `GetNewDLLFunctions` (buffer size overflow over engine struct).
+**Goal:** Eliminate the hard Metamod dependency by implementing a proxy GameDLL backend that loads
+directly via `liblist.gam`, proving the architecture works without any third-party plugin loader.
+
+- [x] Implement `goldsrc-standalone` backend (proxy GameDLL loaded via `liblist.gam` `gamedll` key).
+- [x] Fix Memory Corruption in `GetNewDLLFunctions` (buffer size overflow into engine struct).
 - [x] Fix Mutex re-entrancy deadlocks in proxy layer across forwarded engine callbacks.
 - [x] Remove hardcoded developer paths; route all logging through `PathResolver`.
 - [x] Universal GameDLL auto-detection (`mp.dll` / `cs.so`) with `GetEntityAPI2` / `GetEntityAPI` fallbacks.
-- [ ] Dynamic ReHLDS (`ReHLDS_Api`) & ReGameDLL (`ReGameDLL_Api`) detection with HLSDK fallback.
-- [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using reference headers.
-- [ ] Modularize `goldsrc-wasm-host` and `goldsrc-metamod` crates into clean component sub-modules.
-- [ ] Implement advanced declarative macros (`#[command]`, `#[hook]`) with State Injection (`&mut World`).
 
-## Stage 9: Core Refactoring, Safe Abstraction & Unified Logger — 🏗 In Progress
+---
 
-Goal: eliminate code duplication between backends, harden FFI safety, and establish a production-grade
-logging subsystem. After this stage both backends become thin adapters over a shared `framework/goldsrc` core.
+## v0.9.0 — Core Refactoring, Panic Isolation & Unified Logger 🏗 In Progress
+
+**Goal:** Eliminate code duplication between backends, harden the FFI safety boundary so no Rust
+panic can crash HLDS, and introduce a production-grade structured logger. After this milestone both
+backends are thin adapters over a shared `framework/goldsrc` core.
 
 - [ ] **Core Refactoring**: Move MRS CLI, plugin manager, command registration, and event hooks out of
   `goldsrc-standalone` and `goldsrc-metamod` into `framework/goldsrc`. Both backends become thin adapters.
 - [ ] **Panic Isolation**: Wrap every `#[no_mangle] pub unsafe extern "C"` export in `std::panic::catch_unwind`
   to prevent Rust panics from crossing the C-ABI boundary and crashing HLDS.
-- [ ] **Safe Abstraction Layer**: All raw C pointers (`*mut edict_t`, `*const c_char`) must be wrapped in safe
-  Rust types (`Entity`, `Player`, `CStr`/`String`). Plugin-facing API must be fully `unsafe`-free.
-- [ ] **Unified Logger (`goldsrc_log`)**: Implement a structured logger with categories (`Core`, `Proxy`, `Wasm`,
-  `Plugin`) and levels (`Trace`, `Debug`, `Info`, `Warn`, `Error`). Controlled via `goldsrc.toml`:
+- [ ] **Safe Abstraction Layer**: All raw C pointers (`*mut edict_t`, `*const c_char`) wrapped in safe Rust
+  types (`Entity`, `Player`, `CStr`/`String`). Plugin-facing API becomes fully `unsafe`-free.
+- [ ] **Unified Logger (`goldsrc_log`)**: Structured logger with categories (`Core`, `Proxy`, `Wasm`, `Plugin`)
+  and levels (`Trace`, `Debug`, `Info`, `Warn`, `Error`). Controlled via `goldsrc.toml`:
   ```toml
   [logging]
   level = "debug"
@@ -90,33 +113,37 @@ logging subsystem. After this stage both backends become thin adapters over a sh
   console_output = true
   targets = ["core", "wasm"]
   ```
-- [ ] **Path Normalization**: Extend `PathResolver` with a unified normalization method so all paths use a
-  consistent separator regardless of OS (`Path::display()` / `to_slash_lossy()`).
-- [ ] **Purge legacy C artifacts**: Remove `exports.def`, `metamod.def`, `wrapper.c` from `goldsrc-metamod`
-  (obsolete C/MSVC-era files superseded by `#[no_mangle] pub unsafe extern "C"`).
+- [ ] **Path Normalization**: Extend `PathResolver` with a unified normalization method (consistent separator
+  across OS via `Path::display()` / `to_slash_lossy()`).
+- [ ] **Modularize backends**: Break `goldsrc-wasm-host` and `goldsrc-metamod` into clean component sub-modules.
+- [ ] **Advanced macros**: Implement `#[command]` and `#[hook]` with State Injection (`&mut World`).
+- [ ] **Purge legacy C artifacts**: Remove `exports.def`, `metamod.def`, `wrapper.c` from `goldsrc-metamod`.
 
-## Stage 10: Full HLSDK & WASM Host API Coverage — 📝 Planned
+---
 
-Goal: bring engine API coverage from ~15% to production completeness (~80%+) and expose the full
-GoldSrc surface to WASM plugins.
+## v0.10.0 — Full HLSDK & WASM Host API Coverage 📝 Planned
 
-- [ ] **Engine Functions (`enginefuncs_t`)**: Systematically cover the 140+ engine functions
-  (`pfnCreateNamedEntity`, `pfnMessageBegin`, `pfnRegUserMsg`, `pfnTraceLine`, `pfnPrecacheModel`, ...).
-- [ ] **DLL Hooks (`DLL_FUNCTIONS`)**: Expand hook coverage from the current 5 to all 50+ GameDLL callbacks
-  (`TraceAttack`, `PlayerKilled`, `Touch`, `Think`, `Use`, `PlayerPostThink`, ...).
-- [ ] **ReGameDLL / ReHLDS API**: Optional detection and binding to extended ReAPI interfaces for modern
-  CS 1.6 servers running on ReHLDS.
-- [ ] **WASM Bindings (WIT)**: Expose the expanded engine & DLL surface to WASM plugins through typed
-  WIT interfaces:
-  - Console output: `server_print`, `client_print`.
-  - Command registration: `pfnAddServerCommand`, player command hooks.
-  - Entity access: edict coordinates, health, model, weapon, team.
-  - Damage & death hooks: `TraceAttack`, `PlayerKilled`, damage multipliers.
-  - Menu system: `ShowMenu`, `pfnMessageBegin` / `pfnMessageEnd` wrappers.
-- [ ] **Demo plugin validation**: Verify `vip_core` and `admin_system` against the expanded API on a live HLDS.
+**Goal:** Bring engine API coverage from ~15% to production completeness and expose the full GoldSrc
+surface to WASM plugins through typed WIT interfaces.
 
-## Stage 11: Game-Specific Framework (CS 1.6) — 📝 Planned
+- [ ] **Engine Functions (`enginefuncs_t`)**: Cover the 140+ engine functions
+  (`pfnCreateNamedEntity`, `pfnMessageBegin`, `pfnRegUserMsg`, `pfnTraceLine`, `pfnPrecacheModel`, …).
+- [ ] **DLL Hooks (`DLL_FUNCTIONS`)**: Expand from the current 5 to all 50+ GameDLL callbacks
+  (`TraceAttack`, `PlayerKilled`, `Touch`, `Think`, `Use`, `PlayerPostThink`, …).
+- [ ] **ReHLDS / ReGameDLL API**: Dynamic detection and optional binding to extended ReAPI interfaces.
+- [ ] **WASM Bindings (WIT)**: Expose the expanded engine surface to plugins:
+  - Console: `server_print`, `client_print`.
+  - Commands: `pfnAddServerCommand`, per-player command hooks.
+  - Entities: coordinates, health, model, weapon, team.
+  - Damage & death: `TraceAttack`, `PlayerKilled`, damage multipliers.
+  - Menus: `ShowMenu`, `pfnMessageBegin` / `pfnMessageEnd` wrappers.
+- [ ] **Demo plugin validation**: Verify `vip_core` and `admin_system` on a live HLDS with the expanded API.
 
-- [ ] Split the SDK into a core engine module and game-specific extensions.
-- [ ] Create `goldsrc-cstrike` crate (CS 1.6 bindings) for specific entities, weapons, and game events.
+## v0.11.0 — Game-Specific Framework (CS 1.6) 📝 Planned
+
+**Goal:** Layer CS 1.6–specific abstractions on top of the generic engine API so plugin authors
+write game logic, not FFI glue.
+
+- [ ] Split the SDK into a core engine module and game-specific extension crates.
+- [ ] Create `goldsrc-cstrike` crate: CS 1.6 entities, weapons, buy zones, game events.
 - [ ] Provide abstraction layers for game rules, map objectives, round state, and player states.

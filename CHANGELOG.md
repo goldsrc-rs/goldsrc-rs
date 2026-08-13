@@ -5,76 +5,117 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.2.0] - 2026-08-12 (Stage 7: Component Model & TOML Configs)
-
-### Added
-- **WASM Component Model (`wit-bindgen`)**: Fully migrated WASM host and SDK to WebAssembly Component Model (`wit-bindgen` 0.60.0 & `wit-component` 0.256.0), eliminating raw `extern "C"` bridges.
-- **Wasmtime & Cranelift Engine**: Replaced interpreter runtime with `wasmtime` JIT compiler running natively on `i686-pc-windows-msvc`.
-- **TOML Central Configuration (`goldsrc.toml`)**: Introduced `cstrike/addons/goldsrc/goldsrc.toml` auto-generated configuration file for managing host paths, hot-reloading, and config watchers.
-- **WASM Build Optimization**: Added automated `wasm-opt` optimization step in `build.py` reducing WASM plugin size down to ~200KB.
-- **Zero JSON Overhead**: Replaced `serde_json` with TOML for metadata and configs, completely purging `serde_json` from dependencies.
-
-### Changed
-- **Binary Directory**: Renamed plugin binary path from `dlls/` to `bin/` for modern cross-platform clarity.
-
 ## [Unreleased]
 
-### Added (Stage 6)
-- **Architecture Restructuring**: Reorganized the workspace into `core/`, `backends/`, `framework/`, and `tools/` for better maintainability.
-- **WASM Host Imports**: Introduced a safe FFI bridge allowing WASM plugins to call engine functions directly.
-- **Elegant DX**: Added `#[on_load]` procedural macro to eliminate `unsafe` initialization code in plugins.
-- **Plugin Author Field**: Added `author` metadata to `#[plugin]` macro.
-- **Reduced Payload**: Optimized WASM payload sizes via Cargo release profile optimizations.
+## [0.8.0] - 2026-08-13
 
 ### Added
-
-- Initial project scaffolding: Cargo workspace with 5 crates (`goldsrc-sys`, `goldsrc-api`, `goldsrc-metamod-backend`, `goldsrc-wasm-host`, `goldsrc`).
-- MIT license and Rust `.gitignore`.
-- Repository management rules in `AGENTS.md`: branching strategy, commit conventions, PR workflow, branch protection.
-- HLSDK reference headers cloned as git submodule in `references/hlsdk/`.
-- ReHLDS, metamod-r, and GoldSrcMod.Net reference sources cloned in `private/references/`.
-- README.md and ROADMAP.md rewritten in English.
-- `goldsrc-sys` crate with bindgen-generated FFI from HLSDK headers (enginefuncs_t, edict_t, entvars_t, globalvars_t).
-- `goldsrc-api` crate with Engine trait, Plugin trait, Entity/Player handles.
-- `goldsrc-metamod-backend` crate with Engine trait implementation using Metamod API.
-- `goldsrc-wasm-host` crate with PluginRuntime trait and PluginManager.
-- `goldsrc` public framework crate.
-- Single Python setup script (`scripts/setup.py`) for reference repos and SDK detection.
-- `.build-config.toml` generation (gitignored, machine-specific).
-- GitHub Actions CI for Windows and Linux.
-- Auto-format GitHub Action and pre-commit hook.
-- Integrated `wasmi` pure-Rust WebAssembly interpreter into `goldsrc-wasm-host`.
-- Full plugin lifecycle management for WASM modules: `on_load`, `on_unload`, `on_frame` callbacks.
-- File system watcher (`notify`) for multi-directory hot-reloading without server restarts.
-- Engine console logging (`server_print`) integration for WASM host and modules.
-- Metamod `pfnStartFrame` hook integration for WASM module frame ticks.
-- Dynamic versioning (`CARGO_PKG_VERSION`, `GIT_HASH`, `BUILD_TARGET`) via `build.rs` environment variables.
-- Host CLI (`mrs`) commands implemented via `lexopt`: `load`, `unload`, `reload`, `pause`, `unpause`, `list`, `info`.
-- Added procedural macros crate `goldsrc-macros` (`#[plugin]`, `#[command]`).
-- Added WASM SDK `goldsrc` crate with logging macros (`log_info!`, `log_warn!`, `log_err!`).
-- Added SemVer DAG plugin dependency resolution & topological sorting.
-- Added inter-plugin Pub/Sub event bus across WASM modules.
-- Added configuration hot-reloader watching `configs/` with JSON minification and broadcasting.
-- Added automated deployment script `scripts/deploy.py` with MD5 hash verification.
-- Added Git `pre-commit` hook combining `cargo fmt`, `cargo clippy` and `cargo test`.
+- **Standalone Backend** (`goldsrc-standalone`): New proxy GameDLL backend loaded directly by the
+  engine via `liblist.gam` `gamedll` key, eliminating the hard Metamod dependency.
+- **Universal GameDLL Auto-Detection**: Automatically locates `mp.dll` / `cs.so` at runtime with
+  `GetEntityAPI2` / `GetEntityAPI` version fallbacks.
+- **`PathResolver` Integration**: All runtime paths (`plugins/`, `configs/`, `logs/`) resolved
+  relative to the server working directory; no hardcoded absolute paths remain.
 
 ### Fixed
+- **Memory Corruption** in `GetNewDLLFunctions`: 512-byte buffer was overwriting the 20-byte
+  `NEW_DLL_FUNCTIONS` engine struct, causing random HLDS crashes and freezes.
+- **Mutex Re-Entrancy Deadlocks**: Proxy callbacks now release locks before forwarding to the real
+  GameDLL, resolving infinite hang on map load.
 
-- Fixed ReHLDS `fmtlib` crash when printing strings containing `{` or `}` by escaping them to `{{` and `}}`.
-- Fixed GoldSrc CRT console buffer overflow during frame ticks by implementing a rate-limited `PRINT_QUEUE` flushed in `StartFrame_Post`.
-- Resolved all Clippy warnings across the entire Cargo workspace.
+### Removed
+- Hardcoded developer paths (`C:\Users\Administrator\...`) from standalone backend logging.
 
-- Default branch set to `dev` on GitHub.
-- Branch protection enabled on both `main` and `dev`.
-- Squash-and-merge enabled as the default merge strategy.
-- Moved all reference repositories from `private/references/` to `references/` (gitignored).
-- Converted setup scripts from PowerShell/Bash to single Python script.
-- Converted pre-commit hook from Bash to Python.
+## [0.7.0] - 2026-08-12
+
+### Added
+- **Wasmtime JIT Engine**: Replaced `wasmi` interpreter with `wasmtime` + Cranelift for native
+  x86 JIT compilation of WASM plugins.
+- **WASM Component Model**: Migrated host and SDK to `wit-bindgen` 0.60.0 and `wit-component`
+  0.256.0, eliminating all raw `unsafe extern "C"` WASM bridges.
+- **Central TOML Configuration** (`goldsrc.toml`): Auto-generated config file in
+  `cstrike/addons/goldsrc/` managing host paths, hot-reload flags, and config watchers.
+- **Capability-Based Access Control (RBAC)**: Per-plugin capability declarations enforced by the
+  WASM host at load time.
+- **`wasm-opt` Build Pipeline**: Automated size optimization in `build.py` reducing WASM plugin
+  binaries to ~200 KB (90% reduction).
+
+### Removed
+- `serde_json` dependency: replaced entirely by TOML and the Canonical ABI.
+
+### Changed
+- Plugin binary directory renamed from `dlls/` to `bin/`.
+
+## [0.6.0] - 2026-08-11
+
+### Added
+- **Workspace Restructuring**: Reorganized into `core/`, `backends/`, `framework/`, `tools/` layers.
+- **WASM Host Imports**: Safe FFI bridge allowing WASM plugins to call engine functions directly.
+- **`#[on_load]` Macro**: Eliminates `unsafe` initialization boilerplate in plugin entry points.
+- **`author` field**: Added to `#[plugin]` procedural macro metadata.
+
+### Changed
+- Renamed `metamod-rs` crate to `goldsrc-metamod`.
+
+### Performance
+- Optimized WASM payload sizes via Cargo release profile (`lto`, `opt-level = "z"`, `strip`).
+
+## [0.5.0] - 2026-08-10
+
+### Added
+- **Flat ECS**: Sparse-Set Entity Component System in `goldsrc` framework crate for WASM plugins.
+- **High-Level API Wrappers**: `Player`, `Entity`, `Vector3` safe Rust types over raw `edict_t`.
+- **Granular Config Events**: `created` / `modified` / `deleted` actions with per-plugin config
+  directory isolation (`configs/plugins/<name>/`).
+- **Host Logger Service**: Structured log levels (`Trace`, `Info`, `Warn`, `Error`) with
+  auto-created output directories (`logs/metamod-rs.log`).
+- **`invoke_two_slices`**: Generic WASM FFI helper eliminating duplicated slice-passing boilerplate.
+
+## [0.4.0] - 2026-08-09
+
+### Added
+- **Host Management CLI (`mrs`)**: `lexopt`-based console interface with `load`, `unload`, `reload`,
+  `pause`, `unpause`, `list`, `info` commands and `-a/--all` flag.
+- **`goldsrc-macros`** crate: `#[plugin(systems=...)]` and `#[command]` procedural macros.
+- **SDK `goldsrc`** crate: Flat/Hybrid ECS API and logging macros (`log_info!`, `log_warn!`, `log_err!`).
+- **Plugin DAG Dependency Resolution**: SemVer-validated topological sort via `semver` crate.
+- **Global Event Bus**: Pub/Sub inter-plugin communication across WASM module boundaries.
+- **Config Hot-Reloader**: `configs/` directory watcher with event broadcasting.
+- **Deployment Script** (`scripts/deploy.py`): Automated build, copy, and MD5 hash verification.
+- **Pre-Commit Hook**: Python script combining `cargo fmt`, `cargo clippy`, and `cargo test`.
+
+## [0.3.0] - 2026-08-08
+
+### Added
+- **WASM Plugin Host** (`goldsrc-wasm-host`): Integrated `wasmi` pure-Rust interpreter.
+- **Host Bindings**: `server_print` WASI binding for plugins to write to the server console.
+- **Hot-Reload**: `notify`-based file watcher for `.wasm` files; plugins reload without server restart.
+- **Plugin Lifecycle**: Full `on_load` → `on_frame` → `on_unload` callback chain with error isolation.
+
+## [0.2.0] - 2026-08-07
+
+### Added
+- **Metamod Backend**: Full `GiveFnptrsToDll` / `Meta_Attach` / `Meta_Query` implementation.
+- **Engine Hooks**: `DispatchSpawn`, `ClientConnect`, `ClientDisconnect`, `ClientCommand` via Metamod.
+- **VTable Hook System**: Cross-platform (Windows/Linux) vtable patching using offsets from ReHLDS
+  and HamSandwich.
+- **Engine Structure Wrappers**: Safe Rust wrappers over `edict_t`, `entvars_t`, `CBaseEntity`.
+- **Console Logging**: `SERVER_PRINT` / `ALERT` integration. Server prints "Hello from Rust!".
 
 ### Fixed
+- ReHLDS `fmtlib` crash when printing strings containing `{` or `}` (escaped to `{{` / `}}`).
 
-- Corrected TOML config format (array instead of repeated keys).
-- Fixed backslash escaping in setup script.
-- Disabled bindgen layout tests (fail on 32-bit Linux with max_align_t).
-- Fixed LIBCLANG_PATH for Windows CI.
-- Addressed clippy warnings (unused imports, missing Default impl, unnecessary unsafe blocks).
+## [0.1.0] - 2026-08-06
+
+### Added
+- Initial Cargo workspace with crates: `goldsrc-sys`, `goldsrc-api`, `goldsrc-metamod`,
+  `goldsrc-wasm-host`, `goldsrc`, `goldsrc-macros`.
+- `goldsrc-sys`: `bindgen`-generated FFI from HLSDK headers (`enginefuncs_t`, `edict_t`,
+  `entvars_t`, `globalvars_t`).
+- `goldsrc-api`: `Engine` and `Plugin` traits, `Entity` / `Player` handle types.
+- Reference repositories in `references/` (HLSDK, metamod-r, ReHLDS, GoldSrcMod.Net).
+- `scripts/setup.py`: Single Python script for reference repo setup and SDK detection.
+- `.build-config.toml`: Machine-specific gitignored build configuration.
+- GitHub Actions CI for Windows (`i686-pc-windows-msvc`) and Linux (`i686-unknown-linux-gnu`).
+- Auto-format GitHub Action and Python pre-commit hook.
+- MIT License, README, and ROADMAP.
