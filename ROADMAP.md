@@ -58,16 +58,65 @@
 - [x] Implement Capability-based Access Control system (RBAC) in host and SDK.
 - [x] Purge `serde_json` in favor of zero-overhead TOML & Canonical ABI.
 
-## Stage 8: Standalone Backend & Direct Engine Integration — 🏗 In Progress
+## Stage 8: Standalone Backend & Direct Engine Integration — ✅ Complete
 
-- [ ] Implement `goldsrc-standalone` backend bypassing Metamod dependency.
-- [ ] Implement dynamic ReHLDS (`ReHLDS_Api`) & ReGameDLL (`ReGameDLL_Api`) detection with HLSDK fallback.
+- [x] Implement `goldsrc-standalone` backend bypassing Metamod dependency (proxy GameDLL via `liblist.gam`).
+- [x] Fix Memory Corruption in `GetNewDLLFunctions` (buffer size overflow over engine struct).
+- [x] Fix Mutex re-entrancy deadlocks in proxy layer across forwarded engine callbacks.
+- [x] Remove hardcoded developer paths; route all logging through `PathResolver`.
+- [x] Universal GameDLL auto-detection (`mp.dll` / `cs.so`) with `GetEntityAPI2` / `GetEntityAPI` fallbacks.
+- [ ] Dynamic ReHLDS (`ReHLDS_Api`) & ReGameDLL (`ReGameDLL_Api`) detection with HLSDK fallback.
 - [ ] Direct interception of `hlds.exe` / `hlds_linux` interfaces using reference headers.
 - [ ] Modularize `goldsrc-wasm-host` and `goldsrc-metamod` crates into clean component sub-modules.
 - [ ] Implement advanced declarative macros (`#[command]`, `#[hook]`) with State Injection (`&mut World`).
 
-## Stage 9: Game-Specific Framework Extensions — 📝 Planned
+## Stage 9: Core Refactoring, Safe Abstraction & Unified Logger — 🏗 In Progress
+
+Goal: eliminate code duplication between backends, harden FFI safety, and establish a production-grade
+logging subsystem. After this stage both backends become thin adapters over a shared `framework/goldsrc` core.
+
+- [ ] **Core Refactoring**: Move MRS CLI, plugin manager, command registration, and event hooks out of
+  `goldsrc-standalone` and `goldsrc-metamod` into `framework/goldsrc`. Both backends become thin adapters.
+- [ ] **Panic Isolation**: Wrap every `#[no_mangle] pub unsafe extern "C"` export in `std::panic::catch_unwind`
+  to prevent Rust panics from crossing the C-ABI boundary and crashing HLDS.
+- [ ] **Safe Abstraction Layer**: All raw C pointers (`*mut edict_t`, `*const c_char`) must be wrapped in safe
+  Rust types (`Entity`, `Player`, `CStr`/`String`). Plugin-facing API must be fully `unsafe`-free.
+- [ ] **Unified Logger (`goldsrc_log`)**: Implement a structured logger with categories (`Core`, `Proxy`, `Wasm`,
+  `Plugin`) and levels (`Trace`, `Debug`, `Info`, `Warn`, `Error`). Controlled via `goldsrc.toml`:
+  ```toml
+  [logging]
+  level = "debug"
+  file_output = true   # -> cstrike/goldsrc/logs/
+  console_output = true
+  targets = ["core", "wasm"]
+  ```
+- [ ] **Path Normalization**: Extend `PathResolver` with a unified normalization method so all paths use a
+  consistent separator regardless of OS (`Path::display()` / `to_slash_lossy()`).
+- [ ] **Purge legacy C artifacts**: Remove `exports.def`, `metamod.def`, `wrapper.c` from `goldsrc-metamod`
+  (obsolete C/MSVC-era files superseded by `#[no_mangle] pub unsafe extern "C"`).
+
+## Stage 10: Full HLSDK & WASM Host API Coverage — 📝 Planned
+
+Goal: bring engine API coverage from ~15% to production completeness (~80%+) and expose the full
+GoldSrc surface to WASM plugins.
+
+- [ ] **Engine Functions (`enginefuncs_t`)**: Systematically cover the 140+ engine functions
+  (`pfnCreateNamedEntity`, `pfnMessageBegin`, `pfnRegUserMsg`, `pfnTraceLine`, `pfnPrecacheModel`, ...).
+- [ ] **DLL Hooks (`DLL_FUNCTIONS`)**: Expand hook coverage from the current 5 to all 50+ GameDLL callbacks
+  (`TraceAttack`, `PlayerKilled`, `Touch`, `Think`, `Use`, `PlayerPostThink`, ...).
+- [ ] **ReGameDLL / ReHLDS API**: Optional detection and binding to extended ReAPI interfaces for modern
+  CS 1.6 servers running on ReHLDS.
+- [ ] **WASM Bindings (WIT)**: Expose the expanded engine & DLL surface to WASM plugins through typed
+  WIT interfaces:
+  - Console output: `server_print`, `client_print`.
+  - Command registration: `pfnAddServerCommand`, player command hooks.
+  - Entity access: edict coordinates, health, model, weapon, team.
+  - Damage & death hooks: `TraceAttack`, `PlayerKilled`, damage multipliers.
+  - Menu system: `ShowMenu`, `pfnMessageBegin` / `pfnMessageEnd` wrappers.
+- [ ] **Demo plugin validation**: Verify `vip_core` and `admin_system` against the expanded API on a live HLDS.
+
+## Stage 11: Game-Specific Framework (CS 1.6) — 📝 Planned
 
 - [ ] Split the SDK into a core engine module and game-specific extensions.
-- [ ] Create `goldsrc-cstrike` (CS 1.6 bindings) for specific entities, weapons, and game events.
-- [ ] Provide abstraction layers for game rules, map objectives, and player states.
+- [ ] Create `goldsrc-cstrike` crate (CS 1.6 bindings) for specific entities, weapons, and game events.
+- [ ] Provide abstraction layers for game rules, map objectives, round state, and player states.
