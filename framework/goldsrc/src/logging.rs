@@ -8,12 +8,12 @@
 //! # Usage
 //! ```ignore
 //! // In the backend entry point, after the engine is ready:
-//! goldsrc_sys::log::init(config.logging.clone(), move |msg| {
+//! goldsrc::logging::init(config.logging.clone(), move |msg| {
 //!     engine.server_print(msg);
 //! });
 //!
 //! // Anywhere in the codebase:
-//! use goldsrc_sys::log::{LogLevel, LogTarget};
+//! use goldsrc::logging::{LogLevel, LogTarget};
 //! goldsrc_sys::gslog!(LogLevel::Info, LogTarget::Core, "Plugin count: {}", n);
 //! ```
 
@@ -250,42 +250,42 @@ pub fn log_file_path() -> PathBuf {
 #[macro_export]
 macro_rules! gslog {
     ($level:expr, $target:expr, $($arg:tt)*) => {
-        $crate::log::log($level, $target, &format!($($arg)*))
+        $crate::logging::log($level, $target, &format!($($arg)*))
     };
 }
 
 /// Shorthand macros for each log level (target still required).
 #[macro_export]
-macro_rules! log_trace {
+macro_rules! gslog_trace {
     ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::log::LogLevel::Trace, $target, $($arg)*)
+        $crate::gslog!($crate::logging::LogLevel::Trace, $target, $($arg)*)
     };
 }
 
 #[macro_export]
-macro_rules! log_debug {
+macro_rules! gslog_debug {
     ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::log::LogLevel::Debug, $target, $($arg)*)
+        $crate::gslog!($crate::logging::LogLevel::Debug, $target, $($arg)*)
     };
 }
 
 #[macro_export]
-macro_rules! log_info {
+macro_rules! gslog_info {
     ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::log::LogLevel::Info, $target, $($arg)*)
+        $crate::gslog!($crate::logging::LogLevel::Info, $target, $($arg)*)
     };
 }
 
 #[macro_export]
-macro_rules! log_warn {
+macro_rules! gslog_warn {
     ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::log::LogLevel::Warn, $target, $($arg)*)
+        $crate::gslog!($crate::logging::LogLevel::Warn, $target, $($arg)*)
     };
 }
 
 #[macro_export]
-macro_rules! log_error {
+macro_rules! gslog_error {
     ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::log::LogLevel::Error, $target, $($arg)*)
+        $crate::gslog!($crate::logging::LogLevel::Error, $target, $($arg)*)
     };
 }

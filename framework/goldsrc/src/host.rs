@@ -1,7 +1,7 @@
 //! Host runtime orchestrator for GoldSrc.rs backends.
 
-use goldsrc_sys::log::LogTarget;
-use goldsrc_sys::{paths::PathResolver, GoldSrcConfig};
+use crate::logging::LogTarget;
+use crate::{paths::PathResolver, GoldSrcConfig};
 use goldsrc_wasm_host::PluginManager;
 
 pub struct HostRuntime {
@@ -20,10 +20,10 @@ impl HostRuntime {
         let sys_config = GoldSrcConfig::load_or_create();
 
         // Initialise unified logger
-        goldsrc_sys::log::init(sys_config.logging.clone(), Some(print_cb));
+        crate::logging::init(sys_config.logging.clone(), Some(print_cb));
 
         let main_cfg_path = PathResolver::main_config_path();
-        goldsrc_sys::log_info!(
+        crate::gslog_info!(
             LogTarget::Core,
             "[{}] Config loaded from: {}",
             backend_name,
@@ -33,13 +33,13 @@ impl HostRuntime {
         let plugin_dir = std::path::PathBuf::from(&sys_config.core.plugins_dir);
         let config_dir = std::path::PathBuf::from(&sys_config.core.configs_dir);
 
-        goldsrc_sys::log_info!(
+        crate::gslog_info!(
             LogTarget::Core,
             "[{}] Plugin dir: {}",
             backend_name,
             PathResolver::normalize(&plugin_dir)
         );
-        goldsrc_sys::log_info!(
+        crate::gslog_info!(
             LogTarget::Core,
             "[{}] Config dir: {}",
             backend_name,
@@ -59,13 +59,13 @@ impl HostRuntime {
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
                     match manager.load_plugin(&path) {
-                        Ok(_) => goldsrc_sys::log_info!(
+                        Ok(_) => crate::gslog_info!(
                             LogTarget::Wasm,
                             "[{}] Loaded plugin: {:?}",
                             backend_name,
                             path.file_name().unwrap_or_default()
                         ),
-                        Err(e) => goldsrc_sys::log_error!(
+                        Err(e) => crate::gslog_error!(
                             LogTarget::Wasm,
                             "[{}] Failed to load {:?}: {e}",
                             backend_name,

@@ -22,7 +22,7 @@ mod proxy;
 
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
-use goldsrc_sys::log::LogTarget;
+use goldsrc::logging::LogTarget;
 use goldsrc_sys::{enginefuncs_t, globalvars_t, DLL_FUNCTIONS};
 use std::ffi::{CStr, CString};
 
@@ -151,7 +151,7 @@ fn init_wasm_host() {
             HOST_RUNTIME = Some(runtime);
         },
         Err(e) => {
-            goldsrc_sys::log_error!(LogTarget::Core, "{e}");
+            goldsrc::gslog_error!(LogTarget::Core, "{e}");
         }
     }
 }

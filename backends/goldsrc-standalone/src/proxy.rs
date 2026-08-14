@@ -13,7 +13,7 @@ pub fn file_log(msg: &str) {
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(goldsrc_sys::paths::PathResolver::debug_log_path())
+        .open(goldsrc::paths::PathResolver::debug_log_path())
     {
         let _ = writeln!(file, "[Standalone] {}", msg);
     }

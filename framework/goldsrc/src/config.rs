@@ -1,4 +1,4 @@
-use crate::log::LogConfig;
+use crate::logging::LogConfig;
 use crate::paths::{PathResolver, ADDONS_DIR_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME};
 use serde::{Deserialize, Serialize};
 use std::fs;

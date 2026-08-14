@@ -11,6 +11,11 @@ pub mod cli;
 #[cfg(feature = "host")]
 pub mod host;
 
+pub mod config;
+pub mod logging;
+pub mod paths;
+
+pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api;
 pub use goldsrc_api::{auth::Auth, events::*, Engine, Entity, Player, Plugin, Vector3};

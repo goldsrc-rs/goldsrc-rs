@@ -9,11 +9,6 @@ pub mod bindings;
 pub mod manager;
 pub mod plugin;
 
-use std::fs;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::Path;
-
 pub use manager::PluginManager;
 
 static PRINT_CALLBACK: std::sync::RwLock<Option<fn(&str)>> = std::sync::RwLock::new(None);
@@ -34,22 +29,4 @@ pub fn host_log(msg: &str) {
         }
     }
     println!("{}", msg);
-}
-
-pub fn file_log(msg: &str) {
-    use goldsrc_sys::paths::{ADDONS_DIR_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME, LOGS_DIR_NAME};
-    let logs_dir = Path::new(DEFAULT_MOD_DIR)
-        .join(ADDONS_DIR_NAME)
-        .join(FRAMEWORK_NAME)
-        .join(LOGS_DIR_NAME);
-    let _ = fs::create_dir_all(&logs_dir);
-    let log_file_path = logs_dir.join(format!("{}.log", FRAMEWORK_NAME));
-
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_file_path)
-    {
-        let _ = writeln!(file, "{}", msg);
-    }
 }

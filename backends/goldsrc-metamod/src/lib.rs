@@ -37,8 +37,8 @@ mod vtable;
 pub use entity::*;
 pub use vtable::*;
 
+use goldsrc::logging::LogTarget;
 use goldsrc_api::Engine;
-use goldsrc_sys::log::LogTarget;
 use std::ffi::CString;
 
 use meta_types::*;
@@ -59,7 +59,7 @@ pub fn init_wasm_host() {
             HOST_RUNTIME = Some(runtime);
         },
         Err(e) => {
-            goldsrc_sys::log_error!(LogTarget::Core, "{e}");
+            goldsrc::gslog_error!(LogTarget::Core, "{e}");
         }
     }
 }
@@ -214,7 +214,7 @@ pub fn file_log(msg: &str) {
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(goldsrc_sys::paths::PathResolver::debug_log_path())
+        .open(goldsrc::paths::PathResolver::debug_log_path())
     {
         let _ = writeln!(file, "{}", msg);
     }
