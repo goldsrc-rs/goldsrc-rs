@@ -11,3 +11,4 @@ wit-component = { workspace = true }
 wit-parser = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
+notify = { workspace = true }

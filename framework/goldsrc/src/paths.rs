@@ -2,11 +2,17 @@ use std::path::{Path, PathBuf};
 
 /// Centralized framework constants for path resolution.
 pub const FRAMEWORK_NAME: &str = "goldsrc";
+/// Default mod directory (HLDS mod folder name).
 pub const DEFAULT_MOD_DIR: &str = "cstrike";
+/// HLDS addons directory name.
 pub const ADDONS_DIR_NAME: &str = "addons";
+/// Plugins sub-directory name.
 pub const PLUGINS_DIR_NAME: &str = "plugins";
+/// Binaries sub-directory name.
 pub const BIN_DIR_NAME: &str = "bin";
+/// Configs sub-directory name.
 pub const CONFIGS_DIR_NAME: &str = "configs";
+/// Logs sub-directory name.
 pub const LOGS_DIR_NAME: &str = "logs";
 
 /// Centralized helper for resolving directory paths across HLDS environments.

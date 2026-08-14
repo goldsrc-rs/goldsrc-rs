@@ -3,16 +3,22 @@
 //! This is the main entry point for plugin developers. It re-exports
 //! everything you need from the other crates.
 
+/// Flat ECS for plugin state storage.
 pub mod ecs;
 
+/// Shared host CLI (`meta-rs`/`mrs`). Enabled by the `host-cli` feature.
 #[cfg(feature = "host-cli")]
 pub mod cli;
 
+/// Host runtime orchestrator. Enabled by the `host` feature.
 #[cfg(feature = "host")]
 pub mod host;
 
+/// `goldsrc.toml` configuration types and loader.
 pub mod config;
+/// Unified structured logger for backends.
 pub mod logging;
+/// Filesystem path resolution helpers.
 pub mod paths;
 
 pub use config::*;
@@ -24,6 +30,7 @@ pub use goldsrc_sys;
 
 /// Logging subsystem for WASM plugins.
 pub mod log {
+    /// Forwards `msg` to the host logger (WASM) or `println!` (native).
     pub fn print(msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {

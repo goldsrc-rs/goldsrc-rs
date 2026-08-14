@@ -6,11 +6,20 @@ use std::ffi::{c_char, CStr, OsString};
 use std::sync::OnceLock;
 
 /// Backend accessors needed to run the host CLI as a server command.
+///
+/// The backend provides C-compatible argv access, a live handle to its
+/// [`PluginManager`], an output callback and version metadata. Shared by both
+/// backends so the `meta-rs`/`mrs` command set behaves identically.
 pub struct HostCliBackend {
+    /// Returns the current engine-provided argc.
     pub argc: fn() -> i32,
+    /// Returns the engine-provided argv entry at `i`.
     pub argv: fn(i32) -> *const c_char,
+    /// Returns a mutable reference to the backend's plugin manager, if initialised.
     pub manager: fn() -> Option<&'static mut PluginManager>,
+    /// Prints a line to the server console.
     pub print: fn(&str),
+    /// `(package_version, git_hash, build_target)`.
     pub version: (&'static str, &'static str, &'static str),
 }
 
@@ -333,7 +342,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 return;
             }
             for t in targets {
-                if let Some(idx) = manager.find_plugin_index(&t) {
+                if let Some(idx) = manager.find_plugin(&t) {
                     let info = &manager.get_plugins_info()[idx];
                     let clean_path = info.path.to_string_lossy().replace('\\', "/");
                     out(&format!("--- Plugin Info: {} ---\n", info.name));

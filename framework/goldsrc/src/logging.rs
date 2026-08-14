@@ -34,14 +34,20 @@ use std::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
+    /// Most verbose; messages for fine-grained tracing.
     Trace,
+    /// Debug diagnostics.
     Debug,
+    /// Normal operational messages.
     Info,
+    /// Warnings that do not stop execution.
     Warn,
+    /// Errors that may indicate failure.
     Error,
 }
 
 impl LogLevel {
+    /// Returns the fixed-width tag used in log lines (e.g. `"INFO "`).
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Trace => "TRACE",
@@ -68,6 +74,7 @@ pub enum LogTarget {
 }
 
 impl LogTarget {
+    /// Returns the lowercase name used in log lines (e.g. `"core"`).
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Core => "core",
@@ -262,6 +269,7 @@ macro_rules! gslog_trace {
     };
 }
 
+/// Log a `Debug`-level message to the given target.
 #[macro_export]
 macro_rules! gslog_debug {
     ($target:expr, $($arg:tt)*) => {
@@ -269,6 +277,7 @@ macro_rules! gslog_debug {
     };
 }
 
+/// Log an `Info`-level message to the given target.
 #[macro_export]
 macro_rules! gslog_info {
     ($target:expr, $($arg:tt)*) => {
@@ -276,6 +285,7 @@ macro_rules! gslog_info {
     };
 }
 
+/// Log a `Warn`-level message to the given target.
 #[macro_export]
 macro_rules! gslog_warn {
     ($target:expr, $($arg:tt)*) => {
@@ -283,6 +293,7 @@ macro_rules! gslog_warn {
     };
 }
 
+/// Log an `Error`-level message to the given target.
 #[macro_export]
 macro_rules! gslog_error {
     ($target:expr, $($arg:tt)*) => {

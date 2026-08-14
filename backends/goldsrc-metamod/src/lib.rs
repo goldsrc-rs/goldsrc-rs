@@ -28,13 +28,11 @@ static MSVC_EXPORTS: [u8; 204] = *b"\
 ";
 
 mod commands;
-mod entity;
 mod entrypoints;
 mod hooks;
 mod meta_types;
 mod vtable;
 
-pub use entity::*;
 pub use vtable::*;
 
 use goldsrc::logging::LogTarget;

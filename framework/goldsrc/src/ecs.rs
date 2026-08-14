@@ -39,12 +39,14 @@ impl<T> Default for ComponentStorage<T> {
 }
 
 impl<T> ComponentStorage<T> {
+    /// Creates an empty storage pre-sized for the player range.
     pub fn new() -> Self {
         Self {
             dense: Vec::with_capacity(33),
         }
     }
 
+    /// Inserts `component` for `entity`, growing the backing storage as needed.
     pub fn insert(&mut self, entity: EntityId, component: T) {
         let idx = entity.0 as usize;
         if idx >= self.dense.len() {
@@ -53,6 +55,7 @@ impl<T> ComponentStorage<T> {
         self.dense[idx] = Some(component);
     }
 
+    /// Returns a shared reference to `entity`'s component, if present.
     pub fn get(&self, entity: EntityId) -> Option<&T> {
         let idx = entity.0 as usize;
         if idx < self.dense.len() {
@@ -62,6 +65,7 @@ impl<T> ComponentStorage<T> {
         }
     }
 
+    /// Returns a mutable reference to `entity`'s component, if present.
     pub fn get_mut(&mut self, entity: EntityId) -> Option<&mut T> {
         let idx = entity.0 as usize;
         if idx < self.dense.len() {
@@ -71,6 +75,7 @@ impl<T> ComponentStorage<T> {
         }
     }
 
+    /// Removes and returns `entity`'s component, if present.
     pub fn remove(&mut self, entity: EntityId) -> Option<T> {
         let idx = entity.0 as usize;
         if idx < self.dense.len() {
@@ -88,10 +93,12 @@ pub struct World {
 }
 
 impl World {
+    /// Creates an empty world.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Inserts `component` for `entity` into the per-type storage.
     pub fn insert<T: 'static>(&mut self, entity: EntityId, component: T) {
         let type_id = TypeId::of::<T>();
         let storage = self
@@ -106,6 +113,7 @@ impl World {
         storage.insert(entity, component);
     }
 
+    /// Returns a shared reference to `entity`'s component of type `T`, if present.
     pub fn get<T: 'static>(&self, entity: EntityId) -> Option<&T> {
         let type_id = TypeId::of::<T>();
         let storage = self.storages.get(&type_id)?;
@@ -115,6 +123,7 @@ impl World {
         storage.get(entity)
     }
 
+    /// Returns a mutable reference to `entity`'s component of type `T`, if present.
     pub fn get_mut<T: 'static>(&mut self, entity: EntityId) -> Option<&mut T> {
         let type_id = TypeId::of::<T>();
         let storage = self.storages.get_mut(&type_id)?;
@@ -124,6 +133,7 @@ impl World {
         storage.get_mut(entity)
     }
 
+    /// Removes and returns `entity`'s component of type `T`, if present.
     pub fn remove<T: 'static>(&mut self, entity: EntityId) -> Option<T> {
         let type_id = TypeId::of::<T>();
         let storage = self.storages.get_mut(&type_id)?;

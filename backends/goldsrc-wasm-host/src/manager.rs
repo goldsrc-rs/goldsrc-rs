@@ -5,28 +5,45 @@ use std::path::{Path, PathBuf};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Config, Engine};
 
+use notify::Watcher;
 use std::collections::{HashMap, HashSet};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 
+/// Thread-safe registry of capabilities and per-player grants, shared
+/// between the host and WASM plugin host functions.
 #[derive(Default)]
 pub struct CapabilityRegistry {
-    pub registered: HashMap<String, String>, // name -> description
-    pub player_capabilities: HashMap<i32, HashSet<String>>, // player_index -> capabilities
+    /// Registered capability name -> description.
+    pub registered: HashMap<String, String>,
+    /// player_index -> set of granted capability names.
+    pub player_capabilities: HashMap<i32, HashSet<String>>,
 }
 
+/// Wasmtime store state exposed to WASM plugins via host functions.
 #[derive(Clone)]
 pub struct HostState {
+    /// Shared capability registry.
     pub caps: Arc<RwLock<CapabilityRegistry>>,
 }
 
+/// Read-only snapshot of a loaded plugin, used for CLI listing/info.
 pub struct PluginInfo {
+    /// Plugin name.
     pub name: String,
+    /// Path the plugin was loaded from.
     pub path: PathBuf,
+    /// Index in the plugin list.
     pub index: usize,
+    /// Whether the plugin is paused.
     pub is_paused: bool,
+    /// Parsed metadata, if any.
     pub metadata: Option<PluginMetadata>,
+    /// Whether the plugin exports `on_load`.
     pub has_on_load: bool,
+    /// Whether the plugin exports `on_unload`.
     pub has_on_unload: bool,
+    /// Whether the plugin exports `on_frame`.
     pub has_on_frame: bool,
 }
 
@@ -110,25 +127,43 @@ impl api::Host for HostState {
     }
 }
 
+/// Manages the lifecycle of loaded WASM plugins: loading, unloading,
+/// reloading, pausing, frame dispatch and hot-reload via directory watchers.
+///
+/// Not `Send`/`Sync` (holds wasmtime stores) — keep it on the server thread.
 pub struct PluginManager {
     plugins: Vec<LoadedPlugin>,
     engine: Engine,
     caps: Arc<RwLock<CapabilityRegistry>>,
+    event_rx: Receiver<PathBuf>,
+    event_tx: Sender<PathBuf>,
+    watchers: Vec<notify::RecommendedWatcher>,
+    watcher_count: usize,
 }
 
 impl PluginManager {
+    /// Creates an empty plugin manager backed by a fresh wasmtime engine
+    /// with the Component Model enabled.
     pub fn new() -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
         // config.target("pulley32").unwrap();
         let engine = Engine::new(&config)?;
+        let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
         Ok(Self {
             plugins: Vec::new(),
             caps: Arc::new(RwLock::new(CapabilityRegistry::default())),
             engine,
+            event_rx,
+            event_tx,
+            watchers: Vec::new(),
+            watcher_count: 0,
         })
     }
 
+    /// Loads a WASM plugin from `path`. Accepts either a pre-compiled
+    /// component (magic `\0asm`) or a plain core module, which is embedded
+    /// with component metadata first. Calls the plugin's `on_load`.
     pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, String> {
         let bytes = fs::read(&path).map_err(|e| e.to_string())?;
 
@@ -209,25 +244,22 @@ impl PluginManager {
         Ok("Loaded successfully".to_string())
     }
 
-    pub fn unload_plugin<P: AsRef<Path>>(&mut self, path: P) {
-        let p_ref = path.as_ref();
-        let canonical = p_ref.canonicalize().unwrap_or_else(|_| p_ref.to_path_buf());
-        if let Some(idx) = self
-            .plugins
-            .iter()
-            .position(|p| p.path == p_ref || p.path == canonical)
-        {
-            let plugin = self.plugins.remove(idx);
-            crate::host_log(&format!("Unloaded plugin {}", plugin.name));
+    /// Resolves a plugin query (either numeric index or name) to a plugin index.
+    pub fn find_plugin(&self, query: &str) -> Option<usize> {
+        if let Ok(idx) = query.parse::<usize>() {
+            return (idx < self.plugins.len()).then_some(idx);
         }
+        self.plugins.iter().position(|p| p.name == query)
     }
 
+    /// Unloads all loaded plugins and returns a summary message.
     pub fn unload_all_plugins(&mut self) -> String {
         let count = self.plugins.len();
         self.plugins.clear();
         format!("Unloaded {} plugins.", count)
     }
 
+    /// Sets or clears the pause flag on a plugin by name.
     pub fn pause_plugin(&mut self, name: &str, pause: bool) -> Result<String, String> {
         if let Some(plugin) = self.plugins.iter_mut().find(|p| p.name == name) {
             plugin.is_paused = pause;
@@ -237,6 +269,7 @@ impl PluginManager {
         }
     }
 
+    /// Sets or clears the pause flag on every loaded plugin.
     pub fn pause_all_plugins(&mut self, pause: bool) -> String {
         for p in &mut self.plugins {
             p.is_paused = pause;
@@ -244,6 +277,7 @@ impl PluginManager {
         format!("All plugins pause state set to {}", pause)
     }
 
+    /// Returns a snapshot of metadata for all loaded plugins.
     pub fn get_plugins_info(&self) -> Vec<PluginInfo> {
         self.plugins
             .iter()
@@ -261,63 +295,152 @@ impl PluginManager {
             .collect()
     }
 
+    /// Unloads and reloads every loaded plugin from its recorded path.
+    /// Returns a summary counting failures.
     pub fn reload_all_plugins(&mut self) -> String {
-        let count = self.plugins.len();
+        let paths: Vec<PathBuf> = self.plugins.iter().map(|p| p.path.clone()).collect();
+        let count = paths.len();
         self.plugins.clear();
-        format!("Reloaded {} plugins. (Placeholder)", count)
+        let mut failed = 0;
+        for path in &paths {
+            if self.load_plugin(path).is_err() {
+                failed += 1;
+            }
+        }
+        format!("Reloaded {} plugins ({} failed).", count - failed, failed)
     }
 
+    /// Reloads a single plugin by name or index.
     pub fn reload_plugin_by_query(&mut self, query: &str) -> Result<String, String> {
-        Ok(format!("Reloaded plugin '{}'. (Placeholder)", query))
+        let idx = self
+            .find_plugin(query)
+            .ok_or_else(|| format!("Plugin '{}' not found", query))?;
+        let path = self.plugins[idx].path.clone();
+        let name = self.plugins[idx].name.clone();
+        self.plugins.remove(idx);
+        match self.load_plugin(&path) {
+            Ok(_) => Ok(format!("Reloaded '{}'", name)),
+            Err(e) => Err(format!("Reload of '{}' failed: {}", name, e)),
+        }
     }
 
-    pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, _path: P) -> Result<(), String> {
+    /// Reloads the plugin whose recorded path matches `path`. Used by the
+    /// hot-reload watcher; failures are logged, not returned.
+    fn reload_plugin_path(&mut self, path: &Path) {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if let Some(idx) = self
+            .plugins
+            .iter()
+            .position(|p| p.path == path || p.path.canonicalize().is_ok_and(|c| c == canonical))
+        {
+            let name = self.plugins[idx].name.clone();
+            let path = self.plugins[idx].path.clone();
+            self.plugins.remove(idx);
+            match self.load_plugin(&path) {
+                Ok(_) => crate::host_log(&format!("Hot-reloaded plugin '{}'", name)),
+                Err(e) => crate::host_log(&format!("Hot-reload of '{}' failed: {}", name, e)),
+            }
+        }
+    }
+
+    /// Spawns a `notify` watcher on `dir` that forwards changed files with
+    /// extension `ext` to the event channel, drained in [`on_server_frame`].
+    ///
+    /// [`on_server_frame`]: PluginManager::on_server_frame
+    fn spawn_watcher<P: AsRef<Path>>(&mut self, dir: P, ext: &'static str) -> Result<(), String> {
+        let dir = dir.as_ref().to_path_buf();
+        let tx = self.event_tx.clone();
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            if let Ok(event) = res {
+                for path in event.paths {
+                    if path
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|e| e == ext)
+                    {
+                        let _ = tx.send(path);
+                    }
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+        watcher
+            .watch(&dir, notify::RecursiveMode::NonRecursive)
+            .map_err(|e| e.to_string())?;
+
+        self.watchers.push(watcher);
+        self.watcher_count += 1;
         Ok(())
     }
 
-    pub fn enable_config_watcher<P: AsRef<Path>>(&mut self, _path: P) -> Result<(), String> {
-        Ok(())
+    /// Watches `dir` for changed `.wasm` files and reloads matching plugins
+    /// on the next server frame.
+    pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), String> {
+        self.spawn_watcher(dir, "wasm")
     }
 
+    /// Watches `dir` for changed `.toml` files. Change events are drained in
+    /// [`on_server_frame`], where `.wasm` events trigger reloads.
+    ///
+    /// [`on_server_frame`]: PluginManager::on_server_frame
+    pub fn enable_config_watcher<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), String> {
+        self.spawn_watcher(dir, "toml")
+    }
+
+    /// Dispatches a server command to all plugins.
     pub fn dispatch_command(&mut self, cmd: &str, args: &str) -> bool {
         self.call_on_command(cmd, args)
     }
 
+    /// Drains watcher events (reloading changed `.wasm` plugins) then ticks
+    /// every plugin's `on_frame`. Call once per server frame.
     pub fn on_server_frame(&mut self) {
+        while let Ok(path) = self.event_rx.try_recv() {
+            if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
+                self.reload_plugin_path(&path);
+            }
+        }
         self.call_on_frame();
     }
 
+    /// Loads a plugin by filesystem path (string form of [`load_plugin`]).
+    ///
+    /// [`load_plugin`]: PluginManager::load_plugin
     pub fn load_plugin_by_name(&mut self, query: &str) -> Result<String, String> {
         let path = PathBuf::from(query);
         self.load_plugin(path)
     }
 
+    /// Unloads a single plugin by name or index.
     pub fn unload_plugin_by_query(&mut self, query: &str) -> Result<String, String> {
-        let path = PathBuf::from(query);
-        self.unload_plugin(path);
-        Ok(format!("Unloaded '{}'", query))
+        let idx = self
+            .find_plugin(query)
+            .ok_or_else(|| format!("Plugin '{}' not found", query))?;
+        let plugin = self.plugins.remove(idx);
+        Ok(format!("Unloaded '{}'", plugin.name))
     }
 
-    pub fn find_plugin_index(&self, name: &str) -> Option<usize> {
-        self.plugins.iter().position(|p| p.name == name)
-    }
-
+    /// Returns `(loaded_plugins, active_watchers)` for status displays.
     pub fn get_status_info(&self) -> (usize, usize) {
-        (self.plugins.len(), 0)
+        (self.plugins.len(), self.watcher_count)
     }
 
+    /// Calls `on_frame` on every (non-paused) plugin.
     pub fn call_on_frame(&mut self) {
         for plugin in &mut self.plugins {
             let _ = plugin.call_on_frame();
         }
     }
 
+    /// Calls `on_event` on every (non-paused) plugin.
     pub fn call_on_event(&mut self, name: &str, data: &[u8]) {
         for plugin in &mut self.plugins {
             let _ = plugin.call_on_event(name, data);
         }
     }
 
+    /// Calls `on_command` on every (non-paused) plugin. Returns `false`
+    /// (reserved for future "command handled" signalling).
     pub fn call_on_command(&mut self, cmd: &str, args: &str) -> bool {
         for plugin in &mut self.plugins {
             let _ = plugin.call_on_command(cmd, args);

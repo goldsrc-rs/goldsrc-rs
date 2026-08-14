@@ -3,14 +3,19 @@ use crate::paths::{PathResolver, ADDONS_DIR_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAM
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+/// The `[core]` section of `goldsrc.toml` — filesystem layout paths.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoreConfig {
+    /// Mod directory relative to the game root (e.g. `cstrike`).
     #[serde(default = "default_mod_dir")]
     pub mod_dir: String,
+    /// Directory holding WASM plugins.
     #[serde(default = "default_plugins_dir")]
     pub plugins_dir: String,
+    /// Directory holding per-plugin configs.
     #[serde(default = "default_configs_dir")]
     pub configs_dir: String,
+    /// Directory holding log output.
     #[serde(default = "default_logs_dir")]
     pub logs_dir: String,
 }
@@ -37,10 +42,13 @@ fn default_logs_dir() -> String {
     )
 }
 
+/// The `[wasm]` section of `goldsrc.toml` — WASM runtime behaviour.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WasmConfig {
+    /// Watch the plugins dir and auto-reload changed `.wasm` files.
     #[serde(default = "default_true")]
     pub hot_reload: bool,
+    /// Watch the configs dir for `.toml` changes.
     #[serde(default = "default_true")]
     pub config_watcher: bool,
 }
@@ -49,12 +57,16 @@ fn default_true() -> bool {
     true
 }
 
+/// Top-level `goldsrc.toml` configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GoldSrcConfig {
+    /// Filesystem layout paths.
     #[serde(default)]
     pub core: CoreConfig,
+    /// WASM runtime behaviour.
     #[serde(default)]
     pub wasm: WasmConfig,
+    /// Logger settings.
     #[serde(default)]
     pub logging: LogConfig,
 }

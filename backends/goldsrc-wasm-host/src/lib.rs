@@ -5,8 +5,11 @@
 //! Uses `wasmtime` (with `pulley32`) as the pure-Rust WASM runtime for maximum compatibility
 //! with 32-bit HLDS. Implements the WASM Component Model via `wit-bindgen`.
 
+/// Generated wasmtime bindings for the `goldsrc` WIT world.
 pub mod bindings;
+/// Plugin lifecycle management and hot-reload.
 pub mod manager;
+/// Loaded plugin instance and metadata types.
 pub mod plugin;
 
 pub use manager::PluginManager;
