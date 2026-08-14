@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
 goldsrc-wasm-host = { workspace = true }
-lexopt = "0.3"
+goldsrc = { workspace = true, features = ["host-cli"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Memory", "Win32_Foundation"] }

@@ -137,79 +137,23 @@ impl Engine for StandaloneBackend {
 // WASM Host initialization
 // ============================================================================
 
-static mut WASM_MANAGER: Option<goldsrc_wasm_host::PluginManager> = None;
+static mut HOST_RUNTIME: Option<goldsrc::host::HostRuntime> = None;
 
 fn init_wasm_host() {
-    goldsrc_wasm_host::set_print_callback(|msg| {
+    match goldsrc::host::HostRuntime::init("standalone", |msg| {
         backend().server_print(msg);
-    });
-
-    unsafe {
-        let mut manager = match goldsrc_wasm_host::PluginManager::new() {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("[GoldSrc.rs Standalone] Failed to initialize PluginManager: {e}");
-                return;
-            }
-        };
-
-        use goldsrc_sys::{paths::PathResolver, GoldSrcConfig};
-
-        let sys_config = GoldSrcConfig::load_or_create();
-
-        // ── Initialise the unified logger ──────────────────────────────────
-        goldsrc_sys::log::init(sys_config.logging.clone(), Some(|msg: &str| {
-            backend().server_print(msg);
-        }));
-
-        goldsrc_sys::log_info!(
-            LogTarget::Core,
-            "[standalone] Config loaded from: {}",
-            PathResolver::normalize(&PathResolver::main_config_path())
-        );
-
-        let plugin_dir = std::path::PathBuf::from(&sys_config.core.plugins_dir);
-        let config_dir = std::path::PathBuf::from(&sys_config.core.configs_dir);
-
-        goldsrc_sys::log_info!(
-            LogTarget::Core,
-            "[standalone] Plugin dir: {}",
-            PathResolver::normalize(&plugin_dir)
-        );
-
-        if sys_config.wasm.hot_reload {
-            let _ = manager.enable_hot_reload(&plugin_dir);
+    }) {
+        Ok(runtime) => unsafe {
+            HOST_RUNTIME = Some(runtime);
+        },
+        Err(e) => {
+            goldsrc_sys::log_error!(LogTarget::Core, "{e}");
         }
-        if sys_config.wasm.config_watcher {
-            let _ = manager.enable_config_watcher(&config_dir);
-        }
-
-        if let Ok(entries) = std::fs::read_dir(&plugin_dir) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
-                    match manager.load_plugin(&path) {
-                        Ok(_) => goldsrc_sys::log_info!(
-                            LogTarget::Wasm,
-                            "[standalone] Loaded plugin: {:?}",
-                            path.file_name().unwrap_or_default()
-                        ),
-                        Err(e) => goldsrc_sys::log_error!(
-                            LogTarget::Wasm,
-                            "[standalone] Failed to load {:?}: {e}",
-                            path.file_name().unwrap_or_default()
-                        ),
-                    }
-                }
-            }
-        }
-
-        WASM_MANAGER = Some(manager);
     }
 }
 
 fn wasm_manager() -> Option<&'static mut goldsrc_wasm_host::PluginManager> {
-    unsafe { WASM_MANAGER.as_mut() }
+    unsafe { HOST_RUNTIME.as_mut().map(|r| r.manager_mut()) }
 }
 
 // ============================================================================

@@ -10,3 +10,9 @@ goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
 goldsrc-wasm-host = { workspace = true, optional = true }
 goldsrc-macros = { workspace = true }
+lexopt = { workspace = true, optional = true }
+
+[features]
+# Enable the host-side management runtime and CLI.
+host = ["goldsrc-wasm-host"]
+host-cli = ["host", "lexopt"]

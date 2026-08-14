@@ -5,6 +5,12 @@
 
 pub mod ecs;
 
+#[cfg(feature = "host-cli")]
+pub mod cli;
+
+#[cfg(feature = "host")]
+pub mod host;
+
 pub use ecs::*;
 pub use goldsrc_api;
 pub use goldsrc_api::{auth::Auth, events::*, Engine, Entity, Player, Plugin, Vector3};
