@@ -2,8 +2,78 @@
 
 use goldsrc_wasm_host::PluginManager;
 use lexopt::Arg;
+use std::ffi::{c_char, CStr, OsString};
+use std::sync::OnceLock;
 
-pub fn print_mrs_help<F: FnMut(&str)>(mut out: F) {
+/// Backend accessors needed to run the host CLI as a server command.
+pub struct HostCliBackend {
+    pub argc: fn() -> i32,
+    pub argv: fn(i32) -> *const c_char,
+    pub manager: fn() -> Option<&'static mut PluginManager>,
+    pub print: fn(&str),
+    pub version: (&'static str, &'static str, &'static str),
+}
+
+static HOST_CLI: OnceLock<HostCliBackend> = OnceLock::new();
+
+/// Initialize the shared host CLI backend accessors. Call once at backend init.
+pub fn init_host_cli(backend: HostCliBackend) {
+    let _ = HOST_CLI.set(backend);
+}
+
+/// Shared server-command handler for `meta-rs` / `mrs`.
+///
+/// # Safety
+/// Registered as a C server command; the engine provides the argv accessors.
+pub unsafe extern "C" fn handle_host_command() {
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(backend) = HOST_CLI.get() else {
+            return;
+        };
+        let argc = (backend.argc)();
+        if argc == 0 {
+            return;
+        }
+        let mut raw_args = Vec::new();
+        for i in 0..argc {
+            let arg_ptr = (backend.argv)(i);
+            if !arg_ptr.is_null() {
+                if let Ok(cstr) = CStr::from_ptr(arg_ptr).to_str() {
+                    raw_args.push(OsString::from(cstr));
+                }
+            }
+        }
+        dispatch_host_command(
+            raw_args,
+            (backend.manager)(),
+            backend.version,
+            backend.print,
+        );
+    }));
+    if let Err(err) = res {
+        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = err.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+        if let Some(backend) = HOST_CLI.get() {
+            (backend.print)(&format!(
+                "[GoldSrc.rs PANIC] Caught panic in CLI Command: {}\n",
+                err_msg
+            ));
+        }
+    }
+}
+
+/// Register `meta-rs` / `mrs` server commands pointing at the shared handler.
+pub fn register_host_commands(mut add: impl FnMut(&str, unsafe extern "C" fn())) {
+    add("meta-rs", handle_host_command);
+    add("mrs", handle_host_command);
+}
+
+pub fn print_host_help<F: FnMut(&str)>(mut out: F) {
     out("--- GoldSrc.rs (meta-rs / mrs) Management CLI ---\n");
     out("Usage: mrs <COMMAND> [OPTIONS] [TARGET]\n\n");
     out("Commands:\n");
@@ -29,7 +99,7 @@ pub fn print_mrs_help<F: FnMut(&str)>(mut out: F) {
     out("  -a, --all                 Target all loaded plugins (for unload/reload/pause)\n");
 }
 
-pub fn dispatch_mrs_command<F: FnMut(&str)>(
+pub fn dispatch_host_command<F: FnMut(&str)>(
     raw_args: Vec<std::ffi::OsString>,
     manager: Option<&mut PluginManager>,
     version_info: (&str, &str, &str),
@@ -52,11 +122,11 @@ pub fn dispatch_mrs_command<F: FnMut(&str)>(
     let command = match parser.next() {
         Ok(Some(Arg::Value(val))) => val.to_string_lossy().to_lowercase(),
         Ok(Some(Arg::Short('h') | Arg::Long("help"))) => {
-            print_mrs_help(out);
+            print_host_help(out);
             return;
         }
         _ => {
-            print_mrs_help(out);
+            print_host_help(out);
             return;
         }
     };
@@ -323,7 +393,7 @@ pub fn dispatch_mrs_command<F: FnMut(&str)>(
             ));
         }
         _ => {
-            print_mrs_help(out);
+            print_host_help(out);
         }
     }
 }

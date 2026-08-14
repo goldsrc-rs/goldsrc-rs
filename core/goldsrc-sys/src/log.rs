@@ -70,9 +70,9 @@ pub enum LogTarget {
 impl LogTarget {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Core => "core ",
+            Self::Core => "core",
             Self::Proxy => "proxy",
-            Self::Wasm => "wasm ",
+            Self::Wasm => "wasm",
             Self::Plugin => "plugin",
         }
     }

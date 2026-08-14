@@ -16,6 +16,7 @@
 
 #![allow(static_mut_refs)]
 
+mod commands;
 mod engine_api;
 mod proxy;
 
@@ -73,6 +74,9 @@ macro_rules! call_engfunc_ret {
 }
 
 static PRINT_QUEUE: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub(crate) use call_engfunc;
+pub(crate) use call_engfunc_ret;
 
 impl Engine for StandaloneBackend {
     fn spawn_entity(&self, classname: &str) -> Option<goldsrc_api::Entity> {
@@ -152,7 +156,7 @@ fn init_wasm_host() {
     }
 }
 
-fn wasm_manager() -> Option<&'static mut goldsrc_wasm_host::PluginManager> {
+pub(crate) fn wasm_manager() -> Option<&'static mut goldsrc_wasm_host::PluginManager> {
     unsafe { HOST_RUNTIME.as_mut().map(|r| r.manager_mut()) }
 }
 
@@ -284,6 +288,8 @@ pub unsafe extern "C" fn GiveFnptrsToDll(
         // 3. Initialize WASM host.
         init_wasm_host();
         backend().server_print("[GoldSrc.rs Standalone] WASM Host initialized.\n");
+        // 4. Register mrs/meta-rs server commands.
+        commands::register_cli_commands();
         backend().server_print("[GoldSrc.rs Standalone] Hello from Rust! (Standalone Mode)\n");
     });
 }
