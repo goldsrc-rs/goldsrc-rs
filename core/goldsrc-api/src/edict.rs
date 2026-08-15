@@ -19,6 +19,7 @@
 
 #![allow(dead_code)]
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::ffi::CStr;
 
 /// Validated handle to a GoldSrc engine entity.

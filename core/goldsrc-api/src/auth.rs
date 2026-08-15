@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use crate::caps::CAPS;
 
 #[cfg(target_arch = "wasm32")]
