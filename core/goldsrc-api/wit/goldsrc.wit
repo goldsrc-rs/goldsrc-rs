@@ -64,6 +64,9 @@ world goldsrc-plugin {
     /// Invoked once when the plugin is loaded by the engine.
     export on-load: func();
 
+    /// Invoked once before the plugin is unloaded or reloaded.
+    export on-unload: func();
+
     /// Invoked on every frame tick (StartFrame).
     export on-frame: func();
 

@@ -2,6 +2,7 @@ use crate::bindings::GoldsrcPlugin;
 use crate::manager::HostState;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use wasmtime::component::Component;
 use wasmtime::Store;
 
 /// Metadata structure exported by WASM plugins generated via the `#[plugin]` macro.
@@ -74,6 +75,8 @@ pub struct LoadedPlugin {
     pub store: Store<HostState>,
     /// Generated component bindings for calling the plugin.
     pub bindings: GoldsrcPlugin,
+    /// Compiled component used to inspect which exports exist.
+    pub(crate) component: Component,
 }
 
 impl LoadedPlugin {
@@ -82,12 +85,22 @@ impl LoadedPlugin {
         self.bindings.call_on_load(&mut self.store)
     }
 
+    /// Invokes the plugin's `on_unload` export, if present.
+    pub fn call_on_unload(&mut self) -> wasmtime::Result<()> {
+        self.bindings.call_on_unload(&mut self.store)
+    }
+
     /// Invokes the plugin's `on_frame` export (skipped if paused/poisoned).
+    /// On trap/panic marks the plugin poisoned and logs once.
     pub fn call_on_frame(&mut self) -> wasmtime::Result<()> {
         if self.is_paused || self.is_poisoned {
             return Ok(());
         }
-        self.bindings.call_on_frame(&mut self.store)
+        let res = self.bindings.call_on_frame(&mut self.store);
+        if let Err(ref e) = res {
+            self.poison(e);
+        }
+        res
     }
 
     /// Invokes the plugin's `on_event` export (skipped if paused/poisoned).
@@ -95,8 +108,13 @@ impl LoadedPlugin {
         if self.is_paused || self.is_poisoned {
             return Ok(());
         }
-        self.bindings
-            .call_on_event(&mut self.store, event_name, data)
+        let res = self
+            .bindings
+            .call_on_event(&mut self.store, event_name, data);
+        if let Err(ref e) = res {
+            self.poison(e);
+        }
+        res
     }
 
     /// Invokes the plugin's `on_command` export (skipped if paused/poisoned).
@@ -104,7 +122,26 @@ impl LoadedPlugin {
         if self.is_paused || self.is_poisoned {
             return Ok(());
         }
-        self.bindings
-            .call_on_command(&mut self.store, cmd_name, args)
+        let res = self
+            .bindings
+            .call_on_command(&mut self.store, cmd_name, args);
+        if let Err(ref e) = res {
+            self.poison(e);
+        }
+        res
+    }
+
+    /// Returns whether the component exports a top-level function `name`.
+    pub fn has_export(&self, name: &str) -> bool {
+        self.component.get_export(None, name).is_some()
+    }
+
+    /// Marks the plugin poisoned on a trap/panic and logs once.
+    fn poison(&mut self, err: &wasmtime::Error) {
+        self.is_poisoned = true;
+        crate::host_log(&format!(
+            "Plugin '{}' panicked and was poisoned: {}",
+            self.name, err
+        ));
     }
 }

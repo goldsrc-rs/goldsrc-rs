@@ -52,6 +52,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     );
 
     let mut on_load_fn = quote! {};
+    let mut on_unload_fn = quote! {};
     let mut on_frame_fn = quote! {};
     let mut on_event_fn = quote! {};
     let mut on_command_fn = quote! {};
@@ -62,6 +63,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     for item in &mut input_impl.items {
         if let ImplItem::Fn(method) = item {
             let mut is_on_load = false;
+            let mut is_on_unload = false;
             let mut is_on_frame = false;
             let mut is_on_event = false;
             let mut cmd_name = None;
@@ -70,6 +72,9 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             method.attrs.retain(|attr| {
                 if attr.path().is_ident("on_load") {
                     is_on_load = true;
+                    false
+                } else if attr.path().is_ident("on_unload") {
+                    is_on_unload = true;
                     false
                 } else if attr.path().is_ident("on_frame") {
                     is_on_frame = true;
@@ -99,6 +104,9 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             if is_on_load {
                 on_load_fn = quote! { #struct_name::#fn_name(); };
+            }
+            if is_on_unload {
+                on_unload_fn = quote! { #struct_name::#fn_name(); };
             }
             if is_on_frame {
                 on_frame_fn = quote! { #struct_name::#fn_name(); };
@@ -145,6 +153,10 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #on_load_fn
             }
 
+            fn on_unload() {
+                #on_unload_fn
+            }
+
             fn on_frame() {
                 #on_frame_fn
             }
@@ -174,6 +186,11 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn on_load(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item // Passed through to be parsed by #[plugin]
+}
+
+#[proc_macro_attribute]
+pub fn on_unload(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item // Passed through to be parsed by #[plugin]
 }
 

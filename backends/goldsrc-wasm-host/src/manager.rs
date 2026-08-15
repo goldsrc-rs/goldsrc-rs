@@ -7,8 +7,10 @@ use wasmtime::component::{Component, Linker};
 use wasmtime::{Config, Engine};
 
 use notify::Watcher;
+use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// Wasmtime store state exposed to WASM plugins via host functions.
 pub struct HostState {
@@ -137,7 +139,12 @@ pub struct PluginManager {
     event_tx: Sender<PathBuf>,
     watchers: Vec<notify::RecommendedWatcher>,
     watcher_count: usize,
+    last_reload: HashMap<PathBuf, Instant>,
 }
+
+/// Minimum gap between two hot-reloads of the same file. Compilers write in
+/// several passes, so a rebuild would otherwise reload a half-written file.
+const RELOAD_DEBOUNCE: Duration = Duration::from_millis(150);
 
 impl PluginManager {
     /// Creates an empty plugin manager backed by a fresh wasmtime engine
@@ -156,6 +163,7 @@ impl PluginManager {
             event_tx,
             watchers: Vec::new(),
             watcher_count: 0,
+            last_reload: HashMap::new(),
         })
     }
 
@@ -234,6 +242,7 @@ impl PluginManager {
             metadata,
             store,
             bindings,
+            component,
         };
 
         plugin.call_on_load().map_err(|e| e.to_string())?;
@@ -250,10 +259,21 @@ impl PluginManager {
         self.plugins.iter().position(|p| p.name == query)
     }
 
+    /// Calls `on_unload` (if exported) and removes the plugin at `idx`.
+    fn unload_plugin_at(&mut self, idx: usize) -> LoadedPlugin {
+        let mut plugin = self.plugins.remove(idx);
+        if plugin.has_export("on-unload") {
+            let _ = plugin.call_on_unload();
+        }
+        plugin
+    }
+
     /// Unloads all loaded plugins and returns a summary message.
     pub fn unload_all_plugins(&mut self) -> String {
         let count = self.plugins.len();
-        self.plugins.clear();
+        while !self.plugins.is_empty() {
+            self.unload_plugin_at(self.plugins.len() - 1);
+        }
         format!("Unloaded {} plugins.", count)
     }
 
@@ -286,9 +306,9 @@ impl PluginManager {
                 index,
                 is_paused: p.is_paused,
                 metadata: p.metadata.clone(),
-                has_on_load: true,
-                has_on_unload: false,
-                has_on_frame: true,
+                has_on_load: p.has_export("on-load"),
+                has_on_unload: p.has_export("on-unload"),
+                has_on_frame: p.has_export("on-frame"),
             })
             .collect()
     }
@@ -298,7 +318,9 @@ impl PluginManager {
     pub fn reload_all_plugins(&mut self) -> String {
         let paths: Vec<PathBuf> = self.plugins.iter().map(|p| p.path.clone()).collect();
         let count = paths.len();
-        self.plugins.clear();
+        while !self.plugins.is_empty() {
+            self.unload_plugin_at(self.plugins.len() - 1);
+        }
         let mut failed = 0;
         for path in &paths {
             if self.load_plugin(path).is_err() {
@@ -315,7 +337,7 @@ impl PluginManager {
             .ok_or_else(|| format!("Plugin '{}' not found", query))?;
         let path = self.plugins[idx].path.clone();
         let name = self.plugins[idx].name.clone();
-        self.plugins.remove(idx);
+        self.unload_plugin_at(idx);
         match self.load_plugin(&path) {
             Ok(_) => Ok(format!("Reloaded '{}'", name)),
             Err(e) => Err(format!("Reload of '{}' failed: {}", name, e)),
@@ -333,12 +355,25 @@ impl PluginManager {
         {
             let name = self.plugins[idx].name.clone();
             let path = self.plugins[idx].path.clone();
-            self.plugins.remove(idx);
+            self.unload_plugin_at(idx);
             match self.load_plugin(&path) {
                 Ok(_) => crate::host_log(&format!("Hot-reloaded plugin '{}'", name)),
                 Err(e) => crate::host_log(&format!("Hot-reload of '{}' failed: {}", name, e)),
             }
         }
+    }
+
+    /// Debounced wrapper around [`reload_plugin_path`]: ignores events for a
+    /// file reloaded less than [`RELOAD_DEBOUNCE`] ago.
+    fn reload_plugin_path_debounced(&mut self, path: &Path) {
+        let now = Instant::now();
+        if let Some(last) = self.last_reload.get(path) {
+            if now.duration_since(*last) < RELOAD_DEBOUNCE {
+                return;
+            }
+        }
+        self.last_reload.insert(path.to_path_buf(), now);
+        self.reload_plugin_path(path);
     }
 
     /// Spawns a `notify` watcher on `dir` that forwards changed files with
@@ -390,12 +425,18 @@ impl PluginManager {
         self.call_on_command(cmd, args)
     }
 
-    /// Drains watcher events (reloading changed `.wasm` plugins) then ticks
-    /// every plugin's `on_frame`. Call once per server frame.
+    /// Drains watcher events (reloading changed `.wasm` plugins, debounced)
+    /// then ticks every plugin's `on_frame`. `.toml` events are forwarded to
+    /// plugins as `on_event("config_changed", <path>)`. Call once per frame.
     pub fn on_server_frame(&mut self) {
         while let Ok(path) = self.event_rx.try_recv() {
-            if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
-                self.reload_plugin_path(&path);
+            match path.extension().and_then(|s| s.to_str()) {
+                Some("wasm") => self.reload_plugin_path_debounced(&path),
+                Some("toml") => {
+                    let data = path.to_string_lossy().as_bytes().to_vec();
+                    self.call_on_event("config_changed", &data);
+                }
+                _ => {}
             }
         }
         self.call_on_frame();
@@ -414,7 +455,7 @@ impl PluginManager {
         let idx = self
             .find_plugin(query)
             .ok_or_else(|| format!("Plugin '{}' not found", query))?;
-        let plugin = self.plugins.remove(idx);
+        let plugin = self.unload_plugin_at(idx);
         Ok(format!("Unloaded '{}'", plugin.name))
     }
 
