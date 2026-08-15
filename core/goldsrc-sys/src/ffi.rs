@@ -9,6 +9,37 @@
 /// and every `unsafe extern "C"` hook callback registered with the engine.
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+/// Marker wrapper to make a `&'static T` value `Sync` when it is only ever
+/// accessed from a single thread (the GoldSrc engine is single-threaded).
+///
+/// # Safety
+/// The wrapped reference must never be shared across threads. This holds for
+/// the engine-provided globals/function tables, which are set once at init and
+/// only read from the server thread afterwards.
+pub struct SyncWrapper<T: ?Sized>(T);
+
+// SAFETY: `T` is a `&'static` reference to a value that outlives all calls;
+// access happens only on the single server thread.
+unsafe impl<T: ?Sized> Sync for SyncWrapper<T> {}
+
+// SAFETY: same reasoning as `Sync` — never moved to another thread, and the
+// wrapped `&'static` target outlives all uses on the server thread.
+unsafe impl<T: ?Sized> Send for SyncWrapper<T> {}
+
+impl<T: Sized> SyncWrapper<T> {
+    /// Wrap a value.
+    pub const fn new(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ?Sized> std::ops::Deref for SyncWrapper<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
 /// Executes `f` inside [`std::panic::catch_unwind`], returning `default` if
 /// a panic occurs. The panic payload is reported via `eprintln!` which writes
 /// directly to stderr — this always works even before the engine is fully

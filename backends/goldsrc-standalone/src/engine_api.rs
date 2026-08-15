@@ -9,6 +9,7 @@
 use goldsrc_sys::enginefuncs_t;
 
 /// Unified engine API abstraction resolved at runtime.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum EngineApiTier {
     /// ReHLDS detected: extended API available.
     Rehlds,
@@ -17,28 +18,30 @@ pub enum EngineApiTier {
 }
 
 /// Detected tier for the current server environment.
-static mut ENGINE_TIER: EngineApiTier = EngineApiTier::Vanilla;
-static mut G_ENGFUNCS: Option<enginefuncs_t> = None;
-static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
+static ENGINE_TIER: std::sync::OnceLock<EngineApiTier> = std::sync::OnceLock::new();
+static G_ENGFUNCS: std::sync::OnceLock<goldsrc_sys::ffi::SyncWrapper<&'static enginefuncs_t>> =
+    std::sync::OnceLock::new();
+static G_GLOBALS: std::sync::OnceLock<
+    goldsrc_sys::ffi::SyncWrapper<&'static goldsrc_sys::globalvars_t>,
+> = std::sync::OnceLock::new();
 
 /// Initialize engine functions received from the engine on DLL load.
 ///
 /// # Safety
 /// `engfuncs` and `globals` must be valid pointers provided by the engine.
 pub unsafe fn init(engfuncs: *mut enginefuncs_t, globals: *mut goldsrc_sys::globalvars_t) {
-    unsafe {
-        if !engfuncs.is_null() {
-            G_ENGFUNCS = Some(*engfuncs);
-        }
-        if !globals.is_null() {
-            G_GLOBALS = Some(*globals);
-        }
-
-        // Attempt ReHLDS detection via the exported symbol `RehldsApi`.
-        // ReHLDS exports this from `swds.dll` (Windows) / `engine_i486.so` (Linux).
-        let tier = detect_rehlds();
-        ENGINE_TIER = tier;
+    if !engfuncs.is_null() {
+        let leaked: &'static _ = Box::leak(Box::new(unsafe { *engfuncs }));
+        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(leaked));
     }
+    if !globals.is_null() {
+        let leaked: &'static _ = Box::leak(Box::new(unsafe { *globals }));
+        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(leaked));
+    }
+
+    // Attempt ReHLDS detection via the exported symbol `RehldsApi`.
+    // ReHLDS exports this from `swds.dll` (Windows) / `engine_i486.so` (Linux).
+    let _ = ENGINE_TIER.set(detect_rehlds());
 }
 
 /// Returns the current engine functions table.
@@ -46,11 +49,9 @@ pub unsafe fn init(engfuncs: *mut enginefuncs_t, globals: *mut goldsrc_sys::glob
 /// # Panics
 /// Panics if called before `init`.
 pub fn engfuncs() -> &'static enginefuncs_t {
-    unsafe {
-        G_ENGFUNCS
-            .as_ref()
-            .expect("[GoldSrc.rs Standalone] Engine not initialized")
-    }
+    G_ENGFUNCS
+        .get()
+        .expect("[GoldSrc.rs Standalone] Engine not initialized")
 }
 
 /// Returns the global variables table.
@@ -59,20 +60,16 @@ pub fn engfuncs() -> &'static enginefuncs_t {
 /// Panics if called before `init`.
 #[allow(dead_code)]
 pub fn globals() -> &'static goldsrc_sys::globalvars_t {
-    unsafe {
-        G_GLOBALS
-            .as_ref()
-            .expect("[GoldSrc.rs Standalone] Globals not initialized")
-    }
+    G_GLOBALS
+        .get()
+        .expect("[GoldSrc.rs Standalone] Globals not initialized")
 }
 
 /// Returns a string description of the detected engine tier.
 pub fn tier_name() -> &'static str {
-    unsafe {
-        match ENGINE_TIER {
-            EngineApiTier::Rehlds => "ReHLDS (extended API)",
-            EngineApiTier::Vanilla => "Vanilla HLDS (standard API)",
-        }
+    match ENGINE_TIER.get().unwrap_or(&EngineApiTier::Vanilla) {
+        EngineApiTier::Rehlds => "ReHLDS (extended API)",
+        EngineApiTier::Vanilla => "Vanilla HLDS (standard API)",
     }
 }
 

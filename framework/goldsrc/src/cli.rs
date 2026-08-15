@@ -15,8 +15,6 @@ pub struct HostCliBackend {
     pub argc: fn() -> i32,
     /// Returns the engine-provided argv entry at `i`.
     pub argv: fn(i32) -> *const c_char,
-    /// Returns a mutable reference to the backend's plugin manager, if initialised.
-    pub manager: fn() -> Option<&'static mut PluginManager>,
     /// Prints a line to the server console.
     pub print: fn(&str),
     /// `(package_version, git_hash, build_target)`.
@@ -52,12 +50,9 @@ pub unsafe extern "C" fn handle_host_command() {
                 }
             }
         }
-        dispatch_host_command(
-            raw_args,
-            (backend.manager)(),
-            backend.version,
-            backend.print,
-        );
+        crate::host::HostRuntime::with_manager(|manager| {
+            dispatch_host_command(raw_args, manager, backend.version, backend.print);
+        });
     }));
     if let Err(err) = res {
         let err_msg = if let Some(s) = err.downcast_ref::<&str>() {

@@ -14,8 +14,6 @@
 //! gamedll "addons/goldsrc/bin/goldsrc_standalone.dll"
 //! ```
 
-#![allow(static_mut_refs)]
-
 mod commands;
 mod engine_api;
 mod proxy;
@@ -148,23 +146,12 @@ impl Engine for StandaloneBackend {
 // WASM Host initialization
 // ============================================================================
 
-static mut HOST_RUNTIME: Option<goldsrc::host::HostRuntime> = None;
-
 fn init_wasm_host() {
-    match goldsrc::host::HostRuntime::init("standalone", |msg| {
+    if let Err(e) = goldsrc::host::HostRuntime::init("standalone", |msg| {
         backend().server_print(msg);
     }) {
-        Ok(runtime) => unsafe {
-            HOST_RUNTIME = Some(runtime);
-        },
-        Err(e) => {
-            goldsrc::gslog_error!(LogTarget::Core, "{e}");
-        }
+        goldsrc::gslog_error!(LogTarget::Core, "{e}");
     }
-}
-
-pub(crate) fn wasm_manager() -> Option<&'static mut goldsrc_wasm_host::PluginManager> {
-    unsafe { HOST_RUNTIME.as_mut().map(|r| r.manager_mut()) }
 }
 
 // ============================================================================
@@ -175,35 +162,47 @@ unsafe extern "C" fn hook_start_frame() {
     // SAFETY: forward_start_frame does not unwind; catch_unwind guards the ABI boundary.
     catch_ffi_panic("hook_start_frame", (), || {
         proxy::forward_start_frame();
-        if let Some(manager) = wasm_manager() {
-            manager.on_server_frame();
-        }
+        goldsrc::host::HostRuntime::on_server_frame();
+        drain_print_queue();
     });
 }
 
-#[allow(dead_code)]
-unsafe extern "C" fn hook_start_frame_post() {
-    catch_ffi_panic("hook_start_frame_post", (), || {
-        // Drain the deferred print queue.
-        let message = {
-            let mut queue = match PRINT_QUEUE.lock() {
-                Ok(q) => q,
-                Err(e) => e.into_inner(),
-            };
-            if queue.is_empty() {
-                return;
-            }
-            queue.remove(0)
+/// Drain deferred server prints with fmtlib-safe escaping.
+///
+/// ReHLDS routes `ServerPrint` output through fmtlib: `%` and `{}` from plugin
+/// text would throw and crash the server, so they are escaped before printing.
+fn drain_print_queue() {
+    let messages = {
+        let mut queue = match PRINT_QUEUE.lock() {
+            Ok(q) => q,
+            Err(e) => e.into_inner(),
         };
+        if queue.is_empty() {
+            return;
+        }
+        std::mem::take(&mut *queue)
+    };
+    for message in messages {
+        let safe = message
+            .replace('%', "%%")
+            .replace('{', "{{")
+            .replace('}', "}}")
+            .replace('\r', "")
+            .replace('\n', " ");
+        let mut end = safe.len().min(400);
+        while end > 0 && !safe.is_char_boundary(end) {
+            end -= 1;
+        }
+        let final_msg = format!("{}\n", safe[..end].trim_end());
         unsafe {
             let funcs = engine_api::engfuncs();
             if let Some(f) = funcs.pfnServerPrint {
-                if let Ok(cstr) = CString::new(message.as_str()) {
+                if let Ok(cstr) = CString::new(final_msg) {
                     f(cstr.as_ptr());
                 }
             }
         }
-    });
+    }
 }
 
 unsafe extern "C" fn hook_client_connect(
@@ -214,9 +213,11 @@ unsafe extern "C" fn hook_client_connect(
 ) -> i32 {
     catch_ffi_panic("hook_client_connect", 1, || {
         let result = proxy::forward_client_connect(edict, name, address, reject_reason);
-        if let Some(manager) = wasm_manager() {
-            manager.call_on_event("client_connect", &[]);
-        }
+        goldsrc::host::HostRuntime::with_manager(|m| {
+            if let Some(manager) = m {
+                manager.call_on_event("client_connect", &[]);
+            }
+        });
         result
     })
 }
@@ -224,33 +225,39 @@ unsafe extern "C" fn hook_client_connect(
 unsafe extern "C" fn hook_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
     catch_ffi_panic("hook_client_disconnect", (), || {
         proxy::forward_client_disconnect(edict);
-        if let Some(manager) = wasm_manager() {
-            manager.call_on_event("client_disconnect", &[]);
-        }
+        goldsrc::host::HostRuntime::with_manager(|m| {
+            if let Some(manager) = m {
+                manager.call_on_event("client_disconnect", &[]);
+            }
+        });
     });
 }
 
 unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
     catch_ffi_panic("hook_client_command", (), || {
         proxy::forward_client_command(edict);
-        if let Some(manager) = wasm_manager() {
-            unsafe {
-                let funcs = engine_api::engfuncs();
-                let cmd_ptr = funcs.pfnCmd_Args.map(|f| f()).unwrap_or(std::ptr::null());
-                let cmd_str = if !cmd_ptr.is_null() {
-                    CStr::from_ptr(cmd_ptr).to_string_lossy().into_owned()
-                } else {
-                    String::new()
-                };
-                let name_ptr = funcs.pfnCmd_Argv.map(|f| f(0)).unwrap_or(std::ptr::null());
-                let name_str = if !name_ptr.is_null() {
-                    CStr::from_ptr(name_ptr).to_string_lossy().into_owned()
-                } else {
-                    String::new()
-                };
+        let cmd_str;
+        let name_str;
+        {
+            let funcs = engine_api::engfuncs();
+            let cmd_ptr = funcs.pfnCmd_Args.map(|f| f()).unwrap_or(std::ptr::null());
+            cmd_str = if !cmd_ptr.is_null() {
+                CStr::from_ptr(cmd_ptr).to_string_lossy().into_owned()
+            } else {
+                String::new()
+            };
+            let name_ptr = funcs.pfnCmd_Argv.map(|f| f(0)).unwrap_or(std::ptr::null());
+            name_str = if !name_ptr.is_null() {
+                CStr::from_ptr(name_ptr).to_string_lossy().into_owned()
+            } else {
+                String::new()
+            };
+        }
+        goldsrc::host::HostRuntime::with_manager(|m| {
+            if let Some(manager) = m {
                 manager.dispatch_command(&name_str, &cmd_str);
             }
-        }
+        });
     });
 }
 

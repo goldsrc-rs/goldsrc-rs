@@ -1,9 +1,8 @@
 //! Engine hook callbacks for the Metamod backend.
 
-use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
 
-use crate::{backend, call_engfunc, call_engfunc_ret, engfuncs, wasm_manager, PRINT_QUEUE};
+use crate::{call_engfunc, call_engfunc_ret, engfuncs, PRINT_QUEUE};
 
 /// Hook for DispatchSpawn - called when an entity spawns.
 ///
@@ -23,7 +22,7 @@ pub unsafe extern "C" fn hook_spawn_post(_edict: *mut goldsrc_sys::edict_t) -> i
 
 /// Post-hook for StartFrame.
 pub unsafe extern "C" fn hook_start_frame_post() {
-    let message = {
+    let messages = {
         let mut queue = match PRINT_QUEUE.lock() {
             Ok(q) => q,
             Err(e) => e.into_inner(),
@@ -31,7 +30,7 @@ pub unsafe extern "C" fn hook_start_frame_post() {
         if queue.is_empty() {
             return;
         }
-        queue.remove(0)
+        std::mem::take(&mut *queue)
     };
 
     // =========================================================================================
@@ -56,21 +55,23 @@ pub unsafe extern "C" fn hook_start_frame_post() {
     // 3. `%` is escaped as `%%`.
     // =========================================================================================
 
-    let safe_msg = message
-        .replace("%", "%%")
-        .replace("{", "{{")
-        .replace("}", "}}")
-        .replace("\r", "")
-        .replace("\n", " ");
+    for message in messages {
+        let safe_msg = message
+            .replace('%', "%%")
+            .replace('{', "{{")
+            .replace('}', "}}")
+            .replace('\r', "")
+            .replace('\n', " ");
 
-    let mut end = safe_msg.len().min(400);
-    while end > 0 && !safe_msg.is_char_boundary(end) {
-        end -= 1;
-    }
+        let mut end = safe_msg.len().min(400);
+        while end > 0 && !safe_msg.is_char_boundary(end) {
+            end -= 1;
+        }
 
-    let final_msg = format!("{}\n", safe_msg[..end].trim_end());
-    if let Ok(msg) = std::ffi::CString::new(final_msg) {
-        call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+        let final_msg = format!("{}\n", safe_msg[..end].trim_end());
+        if let Ok(msg) = std::ffi::CString::new(final_msg) {
+            call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+        }
     }
 }
 
@@ -85,7 +86,8 @@ pub unsafe extern "C" fn hook_client_connect(
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
 ) -> goldsrc_sys::qboolean {
-    0
+    // SAFETY: catch_unwind guards the ABI boundary.
+    catch_ffi_panic("hook_client_connect", 0, || 0)
 }
 
 /// Post-hook for ClientConnect.
@@ -120,7 +122,8 @@ pub unsafe extern "C" fn hook_client_disconnect_post(_entity: *mut goldsrc_sys::
 /// `_entity` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
 pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    // SAFETY: catch_unwind guards the ABI boundary; engine calls are safe at this point.
+    catch_ffi_panic("hook_client_command", (), || {
         let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
         if argc == 0 {
             return;
@@ -136,32 +139,24 @@ pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t)
                 } else {
                     ""
                 };
-                if let Some(manager) = wasm_manager() {
-                    manager.dispatch_command(cmd_str, args_str);
-                }
+                goldsrc::host::HostRuntime::with_manager(|m| {
+                    if let Some(manager) = m {
+                        manager.dispatch_command(cmd_str, args_str);
+                    }
+                });
             }
         }
-    }));
+    });
 }
 
 /// Hook for StartFrame - called every server frame.
 pub unsafe extern "C" fn hook_start_frame() {
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        if let Some(manager) = wasm_manager() {
-            manager.on_server_frame();
-        }
-    }));
-    if let Err(err) = res {
-        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
-            s.to_string()
-        } else if let Some(s) = err.downcast_ref::<String>() {
-            s.clone()
-        } else {
-            "Unknown panic".to_string()
-        };
-        backend().server_print(&format!(
-            "[GoldSrc.rs PANIC] Caught panic in StartFrame: {}\n",
-            err_msg
-        ));
-    }
+    // SAFETY: catch_unwind guards the ABI boundary; engine calls are safe at this point.
+    catch_ffi_panic("hook_start_frame", (), || {
+        goldsrc::host::HostRuntime::with_manager(|m| {
+            if let Some(manager) = m {
+                manager.on_server_frame();
+            }
+        });
+    });
 }

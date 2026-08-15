@@ -8,9 +8,18 @@ pub struct HostRuntime {
     manager: PluginManager,
 }
 
+thread_local! {
+    static RUNTIME: std::cell::RefCell<Option<HostRuntime>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
+
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration and hot reload watchers.
-    pub fn init(backend_name: &str, print_cb: fn(&str)) -> Result<Self, String> {
+    ///
+    /// Stores the runtime in a thread-local (the GoldSrc engine is single-threaded,
+    /// so all hooks run on the same thread). Call once at backend init.
+    pub fn init(backend_name: &str, print_cb: fn(&str)) -> Result<(), String> {
         goldsrc_wasm_host::set_print_callback(print_cb);
 
         let mut manager = PluginManager::new().map_err(|e| {
@@ -76,21 +85,27 @@ impl HostRuntime {
             }
         }
 
-        Ok(Self { manager })
+        let runtime = Self { manager };
+        RUNTIME.with(|cell| {
+            *cell.borrow_mut() = Some(runtime);
+        });
+        Ok(())
     }
 
-    /// Access inner PluginManager.
-    pub fn manager_mut(&mut self) -> &mut PluginManager {
-        &mut self.manager
-    }
-
-    /// Access inner PluginManager immutably.
-    pub fn manager(&self) -> &PluginManager {
-        &self.manager
+    /// Run `f` with exclusive access to the `PluginManager`, if initialized.
+    ///
+    /// The engine is single-threaded, so `RefCell` gives safe interior
+    /// mutability without the aliasing UB of a `static mut`.
+    pub fn with_manager<R>(f: impl FnOnce(Option<&mut PluginManager>) -> R) -> R {
+        RUNTIME.with(|cell| f(cell.borrow_mut().as_mut().map(|r| &mut r.manager)))
     }
 
     /// Tick plugins frame event.
-    pub fn on_server_frame(&mut self) {
-        self.manager.on_server_frame();
+    pub fn on_server_frame() {
+        Self::with_manager(|m| {
+            if let Some(manager) = m {
+                manager.on_server_frame();
+            }
+        });
     }
 }

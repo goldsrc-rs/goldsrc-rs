@@ -1,7 +1,5 @@
 //! Metamod backend implementation for GoldSrc.rs.
 
-#![allow(static_mut_refs)]
-
 // ============================================================================
 // MSVC Linker Directives
 //
@@ -33,29 +31,27 @@ use std::ffi::CString;
 
 use meta_types::*;
 
-static mut G_ENGFUNCS: Option<goldsrc_sys::enginefuncs_t> = None;
-static mut G_GLOBALS: Option<goldsrc_sys::globalvars_t> = None;
-static mut G_META_GLOBALS: Option<*mut meta_globals_t> = None;
-static mut HOST_RUNTIME: Option<goldsrc::host::HostRuntime> = None;
+static G_ENGFUNCS: std::sync::OnceLock<
+    goldsrc_sys::ffi::SyncWrapper<&'static goldsrc_sys::enginefuncs_t>,
+> = std::sync::OnceLock::new();
+static G_GLOBALS: std::sync::OnceLock<
+    goldsrc_sys::ffi::SyncWrapper<&'static goldsrc_sys::globalvars_t>,
+> = std::sync::OnceLock::new();
+thread_local! {
+    static G_META_GLOBALS: std::cell::RefCell<Option<*mut meta_globals_t>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
 
 pub static PRINT_QUEUE: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 /// Initialize WASM plugin subsystem and the unified logger.
 pub fn init_wasm_host() {
-    match goldsrc::host::HostRuntime::init("metamod", |msg| {
+    if let Err(e) = goldsrc::host::HostRuntime::init("metamod", |msg| {
         backend().server_print(msg);
     }) {
-        Ok(runtime) => unsafe {
-            HOST_RUNTIME = Some(runtime);
-        },
-        Err(e) => {
-            goldsrc::gslog_error!(LogTarget::Core, "{e}");
-        }
+        goldsrc::gslog_error!(LogTarget::Core, "{e}");
     }
-}
-
-pub fn wasm_manager() -> Option<&'static mut goldsrc_wasm_host::PluginManager> {
-    unsafe { HOST_RUNTIME.as_mut().map(|r| r.manager_mut()) }
 }
 
 /// # Safety
@@ -64,35 +60,41 @@ pub unsafe fn init_backend(
     engfuncs: *mut goldsrc_sys::enginefuncs_t,
     globals: *mut goldsrc_sys::globalvars_t,
 ) {
-    unsafe {
-        if !engfuncs.is_null() {
-            G_ENGFUNCS = Some(*engfuncs);
-        }
-        if !globals.is_null() {
-            G_GLOBALS = Some(*globals);
-        }
+    // Copy the engine-provided structs into leaked boxes; they are set once and
+    // then only read, so a leaked 'static reference is sound and avoids the
+    // aliasing UB of `static mut` accessors.
+    if !engfuncs.is_null() {
+        let leaked: &'static _ = Box::leak(Box::new(unsafe { *engfuncs }));
+        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(leaked));
+    }
+    if !globals.is_null() {
+        let leaked: &'static _ = Box::leak(Box::new(unsafe { *globals }));
+        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(leaked));
     }
 }
 
 pub fn engfuncs() -> &'static goldsrc_sys::enginefuncs_t {
-    unsafe { G_ENGFUNCS.as_ref().expect("Backend not initialized") }
+    G_ENGFUNCS.get().expect("Backend not initialized")
 }
 
 pub fn globals() -> &'static goldsrc_sys::globalvars_t {
-    unsafe { G_GLOBALS.as_ref().expect("Backend not initialized") }
+    G_GLOBALS.get().expect("Backend not initialized")
 }
 
 pub fn meta_globals() -> &'static mut meta_globals_t {
-    unsafe {
-        G_META_GLOBALS
-            .expect("Meta globals not initialized")
-            .as_mut()
-            .expect("Meta globals pointer is null")
-    }
+    G_META_GLOBALS
+        .with(|c| {
+            let guard = c.borrow();
+            // SAFETY: pointer set once by Metamod; single-threaded engine.
+            unsafe { guard.map(|p| &mut *p) }
+        })
+        .expect("Meta globals not initialized")
 }
 
 pub fn set_meta_globals(ptr: *mut meta_globals_t) {
-    unsafe { G_META_GLOBALS = Some(ptr) };
+    G_META_GLOBALS.with(|c| {
+        *c.borrow_mut() = Some(ptr);
+    });
 }
 
 macro_rules! call_engfunc {
