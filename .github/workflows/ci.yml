@@ -39,6 +39,9 @@ jobs:
       - name: Run clippy
         run: cargo clippy --target i686-pc-windows-msvc --workspace -- -D warnings
 
+      - name: Run tests (host target)
+        run: cargo test --workspace
+
   build-linux:
     name: Build (Linux)
     runs-on: ubuntu-latest
