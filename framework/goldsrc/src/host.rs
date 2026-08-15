@@ -17,12 +17,18 @@ thread_local! {
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration and hot reload watchers.
     ///
-    /// Stores the runtime in a thread-local (the GoldSrc engine is single-threaded,
-    /// so all hooks run on the same thread). Call once at backend init.
-    pub fn init(backend_name: &str, print_cb: fn(&str)) -> Result<(), String> {
+    /// `engine` is the backend's [`goldsrc_api::EngineOps`] bridge — it gives
+    /// WASM plugins access to the real game state. Stores the runtime in a
+    /// thread-local (the GoldSrc engine is single-threaded, so all hooks run
+    /// on the same thread). Call once at backend init.
+    pub fn init(
+        backend_name: &str,
+        print_cb: fn(&str),
+        engine: std::sync::Arc<dyn goldsrc_api::EngineOps>,
+    ) -> Result<(), String> {
         goldsrc_wasm_host::set_print_callback(print_cb);
 
-        let mut manager = PluginManager::new().map_err(|e| {
+        let mut manager = PluginManager::new(engine).map_err(|e| {
             format!("[GoldSrc.rs {backend_name}] Failed to init PluginManager: {e}")
         })?;
 

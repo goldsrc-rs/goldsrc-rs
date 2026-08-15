@@ -47,9 +47,15 @@ pub static PRINT_QUEUE: goldsrc::backend::PrintQueue = goldsrc::backend::PrintQu
 
 /// Initialize WASM plugin subsystem and the unified logger.
 pub fn init_wasm_host() {
-    if let Err(e) = goldsrc::host::HostRuntime::init("metamod", |msg| {
-        backend().server_print(msg);
-    }) {
+    let engine: std::sync::Arc<dyn goldsrc_api::EngineOps> =
+        std::sync::Arc::new(goldsrc::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE));
+    if let Err(e) = goldsrc::host::HostRuntime::init(
+        "metamod",
+        |msg| {
+            backend().server_print(msg);
+        },
+        engine,
+    ) {
         goldsrc::gslog_error!(LogTarget::Core, "{e}");
     }
 }

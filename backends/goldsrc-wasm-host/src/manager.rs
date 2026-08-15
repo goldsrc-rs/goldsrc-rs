@@ -1,30 +1,19 @@
 use crate::bindings::{goldsrc::engine::api, GoldsrcPlugin};
 use crate::plugin::{LoadedPlugin, PluginMetadata};
+use goldsrc_api::EngineOps;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Config, Engine};
 
 use notify::Watcher;
-use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, RwLock};
-
-/// Thread-safe registry of capabilities and per-player grants, shared
-/// between the host and WASM plugin host functions.
-#[derive(Default)]
-pub struct CapabilityRegistry {
-    /// Registered capability name -> description.
-    pub registered: HashMap<String, String>,
-    /// player_index -> set of granted capability names.
-    pub player_capabilities: HashMap<i32, HashSet<String>>,
-}
+use std::sync::Arc;
 
 /// Wasmtime store state exposed to WASM plugins via host functions.
-#[derive(Clone)]
 pub struct HostState {
-    /// Shared capability registry.
-    pub caps: Arc<RwLock<CapabilityRegistry>>,
+    /// Engine bridge for real game-state access.
+    pub engine: Arc<dyn EngineOps>,
 }
 
 /// Read-only snapshot of a loaded plugin, used for CLI listing/info.
@@ -52,44 +41,47 @@ impl api::Host for HostState {
         crate::host_log(&msg);
     }
 
-    fn host_entity_is_valid(&mut self, _index: i32) -> bool {
-        true
+    fn host_entity_is_valid(&mut self, index: i32) -> bool {
+        self.engine.entity_is_valid(index)
     }
-    fn host_entity_classname(&mut self, _index: i32) -> Option<String> {
-        None
+    fn host_entity_classname(&mut self, index: i32) -> Option<String> {
+        self.engine.entity_classname(index)
     }
-    fn host_entity_health(&mut self, _index: i32) -> f32 {
-        100.0
+    fn host_entity_health(&mut self, index: i32) -> f32 {
+        self.engine.entity_health(index)
     }
-    fn host_entity_set_health(&mut self, _index: i32, _health: f32) {}
-    fn host_entity_origin(&mut self, _index: i32) -> api::Vector3 {
-        api::Vector3 {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-        }
+    fn host_entity_set_health(&mut self, index: i32, health: f32) {
+        self.engine.entity_set_health(index, health);
     }
-    fn host_entity_set_origin(&mut self, _index: i32, _pos: api::Vector3) {}
-    fn host_entity_velocity(&mut self, _index: i32) -> api::Vector3 {
-        api::Vector3 {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-        }
+    fn host_entity_origin(&mut self, index: i32) -> api::Vector3 {
+        let [x, y, z] = self.engine.entity_origin(index);
+        api::Vector3 { x, y, z }
     }
-    fn host_entity_set_velocity(&mut self, _index: i32, _vel: api::Vector3) {}
-    fn host_player_name(&mut self, _index: i32) -> Option<String> {
-        Some("Player".to_string())
+    fn host_entity_set_origin(&mut self, index: i32, pos: api::Vector3) {
+        self.engine.entity_set_origin(index, [pos.x, pos.y, pos.z]);
     }
-    fn host_player_armorvalue(&mut self, _index: i32) -> f32 {
-        0.0
+    fn host_entity_velocity(&mut self, index: i32) -> api::Vector3 {
+        let [x, y, z] = self.engine.entity_velocity(index);
+        api::Vector3 { x, y, z }
+    }
+    fn host_entity_set_velocity(&mut self, index: i32, vel: api::Vector3) {
+        self.engine
+            .entity_set_velocity(index, [vel.x, vel.y, vel.z]);
+    }
+    fn host_player_name(&mut self, index: i32) -> Option<String> {
+        self.engine.player_name(index)
+    }
+    fn host_player_armorvalue(&mut self, index: i32) -> f32 {
+        self.engine.player_armorvalue(index)
     }
     fn host_player_set_armorvalue(&mut self, index: i32, armor: f32) {
-        crate::host_log(&format!("(mock) Player {} armor set to {}", index, armor));
+        self.engine.player_set_armorvalue(index, armor);
     }
 
     fn host_register_capability(&mut self, name: String, description: String) -> bool {
-        let mut caps = self.caps.write().unwrap();
+        let mut caps = goldsrc_api::caps::CAPS
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         if let std::collections::hash_map::Entry::Vacant(e) = caps.registered.entry(name) {
             e.insert(description);
             true
@@ -99,14 +91,18 @@ impl api::Host for HostState {
     }
 
     fn host_has_capability(&mut self, player_index: i32, name: String) -> bool {
-        let caps = self.caps.read().unwrap();
+        let caps = goldsrc_api::caps::CAPS
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         caps.player_capabilities
             .get(&player_index)
             .is_some_and(|player_caps| player_caps.contains(&name))
     }
 
     fn host_grant_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = self.caps.write().unwrap();
+        let mut caps = goldsrc_api::caps::CAPS
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         // Check if capability exists in the registry
         if !caps.registered.contains_key(&name) {
             return false;
@@ -118,7 +114,9 @@ impl api::Host for HostState {
     }
 
     fn host_revoke_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = self.caps.write().unwrap();
+        let mut caps = goldsrc_api::caps::CAPS
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(player_caps) = caps.player_capabilities.get_mut(&player_index) {
             player_caps.remove(&name)
         } else {
@@ -134,7 +132,7 @@ impl api::Host for HostState {
 pub struct PluginManager {
     plugins: Vec<LoadedPlugin>,
     engine: Engine,
-    caps: Arc<RwLock<CapabilityRegistry>>,
+    engine_ops: Arc<dyn EngineOps>,
     event_rx: Receiver<PathBuf>,
     event_tx: Sender<PathBuf>,
     watchers: Vec<notify::RecommendedWatcher>,
@@ -144,7 +142,7 @@ pub struct PluginManager {
 impl PluginManager {
     /// Creates an empty plugin manager backed by a fresh wasmtime engine
     /// with the Component Model enabled.
-    pub fn new() -> wasmtime::Result<Self> {
+    pub fn new(engine_ops: Arc<dyn EngineOps>) -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
         // config.target("pulley32").unwrap();
@@ -152,8 +150,8 @@ impl PluginManager {
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
         Ok(Self {
             plugins: Vec::new(),
-            caps: Arc::new(RwLock::new(CapabilityRegistry::default())),
             engine,
+            engine_ops,
             event_rx,
             event_tx,
             watchers: Vec::new(),
@@ -212,7 +210,7 @@ impl PluginManager {
         .map_err(|e| e.to_string())?;
 
         let state = HostState {
-            caps: self.caps.clone(),
+            engine: self.engine_ops.clone(),
         };
         let mut store = wasmtime::Store::new(&self.engine, state);
         let bindings = GoldsrcPlugin::instantiate(&mut store, &component, &linker)

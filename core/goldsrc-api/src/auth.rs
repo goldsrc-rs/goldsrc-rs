@@ -1,3 +1,5 @@
+use crate::caps::CAPS;
+
 #[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api;
 
@@ -13,8 +15,15 @@ impl Auth {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (name, description);
-            false
+            let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                caps.registered.entry(name.to_string())
+            {
+                e.insert(description.to_string());
+                true
+            } else {
+                false
+            }
         }
     }
 
@@ -26,8 +35,10 @@ impl Auth {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (player_index, name);
-            false
+            let caps = CAPS.read().unwrap_or_else(|e| e.into_inner());
+            caps.player_capabilities
+                .get(&player_index)
+                .is_some_and(|player_caps| player_caps.contains(name))
         }
     }
 
@@ -39,8 +50,14 @@ impl Auth {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (player_index, name);
-            false
+            let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
+            if !caps.registered.contains_key(name) {
+                return false;
+            }
+            caps.player_capabilities
+                .entry(player_index)
+                .or_default()
+                .insert(name.to_string())
         }
     }
 
@@ -52,8 +69,28 @@ impl Auth {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (player_index, name);
-            false
+            let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
+            if let Some(player_caps) = caps.player_capabilities.get_mut(&player_index) {
+                player_caps.remove(name)
+            } else {
+                false
+            }
         }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::Auth;
+
+    #[test]
+    fn capability_lifecycle() {
+        Auth::register_capability("admin", "test capability");
+        assert!(!Auth::has_capability(1, "admin"));
+        assert!(Auth::grant_capability(1, "admin"));
+        assert!(Auth::has_capability(1, "admin"));
+        assert!(!Auth::grant_capability(1, "missing"));
+        assert!(Auth::revoke_capability(1, "admin"));
+        assert!(!Auth::has_capability(1, "admin"));
     }
 }

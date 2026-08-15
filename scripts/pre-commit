@@ -15,6 +15,10 @@ import sys
 
 
 def main():
+    # -j 2: parallel linking OOMs the linker (LNK1102) on this machine.
+    env = dict(__import__("os").environ)
+    env["CARGO_BUILD_JOBS"] = "2"
+
     print("[Git Hook] Running cargo fmt...")
     fmt_res = subprocess.run(["cargo", "fmt", "--all"], capture_output=True, text=True)
     if fmt_res.returncode != 0:
@@ -26,13 +30,14 @@ def main():
     clippy_res = subprocess.run(
         ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
         text=True,
+        env=env,
     )
     if clippy_res.returncode != 0:
         print("cargo clippy failed!", file=sys.stderr)
         return 1
 
     print("[Git Hook] Running cargo test...")
-    test_res = subprocess.run(["cargo", "test", "--workspace"], text=True)
+    test_res = subprocess.run(["cargo", "test", "--workspace"], text=True, env=env)
     if test_res.returncode != 0:
         print("cargo test failed!", file=sys.stderr)
         return 1

@@ -49,9 +49,14 @@ pub use goldsrc::call_engfunc_ret;
 // ============================================================================
 
 fn init_wasm_host() {
-    if let Err(e) = goldsrc::host::HostRuntime::init("standalone", |msg| {
-        backend().server_print(msg);
-    }) {
+    let engine: std::sync::Arc<dyn goldsrc_api::EngineOps> = std::sync::Arc::new(*backend());
+    if let Err(e) = goldsrc::host::HostRuntime::init(
+        "standalone",
+        |msg| {
+            backend().server_print(msg);
+        },
+        engine,
+    ) {
         goldsrc::gslog_error!(LogTarget::Core, "{e}");
     }
 }

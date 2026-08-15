@@ -103,6 +103,7 @@ impl PrintQueue {
 ///
 /// Both backends differ only in how they obtain the engine function table,
 /// so the whole `Engine` trait implementation lives here once.
+#[derive(Clone, Copy)]
 pub struct EngineBackend {
     engfuncs: fn() -> &'static enginefuncs_t,
     print_queue: &'static PrintQueue,
@@ -169,6 +170,66 @@ impl Engine for EngineBackend {
         unsafe {
             let cname = std::ffi::CString::new(name).unwrap_or_default();
             call_engfunc!((self.engfuncs)().pfnCVarSetFloat, cname.as_ptr(), value);
+        }
+    }
+}
+
+impl goldsrc_api::EngineOps for EngineBackend {
+    fn entity_is_valid(&self, index: i32) -> bool {
+        self.get_player(index).is_some_and(|p| p.is_valid())
+    }
+
+    fn entity_classname(&self, index: i32) -> Option<String> {
+        self.get_player(index).and_then(|e| e.classname())
+    }
+
+    fn entity_health(&self, index: i32) -> f32 {
+        self.get_player(index).map(|e| e.health()).unwrap_or(0.0)
+    }
+
+    fn entity_set_health(&self, index: i32, health: f32) {
+        if let Some(mut e) = self.get_player(index) {
+            e.set_health(health);
+        }
+    }
+
+    fn entity_origin(&self, index: i32) -> [f32; 3] {
+        self.get_player(index)
+            .map(|e| e.origin().into())
+            .unwrap_or([0.0; 3])
+    }
+
+    fn entity_set_origin(&self, index: i32, pos: [f32; 3]) {
+        if let Some(mut e) = self.get_player(index) {
+            e.set_origin(pos.into());
+        }
+    }
+
+    fn entity_velocity(&self, index: i32) -> [f32; 3] {
+        self.get_player(index)
+            .map(|e| e.velocity().into())
+            .unwrap_or([0.0; 3])
+    }
+
+    fn entity_set_velocity(&self, index: i32, vel: [f32; 3]) {
+        if let Some(mut e) = self.get_player(index) {
+            e.set_velocity(vel.into());
+        }
+    }
+
+    fn player_name(&self, index: i32) -> Option<String> {
+        self.get_player(index).and_then(|p| p.name())
+    }
+
+    fn player_armorvalue(&self, index: i32) -> f32 {
+        self.get_player(index)
+            .map(|p| p.armorvalue())
+            .unwrap_or(0.0)
+    }
+
+    fn player_set_armorvalue(&self, index: i32, armor: f32) {
+        if let Some(mut p) = self.get_player(index) {
+            p.set_armorvalue(armor);
         }
     }
 }

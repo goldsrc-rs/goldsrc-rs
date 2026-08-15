@@ -7,12 +7,18 @@
 pub mod auth;
 /// Generated WASM bindings (wasm32 only).
 pub mod bindings;
+/// Shared capability registry (host + native auth).
+pub mod caps;
 /// Validated `edict_t` handle.
 pub mod edict;
+/// Narrow object-safe engine bridge for the WASM host.
+pub mod engine_ops;
 /// Game events and command context types.
 pub mod events;
 
+pub use caps::CapabilityRegistry;
 pub use edict::EDict;
+pub use engine_ops::EngineOps;
 pub use events::*;
 
 /// Engine interface — provides access to engine functions.
@@ -107,12 +113,13 @@ impl Entity {
         }
     }
 
-    /// Prints a message to the entity (mock on native hosts).
+    /// Prints a chat message to the player. On native hosts this is a no-op
+    /// (chat printing is not yet part of the engine bridge surface).
     pub fn print_chat(&self, msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_log(&format!(
-                "(mock) Print to player {}: {}",
+                "Print to player {}: {}",
                 self.index, msg
             ));
         }
@@ -267,6 +274,18 @@ impl Player {
         }
     }
 
+    /// Returns the entity's class name, if set.
+    pub fn classname(&self) -> Option<String> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_entity_classname(self.index)
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.inner.classname()
+        }
+    }
+
     /// Returns the player's world origin.
     pub fn origin(&self) -> Vector3 {
         #[cfg(target_arch = "wasm32")]
@@ -387,12 +406,13 @@ impl Player {
         }
     }
 
-    /// Prints a message to the player (mock on native hosts).
+    /// Prints a chat message to the player. On native hosts this is a no-op
+    /// (chat printing is not yet part of the engine bridge surface).
     pub fn print_chat(&self, msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_log(&format!(
-                "(mock) Print to player {}: {}",
+                "Print to player {}: {}",
                 self.index, msg
             ));
         }

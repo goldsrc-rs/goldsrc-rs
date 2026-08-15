@@ -6,6 +6,7 @@ license.workspace = true
 description = "WASM plugin host for GoldSrc.rs (using wasmtime runtime)"
 
 [dependencies]
+goldsrc-api = { workspace = true }
 wasmtime = { workspace = true }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }
