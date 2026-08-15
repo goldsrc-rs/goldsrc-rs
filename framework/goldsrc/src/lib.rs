@@ -14,6 +14,11 @@ pub mod cli;
 #[cfg(feature = "host")]
 pub mod host;
 
+/// Shared backend plumbing (engine access, print queue, engfunc macros).
+/// Enabled by the `host` feature.
+#[cfg(feature = "host")]
+pub mod backend;
+
 /// `goldsrc.toml` configuration types and loader.
 pub mod config;
 /// Unified structured logger for backends.

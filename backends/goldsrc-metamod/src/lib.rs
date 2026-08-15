@@ -27,7 +27,6 @@ pub use vtable::*;
 
 use goldsrc::logging::LogTarget;
 use goldsrc_api::Engine;
-use std::ffi::CString;
 
 use meta_types::*;
 
@@ -43,7 +42,8 @@ thread_local! {
     };
 }
 
-pub static PRINT_QUEUE: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+/// Deferred server-print queue shared with the standalone backend.
+pub static PRINT_QUEUE: goldsrc::backend::PrintQueue = goldsrc::backend::PrintQueue::new();
 
 /// Initialize WASM plugin subsystem and the unified logger.
 pub fn init_wasm_host() {
@@ -97,107 +97,14 @@ pub fn set_meta_globals(ptr: *mut meta_globals_t) {
     });
 }
 
-macro_rules! call_engfunc {
-    ($func:expr) => {
-        if let Some(f) = $func {
-            f();
-        }
-    };
-    ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*);
-        }
-    };
-}
+use goldsrc::backend::EngineBackend;
 
-macro_rules! call_engfunc_ret {
-    ($func:expr) => {
-        if let Some(f) = $func {
-            f()
-        } else {
-            Default::default()
-        }
-    };
-    ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*)
-        } else {
-            Default::default()
-        }
-    };
-}
+/// Metamod backend: the shared `EngineBackend` fed by this crate's engfunc
+/// accessor and print queue. The backend is a thin adapter.
+pub type MetamodBackend = EngineBackend;
 
-pub(crate) use call_engfunc;
-pub(crate) use call_engfunc_ret;
-
-pub struct MetamodBackend;
-
-impl Default for MetamodBackend {
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl MetamodBackend {
-    pub const fn new() -> Self {
-        Self
-    }
-}
-
-impl Engine for MetamodBackend {
-    fn spawn_entity(&self, classname: &str) -> Option<goldsrc_api::Entity> {
-        unsafe {
-            let funcs = engfuncs();
-            let edict = (funcs.pfnCreateEntity)?();
-            if edict.is_null() {
-                return None;
-            }
-            let cname = CString::new(classname).unwrap_or_default();
-            call_engfunc!(funcs.pfnSetModel, edict, cname.as_ptr());
-            let index = (funcs.pfnIndexOfEdict)?(edict);
-            Some(goldsrc_api::Entity::from_raw(index, edict))
-        }
-    }
-
-    fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
-        unsafe {
-            let funcs = engfuncs();
-            let edict = (funcs.pfnPEntityOfEntIndex)?(index);
-            if edict.is_null() {
-                return None;
-            }
-            Some(goldsrc_api::Player::from_raw(index, edict))
-        }
-    }
-
-    fn server_print(&self, message: &str) {
-        // Defer printing to StartFrame_Post to avoid engine instability during StartFrame.
-        if let Ok(mut queue) = PRINT_QUEUE.lock() {
-            queue.push(message.to_string());
-        }
-    }
-
-    fn server_command(&self, command: &str) {
-        unsafe {
-            let cmd = CString::new(command).unwrap_or_default();
-            call_engfunc!(engfuncs().pfnServerCommand, cmd.as_ptr());
-        }
-    }
-
-    fn cvar_get_float(&self, name: &str) -> f32 {
-        unsafe {
-            let cname = CString::new(name).unwrap_or_default();
-            call_engfunc_ret!(engfuncs().pfnCVarGetFloat, cname.as_ptr())
-        }
-    }
-
-    fn cvar_set_float(&self, name: &str, value: f32) {
-        unsafe {
-            let cname = CString::new(name).unwrap_or_default();
-            call_engfunc!(engfuncs().pfnCVarSetFloat, cname.as_ptr(), value);
-        }
-    }
-}
+pub use goldsrc::call_engfunc;
+pub use goldsrc::call_engfunc_ret;
 
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -212,7 +119,7 @@ pub fn file_log(msg: &str) {
     }
 }
 
-static BACKEND: MetamodBackend = MetamodBackend::new();
+static BACKEND: MetamodBackend = EngineBackend::new(engfuncs, &PRINT_QUEUE);
 
 pub fn backend() -> &'static MetamodBackend {
     &BACKEND

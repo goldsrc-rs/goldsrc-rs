@@ -22,17 +22,6 @@ pub unsafe extern "C" fn hook_spawn_post(_edict: *mut goldsrc_sys::edict_t) -> i
 
 /// Post-hook for StartFrame.
 pub unsafe extern "C" fn hook_start_frame_post() {
-    let messages = {
-        let mut queue = match PRINT_QUEUE.lock() {
-            Ok(q) => q,
-            Err(e) => e.into_inner(),
-        };
-        if queue.is_empty() {
-            return;
-        }
-        std::mem::take(&mut *queue)
-    };
-
     // =========================================================================================
     // WARNING! VERY IMPORTANT COSTELL AND HISTORICAL REFERENCE FOR DESCENDANTS
     // =========================================================================================
@@ -55,21 +44,8 @@ pub unsafe extern "C" fn hook_start_frame_post() {
     // 3. `%` is escaped as `%%`.
     // =========================================================================================
 
-    for message in messages {
-        let safe_msg = message
-            .replace('%', "%%")
-            .replace('{', "{{")
-            .replace('}', "}}")
-            .replace('\r', "")
-            .replace('\n', " ");
-
-        let mut end = safe_msg.len().min(400);
-        while end > 0 && !safe_msg.is_char_boundary(end) {
-            end -= 1;
-        }
-
-        let final_msg = format!("{}\n", safe_msg[..end].trim_end());
-        if let Ok(msg) = std::ffi::CString::new(final_msg) {
+    for message in PRINT_QUEUE.drain() {
+        if let Ok(msg) = std::ffi::CString::new(message) {
             call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
         }
     }

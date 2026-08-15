@@ -18,6 +18,7 @@ mod commands;
 mod engine_api;
 mod proxy;
 
+use goldsrc::backend::EngineBackend;
 use goldsrc::logging::LogTarget;
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
@@ -28,119 +29,20 @@ use std::ffi::{CStr, CString};
 // Backend (Engine trait implementation)
 // ============================================================================
 
-pub struct StandaloneBackend;
+/// Standalone backend: the shared `EngineBackend` fed by this crate's engfunc
+/// accessor and print queue. The backend is a thin adapter.
+pub type StandaloneBackend = EngineBackend;
 
-impl StandaloneBackend {
-    pub const fn new() -> Self {
-        Self
-    }
-}
+static PRINT_QUEUE: goldsrc::backend::PrintQueue = goldsrc::backend::PrintQueue::new();
 
-static BACKEND: StandaloneBackend = StandaloneBackend::new();
+static BACKEND: StandaloneBackend = EngineBackend::new(engine_api::engfuncs, &PRINT_QUEUE);
 
 pub fn backend() -> &'static StandaloneBackend {
     &BACKEND
 }
 
-impl Default for StandaloneBackend {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-macro_rules! call_engfunc {
-    ($func:expr) => {
-        if let Some(f) = $func {
-            f();
-        }
-    };
-    ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*);
-        }
-    };
-}
-
-macro_rules! call_engfunc_ret {
-    ($func:expr) => {
-        if let Some(f) = $func {
-            f()
-        } else {
-            Default::default()
-        }
-    };
-    ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*)
-        } else {
-            Default::default()
-        }
-    };
-}
-
-static PRINT_QUEUE: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-
-pub(crate) use call_engfunc;
-pub(crate) use call_engfunc_ret;
-
-impl Engine for StandaloneBackend {
-    fn spawn_entity(&self, classname: &str) -> Option<goldsrc_api::Entity> {
-        unsafe {
-            let funcs = engine_api::engfuncs();
-            let edict = (funcs.pfnCreateEntity)?();
-            if edict.is_null() {
-                return None;
-            }
-            let cname = CString::new(classname).unwrap_or_default();
-            call_engfunc!(funcs.pfnSetModel, edict, cname.as_ptr());
-            let index = (funcs.pfnIndexOfEdict)?(edict);
-            Some(goldsrc_api::Entity::from_raw(index, edict))
-        }
-    }
-
-    fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
-        unsafe {
-            let funcs = engine_api::engfuncs();
-            let edict = (funcs.pfnPEntityOfEntIndex)?(index);
-            if edict.is_null() {
-                return None;
-            }
-            Some(goldsrc_api::Player::from_raw(index, edict))
-        }
-    }
-
-    fn server_print(&self, message: &str) {
-        // Defer to StartFrame to avoid engine instability during initialization.
-        if let Ok(mut queue) = PRINT_QUEUE.lock() {
-            queue.push(message.to_string());
-        }
-    }
-
-    fn server_command(&self, command: &str) {
-        unsafe {
-            let cmd = CString::new(command).unwrap_or_default();
-            call_engfunc!(engine_api::engfuncs().pfnServerCommand, cmd.as_ptr());
-        }
-    }
-
-    fn cvar_get_float(&self, name: &str) -> f32 {
-        unsafe {
-            let cname = CString::new(name).unwrap_or_default();
-            call_engfunc_ret!(engine_api::engfuncs().pfnCVarGetFloat, cname.as_ptr())
-        }
-    }
-
-    fn cvar_set_float(&self, name: &str, value: f32) {
-        unsafe {
-            let cname = CString::new(name).unwrap_or_default();
-            call_engfunc!(
-                engine_api::engfuncs().pfnCVarSetFloat,
-                cname.as_ptr(),
-                value
-            );
-        }
-    }
-}
+pub use goldsrc::call_engfunc;
+pub use goldsrc::call_engfunc_ret;
 
 // ============================================================================
 // WASM Host initialization
@@ -172,32 +74,11 @@ unsafe extern "C" fn hook_start_frame() {
 /// ReHLDS routes `ServerPrint` output through fmtlib: `%` and `{}` from plugin
 /// text would throw and crash the server, so they are escaped before printing.
 fn drain_print_queue() {
-    let messages = {
-        let mut queue = match PRINT_QUEUE.lock() {
-            Ok(q) => q,
-            Err(e) => e.into_inner(),
-        };
-        if queue.is_empty() {
-            return;
-        }
-        std::mem::take(&mut *queue)
-    };
-    for message in messages {
-        let safe = message
-            .replace('%', "%%")
-            .replace('{', "{{")
-            .replace('}', "}}")
-            .replace('\r', "")
-            .replace('\n', " ");
-        let mut end = safe.len().min(400);
-        while end > 0 && !safe.is_char_boundary(end) {
-            end -= 1;
-        }
-        let final_msg = format!("{}\n", safe[..end].trim_end());
+    for message in PRINT_QUEUE.drain() {
         unsafe {
             let funcs = engine_api::engfuncs();
             if let Some(f) = funcs.pfnServerPrint {
-                if let Ok(cstr) = CString::new(final_msg) {
+                if let Ok(cstr) = CString::new(message) {
                     f(cstr.as_ptr());
                 }
             }
