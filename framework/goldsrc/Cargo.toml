@@ -7,7 +7,7 @@ description = "Public framework (SDK) for GoldSrc.rs plugin developers"
 
 [dependencies]
 goldsrc-sys = { workspace = true }
-goldsrc-api = { workspace = true }
+goldsrc-api = { workspace = true, features = ["unsafe-sys"] }
 goldsrc-wasm-host = { workspace = true, optional = true }
 goldsrc-macros = { workspace = true }
 lexopt = { workspace = true, optional = true }

@@ -33,28 +33,6 @@ pub unsafe extern "C" fn hook_spawn_post(_edict: *mut goldsrc_sys::edict_t) -> i
 
 /// Post-hook for StartFrame.
 pub unsafe extern "C" fn hook_start_frame_post() {
-    // =========================================================================================
-    // WARNING! VERY IMPORTANT COSTELL AND HISTORICAL REFERENCE FOR DESCENDANTS
-    // =========================================================================================
-    // If you're reading this code, you're probably wondering: "What the fuck is going on here?"
-    //
-    // Some genius (may their code compile with errors!) decided to update the console logger
-    // in ReHLDS / HLDS to use the C++ `fmtlib` library (`std::format`),
-    // BUT FORGOT THAT STRINGS FROM PLUGINS CANNOT BE PASSED DIRECTLY AS A FORMAT!
-    //
-    // The result is that if the plugin outputs JSON or any string with curly braces `{` or `}`,
-    // `fmtlib` considers them format specifiers, throws an UNCAUGHT exception
-    // `std::format_error("invalid format string")` and THE ENTIRE SERVER CRASHES TO HELL!
-    //
-    // I spent half me life blaming StartFrame, mutexes, poor Wasmi, memory alignment and Windows,
-    // but the fault lay with a damn genius who didn't know how to use `fmt::print("{}")`!
-    //
-    // Hence:
-    // 1. PRINT_QUEUE saves from CRT buffer overflow when spamming logs for 1 frame.
-    // 2. All `{` and `}` are ESCAPED as `{{` and `}}` — so `fmt` turns them back into braces without a crash.
-    // 3. `%` is escaped as `%%`.
-    // =========================================================================================
-
     for message in PRINT_QUEUE.drain() {
         if let Ok(msg) = std::ffi::CString::new(message) {
             call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());

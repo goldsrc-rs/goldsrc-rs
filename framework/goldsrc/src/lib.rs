@@ -31,7 +31,6 @@ pub use ecs::*;
 pub use goldsrc_api;
 pub use goldsrc_api::{auth::Auth, Engine, Entity, Player, Plugin, Vector3};
 pub use goldsrc_macros::{command, event, on_load, plugin};
-pub use goldsrc_sys;
 
 /// Logging subsystem for WASM plugins.
 pub mod log {
