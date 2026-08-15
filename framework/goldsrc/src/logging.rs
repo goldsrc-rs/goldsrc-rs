@@ -132,6 +132,7 @@ type ConsoleCb = Box<dyn Fn(&str) + Send + Sync + 'static>;
 struct GsLogger {
     config: LogConfig,
     log_path: PathBuf,
+    file_handle: Option<std::fs::File>,
     /// Optional callback forwarding messages to the server console.
     console_cb: Option<ConsoleCb>,
 }
@@ -144,9 +145,15 @@ impl GsLogger {
             .join(LOGS_DIR_NAME);
         let _ = fs::create_dir_all(&log_dir);
         let log_path = log_dir.join("goldsrc.log");
+        let file_handle = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .ok();
         Self {
             config,
             log_path,
+            file_handle,
             console_cb,
         }
     }
@@ -161,7 +168,7 @@ impl GsLogger {
         self.config.targets.contains(&target)
     }
 
-    fn emit(&self, level: LogLevel, target: LogTarget, message: &str) {
+    fn emit(&mut self, level: LogLevel, target: LogTarget, message: &str) {
         if !self.should_emit(level, target) {
             return;
         }
@@ -169,14 +176,17 @@ impl GsLogger {
         // Format: [INFO ][core ] message
         let line = format!("[{}][{}] {}\n", level.as_str(), target.as_str(), message);
 
-        // File output.
+        // File output (re-uses open file handle if available, falls back to open on demand).
         if self.config.file_output {
-            if let Ok(mut file) = OpenOptions::new()
+            if let Some(ref mut file) = self.file_handle {
+                let _ = file.write_all(line.as_bytes());
+            } else if let Ok(mut file) = OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&self.log_path)
             {
                 let _ = file.write_all(line.as_bytes());
+                self.file_handle = Some(file);
             }
         }
 
@@ -218,7 +228,7 @@ pub fn log(level: LogLevel, target: LogTarget, message: &str) {
     match LOGGER.get() {
         Some(mtx) => {
             // Poisoned mutex → recover and continue.
-            let guard = match mtx.lock() {
+            let mut guard = match mtx.lock() {
                 Ok(g) => g,
                 Err(e) => e.into_inner(),
             };
