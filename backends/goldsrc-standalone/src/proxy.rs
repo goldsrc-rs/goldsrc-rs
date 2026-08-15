@@ -147,18 +147,16 @@ fn resolve_game_dll_path() -> PathBuf {
     }
 
     // 3. Fallback: try executable directory
-    if let Ok(exe_dir) = std::env::current_exe().map(|p| p.parent().map(|d| d.to_path_buf())) {
-        if let Some(base) = exe_dir {
-            for mod_dir in &mod_dirs {
-                for dll_name in GAME_DLL_NAMES {
-                    let candidate = base.join(mod_dir).join("dlls").join(dll_name);
-                    if candidate.exists() {
-                        file_log(&format!(
-                            "Resolved GameDLL via exe base search: {:?}",
-                            candidate
-                        ));
-                        return candidate;
-                    }
+    if let Ok(Some(base)) = std::env::current_exe().map(|p| p.parent().map(|d| d.to_path_buf())) {
+        for mod_dir in &mod_dirs {
+            for dll_name in GAME_DLL_NAMES {
+                let candidate = base.join(mod_dir).join("dlls").join(dll_name);
+                if candidate.exists() {
+                    file_log(&format!(
+                        "Resolved GameDLL via exe base search: {:?}",
+                        candidate
+                    ));
+                    return candidate;
                 }
             }
         }

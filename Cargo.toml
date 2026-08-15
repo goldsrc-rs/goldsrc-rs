@@ -3,6 +3,7 @@ members = [
     "core/goldsrc-sys",
     "core/goldsrc-api",
     "backends/goldsrc-metamod",
+    "backends/goldsrc-standalone",
     "backends/goldsrc-wasm-host",
     "framework/goldsrc",
     "framework/goldsrc-macros",
@@ -15,6 +16,7 @@ default-members = [
     "core/goldsrc-sys",
     "core/goldsrc-api",
     "backends/goldsrc-metamod",
+    "backends/goldsrc-standalone",
     "backends/goldsrc-wasm-host",
     "framework/goldsrc",
     "framework/goldsrc-macros",
@@ -31,6 +33,7 @@ repository = "https://github.com/ulquiorracode/GoldSrc.rs"
 goldsrc-sys = { path = "core/goldsrc-sys", version = "0.1.0" }
 goldsrc-api = { path = "core/goldsrc-api", version = "0.1.0" }
 goldsrc-metamod = { path = "backends/goldsrc-metamod", version = "0.1.0" }
+goldsrc-standalone = { path = "backends/goldsrc-standalone", version = "0.1.0" }
 goldsrc-wasm-host = { path = "backends/goldsrc-wasm-host", version = "0.1.0" }
 goldsrc = { path = "framework/goldsrc", version = "0.1.0" }
 goldsrc-macros = { path = "framework/goldsrc-macros", version = "0.1.0" }
@@ -48,10 +51,13 @@ notify = "8.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 lexopt = "0.3"
+libloading = "0.8"
+libc = "0.2"
 
+# NOTE: `panic` must stay "unwind" — `catch_ffi_panic` (catch_unwind) relies on
+# unwinding to stop Rust panics at the C-ABI boundary before they kill HLDS.
 [profile.release]
 lto = "fat"
 opt-level = "z"
 strip = "debuginfo"
-panic = "abort"
 codegen-units = 1

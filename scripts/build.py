@@ -10,15 +10,21 @@ def get_repo_root() -> Path:
     return Path(__file__).parent.parent
 
 
-def build_plugin(target: str = "i686-pc-windows-msvc", release: bool = True) -> Path:
-    """Build a plugin and return the path to the produced library."""
-    print(f"Building for {target} ({'release' if release else 'debug'})...")
+def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc", release: bool = True) -> Path:
+    """Build a backend plugin (metamod or standalone) and return the path to the produced library."""
+    crate_name = "goldsrc-standalone" if backend == "standalone" else "goldsrc-metamod"
+    lib_basename = "goldsrc_standalone" if backend == "standalone" else "goldsrc_metamod"
+
+    print(f"Building {backend} backend ({crate_name}) for {target} ({'release' if release else 'debug'})...")
     repo_root = get_repo_root()
 
     env = os.environ.copy()
-    env["LIBCLANG_PATH"] = r"C:\Program Files\LLVM\lib"
+    if "LIBCLANG_PATH" not in env:
+        default_llvm = Path(r"C:\Program Files\LLVM\lib")
+        if default_llvm.exists():
+            env["LIBCLANG_PATH"] = str(default_llvm)
 
-    cmd = ["cargo", "build", "--target", target, "-p", "goldsrc-metamod"]
+    cmd = ["cargo", "build", "--target", target, "-p", crate_name]
     if release:
         cmd.append("--release")
 
@@ -31,9 +37,9 @@ def build_plugin(target: str = "i686-pc-windows-msvc", release: bool = True) -> 
 
     # Determine the output file extension
     if "windows" in target:
-        lib_name = "goldsrc_metamod.dll"
+        lib_name = f"{lib_basename}.dll"
     else:
-        lib_name = "libgoldsrc_metamod.so"
+        lib_name = f"lib{lib_basename}.so"
 
     profile = "release" if release else "debug"
     lib_path = repo_root / "target" / target / profile / lib_name
@@ -101,9 +107,15 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Build GoldSrc.rs plugin")
+    parser = argparse.ArgumentParser(description="Build GoldSrc.rs backend plugin")
+    parser.add_argument(
+        "--backend",
+        choices=["metamod", "standalone"],
+        default="metamod",
+        help="Backend type to build (default: metamod)",
+    )
     parser.add_argument("--target", default="i686-pc-windows-msvc", help="Build target")
     parser.add_argument("--debug", action="store_true", help="Build in debug mode")
     args = parser.parse_args()
 
-    build_plugin(target=args.target, release=not args.debug)
+    build_plugin(backend=args.backend, target=args.target, release=not args.debug)

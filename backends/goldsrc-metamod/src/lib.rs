@@ -17,15 +17,7 @@
 #[cfg(all(target_arch = "x86", target_env = "msvc"))]
 #[unsafe(link_section = ".drectve")]
 #[used]
-static MSVC_EXPORTS: [u8; 204] = *b"\
- /EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8\
- /EXPORT:Meta_Query=_Meta_Query\
- /EXPORT:Meta_Attach=_Meta_Attach\
- /EXPORT:Meta_Detach=_Meta_Detach\
- /EXPORT:GetEntityAPI2=_GetEntityAPI2\
- /EXPORT:GetEntityAPI2_Post=_GetEntityAPI2_Post\
- /EXPORT:GetNewDLLFunctions=_GetNewDLLFunctions\
-";
+static MSVC_EXPORTS: [u8; 270] = *b"/EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8 /EXPORT:Meta_Query=_Meta_Query /EXPORT:Meta_Attach=_Meta_Attach /EXPORT:Meta_Detach=_Meta_Detach /EXPORT:GetEntityAPI2=_GetEntityAPI2 /EXPORT:GetEntityAPI2_Post=_GetEntityAPI2_Post /EXPORT:GetNewDLLFunctions=_GetNewDLLFunctions";
 
 mod commands;
 mod entrypoints;

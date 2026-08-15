@@ -10,11 +10,7 @@ pub fn register_cli_commands() {
         argv: |i| unsafe { call_engfunc_ret!(engine_api::engfuncs().pfnCmd_Argv, i) },
         manager: wasm_manager,
         print: |msg| backend().server_print(msg),
-        version: (
-            env!("CARGO_PKG_VERSION"),
-            "dev",
-            "standalone",
-        ),
+        version: (env!("CARGO_PKG_VERSION"), "dev", "standalone"),
     });
     goldsrc::cli::register_host_commands(|name, handler| {
         let cname = std::ffi::CString::new(name).unwrap();

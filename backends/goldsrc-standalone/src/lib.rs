@@ -20,9 +20,9 @@ mod commands;
 mod engine_api;
 mod proxy;
 
+use goldsrc::logging::LogTarget;
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
-use goldsrc::logging::LogTarget;
 use goldsrc_sys::{enginefuncs_t, globalvars_t, DLL_FUNCTIONS};
 use std::ffi::{CStr, CString};
 
@@ -64,6 +64,13 @@ macro_rules! call_engfunc {
 }
 
 macro_rules! call_engfunc_ret {
+    ($func:expr) => {
+        if let Some(f) = $func {
+            f()
+        } else {
+            Default::default()
+        }
+    };
     ($func:expr, $($arg:expr),*) => {
         if let Some(f) = $func {
             f($($arg),*)
@@ -229,19 +236,13 @@ unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
         if let Some(manager) = wasm_manager() {
             unsafe {
                 let funcs = engine_api::engfuncs();
-                let cmd_ptr = funcs
-                    .pfnCmd_Args
-                    .and_then(|f| Some(f()))
-                    .unwrap_or(std::ptr::null());
+                let cmd_ptr = funcs.pfnCmd_Args.map(|f| f()).unwrap_or(std::ptr::null());
                 let cmd_str = if !cmd_ptr.is_null() {
                     CStr::from_ptr(cmd_ptr).to_string_lossy().into_owned()
                 } else {
                     String::new()
                 };
-                let name_ptr = funcs
-                    .pfnCmd_Argv
-                    .and_then(|f| Some(f(0)))
-                    .unwrap_or(std::ptr::null());
+                let name_ptr = funcs.pfnCmd_Argv.map(|f| f(0)).unwrap_or(std::ptr::null());
                 let name_str = if !name_ptr.is_null() {
                     CStr::from_ptr(name_ptr).to_string_lossy().into_owned()
                 } else {
@@ -269,10 +270,7 @@ unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
 /// Any Rust panic is caught — an unhandled panic here would crash HLDS.
 #[no_mangle]
 #[inline(never)]
-pub unsafe extern "C" fn GiveFnptrsToDll(
-    engfuncs: *mut enginefuncs_t,
-    globals: *mut globalvars_t,
-) {
+pub unsafe extern "C" fn GiveFnptrsToDll(engfuncs: *mut enginefuncs_t, globals: *mut globalvars_t) {
     // SAFETY: engfuncs and globals are engine-provided; valid for the server lifetime.
     catch_ffi_panic("GiveFnptrsToDll", (), || {
         unsafe {
