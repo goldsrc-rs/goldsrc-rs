@@ -74,7 +74,8 @@ world goldsrc-plugin {
     export on-event: func(name: string, payload: list<u8>);
 
     /// Invoked when a registered command is executed.
-    export on-command: func(name: string, args: string);
+    /// Returns `true` if the command was handled (consumed).
+    export on-command: func(name: string, args: string) -> bool;
 
     /// Retrieves a JSON string containing the plugin's metadata.
     export get-metadata: func() -> string;

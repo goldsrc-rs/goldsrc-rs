@@ -30,7 +30,6 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
         author: "Unknown".to_string(),
         dependencies: Vec::new(),
     };
-
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     for meta in parser.parse2(attr)? {
         let ident = match meta.path().get_ident() {
@@ -162,14 +161,6 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         deps_toml = format!("dependencies = [{}]\n", deps.join(", "));
     }
 
-    let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}",
-        toml_escape(&plugin_name),
-        toml_escape(&plugin_version),
-        toml_escape(&plugin_author),
-        deps_toml
-    );
-
     let mut on_load_fn = quote! {};
     let mut on_unload_fn = quote! {};
     let mut on_frame_fn = quote! {};
@@ -177,6 +168,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut on_command_fn = quote! {};
 
     let mut command_matchers = Vec::new();
+    let mut plugin_commands: Vec<String> = Vec::new();
 
     // Iterate over the items in the impl block to find our marker attributes
     for item in &mut input_impl.items {
@@ -254,6 +246,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 if let Err(e) = check_handler_args(method, "command", &[0, 1, 2]) {
                     return e.to_compile_error().into();
                 }
+                plugin_commands.push(cmd.clone());
                 let call_expr = match inputs_len {
                     0 => quote! { #struct_name::#fn_name() },
                     1 => quote! { #struct_name::#fn_name(args) },
@@ -270,10 +263,32 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         on_command_fn = quote! {
             match name.as_str() {
                 #(#command_matchers)*
-                _ => {}
+                _ => return false,
             }
+            true
         };
+    } else {
+        on_command_fn = quote! { false };
     }
+
+    // Commands are discovered from #[command] markers on handler methods.
+    let mut commands_toml = String::new();
+    if !plugin_commands.is_empty() {
+        let cmds: Vec<String> = plugin_commands
+            .iter()
+            .map(|c| format!("\"{}\"", toml_escape(c)))
+            .collect();
+        commands_toml = format!("commands = [{}]\n", cmds.join(", "));
+    }
+
+    let meta_toml = format!(
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}",
+        toml_escape(&plugin_name),
+        toml_escape(&plugin_version),
+        toml_escape(&plugin_author),
+        deps_toml,
+        commands_toml
+    );
 
     let expanded = quote! {
         #input_impl
@@ -299,7 +314,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #on_event_fn
             }
 
-            fn on_command(name: String, args: String) {
+            fn on_command(name: String, args: String) -> bool {
                 #on_command_fn
             }
         }

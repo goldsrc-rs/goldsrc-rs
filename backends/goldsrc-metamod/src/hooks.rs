@@ -4,6 +4,17 @@ use goldsrc_sys::ffi::catch_ffi_panic;
 
 use crate::{call_engfunc, call_engfunc_ret, engfuncs, PRINT_QUEUE};
 
+/// Emits a player event to WASM plugins. Payload is the player index as
+/// 4 little-endian bytes so plugins can decode it cheaply.
+fn emit_player_event(name: &str, index: i32) {
+    let payload = index.to_le_bytes();
+    goldsrc::host::HostRuntime::with_manager(|m| {
+        if let Some(manager) = m {
+            manager.call_on_event(name, &payload);
+        }
+    });
+}
+
 /// Hook for DispatchSpawn - called when an entity spawns.
 ///
 /// # Safety
@@ -66,15 +77,24 @@ pub unsafe extern "C" fn hook_client_connect(
     catch_ffi_panic("hook_client_connect", 0, || 0)
 }
 
-/// Post-hook for ClientConnect.
+/// Post-hook for ClientConnect - called when a player connects.
+///
+/// # Safety
+/// Pointers must be valid C strings.
 #[allow(dead_code)]
 pub unsafe extern "C" fn hook_client_connect_post(
-    _entity: *mut goldsrc_sys::edict_t,
+    entity: *mut goldsrc_sys::edict_t,
     _name: *const std::os::raw::c_char,
     _address: *const std::os::raw::c_char,
     _reject_reason: *mut std::os::raw::c_char,
 ) -> goldsrc_sys::qboolean {
-    catch_ffi_panic("hook_client_connect_post", 0, || 0)
+    // SAFETY: catch_unwind guards the ABI boundary.
+    catch_ffi_panic("hook_client_connect_post", 0, || {
+        // SAFETY: `entity` is a valid edict pointer provided by the engine.
+        let index = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity) };
+        emit_player_event("client_connect", index);
+        0
+    })
 }
 
 /// Hook for ClientDisconnect - called when a player disconnects.
@@ -88,8 +108,13 @@ pub unsafe extern "C" fn hook_client_disconnect(_entity: *mut goldsrc_sys::edict
 
 /// Post-hook for ClientDisconnect.
 #[allow(dead_code)]
-pub unsafe extern "C" fn hook_client_disconnect_post(_entity: *mut goldsrc_sys::edict_t) {
-    catch_ffi_panic("hook_client_disconnect_post", (), || ());
+pub unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::edict_t) {
+    // SAFETY: catch_unwind guards the ABI boundary.
+    catch_ffi_panic("hook_client_disconnect_post", (), || {
+        // SAFETY: `entity` is a valid edict pointer provided by the engine.
+        let index = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity) };
+        emit_player_event("client_disconnect", index);
+    });
 }
 
 /// Hook for ClientCommand - called when a player issues a command.

@@ -101,6 +101,8 @@ unsafe extern "C" fn hook_client_connect(
         let result = proxy::forward_client_connect(edict, name, address, reject_reason);
         goldsrc::host::HostRuntime::with_manager(|m| {
             if let Some(manager) = m {
+                // ponytail: no index payload — standalone lacks edict-base access
+                // (no pfnIndexOfEdict). Add when standalone gains edict access.
                 manager.call_on_event("client_connect", &[]);
             }
         });
@@ -113,6 +115,7 @@ unsafe extern "C" fn hook_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
         proxy::forward_client_disconnect(edict);
         goldsrc::host::HostRuntime::with_manager(|m| {
             if let Some(manager) = m {
+                // ponytail: no index payload — see hook_client_connect.
                 manager.call_on_event("client_disconnect", &[]);
             }
         });

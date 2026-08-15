@@ -13,13 +13,10 @@ pub mod caps;
 pub mod edict;
 /// Narrow object-safe engine bridge for the WASM host.
 pub mod engine_ops;
-/// Game events and command context types.
-pub mod events;
 
 pub use caps::CapabilityRegistry;
 pub use edict::EDict;
 pub use engine_ops::EngineOps;
-pub use events::*;
 
 /// Engine interface — provides access to engine functions.
 pub trait Engine {

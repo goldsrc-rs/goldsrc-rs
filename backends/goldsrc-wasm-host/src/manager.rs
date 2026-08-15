@@ -141,6 +141,8 @@ pub struct PluginManager {
     watchers: Vec<notify::RecommendedWatcher>,
     watcher_count: usize,
     last_reload: HashMap<PathBuf, Instant>,
+    /// command name -> plugin indices that registered it.
+    command_registry: HashMap<String, Vec<usize>>,
 }
 
 /// Minimum gap between two hot-reloads of the same file. Compilers write in
@@ -165,6 +167,7 @@ impl PluginManager {
             watchers: Vec::new(),
             watcher_count: 0,
             last_reload: HashMap::new(),
+            command_registry: HashMap::new(),
         })
     }
 
@@ -249,6 +252,15 @@ impl PluginManager {
             .call_on_load()
             .map_err(|e| LoadError::LoadPanic(e.to_string()))?;
         crate::host_log(&format!("Loaded component plugin: {}", plugin.name));
+        let idx = self.plugins.len();
+        if let Some(meta) = &plugin.metadata {
+            for cmd in &meta.commands {
+                self.command_registry
+                    .entry(cmd.clone())
+                    .or_default()
+                    .push(idx);
+            }
+        }
         self.plugins.push(plugin);
         Ok("Loaded successfully".to_string())
     }
@@ -263,9 +275,27 @@ impl PluginManager {
 
     /// Calls `on_unload` (if exported) and removes the plugin at `idx`.
     fn unload_plugin_at(&mut self, idx: usize) -> LoadedPlugin {
+        // Deregister this plugin's commands.
+        let meta = self.plugins[idx].metadata.clone();
+        for cmd in meta.iter().flat_map(|m| &m.commands) {
+            if let Some(owners) = self.command_registry.get_mut(cmd) {
+                owners.retain(|i| *i != idx);
+                if owners.is_empty() {
+                    self.command_registry.remove(cmd);
+                }
+            }
+        }
         let mut plugin = self.plugins.remove(idx);
         if plugin.has_export("on-unload") {
             let _ = plugin.call_on_unload();
+        }
+        // Shift indices of plugins after idx in the registry.
+        for owners in self.command_registry.values_mut() {
+            for i in owners.iter_mut() {
+                if *i > idx {
+                    *i -= 1;
+                }
+            }
         }
         plugin
     }
@@ -425,9 +455,20 @@ impl PluginManager {
         self.spawn_watcher(dir, "toml")
     }
 
-    /// Dispatches a server command to all plugins.
+    /// Dispatches a server command to the plugins that registered it.
+    /// Stops at the first plugin that reports handling it (consume).
     pub fn dispatch_command(&mut self, cmd: &str, args: &str) -> bool {
-        self.call_on_command(cmd, args)
+        let Some(owners) = self.command_registry.get(cmd).cloned() else {
+            return false;
+        };
+        for idx in owners {
+            if let Some(plugin) = self.plugins.get_mut(idx) {
+                if plugin.call_on_command(cmd, args).unwrap_or(false) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Drains watcher events (reloading changed `.wasm` plugins, debounced)
@@ -482,13 +523,70 @@ impl PluginManager {
             let _ = plugin.call_on_event(name, data);
         }
     }
+}
 
-    /// Calls `on_command` on every (non-paused) plugin. Returns `false`
-    /// (reserved for future "command handled" signalling).
-    pub fn call_on_command(&mut self, cmd: &str, args: &str) -> bool {
-        for plugin in &mut self.plugins {
-            let _ = plugin.call_on_command(cmd, args);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct NoopEngineOps;
+
+    impl EngineOps for NoopEngineOps {
+        fn entity_is_valid(&self, _index: i32) -> bool {
+            false
         }
-        false
+        fn entity_classname(&self, _index: i32) -> Option<String> {
+            None
+        }
+        fn entity_health(&self, _index: i32) -> f32 {
+            0.0
+        }
+        fn entity_set_health(&self, _index: i32, _health: f32) {}
+        fn entity_origin(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
+        fn entity_velocity(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_velocity(&self, _index: i32, _vel: [f32; 3]) {}
+        fn player_name(&self, _index: i32) -> Option<String> {
+            None
+        }
+        fn player_armorvalue(&self, _index: i32) -> f32 {
+            0.0
+        }
+        fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
+    }
+
+    /// Loads the built demo plugin and checks the command registry + consume semantics.
+    #[test]
+    fn command_registry_registers_and_consumes() {
+        // Skipped when the demo plugin was not built (e.g. `cargo test -p goldsrc-wasm-host`).
+        let wasm_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../target/wasm32-unknown-unknown/debug/test_suite.wasm"
+        );
+        if !std::path::Path::new(wasm_path).exists() {
+            eprintln!("test_suite.wasm not built; skipping command registry test");
+            return;
+        }
+
+        let mut manager = PluginManager::new(Arc::new(NoopEngineOps)).unwrap();
+        manager.load_plugin(wasm_path).unwrap();
+
+        // The #[command(name = "testcmd")] marker must be discoverable in metadata.
+        let meta = &manager.plugins[0].metadata;
+        assert!(meta.is_some());
+        assert!(meta
+            .as_ref()
+            .unwrap()
+            .commands
+            .contains(&"testcmd".to_string()));
+
+        // Dispatch finds the plugin via the registry and consumes the command.
+        assert!(manager.dispatch_command("testcmd", "hello"));
+        // Unknown commands are not dispatched at all.
+        assert!(!manager.dispatch_command("nonexistent", ""));
     }
 }

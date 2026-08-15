@@ -19,6 +19,9 @@ pub struct PluginMetadata {
     /// Registered system names (from `#[plugin(system = ...)]`).
     #[serde(default)]
     pub systems: Vec<String>,
+    /// Commands this plugin handles (from `#[command(name = ...)]`).
+    #[serde(default)]
+    pub commands: Vec<String>,
     /// Plugin dependencies: name -> version requirement.
     #[serde(default, deserialize_with = "deserialize_deps")]
     pub dependencies: HashMap<String, String>,
@@ -118,17 +121,21 @@ impl LoadedPlugin {
     }
 
     /// Invokes the plugin's `on_command` export (skipped if paused/poisoned).
-    pub fn call_on_command(&mut self, cmd_name: &str, args: &str) -> wasmtime::Result<()> {
+    /// Returns whether the plugin consumed the command.
+    pub fn call_on_command(&mut self, cmd_name: &str, args: &str) -> wasmtime::Result<bool> {
         if self.is_paused || self.is_poisoned {
-            return Ok(());
+            return Ok(false);
         }
         let res = self
             .bindings
             .call_on_command(&mut self.store, cmd_name, args);
-        if let Err(ref e) = res {
-            self.poison(e);
+        match res {
+            Err(e) => {
+                self.poison(&e);
+                Err(e)
+            }
+            Ok(consumed) => Ok(consumed),
         }
-        res
     }
 
     /// Returns whether the component exports a top-level function `name`.
