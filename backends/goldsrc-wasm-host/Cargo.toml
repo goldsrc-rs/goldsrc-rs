@@ -13,3 +13,4 @@ wit-parser = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 notify = { workspace = true }
+thiserror = { workspace = true }

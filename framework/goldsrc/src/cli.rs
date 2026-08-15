@@ -225,7 +225,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             for t in targets {
                 match manager.load_plugin_by_name(&t) {
                     Ok(msg) => out(&msg),
-                    Err(err) => out(&err),
+                    Err(err) => out(&err.to_string()),
                 }
             }
         }
@@ -246,7 +246,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 for t in targets {
                     match manager.unload_plugin_by_query(&t) {
                         Ok(msg) => out(&msg),
-                        Err(err) => out(&err),
+                        Err(err) => out(&err.to_string()),
                     }
                 }
             } else {
@@ -270,7 +270,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 for t in targets {
                     match manager.reload_plugin_by_query(&t) {
                         Ok(msg) => out(&msg),
-                        Err(err) => out(&err),
+                        Err(err) => out(&err.to_string()),
                     }
                 }
             } else {
@@ -294,7 +294,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 for t in targets {
                     match manager.pause_plugin(&t, true) {
                         Ok(msg) => out(&msg),
-                        Err(err) => out(&err),
+                        Err(err) => out(&err.to_string()),
                     }
                 }
             } else {
@@ -318,7 +318,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 for t in targets {
                     match manager.pause_plugin(&t, false) {
                         Ok(msg) => out(&msg),
-                        Err(err) => out(&err),
+                        Err(err) => out(&err.to_string()),
                     }
                 }
             } else {

@@ -2,6 +2,7 @@
 
 use crate::logging::LogTarget;
 use crate::{paths::PathResolver, GoldSrcConfig};
+use goldsrc_wasm_host::error::HostError;
 use goldsrc_wasm_host::PluginManager;
 
 pub struct HostRuntime {
@@ -25,12 +26,11 @@ impl HostRuntime {
         backend_name: &str,
         print_cb: fn(&str),
         engine: std::sync::Arc<dyn goldsrc_api::EngineOps>,
-    ) -> Result<(), String> {
+    ) -> Result<(), HostError> {
         goldsrc_wasm_host::set_print_callback(print_cb);
 
-        let mut manager = PluginManager::new(engine).map_err(|e| {
-            format!("[GoldSrc.rs {backend_name}] Failed to init PluginManager: {e}")
-        })?;
+        let mut manager = PluginManager::new(engine)
+            .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
 
         let sys_config = GoldSrcConfig::load_or_create();
 

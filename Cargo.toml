@@ -53,6 +53,7 @@ toml = "0.8"
 lexopt = "0.3"
 libloading = "0.8"
 libc = "0.2"
+thiserror = "2.0"
 
 # NOTE: `panic` must stay "unwind" — `catch_ffi_panic` (catch_unwind) relies on
 # unwinding to stop Rust panics at the C-ABI boundary before they kill HLDS.

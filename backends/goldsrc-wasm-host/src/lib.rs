@@ -7,6 +7,8 @@
 
 /// Generated wasmtime bindings for the `goldsrc` WIT world.
 pub mod bindings;
+/// Error taxonomy.
+pub mod error;
 /// Plugin lifecycle management and hot-reload.
 pub mod manager;
 /// Loaded plugin instance and metadata types.

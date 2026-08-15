@@ -1,4 +1,5 @@
 use crate::bindings::{goldsrc::engine::api, GoldsrcPlugin};
+use crate::error::{CommandError, LoadError};
 use crate::plugin::{LoadedPlugin, PluginMetadata};
 use goldsrc_api::EngineOps;
 use std::fs;
@@ -170,8 +171,12 @@ impl PluginManager {
     /// Loads a WASM plugin from `path`. Accepts either a pre-compiled
     /// component (magic `\0asm`) or a plain core module, which is embedded
     /// with component metadata first. Calls the plugin's `on_load`.
-    pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, String> {
-        let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, LoadError> {
+        let path = path.as_ref();
+        let bytes = fs::read(path).map_err(|source| LoadError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
 
         let is_comp = bytes.len() >= 8 && &bytes[0..8] == b"\0asm\x0d\0\x01\0";
         let component_bytes = if is_comp {
@@ -195,34 +200,34 @@ impl PluginManager {
                 world_id,
                 wit_component::StringEncoding::UTF8,
             )
-            .map_err(|e| format!("Failed to embed component metadata: {}", e))?;
+            .map_err(|e| LoadError::Embed(e.to_string()))?;
 
             let mut encoder = wit_component::ComponentEncoder::default()
                 .module(&wasm_bytes)
-                .map_err(|e| format!("ComponentEncoder module error: {:#?}", e))?
+                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
                 .validate(true);
 
             encoder
                 .encode()
-                .map_err(|e| format!("ComponentEncoder encode error: {:#?}", e))?
+                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
         };
 
-        let component =
-            Component::new(&self.engine, &component_bytes).map_err(|e| e.to_string())?;
+        let component = Component::new(&self.engine, &component_bytes)
+            .map_err(|e| LoadError::Compile(e.to_string()))?;
 
         let mut linker = Linker::new(&self.engine);
         api::add_to_linker::<HostState, wasmtime::component::HasSelf<HostState>>(
             &mut linker,
             |state: &mut HostState| state,
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| LoadError::Link(e.to_string()))?;
 
         let state = HostState {
             engine: self.engine_ops.clone(),
         };
         let mut store = wasmtime::Store::new(&self.engine, state);
         let bindings = GoldsrcPlugin::instantiate(&mut store, &component, &linker)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| LoadError::Instantiate(e.to_string()))?;
 
         let metadata = bindings
             .call_get_metadata(&mut store)
@@ -230,13 +235,8 @@ impl PluginManager {
             .and_then(|meta_str| toml::from_str::<PluginMetadata>(&meta_str).ok());
 
         let mut plugin = LoadedPlugin {
-            name: path
-                .as_ref()
-                .file_stem()
-                .unwrap()
-                .to_string_lossy()
-                .to_string(),
-            path: path.as_ref().to_path_buf(),
+            name: path.file_stem().unwrap().to_string_lossy().to_string(),
+            path: path.to_path_buf(),
             is_paused: false,
             is_poisoned: false,
             metadata,
@@ -245,7 +245,9 @@ impl PluginManager {
             component,
         };
 
-        plugin.call_on_load().map_err(|e| e.to_string())?;
+        plugin
+            .call_on_load()
+            .map_err(|e| LoadError::LoadPanic(e.to_string()))?;
         crate::host_log(&format!("Loaded component plugin: {}", plugin.name));
         self.plugins.push(plugin);
         Ok("Loaded successfully".to_string())
@@ -278,12 +280,12 @@ impl PluginManager {
     }
 
     /// Sets or clears the pause flag on a plugin by name.
-    pub fn pause_plugin(&mut self, name: &str, pause: bool) -> Result<String, String> {
+    pub fn pause_plugin(&mut self, name: &str, pause: bool) -> Result<String, CommandError> {
         if let Some(plugin) = self.plugins.iter_mut().find(|p| p.name == name) {
             plugin.is_paused = pause;
             Ok(format!("Plugin '{}' pause state set to {}", name, pause))
         } else {
-            Err(format!("Plugin '{}' not found", name))
+            Err(CommandError::NotFound(name.to_string()))
         }
     }
 
@@ -331,17 +333,16 @@ impl PluginManager {
     }
 
     /// Reloads a single plugin by name or index.
-    pub fn reload_plugin_by_query(&mut self, query: &str) -> Result<String, String> {
+    pub fn reload_plugin_by_query(&mut self, query: &str) -> Result<String, CommandError> {
         let idx = self
             .find_plugin(query)
-            .ok_or_else(|| format!("Plugin '{}' not found", query))?;
+            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
         let path = self.plugins[idx].path.clone();
         let name = self.plugins[idx].name.clone();
         self.unload_plugin_at(idx);
-        match self.load_plugin(&path) {
-            Ok(_) => Ok(format!("Reloaded '{}'", name)),
-            Err(e) => Err(format!("Reload of '{}' failed: {}", name, e)),
-        }
+        self.load_plugin(&path)
+            .map(|_| format!("Reloaded '{}'", name))
+            .map_err(|source| CommandError::Load { name, source })
     }
 
     /// Reloads the plugin whose recorded path matches `path`. Used by the
@@ -380,7 +381,11 @@ impl PluginManager {
     /// extension `ext` to the event channel, drained in [`on_server_frame`].
     ///
     /// [`on_server_frame`]: PluginManager::on_server_frame
-    fn spawn_watcher<P: AsRef<Path>>(&mut self, dir: P, ext: &'static str) -> Result<(), String> {
+    fn spawn_watcher<P: AsRef<Path>>(
+        &mut self,
+        dir: P,
+        ext: &'static str,
+    ) -> Result<(), CommandError> {
         let dir = dir.as_ref().to_path_buf();
         let tx = self.event_tx.clone();
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
@@ -396,10 +401,10 @@ impl PluginManager {
                 }
             }
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CommandError::Watcher(e.to_string()))?;
         watcher
             .watch(&dir, notify::RecursiveMode::NonRecursive)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| CommandError::Watcher(e.to_string()))?;
 
         self.watchers.push(watcher);
         self.watcher_count += 1;
@@ -408,7 +413,7 @@ impl PluginManager {
 
     /// Watches `dir` for changed `.wasm` files and reloads matching plugins
     /// on the next server frame.
-    pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), String> {
+    pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), CommandError> {
         self.spawn_watcher(dir, "wasm")
     }
 
@@ -416,7 +421,7 @@ impl PluginManager {
     /// [`on_server_frame`], where `.wasm` events trigger reloads.
     ///
     /// [`on_server_frame`]: PluginManager::on_server_frame
-    pub fn enable_config_watcher<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), String> {
+    pub fn enable_config_watcher<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), CommandError> {
         self.spawn_watcher(dir, "toml")
     }
 
@@ -445,16 +450,16 @@ impl PluginManager {
     /// Loads a plugin by filesystem path (string form of [`load_plugin`]).
     ///
     /// [`load_plugin`]: PluginManager::load_plugin
-    pub fn load_plugin_by_name(&mut self, query: &str) -> Result<String, String> {
+    pub fn load_plugin_by_name(&mut self, query: &str) -> Result<String, LoadError> {
         let path = PathBuf::from(query);
         self.load_plugin(path)
     }
 
     /// Unloads a single plugin by name or index.
-    pub fn unload_plugin_by_query(&mut self, query: &str) -> Result<String, String> {
+    pub fn unload_plugin_by_query(&mut self, query: &str) -> Result<String, CommandError> {
         let idx = self
             .find_plugin(query)
-            .ok_or_else(|| format!("Plugin '{}' not found", query))?;
+            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
         let plugin = self.unload_plugin_at(idx);
         Ok(format!("Unloaded '{}'", plugin.name))
     }
