@@ -18,7 +18,7 @@ impl EntityId {
 
     /// Check if entity is a player (index 1 to 32).
     pub fn is_player(self) -> bool {
-        (1..=32).contains(&self.0)
+        (1..=goldsrc_api::consts::MAX_PLAYERS).contains(&self.0)
     }
 
     /// Check if entity is the world (index 0).

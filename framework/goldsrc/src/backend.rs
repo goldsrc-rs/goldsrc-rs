@@ -61,9 +61,11 @@ impl PrintQueue {
     }
     /// Queue a message for later printing.
     pub fn push(&self, message: &str) {
-        if let Ok(mut queue) = self.0.lock() {
-            queue.push_back(message.to_string());
-        }
+        let mut queue = match self.0.lock() {
+            Ok(q) => q,
+            Err(e) => e.into_inner(),
+        };
+        queue.push_back(message.to_string());
     }
 
     /// Take all pending messages, escaping fmtlib-sensitive characters.
@@ -131,7 +133,9 @@ impl Engine for EngineBackend {
                 return None;
             }
             let cname = std::ffi::CString::new(classname).unwrap_or_default();
-            call_engfunc!(funcs.pfnSetModel, edict, cname.as_ptr());
+            if let Some(alloc_string) = funcs.pfnAllocString {
+                (*edict).v.classname = alloc_string(cname.as_ptr()) as u32;
+            }
             let index = (funcs.pfnIndexOfEdict)?(edict);
             Some(goldsrc_api::Entity::from_raw(index, edict))
         }

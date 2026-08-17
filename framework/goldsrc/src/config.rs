@@ -1,5 +1,6 @@
 use crate::logging::LogConfig;
-use crate::paths::{PathResolver, ADDONS_DIR_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME};
+use crate::paths::PathResolver;
+use goldsrc_api::consts::BackendType;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -7,61 +8,42 @@ use std::fs;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoreConfig {
     /// Mod directory relative to the game root (e.g. `cstrike`).
-    #[serde(default = "default_mod_dir")]
     pub mod_dir: String,
     /// Directory holding WASM plugins.
-    #[serde(default = "default_plugins_dir")]
     pub plugins_dir: String,
     /// Directory holding per-plugin configs.
-    #[serde(default = "default_configs_dir")]
     pub configs_dir: String,
     /// Directory holding log output.
-    #[serde(default = "default_logs_dir")]
     pub logs_dir: String,
 }
 
-fn default_mod_dir() -> String {
-    DEFAULT_MOD_DIR.to_string()
-}
-fn default_plugins_dir() -> String {
-    format!(
-        "{}/{}/{}/plugins",
-        DEFAULT_MOD_DIR, ADDONS_DIR_NAME, FRAMEWORK_NAME
-    )
-}
-fn default_configs_dir() -> String {
-    format!(
-        "{}/{}/{}/configs",
-        DEFAULT_MOD_DIR, ADDONS_DIR_NAME, FRAMEWORK_NAME
-    )
-}
-fn default_logs_dir() -> String {
-    format!(
-        "{}/{}/{}/logs",
-        DEFAULT_MOD_DIR, ADDONS_DIR_NAME, FRAMEWORK_NAME
-    )
+impl CoreConfig {
+    pub fn new(backend: BackendType) -> Self {
+        let fw_dir = PathResolver::framework_dir(backend);
+        Self {
+            mod_dir: goldsrc_api::consts::DEFAULT_MOD_DIR.to_string(),
+            plugins_dir: PathResolver::normalize(&fw_dir.join(crate::paths::PLUGINS_DIR_NAME)),
+            configs_dir: PathResolver::normalize(&fw_dir.join(crate::paths::CONFIGS_DIR_NAME)),
+            logs_dir: PathResolver::normalize(&fw_dir.join(crate::paths::LOGS_DIR_NAME)),
+        }
+    }
 }
 
 /// The `[wasm]` section of `goldsrc.toml` — WASM runtime behaviour.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WasmConfig {
     /// Watch the plugins dir and auto-reload changed `.wasm` files.
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub hot_reload: bool,
     /// Watch the configs dir for `.toml` changes.
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub config_watcher: bool,
 }
 
-fn default_true() -> bool {
-    true
-}
-
 /// Top-level `goldsrc.toml` configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoldSrcConfig {
     /// Filesystem layout paths.
-    #[serde(default)]
     pub core: CoreConfig,
     /// WASM runtime behaviour.
     #[serde(default)]
@@ -71,39 +53,58 @@ pub struct GoldSrcConfig {
     pub logging: LogConfig,
 }
 
-impl Default for CoreConfig {
-    fn default() -> Self {
-        Self {
-            mod_dir: default_mod_dir(),
-            plugins_dir: default_plugins_dir(),
-            configs_dir: default_configs_dir(),
-            logs_dir: default_logs_dir(),
-        }
-    }
-}
-
-impl Default for WasmConfig {
-    fn default() -> Self {
-        Self {
-            hot_reload: true,
-            config_watcher: true,
-        }
-    }
-}
-
 impl GoldSrcConfig {
     /// Loads `goldsrc.toml` from the resolved base path or creates a default one if missing.
-    pub fn load_or_create() -> Self {
-        let config_path = PathResolver::main_config_path();
+    ///
+    /// If an existing configuration file fails to parse, a backup (`.bak`) is created
+    /// before generating a fresh default configuration to prevent data loss.
+    pub fn load_or_create(backend: BackendType) -> Self {
+        let config_path = PathResolver::main_config_path(backend);
         if config_path.exists() {
-            if let Ok(content) = fs::read_to_string(&config_path) {
-                if let Ok(config) = toml::from_str::<Self>(&content) {
-                    return config;
+            match fs::read_to_string(&config_path) {
+                Ok(content) => match toml::from_str::<Self>(&content) {
+                    Ok(config) => return config,
+                    Err(e) => {
+                        log::warn!(
+                            target: "core",
+                            "Failed to parse existing configuration file '{}': {}. Creating backup...",
+                            config_path.display(),
+                            e
+                        );
+                        let bak_path = config_path.with_extension("toml.bak");
+                        if let Err(copy_err) = fs::copy(&config_path, &bak_path) {
+                            log::error!(
+                                target: "core",
+                                "Failed to create backup config at '{}': {}",
+                                bak_path.display(),
+                                copy_err
+                            );
+                        } else {
+                            log::info!(
+                                target: "core",
+                                "Existing configuration backed up to '{}'",
+                                bak_path.display()
+                            );
+                        }
+                    }
+                },
+                Err(e) => {
+                    log::error!(
+                        target: "core",
+                        "Failed to read configuration file '{}': {}",
+                        config_path.display(),
+                        e
+                    );
                 }
             }
         }
 
-        let config = Self::default();
+        let config = Self {
+            core: CoreConfig::new(backend),
+            wasm: WasmConfig::default(),
+            logging: LogConfig::default(),
+        };
+
         if let Some(parent) = config_path.parent() {
             let _ = fs::create_dir_all(parent);
         }

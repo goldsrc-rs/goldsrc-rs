@@ -71,31 +71,43 @@ pub unsafe extern "C" fn handle_host_command() {
     }
 }
 
-/// Register `meta-rs` / `mrs` server commands pointing at the shared handler.
-pub fn register_host_commands(mut add: impl FnMut(&str, unsafe extern "C" fn())) {
-    add("meta-rs", handle_host_command);
-    add("mrs", handle_host_command);
+/// Register server commands pointing at the shared handler.
+///
+/// If `names` is empty, defaults to `&["goldsrc-rs", "grs", "meta-rs", "mrs"]`.
+pub fn register_host_commands_with_names(
+    names: &[&str],
+    mut add: impl FnMut(&str, unsafe extern "C" fn()),
+) {
+    for &name in names {
+        add(name, handle_host_command);
+    }
+}
+
+/// Register default server commands (`goldsrc-rs`, `grs`, `meta-rs`, `mrs`).
+pub fn register_host_commands(add: impl FnMut(&str, unsafe extern "C" fn())) {
+    register_host_commands_with_names(&["goldsrc-rs", "grs", "meta-rs", "mrs"], add);
 }
 
 pub fn print_host_help<F: FnMut(&str)>(mut out: F) {
-    out("--- GoldSrc.rs (meta-rs / mrs) Management CLI ---\n");
-    out("Usage: mrs <COMMAND> [OPTIONS] [TARGET]\n\n");
+    out("--- GoldSrc.rs Management CLI ---\n");
+    out("Usage: grs <COMMAND> [OPTIONS] [TARGET]\n");
+    out("Aliases: goldsrc-rs, mrs, meta-rs\n\n");
     out("Commands:\n");
-    out("  [ Plugin Lifecycle ]\n");
+    out("  Plugin Lifecycle:\n");
     out("    load <file>             Load a WASM plugin from plugins/ directory\n");
     out("    unload <target>         Gracefully unload plugin(s) (-a, --all supported)\n");
     out("    reload <target>         Reload plugin(s) (-a, --all supported)\n\n");
-    out("  [ Execution Control ]\n");
+    out("  Execution Control:\n");
     out("    pause <target>          Suspend plugin execution (-a, --all supported)\n");
     out("    unpause <target>        Resume plugin execution (-a, --all supported)\n\n");
-    out("  [ Inspection & Debugging ]\n");
+    out("  Inspection & Debugging:\n");
     out("    list [OPTIONS]          List loaded plugins. Options:\n");
     out("                              -p, --page <N>    Show specific page (default: 1)\n");
     out("                              -s, --size <N>    Set page size (default: 5)\n");
     out("                              -a, --all         Show all plugins (ignore pagination)\n");
     out("                              --paused          Show only paused plugins\n");
     out("    info <target>           Show detailed metadata and exports\n\n");
-    out("  [ System ]\n");
+    out("  System:\n");
     out("    status                  Show host runtime stats (RAM, watchers, count)\n");
     out("    version                 Show host version info\n\n");
     out("Options:\n");

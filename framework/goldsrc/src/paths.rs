@@ -1,15 +1,11 @@
+pub use goldsrc_api::consts::BackendType;
+use goldsrc_api::consts::{
+    ADDONS_DIR_NAME, DEBUG_LOG_FILE_NAME, DEFAULT_CONFIG_FILE_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME,
+};
 use std::path::{Path, PathBuf};
 
-/// Centralized framework constants for path resolution.
-pub const FRAMEWORK_NAME: &str = "goldsrc";
-/// Default mod directory (HLDS mod folder name).
-pub const DEFAULT_MOD_DIR: &str = "cstrike";
-/// HLDS addons directory name.
-pub const ADDONS_DIR_NAME: &str = "addons";
 /// Plugins sub-directory name.
 pub const PLUGINS_DIR_NAME: &str = "plugins";
-/// Binaries sub-directory name.
-pub const BIN_DIR_NAME: &str = "bin";
 /// Configs sub-directory name.
 pub const CONFIGS_DIR_NAME: &str = "configs";
 /// Logs sub-directory name.
@@ -19,131 +15,105 @@ pub const LOGS_DIR_NAME: &str = "logs";
 pub struct PathResolver;
 
 impl PathResolver {
+    /// Gets the base directory for the framework depending on the backend.
+    /// E.g. `cstrike/addons/goldsrc` for Metamod, `cstrike/goldsrc` for Standalone.
+    pub fn framework_dir(backend: BackendType) -> PathBuf {
+        let mut path = PathBuf::from(DEFAULT_MOD_DIR);
+        if backend == BackendType::Metamod {
+            path.push(ADDONS_DIR_NAME);
+        }
+        path.push(FRAMEWORK_NAME);
+        path
+    }
+
     /// Returns possible plugin directory paths in order of preference.
-    pub fn plugin_dirs() -> Vec<PathBuf> {
+    pub fn plugin_dirs(backend: BackendType) -> Vec<PathBuf> {
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()));
         let mut dirs = Vec::new();
 
+        let rel_path = Self::framework_dir(backend).join(PLUGINS_DIR_NAME);
         if let Some(ref base) = exe_dir {
-            dirs.push(
-                base.join(DEFAULT_MOD_DIR)
-                    .join(ADDONS_DIR_NAME)
-                    .join(FRAMEWORK_NAME)
-                    .join(PLUGINS_DIR_NAME),
-            );
-            dirs.push(
-                base.join(ADDONS_DIR_NAME)
-                    .join(FRAMEWORK_NAME)
-                    .join(PLUGINS_DIR_NAME),
-            );
+            dirs.push(base.join(&rel_path));
+            // Alternative without DEFAULT_MOD_DIR prefix
+            let mut alt_rel = PathBuf::new();
+            if backend == BackendType::Metamod {
+                alt_rel.push(ADDONS_DIR_NAME);
+            }
+            alt_rel.push(FRAMEWORK_NAME);
+            alt_rel.push(PLUGINS_DIR_NAME);
+            dirs.push(base.join(&alt_rel));
         }
 
-        dirs.push(
-            PathBuf::from(DEFAULT_MOD_DIR)
-                .join(ADDONS_DIR_NAME)
-                .join(FRAMEWORK_NAME)
-                .join(PLUGINS_DIR_NAME),
-        );
-        dirs.push(
-            PathBuf::from(ADDONS_DIR_NAME)
-                .join(FRAMEWORK_NAME)
-                .join(PLUGINS_DIR_NAME),
-        );
+        dirs.push(rel_path);
         dirs
     }
 
     /// Returns the first existing plugin directory, or the primary default path.
-    pub fn existing_plugin_dir() -> PathBuf {
-        for dir in Self::plugin_dirs() {
+    pub fn existing_plugin_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::plugin_dirs(backend) {
             if dir.exists() {
                 return dir;
             }
         }
-        PathBuf::from(DEFAULT_MOD_DIR)
-            .join(ADDONS_DIR_NAME)
-            .join(FRAMEWORK_NAME)
-            .join(PLUGINS_DIR_NAME)
+        Self::framework_dir(backend).join(PLUGINS_DIR_NAME)
     }
 
     /// Returns possible config directory paths in order of preference.
-    pub fn config_dirs() -> Vec<PathBuf> {
+    pub fn config_dirs(backend: BackendType) -> Vec<PathBuf> {
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()));
         let mut dirs = Vec::new();
 
+        let rel_path = Self::framework_dir(backend).join(CONFIGS_DIR_NAME);
         if let Some(ref base) = exe_dir {
-            dirs.push(
-                base.join(DEFAULT_MOD_DIR)
-                    .join(ADDONS_DIR_NAME)
-                    .join(FRAMEWORK_NAME)
-                    .join(CONFIGS_DIR_NAME),
-            );
-            dirs.push(
-                base.join(ADDONS_DIR_NAME)
-                    .join(FRAMEWORK_NAME)
-                    .join(CONFIGS_DIR_NAME),
-            );
+            dirs.push(base.join(&rel_path));
+            // Alternative without DEFAULT_MOD_DIR prefix
+            let mut alt_rel = PathBuf::new();
+            if backend == BackendType::Metamod {
+                alt_rel.push(ADDONS_DIR_NAME);
+            }
+            alt_rel.push(FRAMEWORK_NAME);
+            alt_rel.push(CONFIGS_DIR_NAME);
+            dirs.push(base.join(&alt_rel));
         }
 
-        dirs.push(
-            PathBuf::from(DEFAULT_MOD_DIR)
-                .join(ADDONS_DIR_NAME)
-                .join(FRAMEWORK_NAME)
-                .join(CONFIGS_DIR_NAME),
-        );
-        dirs.push(
-            PathBuf::from(ADDONS_DIR_NAME)
-                .join(FRAMEWORK_NAME)
-                .join(CONFIGS_DIR_NAME),
-        );
+        dirs.push(rel_path);
         dirs
     }
 
     /// Returns the first existing config directory, or the primary default path.
-    pub fn existing_config_dir() -> PathBuf {
-        for dir in Self::config_dirs() {
+    pub fn existing_config_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::config_dirs(backend) {
             if dir.exists() {
                 return dir;
             }
         }
-        PathBuf::from(DEFAULT_MOD_DIR)
-            .join(ADDONS_DIR_NAME)
-            .join(FRAMEWORK_NAME)
-            .join(CONFIGS_DIR_NAME)
+        Self::framework_dir(backend).join(CONFIGS_DIR_NAME)
     }
 
     /// Returns the path to goldsrc.toml.
-    pub fn main_config_path() -> PathBuf {
+    pub fn main_config_path(backend: BackendType) -> PathBuf {
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()));
 
+        let rel_path = Self::framework_dir(backend).join(DEFAULT_CONFIG_FILE_NAME);
         if let Some(ref base) = exe_dir {
-            let path = base
-                .join(DEFAULT_MOD_DIR)
-                .join(ADDONS_DIR_NAME)
-                .join(FRAMEWORK_NAME)
-                .join("goldsrc.toml");
+            let path = base.join(&rel_path);
             if path.exists() {
                 return path;
             }
         }
 
-        PathBuf::from(DEFAULT_MOD_DIR)
-            .join(ADDONS_DIR_NAME)
-            .join(FRAMEWORK_NAME)
-            .join("goldsrc.toml")
+        rel_path
     }
 
     /// Returns the path to debug.log.
-    pub fn debug_log_path() -> PathBuf {
-        PathBuf::from(DEFAULT_MOD_DIR)
-            .join(ADDONS_DIR_NAME)
-            .join(FRAMEWORK_NAME)
-            .join("debug.log")
+    pub fn debug_log_path(backend: BackendType) -> PathBuf {
+        Self::framework_dir(backend).join(DEBUG_LOG_FILE_NAME)
     }
 
     /// Normalizes a path to a consistent, human-readable string with forward

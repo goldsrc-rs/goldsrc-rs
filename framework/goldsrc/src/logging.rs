@@ -17,13 +17,13 @@
 //! goldsrc_sys::gslog!(LogLevel::Info, LogTarget::Core, "Plugin count: {}", n);
 //! ```
 
-use crate::paths::{ADDONS_DIR_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME, LOGS_DIR_NAME};
+use crate::paths::{BackendType, PathResolver};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::{Mutex, OnceLock},
+    sync::Mutex,
 };
 
 // ============================================================================
@@ -52,9 +52,31 @@ impl LogLevel {
         match self {
             Self::Trace => "TRACE",
             Self::Debug => "DEBUG",
-            Self::Info => "INFO ",
-            Self::Warn => "WARN ",
+            Self::Info => "INFO",
+            Self::Warn => "WARN",
             Self::Error => "ERROR",
+        }
+    }
+
+    /// Convert from `log::Level`
+    pub fn from_log_level(level: log::Level) -> Self {
+        match level {
+            log::Level::Trace => Self::Trace,
+            log::Level::Debug => Self::Debug,
+            log::Level::Info => Self::Info,
+            log::Level::Warn => Self::Warn,
+            log::Level::Error => Self::Error,
+        }
+    }
+
+    /// Convert to `log::LevelFilter`
+    pub fn to_level_filter(self) -> log::LevelFilter {
+        match self {
+            Self::Trace => log::LevelFilter::Trace,
+            Self::Debug => log::LevelFilter::Debug,
+            Self::Info => log::LevelFilter::Info,
+            Self::Warn => log::LevelFilter::Warn,
+            Self::Error => log::LevelFilter::Error,
         }
     }
 }
@@ -129,7 +151,7 @@ impl Default for LogConfig {
 
 type ConsoleCb = Box<dyn Fn(&str) + Send + Sync + 'static>;
 
-struct GsLogger {
+struct GoldSrcLogger {
     config: LogConfig,
     log_path: PathBuf,
     file_handle: Option<std::fs::File>,
@@ -137,14 +159,12 @@ struct GsLogger {
     console_cb: Option<ConsoleCb>,
 }
 
-impl GsLogger {
-    fn new(config: LogConfig, console_cb: Option<ConsoleCb>) -> Self {
-        let log_dir = PathBuf::from(DEFAULT_MOD_DIR)
-            .join(ADDONS_DIR_NAME)
-            .join(FRAMEWORK_NAME)
-            .join(LOGS_DIR_NAME);
+impl GoldSrcLogger {
+    fn new(config: LogConfig, backend_type: BackendType, console_cb: Option<ConsoleCb>) -> Self {
+        let fw_dir = PathResolver::framework_dir(backend_type);
+        let log_dir = fw_dir.join(crate::paths::LOGS_DIR_NAME);
         let _ = fs::create_dir_all(&log_dir);
-        let log_path = log_dir.join("goldsrc.log");
+        let log_path = log_dir.join(goldsrc_api::consts::DEFAULT_LOG_FILE_NAME);
         let file_handle = OpenOptions::new()
             .create(true)
             .append(true)
@@ -173,27 +193,46 @@ impl GsLogger {
             return;
         }
 
-        // Format: [INFO ][core ] message
-        let line = format!("[{}][{}] {}\n", level.as_str(), target.as_str(), message);
+        // Clean plain text format for file: [INFO][core] message
+        let plain_line = format!("[{}][{}] {}\n", level.as_str(), target.as_str(), message);
 
         // File output (re-uses open file handle if available, falls back to open on demand).
         if self.config.file_output {
             if let Some(ref mut file) = self.file_handle {
-                let _ = file.write_all(line.as_bytes());
+                let _ = file.write_all(plain_line.as_bytes());
             } else if let Ok(mut file) = OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&self.log_path)
             {
-                let _ = file.write_all(line.as_bytes());
+                let _ = file.write_all(plain_line.as_bytes());
                 self.file_handle = Some(file);
             }
         }
 
-        // Console output (via engine callback if registered).
+        // Console output with ANSI colors
         if self.config.console_output {
             if let Some(ref cb) = self.console_cb {
-                cb(&line);
+                // ANSI color mapping:
+                // Trace: Cyan (\x1b[36m), Debug: Gray/Dim (\x1b[90m), Info: Green (\x1b[32m),
+                // Warn: Yellow (\x1b[33m), Error: Red (\x1b[31m), Reset: \x1b[0m
+                let level_color = match level {
+                    LogLevel::Trace => "\x1b[36m",
+                    LogLevel::Debug => "\x1b[90m",
+                    LogLevel::Info => "\x1b[32m",
+                    LogLevel::Warn => "\x1b[33m",
+                    LogLevel::Error => "\x1b[31m",
+                };
+                let target_color = "\x1b[35m"; // Magenta for target
+                let reset = "\x1b[0m";
+
+                let console_line = format!(
+                    "[{level_color}{}{reset}][{target_color}{}{reset}] {}\n",
+                    level.as_str(),
+                    target.as_str(),
+                    message
+                );
+                cb(&console_line);
             }
         }
     }
@@ -203,110 +242,66 @@ impl GsLogger {
 // Global singleton access
 // ============================================================================
 
-static LOGGER: OnceLock<Mutex<GsLogger>> = OnceLock::new();
+struct LoggerImpl {
+    inner: Mutex<GoldSrcLogger>,
+}
 
-/// Initialise the global logger.  Must be called once at server startup,
+impl log::Log for LoggerImpl {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
+        let level = LogLevel::from_log_level(record.level());
+
+        let target = match record.target() {
+            "proxy" => LogTarget::Proxy,
+            "wasm" => LogTarget::Wasm,
+            "plugin" => LogTarget::Plugin,
+            _ => LogTarget::Core,
+        };
+
+        let message = format!("{}", record.args());
+
+        let mut guard = match self.inner.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
+        guard.emit(level, target, &message);
+    }
+
+    fn flush(&self) {}
+}
+
+static LOGGER_INSTANCE: std::sync::OnceLock<LoggerImpl> = std::sync::OnceLock::new();
+
+/// Initialise the global logger. Must be called once at server startup,
 /// after the engine has provided function pointers.
 ///
 /// `console_cb` is an optional closure that forwards formatted log lines
 /// to the server console via `pfnServerPrint`.
-///
-/// Calling `init` a second time is a no-op (the `OnceLock` guarantees
-/// single initialisation).
-pub fn init<F>(config: LogConfig, console_cb: Option<F>)
+pub fn init<F>(config: LogConfig, backend_type: BackendType, console_cb: Option<F>)
 where
     F: Fn(&str) + Send + Sync + 'static,
 {
     let cb: Option<ConsoleCb> = console_cb.map(|f| Box::new(f) as ConsoleCb);
-    // OnceLock::set returns Err if already set — we simply ignore it.
-    let _ = LOGGER.set(Mutex::new(GsLogger::new(config, cb)));
-}
+    let level_filter = config.level.to_level_filter();
 
-/// Emit a log line.  If the logger has not been initialised yet,
-/// falls back to `eprintln!` (always available, even before engine init).
-pub fn log(level: LogLevel, target: LogTarget, message: &str) {
-    match LOGGER.get() {
-        Some(mtx) => {
-            // Poisoned mutex → recover and continue.
-            let mut guard = match mtx.lock() {
-                Ok(g) => g,
-                Err(e) => e.into_inner(),
-            };
-            guard.emit(level, target, message);
-        }
-        None => {
-            // Logger not yet initialised — write to stderr as fallback.
-            eprintln!(
-                "[GoldSrc.rs][{}][{}] {}",
-                level.as_str().trim(),
-                target.as_str().trim(),
-                message
-            );
-        }
+    if let Ok(_logger) = LOGGER_INSTANCE.set(LoggerImpl {
+        inner: Mutex::new(GoldSrcLogger::new(config, backend_type, cb)),
+    }) {
+        let _ = log::set_logger(LOGGER_INSTANCE.get().unwrap());
+        log::set_max_level(level_filter);
     }
 }
 
 /// Returns the path where the log file is written (for display / config).
-pub fn log_file_path() -> PathBuf {
-    PathBuf::from(DEFAULT_MOD_DIR)
-        .join(ADDONS_DIR_NAME)
-        .join(FRAMEWORK_NAME)
-        .join(LOGS_DIR_NAME)
-        .join("goldsrc.log")
-}
-
-// ============================================================================
-// Convenience macros
-// ============================================================================
-
-/// Log with explicit level and target.
-///
-/// ```ignore
-/// gslog!(LogLevel::Warn, LogTarget::Wasm, "Plugin {} failed: {}", name, e);
-/// ```
-#[macro_export]
-macro_rules! gslog {
-    ($level:expr, $target:expr, $($arg:tt)*) => {
-        $crate::logging::log($level, $target, &format!($($arg)*))
-    };
-}
-
-/// Shorthand macros for each log level (target still required).
-#[macro_export]
-macro_rules! gslog_trace {
-    ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::logging::LogLevel::Trace, $target, $($arg)*)
-    };
-}
-
-/// Log a `Debug`-level message to the given target.
-#[macro_export]
-macro_rules! gslog_debug {
-    ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::logging::LogLevel::Debug, $target, $($arg)*)
-    };
-}
-
-/// Log an `Info`-level message to the given target.
-#[macro_export]
-macro_rules! gslog_info {
-    ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::logging::LogLevel::Info, $target, $($arg)*)
-    };
-}
-
-/// Log a `Warn`-level message to the given target.
-#[macro_export]
-macro_rules! gslog_warn {
-    ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::logging::LogLevel::Warn, $target, $($arg)*)
-    };
-}
-
-/// Log an `Error`-level message to the given target.
-#[macro_export]
-macro_rules! gslog_error {
-    ($target:expr, $($arg:tt)*) => {
-        $crate::gslog!($crate::logging::LogLevel::Error, $target, $($arg)*)
-    };
+pub fn log_file_path(backend: BackendType) -> PathBuf {
+    PathResolver::framework_dir(backend)
+        .join(crate::paths::LOGS_DIR_NAME)
+        .join(goldsrc_api::consts::DEFAULT_LOG_FILE_NAME)
 }
