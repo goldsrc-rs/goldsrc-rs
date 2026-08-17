@@ -1,0 +1,5 @@
+#!/bin/sh
+# GoldSrc.rs Git Pre-Commit Hook
+# Installed via: python -m scripts setup --hooks
+
+exec python3 -m scripts pre-commit "$@" || exec python -m scripts pre-commit "$@"

@@ -60,12 +60,14 @@ def check_exports(dll_path: Path) -> list[str]:
     return exports
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python check_exports.py <path-to-dll>")
-        sys.exit(1)
+def main(argv=None):
+    import argparse
 
-    dll_path = Path(sys.argv[1])
+    parser = argparse.ArgumentParser(description="Check DLL exports using dumpbin")
+    parser.add_argument("dll", help="Path to DLL file")
+    args = parser.parse_args(argv)
+
+    dll_path = Path(args.dll)
     print(f"Checking: {dll_path.name}")
     exports = check_exports(dll_path)
 
@@ -75,3 +77,8 @@ if __name__ == "__main__":
         print(f"  {len(exports)} exports:")
         for name in exports:
             print(f"    - {name}")
+
+
+if __name__ == "__main__":
+    main()
+

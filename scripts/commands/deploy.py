@@ -75,25 +75,48 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
     expected_line = f'{key_name} "{expected_val}"'
 
     lines = []
-    updated = False
-    for line in content.split("\n"):
-        stripped = line.strip()
-        if (stripped.startswith(f"{key_name} ") or stripped.startswith(f'{key_name}\t')) and not stripped.startswith(";"):
-            if stripped == expected_line:
-                print(f"Standalone backend already set in {liblist_path}")
-                return
-            # Comment out old gamedll line and insert ours
-            lines.append(f"; {line}  # Replaced by GoldSrc.rs deploy")
+    found_and_enabled = False
+
+    # Check if there is an existing commented or active expected_line in the file
+    file_lines = content.split("\n")
+    
+    # First pass: if expected_line already exists as active or commented, rewrite cleanly
+    has_target_entry = any(expected_val in l for l in file_lines)
+
+    if has_target_entry:
+        for line in file_lines:
+            stripped = line.strip()
+            # If this is our target DLL (whether active or commented)
+            if expected_val in stripped:
+                if not found_and_enabled:
+                    lines.append(expected_line)
+                    found_and_enabled = True
+            # If this is another active gamedll entry, comment it out
+            elif (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//") and not stripped.startswith(";"):
+                lines.append(f"// {line}  // Replaced by GoldSrc.rs deploy")
+            else:
+                lines.append(line)
+    else:
+        # Target not present in file yet: comment out existing active gamedll and prepend ours
+        for line in file_lines:
+            stripped = line.strip()
+            if (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//") and not stripped.startswith(";"):
+                if not found_and_enabled:
+                    lines.append(expected_line)
+                    found_and_enabled = True
+                lines.append(f"// {line}  // Replaced by GoldSrc.rs deploy")
+            else:
+                lines.append(line)
+
+        if not found_and_enabled:
             lines.append(expected_line)
-            updated = True
-        else:
-            lines.append(line)
 
-    if not updated:
-        lines.append(expected_line)
-
-    liblist_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Updated {liblist_path} with: {expected_line}")
+    new_content = "\n".join(lines) + "\n"
+    if new_content.strip() != content.strip():
+        liblist_path.write_text(new_content, encoding="utf-8")
+        print(f"Updated {liblist_path} with: {expected_line}")
+    else:
+        print(f"Standalone backend already set in {liblist_path}")
 
 
 def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", target: str = "i686-pc-windows-msvc") -> None:
@@ -112,9 +135,11 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
         if not addons_dir.exists():
             addons_dir = game_path / ADDONS_DIR_NAME
             if not addons_dir.exists():
-                print(f"Error: Addons directory not found", file=sys.stderr)
-                print(f"  Tried: {game_path / DEFAULT_MOD / ADDONS_DIR_NAME}", file=sys.stderr)
-                print(f"  Tried: {game_path / ADDONS_DIR_NAME}", file=sys.stderr)
+                print("Error: Metamod addons directory not found on the server!", file=sys.stderr)
+                print(f"  Checked: {game_path / DEFAULT_MOD / ADDONS_DIR_NAME}", file=sys.stderr)
+                print(f"  Checked: {game_path / ADDONS_DIR_NAME}", file=sys.stderr)
+                print("\n-> To deploy with Metamod, ensure Metamod-r/Metamod is installed on your server.", file=sys.stderr)
+                print("-> Alternatively, use Standalone backend without Metamod: python -m scripts deploy --backend standalone", file=sys.stderr)
                 sys.exit(1)
         plugin_dir = addons_dir / FRAMEWORK_NAME / "bin"
 
@@ -137,13 +162,23 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
         if not addons_dir.exists():
             addons_dir = game_path / ADDONS_DIR_NAME
 
-        plugins_ini = addons_dir / "metamod" / "plugins.ini"
+        metamod_dir = addons_dir / "metamod"
+        plugins_ini = metamod_dir / "plugins.ini"
+        prefix = get_platform_prefix(target)
+        expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
+
+        # If addons/metamod exists but plugins.ini is not created yet, create it automatically
         if not plugins_ini.exists():
-            print(f"\nWarning: plugins.ini not found at {plugins_ini}", file=sys.stderr)
-            print("You may need to install Metamod-r first.")
-            print("Add this line to plugins.ini manually:")
-            print(f"  {get_platform_prefix(target)} addons\\goldsrc\\bin\\{dest_name}")
-            return
+            if metamod_dir.exists():
+                plugins_ini.write_text(f"; Metamod plugins configuration\n{expected_line}\n", encoding="utf-8")
+                print(f"Created {plugins_ini} with: {expected_line}")
+                return
+            else:
+                print(f"\nWarning: metamod directory not found at {metamod_dir}", file=sys.stderr)
+                print("You may need to install Metamod-r first.")
+                print("Add this line to plugins.ini manually:")
+                print(f"  {expected_line}")
+                return
 
         content = plugins_ini.read_text(encoding="utf-8")
         prefix = get_platform_prefix(target)
@@ -209,6 +244,28 @@ def verify_deploy(
             print(f"  [FAIL] Backend DLL hash mismatch: src={src_hash[:8]} dst={dst_hash[:8]}")
             all_ok = False
 
+        # Check 2.1: Automated Calling Convention & ABI validation
+        if backend == "standalone" and "windows" in target:
+            try:
+                from crash_analyzer.binary import inspect_function_convention
+                from crash_analyzer.cli import DEFAULT_EXPORT_CONTRACT
+
+                mp_dll = game_path / DEFAULT_MOD / "dlls" / "mp.dll"
+                for fn in DEFAULT_EXPORT_CONTRACT:
+                    p_conv = inspect_function_convention(str(dest_path), fn)
+                    if not p_conv:
+                        print(f"  [FAIL] Required export '{fn}' is missing from backend DLL!")
+                        all_ok = False
+                    elif mp_dll.exists():
+                        r_conv = inspect_function_convention(str(mp_dll), fn)
+                        if r_conv and (p_conv["convention"] != r_conv["convention"] or p_conv["bytes_cleaned"] != r_conv["bytes_cleaned"]):
+                            print(f"  [FAIL] Calling convention mismatch on '{fn}': proxy={p_conv['ret_insn']} vs real={r_conv['ret_insn']}")
+                            all_ok = False
+                if all_ok:
+                    print("  [OK]   GoldSrc ABI contract & Calling Conventions verified")
+            except ImportError:
+                pass
+
     # Check 3: Registration in config
     if backend == "standalone":
         liblist_path = game_path / DEFAULT_MOD / "liblist.gam"
@@ -224,9 +281,19 @@ def verify_deploy(
             key_name = "gamedll" if is_windows else "gamedll_linux"
             expected_val = f"goldsrc\\bin\\{dest_name}" if is_windows else f"goldsrc/bin/{dest_name}"
             expected_line = f'{key_name} "{expected_val}"'
-            found = any(line.strip() == expected_line for line in content.split("\n"))
-            if found:
-                print("  [OK]   Standalone backend registered in liblist.gam")
+
+            first_active_gamedll = None
+            for line in content.split("\n"):
+                stripped = line.strip()
+                if (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//") and not stripped.startswith(";"):
+                    first_active_gamedll = stripped
+                    break
+
+            if first_active_gamedll == expected_line:
+                print("  [OK]   Standalone backend active in liblist.gam")
+            elif first_active_gamedll:
+                print(f"  [FAIL] liblist.gam active gamedll mismatch:\n         Expected: {expected_line}\n         Active:   {first_active_gamedll}")
+                all_ok = False
             else:
                 print(f"  [FAIL] Standalone backend ({expected_line}) not found in liblist.gam")
                 all_ok = False
@@ -308,36 +375,43 @@ def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
             print(f"Using server path from environment variable: {path}")
             return path
 
-    # 3. Local uncommitted config file (deploy.local.toml)
-    local_config = repo_root / "deploy.local.toml"
-    if local_config.exists():
+    # 3. Unified local config (goldsrc.local.toml)
+    try:
+        import tomllib
+    except ImportError:
         try:
-            import tomllib
+            import tomli as tomllib
         except ImportError:
-            try:
-                import tomli as tomllib
-            except ImportError:
-                tomllib = None
+            tomllib = None
 
-        if tomllib:
-            data = tomllib.loads(local_config.read_text(encoding="utf-8"))
-            server_path = data.get("server_path")
-            if server_path:
-                path = Path(server_path)
-                if path.exists():
-                    print(f"Using server path from {local_config.name}: {path}")
-                    return path
+    if tomllib:
+        local_config = repo_root / "goldsrc.local.toml"
+        if local_config.exists():
+            try:
+                data = tomllib.loads(local_config.read_text(encoding="utf-8"))
+                server_path = (
+                    data.get("deploy", {}).get("server_path")
+                    if "deploy" in data
+                    else data.get("server_path")
+                )
+                if server_path:
+                    path = Path(server_path)
+                    if path.exists():
+                        print(f"Using server path from {local_config.name}: {path}")
+                        return path
+            except Exception:
+                pass
 
     # 4. Error if no valid path resolved
     print("Error: No game server path specified!", file=sys.stderr)
     print("\nPlease provide the server path using one of the following methods:", file=sys.stderr)
-    print('  1. Pass --path argument: python scripts/deploy.py --path "C:\\path\\to\\hlds"', file=sys.stderr)
+    print('  1. Pass --path argument: python -m scripts deploy --path "C:\\path\\to\\hlds"', file=sys.stderr)
     print('  2. Set environment variable: set GOLDSRC_SERVER_DIR="C:\\path\\to\\hlds"', file=sys.stderr)
-    print('  3. Create deploy.local.toml with: server_path = "C:\\\\path\\\\to\\\\hlds"', file=sys.stderr)
+    print('  3. In goldsrc.local.toml under [deploy]: server_path = "C:\\\\path\\\\to\\\\hlds"', file=sys.stderr)
     sys.exit(1)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs backend and WASM modules")
     parser.add_argument(
         "--path",
@@ -367,9 +441,9 @@ def main():
         action="store_true",
         help="Verify deployment without deploying",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).resolve().parent.parent.parent
     game_path = resolve_game_path(args.path, repo_root)
     dest_name = get_dest_name(args.backend, args.target)
 

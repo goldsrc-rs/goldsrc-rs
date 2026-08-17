@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def get_repo_root() -> Path:
-    return Path(__file__).parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc", release: bool = True) -> Path:
@@ -104,7 +104,7 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
     return plugins
 
 
-if __name__ == "__main__":
+def main(argv=None):
     import argparse
 
     parser = argparse.ArgumentParser(description="Build GoldSrc.rs backend plugin")
@@ -116,6 +116,19 @@ if __name__ == "__main__":
     )
     parser.add_argument("--target", default="i686-pc-windows-msvc", help="Build target")
     parser.add_argument("--debug", action="store_true", help="Build in debug mode")
-    args = parser.parse_args()
+    parser.add_argument("--wasm", action="store_true", help="Build only WASM plugins")
+    parser.add_argument("--all", action="store_true", help="Build both backend DLL and WASM plugins")
+    args = parser.parse_args(argv)
 
-    build_plugin(backend=args.backend, target=args.target, release=not args.debug)
+    if args.wasm:
+        build_wasm_plugins(release=not args.debug)
+    elif args.all:
+        build_plugin(backend=args.backend, target=args.target, release=not args.debug)
+        build_wasm_plugins(release=not args.debug)
+    else:
+        build_plugin(backend=args.backend, target=args.target, release=not args.debug)
+
+
+if __name__ == "__main__":
+    main()
+
