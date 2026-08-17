@@ -509,6 +509,7 @@ dependencies = [
  "goldsrc-sys",
  "goldsrc-wasm-host",
  "lexopt",
+ "log",
  "serde",
  "toml",
 ]
@@ -519,7 +520,6 @@ version = "0.1.0"
 dependencies = [
  "goldsrc-sys",
  "wit-bindgen",
- "wit-component 0.256.0",
 ]
 
 [[package]]

@@ -106,6 +106,7 @@ backends are thin adapters over a shared `framework/goldsrc` core.
   types (`Entity`, `Player`, `CStr`/`String`). Plugin-facing API becomes fully `unsafe`-free.
 - [ ] **Unified Logger (`goldsrc_log`)**: Structured logger with categories (`Core`, `Proxy`, `Wasm`, `Plugin`)
   and levels (`Trace`, `Debug`, `Info`, `Warn`, `Error`). Controlled via `goldsrc.toml`:
+
   ```toml
   [logging]
   level = "debug"
@@ -113,6 +114,7 @@ backends are thin adapters over a shared `framework/goldsrc` core.
   console_output = true
   targets = ["core", "wasm"]
   ```
+
 - [ ] **Path Normalization**: Extend `PathResolver` with a unified normalization method (consistent separator
   across OS via `Path::display()` / `to_slash_lossy()`).
 - [ ] **Modularize backends**: Break `goldsrc-wasm-host` and `goldsrc-metamod` into clean component sub-modules.
