@@ -9,14 +9,18 @@ pub fn register_cli_commands() {
         argc: || unsafe { call_engfunc_ret!(engine_api::engfuncs().pfnCmd_Argc) },
         argv: |i| unsafe { call_engfunc_ret!(engine_api::engfuncs().pfnCmd_Argv, i) },
         print: |msg| backend().server_print(msg),
-        version: (env!("CARGO_PKG_VERSION"), "dev", "standalone"),
+        version: (
+            env!("CARGO_PKG_VERSION"),
+            env!("GIT_HASH"),
+            env!("BUILD_TARGET"),
+        ),
     });
-    goldsrc::cli::register_host_commands(|name, handler| {
-        let cname = std::ffi::CString::new(name).unwrap();
+    goldsrc::cli::register_host_commands_with_names(&["goldsrc-rs", "grs"], |name, handler| {
+        let cname = std::ffi::CString::new(name).unwrap().into_raw();
         unsafe {
             call_engfunc!(
                 engine_api::engfuncs().pfnAddServerCommand,
-                cname.as_ptr(),
+                cname,
                 Some(handler)
             );
         }

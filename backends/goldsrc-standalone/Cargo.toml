@@ -14,5 +14,3 @@ goldsrc-api = { workspace = true }
 goldsrc-wasm-host = { workspace = true }
 goldsrc = { workspace = true, features = ["host-cli"] }
 libloading = { workspace = true }
-
-[build-dependencies]

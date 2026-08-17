@@ -3,21 +3,10 @@
 //! Loads the real game DLL (`mp.dll` / `cs.so`) and forwards all standard
 //! GameDLL exports to it, while inserting our hooks around the key callbacks.
 
-use std::io::Write;
+use goldsrc::log;
+use goldsrc_sys::{enginefuncs_t, globalvars_t, DLL_FUNCTIONS, NEW_DLL_FUNCTIONS};
 use std::path::PathBuf;
 use std::sync::OnceLock;
-
-use goldsrc_sys::{enginefuncs_t, globalvars_t, DLL_FUNCTIONS};
-
-pub fn file_log(msg: &str) {
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(goldsrc::paths::PathResolver::debug_log_path())
-    {
-        let _ = writeln!(file, "[Standalone] {}", msg);
-    }
-}
 
 /// Name of the real game DLL to proxy.
 #[cfg(target_os = "windows")]
@@ -40,8 +29,8 @@ pub struct GameDllProxy {
     _lib: libloading::Library,
     /// DLL function table populated by the real game DLL.
     pub dll_funcs: DLL_FUNCTIONS,
-    /// Optional NEW_DLL_FUNCTIONS table (opaque raw buffer).
-    pub new_dll_funcs_buf: [u8; 512],
+    /// Optional NEW_DLL_FUNCTIONS table (ReGameDLL, Sven Co-op).
+    pub new_dll_funcs: NEW_DLL_FUNCTIONS,
     pub has_new_dll_funcs: bool,
     /// Whether the real DLL was successfully loaded.
     #[allow(dead_code)]
@@ -50,33 +39,65 @@ pub struct GameDllProxy {
 
 static PROXY: OnceLock<std::sync::Mutex<GameDllProxy>> = OnceLock::new();
 
-/// Load the real game DLL and populate our proxy tables.
-///
-/// # Safety
-/// `engfuncs` and `globals` must be valid pointers.
-pub unsafe fn load(engfuncs: *mut enginefuncs_t, globals: *mut globalvars_t) -> bool {
+pub fn dbg_log(msg: &str) {
+    use std::io::Write;
+    let _ = std::fs::create_dir_all("cstrike/goldsrc");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("cstrike/goldsrc/debug.log")
+    {
+        let _ = writeln!(f, "[Standalone] {msg}");
+        let _ = f.flush();
+    }
+}
+
+/// Ensure the real game DLL is loaded and its function tables are populated.
+pub fn ensure_loaded() -> bool {
+    if PROXY.get().is_some() {
+        return true;
+    }
     let dll_path = resolve_game_dll_path();
-    file_log(&format!(
+    dbg_log(&format!(
+        "Attempting to load real GameDLL from path: {dll_path:?}"
+    ));
+    log::info!(
+        target: "proxy",
         "Attempting to load real GameDLL from path: {:?}",
         dll_path
-    ));
+    );
 
-    let result = unsafe { try_load_game_dll(&dll_path, engfuncs, globals) };
+    let result = unsafe { try_load_game_dll(&dll_path) };
 
     match result {
         Ok(proxy) => {
-            file_log(&format!(
+            dbg_log(&format!(
+                "Successfully loaded real GameDLL from {dll_path:?}"
+            ));
+            log::info!(
+                target: "proxy",
                 "Successfully loaded real GameDLL from {:?}",
                 dll_path
-            ));
+            );
+            unsafe {
+                CACHED_DLL_FUNCS = proxy.dll_funcs;
+                CACHED_NEW_DLL_FUNCS = proxy.new_dll_funcs;
+                HAS_NEW_DLL_FUNCS = proxy.has_new_dll_funcs;
+                IS_LOADED = true;
+            }
             let _ = PROXY.set(std::sync::Mutex::new(proxy));
             true
         }
         Err(e) => {
-            file_log(&format!(
-                "ERROR: Failed to load real GameDLL from '{:?}': {}",
-                dll_path, e
+            dbg_log(&format!(
+                "ERROR: Failed to load real GameDLL from '{dll_path:?}': {e}"
             ));
+            log::error!(
+                target: "proxy",
+                "ERROR: Failed to load real GameDLL from '{:?}': {}",
+                dll_path,
+                e
+            );
             eprintln!(
                 "[GoldSrc.rs Standalone] WARNING: Failed to load real game DLL '{}': {}",
                 dll_path.display(),
@@ -87,41 +108,54 @@ pub unsafe fn load(engfuncs: *mut enginefuncs_t, globals: *mut globalvars_t) -> 
     }
 }
 
-/// Resolve the path to the real game DLL universally across any GoldSrc mod (CS 1.6, Sven Co-op, Half-Life, etc.).
-fn resolve_game_dll_path() -> PathBuf {
-    // 1. Try reading original gamedll path from liblist.gam if present
-    for liblist in &[
-        "cstrike/liblist.gam",
-        "liblist.gam",
-        "svencoop/liblist.gam",
-        "valve/liblist.gam",
-    ] {
-        let p = PathBuf::from(liblist);
-        if p.exists() {
-            if let Ok(content) = std::fs::read_to_string(&p) {
-                for line in content.lines() {
-                    let trimmed = line.trim();
-                    // Look for commented-out original line or gamedll line that is NOT our standalone binary
-                    let clean = if trimmed.starts_with(';') {
-                        trimmed.trim_start_matches(';').trim()
-                    } else {
-                        trimmed
-                    };
+/// Forward GiveFnptrsToDll to the real game DLL.
+///
+/// # Safety
+/// `engfuncs` and `globals` must be valid engine pointers.
+pub unsafe fn forward_give_fnptrs_to_dll(engfuncs: *mut enginefuncs_t, globals: *mut globalvars_t) {
+    ensure_loaded();
+    if let Some(proxy_lock) = PROXY.get() {
+        let guard = proxy_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let give_fns: Result<
+            libloading::Symbol<unsafe extern "system" fn(*mut enginefuncs_t, *mut globalvars_t)>,
+            _,
+        > = guard._lib.get(b"GiveFnptrsToDll\0");
+        match give_fns {
+            Ok(f) => {
+                dbg_log("Forwarding GiveFnptrsToDll to real GameDLL...");
+                f(engfuncs, globals);
+                dbg_log("Real GameDLL GiveFnptrsToDll returned successfully");
+            }
+            Err(e) => {
+                dbg_log(&format!(
+                    "ERROR: GiveFnptrsToDll not found in real GameDLL: {e}"
+                ));
+            }
+        }
+    }
+}
 
-                    if clean.starts_with("gamedll") || clean.starts_with("gamedll_linux") {
-                        if clean.contains("goldsrc_standalone") {
-                            continue;
-                        }
+/// Helper to resolve the path of the original game DLL to proxy.
+fn resolve_game_dll_path() -> PathBuf {
+    // 1. Try reading original gamedll from liblist.gam
+    let liblist_paths = ["cstrike/liblist.gam", "liblist.gam"];
+    for liblist_path in &liblist_paths {
+        if let Ok(content) = std::fs::read_to_string(liblist_path) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                // Find commented out original gamedll or active gamedll that isn't us
+                if (trimmed.starts_with("gamedll") || trimmed.starts_with("; gamedll"))
+                    && !trimmed.contains("goldsrc")
+                {
+                    // Clean up comments and extract value
+                    let clean = trimmed.trim_start_matches(';').trim();
+                    if clean.starts_with("gamedll") {
                         // Extract quoted path
                         if let Some(start) = clean.find('"') {
                             if let Some(end) = clean[start + 1..].find('"') {
                                 let orig_path = &clean[start + 1..start + 1 + end];
                                 let target_path = PathBuf::from(orig_path);
                                 if target_path.exists() {
-                                    file_log(&format!(
-                                        "Resolved original GameDLL from liblist.gam: {:?}",
-                                        target_path
-                                    ));
                                     return target_path;
                                 }
                             }
@@ -140,7 +174,11 @@ fn resolve_game_dll_path() -> PathBuf {
         for dll_name in GAME_DLL_NAMES {
             let candidate = PathBuf::from(mod_dir).join("dlls").join(dll_name);
             if candidate.exists() {
-                file_log(&format!("Resolved GameDLL via mod search: {:?}", candidate));
+                log::info!(
+                    target: "proxy",
+                    "Resolved GameDLL via mod search: {:?}",
+                    candidate
+                );
                 return candidate;
             }
         }
@@ -152,10 +190,11 @@ fn resolve_game_dll_path() -> PathBuf {
             for dll_name in GAME_DLL_NAMES {
                 let candidate = base.join(mod_dir).join("dlls").join(dll_name);
                 if candidate.exists() {
-                    file_log(&format!(
+                    log::info!(
+                        target: "proxy",
                         "Resolved GameDLL via exe base search: {:?}",
                         candidate
-                    ));
+                    );
                     return candidate;
                 }
             }
@@ -167,24 +206,11 @@ fn resolve_game_dll_path() -> PathBuf {
         .join(GAME_DLL_NAMES[0])
 }
 
-/// Load the game DLL and call `GiveFnptrsToDll` on it.
-///
-/// # Safety
-/// `engfuncs` and `globals` must be valid.
-unsafe fn try_load_game_dll(
-    path: &PathBuf,
-    engfuncs: *mut enginefuncs_t,
-    globals: *mut globalvars_t,
-) -> Result<GameDllProxy, Box<dyn std::error::Error>> {
+/// Load the game DLL and populate its function tables.
+unsafe fn try_load_game_dll(path: &PathBuf) -> Result<GameDllProxy, Box<dyn std::error::Error>> {
     unsafe {
         // SAFETY: Loading a DLL from a trusted path.
         let lib = libloading::Library::new(path)?;
-
-        // Call GiveFnptrsToDll on the real game DLL so it receives engine functions.
-        let give_fns: libloading::Symbol<
-            unsafe extern "C" fn(*mut enginefuncs_t, *mut globalvars_t),
-        > = lib.get(b"GiveFnptrsToDll\0")?;
-        give_fns(engfuncs, globals);
 
         // Retrieve the DLL_FUNCTIONS table from the real game DLL.
         let mut dll_funcs: DLL_FUNCTIONS = std::mem::zeroed();
@@ -199,7 +225,10 @@ unsafe fn try_load_game_dll(
         if let Ok(f) = get_entity_api2 {
             let ret = f(&mut dll_funcs, &mut iface_ver);
             if ret != 0 {
-                file_log("Successfully populated DLL_FUNCTIONS via GetEntityAPI2");
+                log::info!(
+                    target: "proxy",
+                    "Successfully populated DLL_FUNCTIONS via GetEntityAPI2"
+                );
                 loaded_api = true;
             }
         }
@@ -213,20 +242,24 @@ unsafe fn try_load_game_dll(
             if let Ok(f) = get_entity_api {
                 let ret = f(&mut dll_funcs, 140);
                 if ret != 0 {
-                    file_log("Successfully populated DLL_FUNCTIONS via GetEntityAPI");
+                    log::info!(
+                        target: "proxy",
+                        "Successfully populated DLL_FUNCTIONS via GetEntityAPI"
+                    );
                     loaded_api = true;
                 }
             }
         }
 
         if !loaded_api {
-            file_log(
-                "WARNING: Neither GetEntityAPI2 nor GetEntityAPI returned 1 for real GameDLL!",
+            log::warn!(
+                target: "proxy",
+                "WARNING: Neither GetEntityAPI2 nor GetEntityAPI returned 1 for real GameDLL!"
             );
         }
 
         // Retrieve NEW_DLL_FUNCTIONS if available
-        let mut new_dll_funcs_buf = [0u8; 512];
+        let mut new_dll_funcs: NEW_DLL_FUNCTIONS = std::mem::zeroed();
         let mut new_iface_ver: i32 = 1;
         let get_new_dll_fns: Result<
             libloading::Symbol<unsafe extern "C" fn(*mut std::ffi::c_void, *mut i32) -> i32>,
@@ -235,11 +268,14 @@ unsafe fn try_load_game_dll(
 
         let has_new_dll_funcs = if let Ok(f) = get_new_dll_fns {
             let ret = f(
-                new_dll_funcs_buf.as_mut_ptr() as *mut std::ffi::c_void,
+                &mut new_dll_funcs as *mut _ as *mut std::ffi::c_void,
                 &mut new_iface_ver,
             );
             if ret != 0 {
-                file_log("Successfully populated NEW_DLL_FUNCTIONS via GetNewDLLFunctions");
+                log::info!(
+                    target: "proxy",
+                    "Successfully populated NEW_DLL_FUNCTIONS via GetNewDLLFunctions"
+                );
                 true
             } else {
                 false
@@ -251,38 +287,44 @@ unsafe fn try_load_game_dll(
         Ok(GameDllProxy {
             _lib: lib,
             dll_funcs,
-            new_dll_funcs_buf,
+            new_dll_funcs,
             has_new_dll_funcs,
             loaded: true,
         })
     }
 }
 
+/// Global cached tables populated when real GameDLL is loaded
+static mut CACHED_DLL_FUNCS: DLL_FUNCTIONS = unsafe { std::mem::zeroed() };
+static mut CACHED_NEW_DLL_FUNCS: NEW_DLL_FUNCTIONS = unsafe { std::mem::zeroed() };
+static mut HAS_NEW_DLL_FUNCS: bool = false;
+static mut IS_LOADED: bool = false;
+
 /// Copy the real game DLL's function table into the provided table pointer.
 pub fn populate_dll_table(dll_table: *mut DLL_FUNCTIONS) {
-    if let Some(proxy_lock) = PROXY.get() {
-        if let Ok(proxy) = proxy_lock.lock() {
-            unsafe {
-                *dll_table = proxy.dll_funcs;
-            }
+    ensure_loaded();
+    unsafe {
+        if IS_LOADED && !dll_table.is_null() {
+            std::ptr::copy_nonoverlapping(&raw const CACHED_DLL_FUNCS, dll_table, 1);
+            dbg_log("Successfully copied real DLL_FUNCTIONS to engine table!");
+        } else {
+            dbg_log("ERROR: Real GameDLL not loaded when calling populate_dll_table!");
         }
     }
 }
 
 /// Copy NEW_DLL_FUNCTIONS from real GameDLL if present.
 pub fn populate_new_dll_table(new_dll_table: *mut std::ffi::c_void) -> bool {
-    if let Some(proxy_lock) = PROXY.get() {
-        if let Ok(proxy) = proxy_lock.lock() {
-            if proxy.has_new_dll_funcs && !new_dll_table.is_null() {
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        proxy.new_dll_funcs_buf.as_ptr(),
-                        new_dll_table as *mut u8,
-                        512,
-                    );
-                }
-                return true;
-            }
+    ensure_loaded();
+    unsafe {
+        if IS_LOADED && HAS_NEW_DLL_FUNCS && !new_dll_table.is_null() {
+            std::ptr::copy_nonoverlapping(
+                &raw const CACHED_NEW_DLL_FUNCS,
+                new_dll_table as *mut NEW_DLL_FUNCTIONS,
+                1,
+            );
+            dbg_log("Successfully copied real NEW_DLL_FUNCTIONS to engine table!");
+            return true;
         }
     }
     false
@@ -290,14 +332,15 @@ pub fn populate_new_dll_table(new_dll_table: *mut std::ffi::c_void) -> bool {
 
 /// Forward a spawn call to the real game DLL if loaded.
 pub fn forward_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
-    if let Some(proxy_lock) = PROXY.get() {
-        if let Ok(proxy) = proxy_lock.lock() {
-            if let Some(f) = proxy.dll_funcs.pfnSpawn {
-                return unsafe { f(edict) };
-            }
-        }
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnSpawn
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) }
+    } else {
+        0
     }
-    0
 }
 
 /// Forward a client connect call to the real game DLL if loaded.
@@ -307,45 +350,135 @@ pub fn forward_client_connect(
     address: *const std::os::raw::c_char,
     reject_reason: *mut std::os::raw::c_char,
 ) -> i32 {
-    if let Some(proxy_lock) = PROXY.get() {
-        if let Ok(proxy) = proxy_lock.lock() {
-            if let Some(f) = proxy.dll_funcs.pfnClientConnect {
-                return unsafe { f(edict, name, address, reject_reason) };
-            }
-        }
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnClientConnect
+    });
+    if let Some(f) = func {
+        unsafe { f(edict, name, address, reject_reason) }
+    } else {
+        1 // Allow by default if no real DLL
     }
-    1 // Allow by default if no real DLL
 }
 
 /// Forward a client disconnect call to the real game DLL if loaded.
 pub fn forward_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
-    if let Some(proxy_lock) = PROXY.get() {
-        if let Ok(proxy) = proxy_lock.lock() {
-            if let Some(f) = proxy.dll_funcs.pfnClientDisconnect {
-                unsafe { f(edict) };
-            }
-        }
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnClientDisconnect
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
     }
 }
 
 /// Forward a client command call to the real game DLL if loaded.
 pub fn forward_client_command(edict: *mut goldsrc_sys::edict_t) {
-    if let Some(proxy_lock) = PROXY.get() {
-        if let Ok(proxy) = proxy_lock.lock() {
-            if let Some(f) = proxy.dll_funcs.pfnClientCommand {
-                unsafe { f(edict) };
-            }
-        }
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnClientCommand
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
+/// Forward a game init call to the real game DLL if loaded.
+pub fn forward_game_init() {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnGameInit
+    });
+    if let Some(f) = func {
+        unsafe { f() };
     }
 }
 
 /// Forward a start frame call to the real game DLL if loaded.
 pub fn forward_start_frame() {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnStartFrame
+    });
+    if let Some(f) = func {
+        unsafe { f() };
+    }
+}
+
+/// Forward Server_GetBlendingInterface call to the real game DLL.
+///
+/// # Safety
+/// Pointers must be valid or null as accepted by HLSDK.
+pub unsafe fn forward_server_get_blending_interface(
+    version: i32,
+    ppinterface: *mut *mut std::ffi::c_void,
+    pstudio: *mut std::ffi::c_void,
+    rotationmatrix: *mut std::ffi::c_void,
+    bonetransform: *mut std::ffi::c_void,
+) -> i32 {
+    ensure_loaded();
     if let Some(proxy_lock) = PROXY.get() {
-        if let Ok(proxy) = proxy_lock.lock() {
-            if let Some(f) = proxy.dll_funcs.pfnStartFrame {
-                unsafe { f() };
-            }
+        let guard = proxy_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let func: Result<
+            libloading::Symbol<
+                unsafe extern "C" fn(
+                    i32,
+                    *mut *mut std::ffi::c_void,
+                    *mut std::ffi::c_void,
+                    *mut std::ffi::c_void,
+                    *mut std::ffi::c_void,
+                ) -> i32,
+            >,
+            _,
+        > = guard._lib.get(b"Server_GetBlendingInterface\0");
+        if let Ok(f) = func {
+            return f(version, ppinterface, pstudio, rotationmatrix, bonetransform);
         }
     }
+    0
+}
+
+/// Forward an entity factory function call (e.g. worldspawn, info_player_start) to the real game DLL.
+///
+/// # Safety
+/// `pev` is a valid pointer to an `entvars_t` allocated by the engine.
+pub unsafe fn forward_entity(name: &str, pev: *mut goldsrc_sys::entvars_t) {
+    ensure_loaded();
+    if let Some(proxy_lock) = PROXY.get() {
+        let guard = proxy_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut name_bytes = name.as_bytes().to_vec();
+        name_bytes.push(0);
+        let func: Result<libloading::Symbol<unsafe extern "C" fn(*mut goldsrc_sys::entvars_t)>, _> =
+            guard._lib.get(&name_bytes[..]);
+        if let Ok(f) = func {
+            f(pev);
+        }
+    }
+}
+
+/// Forward CreateInterface call to the real game DLL if available.
+///
+/// # Safety
+/// `name` must be a valid null-terminated C string.
+pub unsafe fn forward_create_interface(
+    name: *const std::os::raw::c_char,
+    return_code: *mut i32,
+) -> *mut std::ffi::c_void {
+    ensure_loaded();
+    if let Some(proxy_lock) = PROXY.get() {
+        let guard = proxy_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let func: Result<
+            libloading::Symbol<
+                unsafe extern "C" fn(
+                    *const std::os::raw::c_char,
+                    *mut i32,
+                ) -> *mut std::ffi::c_void,
+            >,
+            _,
+        > = guard._lib.get(b"CreateInterface\0");
+        if let Ok(f) = func {
+            return f(name, return_code);
+        }
+    }
+    std::ptr::null_mut()
 }
