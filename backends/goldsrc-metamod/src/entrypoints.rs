@@ -3,19 +3,9 @@
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
 use std::ffi::c_void;
-use std::ffi::CString;
 
 use crate::meta_types::*;
-use crate::{backend, call_engfunc, engfuncs, init_backend, init_wasm_host};
-
-/// Helper for Metamod ALERT logging.
-pub fn alert(level: goldsrc_sys::ALERT_TYPE, message: &str) {
-    // SAFETY: engfuncs() pointer valid after initialization.
-    unsafe {
-        let msg = CString::new(message).unwrap_or_default();
-        call_engfunc!(engfuncs().pfnAlertMessage, level, msg.as_ptr());
-    }
-}
+use crate::{backend, init_backend, init_wasm_host};
 
 /// # Safety
 /// Called by the engine during DLL loading. `engfuncs` and `globals` are

@@ -16,13 +16,9 @@ pub fn register_cli_commands() {
         ),
     });
     goldsrc::cli::register_host_commands(|name, handler| {
-        let cname = std::ffi::CString::new(name).unwrap();
+        let cname = std::ffi::CString::new(name).unwrap().into_raw();
         unsafe {
-            call_engfunc!(
-                engfuncs().pfnAddServerCommand,
-                cname.as_ptr(),
-                Some(handler)
-            );
+            call_engfunc!(engfuncs().pfnAddServerCommand, cname, Some(handler));
         }
     });
 }

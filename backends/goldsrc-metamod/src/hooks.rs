@@ -4,17 +4,6 @@ use goldsrc_sys::ffi::catch_ffi_panic;
 
 use crate::{call_engfunc, call_engfunc_ret, engfuncs, PRINT_QUEUE};
 
-/// Emits a player event to WASM plugins. Payload is the player index as
-/// 4 little-endian bytes so plugins can decode it cheaply.
-fn emit_player_event(name: &str, index: i32) {
-    let payload = index.to_le_bytes();
-    goldsrc::host::HostRuntime::with_manager(|m| {
-        if let Some(manager) = m {
-            manager.call_on_event(name, &payload);
-        }
-    });
-}
-
 /// Hook for DispatchSpawn - called when an entity spawns.
 ///
 /// # Safety
@@ -70,7 +59,7 @@ pub unsafe extern "C" fn hook_client_connect_post(
     catch_ffi_panic("hook_client_connect_post", 0, || {
         // SAFETY: `entity` is a valid edict pointer provided by the engine.
         let index = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity) };
-        emit_player_event("client_connect", index);
+        goldsrc::hooks::emit_player_event("client_connect", index);
         0
     })
 }
@@ -91,7 +80,7 @@ pub unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::e
     catch_ffi_panic("hook_client_disconnect_post", (), || {
         // SAFETY: `entity` is a valid edict pointer provided by the engine.
         let index = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity) };
-        emit_player_event("client_disconnect", index);
+        goldsrc::hooks::emit_player_event("client_disconnect", index);
     });
 }
 
@@ -118,11 +107,7 @@ pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t)
                 } else {
                     ""
                 };
-                goldsrc::host::HostRuntime::with_manager(|m| {
-                    if let Some(manager) = m {
-                        manager.dispatch_command(cmd_str, args_str);
-                    }
-                });
+                goldsrc::hooks::dispatch_command(cmd_str, args_str);
             }
         }
     });
@@ -132,10 +117,6 @@ pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t)
 pub unsafe extern "C" fn hook_start_frame() {
     // SAFETY: catch_unwind guards the ABI boundary; engine calls are safe at this point.
     catch_ffi_panic("hook_start_frame", (), || {
-        goldsrc::host::HostRuntime::with_manager(|m| {
-            if let Some(manager) = m {
-                manager.on_server_frame();
-            }
-        });
+        goldsrc::hooks::on_server_frame();
     });
 }

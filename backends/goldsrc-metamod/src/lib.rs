@@ -21,11 +21,8 @@ mod commands;
 mod entrypoints;
 mod hooks;
 mod meta_types;
-mod vtable;
 
-pub use vtable::*;
-
-use goldsrc::logging::LogTarget;
+use goldsrc::log;
 use goldsrc_api::Engine;
 
 use meta_types::*;
@@ -36,11 +33,8 @@ static G_ENGFUNCS: std::sync::OnceLock<
 static G_GLOBALS: std::sync::OnceLock<
     goldsrc_sys::ffi::SyncWrapper<&'static goldsrc_sys::globalvars_t>,
 > = std::sync::OnceLock::new();
-thread_local! {
-    static G_META_GLOBALS: std::cell::RefCell<Option<*mut meta_globals_t>> = const {
-        std::cell::RefCell::new(None)
-    };
-}
+static G_META_GLOBALS: std::sync::atomic::AtomicPtr<meta_globals_t> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 /// Deferred server-print queue shared with the standalone backend.
 pub static PRINT_QUEUE: goldsrc::backend::PrintQueue = goldsrc::backend::PrintQueue::new();
@@ -50,13 +44,13 @@ pub fn init_wasm_host() {
     let engine: std::sync::Arc<dyn goldsrc_api::EngineOps> =
         std::sync::Arc::new(goldsrc::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE));
     if let Err(e) = goldsrc::host::HostRuntime::init(
-        "metamod",
+        goldsrc_api::consts::BackendType::Metamod,
         |msg| {
             backend().server_print(msg);
         },
         engine,
     ) {
-        goldsrc::gslog_error!(LogTarget::Core, "{e}");
+        log::error!(target: "core", "{e}");
     }
 }
 
@@ -66,16 +60,11 @@ pub unsafe fn init_backend(
     engfuncs: *mut goldsrc_sys::enginefuncs_t,
     globals: *mut goldsrc_sys::globalvars_t,
 ) {
-    // Copy the engine-provided structs into leaked boxes; they are set once and
-    // then only read, so a leaked 'static reference is sound and avoids the
-    // aliasing UB of `static mut` accessors.
     if !engfuncs.is_null() {
-        let leaked: &'static _ = Box::leak(Box::new(unsafe { *engfuncs }));
-        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(leaked));
+        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(&*engfuncs));
     }
     if !globals.is_null() {
-        let leaked: &'static _ = Box::leak(Box::new(unsafe { *globals }));
-        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(leaked));
+        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(&*globals));
     }
 }
 
@@ -88,19 +77,15 @@ pub fn globals() -> &'static goldsrc_sys::globalvars_t {
 }
 
 pub fn meta_globals() -> &'static mut meta_globals_t {
-    G_META_GLOBALS
-        .with(|c| {
-            let guard = c.borrow();
-            // SAFETY: pointer set once by Metamod; single-threaded engine.
-            unsafe { guard.map(|p| &mut *p) }
-        })
-        .expect("Meta globals not initialized")
+    let ptr = G_META_GLOBALS.load(std::sync::atomic::Ordering::Relaxed);
+    if ptr.is_null() {
+        panic!("Meta globals not initialized");
+    }
+    unsafe { &mut *ptr }
 }
 
 pub fn set_meta_globals(ptr: *mut meta_globals_t) {
-    G_META_GLOBALS.with(|c| {
-        *c.borrow_mut() = Some(ptr);
-    });
+    G_META_GLOBALS.store(ptr, std::sync::atomic::Ordering::Relaxed);
 }
 
 use goldsrc::backend::EngineBackend;
@@ -112,19 +97,6 @@ pub type MetamodBackend = EngineBackend;
 pub use goldsrc::call_engfunc;
 pub use goldsrc::call_engfunc_ret;
 
-use std::fs::OpenOptions;
-use std::io::Write;
-
-pub fn file_log(msg: &str) {
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(goldsrc::paths::PathResolver::debug_log_path())
-    {
-        let _ = writeln!(file, "{}", msg);
-    }
-}
-
 static BACKEND: MetamodBackend = EngineBackend::new(engfuncs, &PRINT_QUEUE);
 
 pub fn backend() -> &'static MetamodBackend {
@@ -132,7 +104,7 @@ pub fn backend() -> &'static MetamodBackend {
 }
 
 pub use entrypoints::{
-    alert, GetEngineFunctions, GetEngineFunctions_Post, GetEntityAPI, GetEntityAPI2,
-    GetEntityAPI2_Post, GetEntityAPI_Post, GetNewDLLFunctions, GetNewDLLFunctions_Post,
-    GiveFnptrsToDll, Meta_Attach, Meta_Detach, Meta_Query,
+    GetEngineFunctions, GetEngineFunctions_Post, GetEntityAPI, GetEntityAPI2, GetEntityAPI2_Post,
+    GetEntityAPI_Post, GetNewDLLFunctions, GetNewDLLFunctions_Post, GiveFnptrsToDll, Meta_Attach,
+    Meta_Detach, Meta_Query,
 };
