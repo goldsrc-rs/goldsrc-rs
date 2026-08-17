@@ -8,7 +8,6 @@ description = "Pure Rust traits (interfaces) for GoldSrc engine interaction"
 [dependencies]
 goldsrc-sys = { workspace = true }
 wit-bindgen = { workspace = true }
-wit-component = { workspace = true }
 
 [features]
 default = []

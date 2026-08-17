@@ -9,6 +9,8 @@ pub mod auth;
 pub mod bindings;
 /// Shared capability registry (host + native auth).
 pub mod caps;
+/// Global constants for the engine and framework.
+pub mod consts;
 /// Validated `edict_t` handle.
 pub mod edict;
 /// Narrow object-safe engine bridge for the WASM host.
@@ -56,7 +58,7 @@ impl Entity {
     ///
     /// # Safety
     /// The caller must ensure that `edict` is a valid pointer to an entity in the engine.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "unsafe-sys"))]
     pub unsafe fn from_raw(index: i32, edict: *mut goldsrc_sys::edict_t) -> Self {
         // SAFETY: propagated from caller.
         Self {
@@ -162,7 +164,7 @@ impl Entity {
     }
 
     /// Returns the raw `edict_t` pointer, or null if the handle is stale.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "unsafe-sys"))]
     pub fn as_ptr(&self) -> *mut goldsrc_sys::edict_t {
         self.inner.as_ptr().unwrap_or(std::ptr::null_mut())
     }
@@ -218,7 +220,7 @@ impl Player {
     ///
     /// # Safety
     /// The caller must ensure that `edict` is a valid pointer to a player entity in the engine.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "unsafe-sys"))]
     pub unsafe fn from_raw(index: i32, edict: *mut goldsrc_sys::edict_t) -> Self {
         Self {
             index,
@@ -440,7 +442,7 @@ impl Player {
     }
 
     /// Returns the raw `edict_t` pointer, or null if the handle is stale.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "unsafe-sys"))]
     pub fn as_ptr(&self) -> *mut goldsrc_sys::edict_t {
         self.inner.as_ptr().unwrap_or(std::ptr::null_mut())
     }

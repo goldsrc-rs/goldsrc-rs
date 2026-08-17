@@ -137,6 +137,10 @@ fn check_handler_args(method: &ImplItemFn, attr_name: &str, expected: &[usize]) 
     }
 }
 
+/// Attribute macro that marks a struct implementation as a GoldSrc WASM plugin.
+///
+/// Generates the WIT Component Model export bindings, event dispatcher, command registry,
+/// and metadata header for the WASM runtime.
 #[proc_macro_attribute]
 pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let attr = match parse_plugin_attr(attr.into()) {
@@ -343,27 +347,32 @@ fn marker_outside_plugin(name: &str) -> TokenStream {
     .into()
 }
 
+/// Marker attribute for the plugin's `on_load` lifecycle hook.
 #[proc_macro_attribute]
 pub fn on_load(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     // Expanded by the compiler only when NOT inside #[plugin] (which strips it).
     marker_outside_plugin("on_load")
 }
 
+/// Marker attribute for the plugin's `on_unload` lifecycle hook.
 #[proc_macro_attribute]
 pub fn on_unload(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("on_unload")
 }
 
+/// Marker attribute for the plugin's per-frame `on_frame` hook.
 #[proc_macro_attribute]
 pub fn on_frame(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("on_frame")
 }
 
+/// Marker attribute for event handlers (`#[event("event_name")]`).
 #[proc_macro_attribute]
 pub fn event(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("event")
 }
 
+/// Marker attribute for console / client command handlers (`#[command("cmd_name")]`).
 #[proc_macro_attribute]
 pub fn command(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("command")
