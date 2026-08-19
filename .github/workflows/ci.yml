@@ -21,6 +21,9 @@ jobs:
         with:
           targets: i686-pc-windows-msvc
 
+      - name: Cache Rust dependencies & build artifacts
+        uses: Swatinem/rust-cache@v2
+
       - name: Install LLVM (winget)
         run: |
           winget install LLVM.LLVM --accept-package-agreements --accept-source-agreements
@@ -52,6 +55,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: i686-unknown-linux-gnu,wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies & build artifacts
+        uses: Swatinem/rust-cache@v2
 
       - name: Install LLVM and clang
         run: |
