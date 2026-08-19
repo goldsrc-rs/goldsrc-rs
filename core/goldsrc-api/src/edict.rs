@@ -237,6 +237,25 @@ impl EDict {
             None => false,
         }
     }
+
+    /// Entity angles (pitch, yaw, roll).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn angles(self) -> Option<[f32; 3]> {
+        let ptr = self.raw_ptr()?;
+        Some(unsafe { (*ptr).v.angles })
+    }
+
+    /// Set entity angles.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_angles(self, angles: [f32; 3]) -> bool {
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.angles = angles };
+                true
+            }
+            None => false,
+        }
+    }
 }
 
 // EDict is just two integers + a pointer-width integer. Thread-safety is

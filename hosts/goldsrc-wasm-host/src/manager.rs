@@ -81,6 +81,67 @@ impl api::Host for HostState {
         self.engine.player_set_armorvalue(index, armor);
     }
 
+    fn host_entity_angles(&mut self, index: i32) -> api::Vector3 {
+        let [x, y, z] = self.engine.entity_angles(index);
+        api::Vector3 { x, y, z }
+    }
+    fn host_entity_set_angles(&mut self, index: i32, angles: api::Vector3) {
+        self.engine
+            .entity_set_angles(index, [angles.x, angles.y, angles.z]);
+    }
+    fn host_create_named_entity(&mut self, classname: String) -> Option<i32> {
+        self.engine.create_named_entity(&classname)
+    }
+    fn host_remove_entity(&mut self, index: i32) {
+        self.engine.remove_entity(index);
+    }
+    fn host_drop_to_floor(&mut self, index: i32) -> i32 {
+        self.engine.drop_to_floor(index)
+    }
+
+    fn host_cvar_get_float(&mut self, name: String) -> f32 {
+        self.engine.cvar_get_float(&name)
+    }
+    fn host_cvar_set_float(&mut self, name: String, val: f32) {
+        self.engine.cvar_set_float(&name, val);
+    }
+    fn host_cvar_get_string(&mut self, name: String) -> Option<String> {
+        self.engine.cvar_get_string(&name)
+    }
+    fn host_cvar_set_string(&mut self, name: String, val: String) {
+        self.engine.cvar_set_string(&name, &val);
+    }
+
+    fn host_precache_model(&mut self, path: String) -> i32 {
+        self.engine.precache_model(&path)
+    }
+    fn host_precache_sound(&mut self, path: String) -> i32 {
+        self.engine.precache_sound(&path)
+    }
+    fn host_precache_generic(&mut self, path: String) -> i32 {
+        self.engine.precache_generic(&path)
+    }
+    fn host_emit_sound(
+        &mut self,
+        entity: i32,
+        channel: i32,
+        sample: String,
+        volume: f32,
+        attenuation: f32,
+        sound_flags: i32,
+        pitch: i32,
+    ) {
+        self.engine.emit_sound(
+            entity,
+            channel,
+            &sample,
+            volume,
+            attenuation,
+            sound_flags,
+            pitch,
+        );
+    }
+
     fn host_register_capability(&mut self, name: String, description: String) -> bool {
         let mut caps = goldsrc_api::caps::CAPS
             .write()
@@ -531,7 +592,39 @@ mod tests {
 
     struct NoopEngineOps;
 
-    impl EngineOps for NoopEngineOps {
+    impl goldsrc_api::EnginePrecache for NoopEngineOps {
+        fn precache_model(&self, _path: &str) -> i32 {
+            0
+        }
+        fn precache_sound(&self, _path: &str) -> i32 {
+            0
+        }
+        fn precache_generic(&self, _path: &str) -> i32 {
+            0
+        }
+    }
+
+    impl goldsrc_api::EngineMessages for NoopEngineOps {
+        fn message_begin(
+            &self,
+            _msg_dest: i32,
+            _msg_type: i32,
+            _origin: Option<[f32; 3]>,
+            _edict_index: Option<i32>,
+        ) {
+        }
+        fn message_end(&self) {}
+        fn write_byte(&self, _val: i32) {}
+        fn write_char(&self, _val: i32) {}
+        fn write_short(&self, _val: i32) {}
+        fn write_long(&self, _val: i32) {}
+        fn write_angle(&self, _val: f32) {}
+        fn write_coord(&self, _val: f32) {}
+        fn write_string(&self, _val: &str) {}
+        fn write_entity(&self, _val: i32) {}
+    }
+
+    impl goldsrc_api::EngineEntities for NoopEngineOps {
         fn entity_is_valid(&self, _index: i32) -> bool {
             false
         }
@@ -550,6 +643,10 @@ mod tests {
             [0.0; 3]
         }
         fn entity_set_velocity(&self, _index: i32, _vel: [f32; 3]) {}
+        fn entity_angles(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
         fn player_name(&self, _index: i32) -> Option<String> {
             None
         }
@@ -557,6 +654,74 @@ mod tests {
             0.0
         }
         fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
+        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
+            None
+        }
+        fn remove_entity(&self, _index: i32) {}
+        fn drop_to_floor(&self, _index: i32) -> i32 {
+            0
+        }
+    }
+
+    impl goldsrc_api::EngineCvars for NoopEngineOps {
+        fn cvar_get_float(&self, _name: &str) -> f32 {
+            0.0
+        }
+        fn cvar_set_float(&self, _name: &str, _val: f32) {}
+        fn cvar_get_string(&self, _name: &str) -> Option<String> {
+            None
+        }
+        fn cvar_set_string(&self, _name: &str, _val: &str) {}
+    }
+
+    impl goldsrc_api::EnginePhysics for NoopEngineOps {
+        fn point_contents(&self, _point: [f32; 3]) -> i32 {
+            0
+        }
+        fn trace_line(
+            &self,
+            _start: [f32; 3],
+            _end: [f32; 3],
+            _flags: i32,
+            _ignore_ent: i32,
+        ) -> goldsrc_api::TraceResult {
+            goldsrc_api::TraceResult::default()
+        }
+        fn trace_hull(
+            &self,
+            _start: [f32; 3],
+            _end: [f32; 3],
+            _flags: i32,
+            _hull_number: i32,
+            _ignore_ent: i32,
+        ) -> goldsrc_api::TraceResult {
+            goldsrc_api::TraceResult::default()
+        }
+    }
+
+    impl goldsrc_api::EngineSound for NoopEngineOps {
+        fn emit_sound(
+            &self,
+            _entity: i32,
+            _channel: i32,
+            _sample: &str,
+            _volume: f32,
+            _attenuation: f32,
+            _flags: i32,
+            _pitch: i32,
+        ) {
+        }
+        fn emit_ambient_sound(
+            &self,
+            _entity: i32,
+            _pos: [f32; 3],
+            _sample: &str,
+            _volume: f32,
+            _attenuation: f32,
+            _flags: i32,
+            _pitch: i32,
+        ) {
+        }
     }
 
     /// Loads the built demo plugin and checks the command registry + consume semantics.
