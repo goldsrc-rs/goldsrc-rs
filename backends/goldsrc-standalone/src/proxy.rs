@@ -61,10 +61,11 @@ pub fn ensure_loaded() -> bool {
     dbg_log(&format!(
         "Attempting to load real GameDLL from path: {dll_path:?}"
     ));
+    let norm_path = goldsrc::paths::PathResolver::normalize(&dll_path);
     log::info!(
         target: "proxy",
-        "Attempting to load real GameDLL from path: {:?}",
-        dll_path
+        "Attempting to load real GameDLL from path: \"{}\"",
+        norm_path
     );
 
     let result = unsafe { try_load_game_dll(&dll_path) };
@@ -72,36 +73,29 @@ pub fn ensure_loaded() -> bool {
     match result {
         Ok(proxy) => {
             dbg_log(&format!(
-                "Successfully loaded real GameDLL from {dll_path:?}"
+                "Successfully loaded real GameDLL from \"{norm_path}\""
             ));
             log::info!(
                 target: "proxy",
-                "Successfully loaded real GameDLL from {:?}",
-                dll_path
+                "Successfully loaded real GameDLL from \"{}\"",
+                norm_path
             );
-            unsafe {
-                CACHED_DLL_FUNCS = proxy.dll_funcs;
-                CACHED_NEW_DLL_FUNCS = proxy.new_dll_funcs;
-                HAS_NEW_DLL_FUNCS = proxy.has_new_dll_funcs;
-                IS_LOADED = true;
-            }
             let _ = PROXY.set(std::sync::Mutex::new(proxy));
             true
         }
         Err(e) => {
             dbg_log(&format!(
-                "ERROR: Failed to load real GameDLL from '{dll_path:?}': {e}"
+                "ERROR: Failed to load real GameDLL from \"{norm_path}\": {e}"
             ));
             log::error!(
                 target: "proxy",
-                "ERROR: Failed to load real GameDLL from '{:?}': {}",
-                dll_path,
+                "ERROR: Failed to load real GameDLL from \"{}\": {}",
+                norm_path,
                 e
             );
             eprintln!(
-                "[GoldSrc.rs Standalone] WARNING: Failed to load real game DLL '{}': {}",
-                dll_path.display(),
-                e
+                "[GoldSrc.rs Standalone] WARNING: Failed to load real game DLL \"{}\": {}",
+                norm_path, e
             );
             false
         }
@@ -176,8 +170,8 @@ fn resolve_game_dll_path() -> PathBuf {
             if candidate.exists() {
                 log::info!(
                     target: "proxy",
-                    "Resolved GameDLL via mod search: {:?}",
-                    candidate
+                    "Resolved GameDLL via mod search: \"{}\"",
+                    goldsrc::paths::PathResolver::normalize(&candidate)
                 );
                 return candidate;
             }
@@ -192,8 +186,8 @@ fn resolve_game_dll_path() -> PathBuf {
                 if candidate.exists() {
                     log::info!(
                         target: "proxy",
-                        "Resolved GameDLL via exe base search: {:?}",
-                        candidate
+                        "Resolved GameDLL via exe base search: \"{}\"",
+                        goldsrc::paths::PathResolver::normalize(&candidate)
                     );
                     return candidate;
                 }
@@ -294,18 +288,18 @@ unsafe fn try_load_game_dll(path: &PathBuf) -> Result<GameDllProxy, Box<dyn std:
     }
 }
 
-/// Global cached tables populated when real GameDLL is loaded
-static mut CACHED_DLL_FUNCS: DLL_FUNCTIONS = unsafe { std::mem::zeroed() };
-static mut CACHED_NEW_DLL_FUNCS: NEW_DLL_FUNCTIONS = unsafe { std::mem::zeroed() };
-static mut HAS_NEW_DLL_FUNCS: bool = false;
-static mut IS_LOADED: bool = false;
-
 /// Copy the real game DLL's function table into the provided table pointer.
 pub fn populate_dll_table(dll_table: *mut DLL_FUNCTIONS) {
     ensure_loaded();
-    unsafe {
-        if IS_LOADED && !dll_table.is_null() {
-            std::ptr::copy_nonoverlapping(&raw const CACHED_DLL_FUNCS, dll_table, 1);
+    if dll_table.is_null() {
+        return;
+    }
+    if let Some(lock) = PROXY.get() {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.loaded {
+            unsafe {
+                std::ptr::copy_nonoverlapping(&guard.dll_funcs, dll_table, 1);
+            }
             dbg_log("Successfully copied real DLL_FUNCTIONS to engine table!");
         } else {
             dbg_log("ERROR: Real GameDLL not loaded when calling populate_dll_table!");
@@ -316,13 +310,19 @@ pub fn populate_dll_table(dll_table: *mut DLL_FUNCTIONS) {
 /// Copy NEW_DLL_FUNCTIONS from real GameDLL if present.
 pub fn populate_new_dll_table(new_dll_table: *mut std::ffi::c_void) -> bool {
     ensure_loaded();
-    unsafe {
-        if IS_LOADED && HAS_NEW_DLL_FUNCS && !new_dll_table.is_null() {
-            std::ptr::copy_nonoverlapping(
-                &raw const CACHED_NEW_DLL_FUNCS,
-                new_dll_table as *mut NEW_DLL_FUNCTIONS,
-                1,
-            );
+    if new_dll_table.is_null() {
+        return false;
+    }
+    if let Some(lock) = PROXY.get() {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.loaded && guard.has_new_dll_funcs {
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    &guard.new_dll_funcs,
+                    new_dll_table as *mut NEW_DLL_FUNCTIONS,
+                    1,
+                );
+            }
             dbg_log("Successfully copied real NEW_DLL_FUNCTIONS to engine table!");
             return true;
         }

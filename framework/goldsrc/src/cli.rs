@@ -231,7 +231,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             }
             if targets.is_empty() {
-                out("Usage: mrs load <file1> [file2...]\n");
+                out("Usage: grs load <file1> [file2...]\n");
                 return;
             }
             for t in targets {
@@ -262,7 +262,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     }
                 }
             } else {
-                out("Usage: mrs unload <name|index...> or mrs unload -a/--all\n");
+                out("Usage: grs unload <name|index...> or grs unload -a/--all\n");
             }
         }
         "reload" => {
@@ -286,7 +286,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     }
                 }
             } else {
-                out("Usage: mrs reload <name|index...> or mrs reload -a/--all\n");
+                out("Usage: grs reload <name|index...> or grs reload -a/--all\n");
             }
         }
         "pause" => {
@@ -310,7 +310,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     }
                 }
             } else {
-                out("Usage: mrs pause <name|index...> or mrs pause -a/--all\n");
+                out("Usage: grs pause <name|index...> or grs pause -a/--all\n");
             }
         }
         "unpause" => {
@@ -334,7 +334,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     }
                 }
             } else {
-                out("Usage: mrs unpause <name|index...> or mrs unpause -a/--all\n");
+                out("Usage: grs unpause <name|index...> or grs unpause -a/--all\n");
             }
         }
         "info" => {
@@ -345,16 +345,16 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             }
             if targets.is_empty() {
-                out("Usage: mrs info <name|index...>\n");
+                out("Usage: grs info <name|index...>\n");
                 return;
             }
             for t in targets {
                 if let Some(idx) = manager.find_plugin(&t) {
                     let info = &manager.get_plugins_info()[idx];
-                    let clean_path = info.path.to_string_lossy().replace('\\', "/");
+                    let clean_path = crate::paths::PathResolver::normalize(&info.path);
                     out(&format!("--- Plugin Info: {} ---\n", info.name));
                     out(&format!("  Index:        #{}\n", info.index));
-                    out(&format!("  Path:         {}\n", clean_path));
+                    out(&format!("  Path:         \"{}\"\n", clean_path));
                     out(&format!(
                         "  Status:       {}\n",
                         if info.is_paused { "Paused" } else { "Running" }

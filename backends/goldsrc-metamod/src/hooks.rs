@@ -22,11 +22,15 @@ pub unsafe extern "C" fn hook_spawn_post(_edict: *mut goldsrc_sys::edict_t) -> i
 
 /// Post-hook for StartFrame.
 pub unsafe extern "C" fn hook_start_frame_post() {
-    for message in PRINT_QUEUE.drain() {
-        if let Ok(msg) = std::ffi::CString::new(message) {
-            call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+    catch_ffi_panic("hook_start_frame_post", (), || {
+        for message in PRINT_QUEUE.drain() {
+            if let Ok(msg) = std::ffi::CString::new(message) {
+                unsafe {
+                    call_engfunc!(engfuncs().pfnServerPrint, msg.as_ptr());
+                }
+            }
         }
-    }
+    });
 }
 
 /// Hook for ClientConnect - called when a player connects.

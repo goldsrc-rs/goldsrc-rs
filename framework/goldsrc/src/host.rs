@@ -46,7 +46,7 @@ impl HostRuntime {
         let main_cfg_path = PathResolver::main_config_path(backend);
         log::info!(
             target: "core",
-            "Config loaded from: {}",
+            "Config loaded from: \"{}\"",
             PathResolver::normalize(&main_cfg_path)
         );
 
@@ -55,12 +55,12 @@ impl HostRuntime {
 
         log::info!(
             target: "core",
-            "Plugin dir: {}",
+            "Plugin dir: \"{}\"",
             PathResolver::normalize(&plugin_dir)
         );
         log::info!(
             target: "core",
-            "Config dir: {}",
+            "Config dir: \"{}\"",
             PathResolver::normalize(&config_dir)
         );
 
@@ -76,16 +76,20 @@ impl HostRuntime {
             for entry in entries.filter_map(|e| e.ok()) {
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
+                    let file_name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy())
+                        .unwrap_or_default();
                     match manager.load_plugin(&path) {
                         Ok(_) => log::info!(
                             target: "wasm",
-                            "Loaded plugin: {:?}",
-                            path.file_name().unwrap_or_default()
+                            "Loaded plugin: \"{}\"",
+                            file_name
                         ),
                         Err(e) => log::error!(
                             target: "wasm",
-                            "Failed to load {:?}: {e}",
-                            path.file_name().unwrap_or_default()
+                            "Failed to load \"{}\": {e}",
+                            file_name
                         ),
                     }
                 }

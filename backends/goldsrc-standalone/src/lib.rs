@@ -114,7 +114,14 @@ unsafe extern "C" fn hook_client_connect(
     proxy::dbg_log("hook_client_connect called");
     catch_ffi_panic("hook_client_connect", 1, || {
         let result = proxy::forward_client_connect(edict, name, address, reject_reason);
-        goldsrc::hooks::emit_event("client_connect", &[]);
+        if result != 0 {
+            let funcs = engine_api::engfuncs();
+            let index = funcs
+                .pfnIndexOfEdict
+                .map(|f| unsafe { f(edict) })
+                .unwrap_or(0);
+            goldsrc::hooks::emit_player_event("client_connect", index);
+        }
         result
     })
 }
@@ -122,8 +129,13 @@ unsafe extern "C" fn hook_client_connect(
 unsafe extern "C" fn hook_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
     proxy::dbg_log("hook_client_disconnect called");
     catch_ffi_panic("hook_client_disconnect", (), || {
+        let funcs = engine_api::engfuncs();
+        let index = funcs
+            .pfnIndexOfEdict
+            .map(|f| unsafe { f(edict) })
+            .unwrap_or(0);
         proxy::forward_client_disconnect(edict);
-        goldsrc::hooks::emit_event("client_disconnect", &[]);
+        goldsrc::hooks::emit_player_event("client_disconnect", index);
     });
 }
 

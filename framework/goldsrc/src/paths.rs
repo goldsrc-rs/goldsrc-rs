@@ -131,41 +131,47 @@ impl PathResolver {
     /// ```
     pub fn normalize(path: &Path) -> String {
         // Resolve . and .. without hitting the filesystem.
-        let mut components: Vec<std::ffi::OsString> = Vec::new();
+        let mut components: Vec<std::path::Component> = Vec::new();
         for comp in path.components() {
             match comp {
                 std::path::Component::CurDir => {}
                 std::path::Component::ParentDir => {
-                    // Only pop if there is a normal component to go up from;
-                    // never pop a prefix (drive letter) or root component.
-                    if matches!(
-                        components
-                            .last()
-                            .and_then(|c| { std::path::Path::new(c).components().next() }),
-                        Some(std::path::Component::Normal(_))
-                    ) {
+                    if matches!(components.last(), Some(std::path::Component::Normal(_))) {
                         components.pop();
                     }
                 }
-                other => components.push(other.as_os_str().to_os_string()),
+                other => components.push(other),
             }
         }
 
-        // Re-join and convert separators to forward slashes.
-        let joined = components
-            .iter()
-            .enumerate()
-            .fold(String::new(), |mut acc, (i, c)| {
-                if i > 0 {
-                    acc.push('/');
+        let mut result = String::new();
+        for comp in components {
+            match comp {
+                std::path::Component::Prefix(prefix) => {
+                    result.push_str(&prefix.as_os_str().to_string_lossy().replace('\\', "/"));
                 }
-                acc.push_str(&c.to_string_lossy());
-                acc
-            });
+                std::path::Component::RootDir => {
+                    if !result.ends_with('/') {
+                        result.push('/');
+                    }
+                }
+                std::path::Component::CurDir => {}
+                std::path::Component::ParentDir => {
+                    if !result.is_empty() && !result.ends_with('/') {
+                        result.push('/');
+                    }
+                    result.push_str("..");
+                }
+                std::path::Component::Normal(c) => {
+                    if !result.is_empty() && !result.ends_with('/') {
+                        result.push('/');
+                    }
+                    result.push_str(&c.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
 
-        // On Windows, backslashes may still appear inside individual components
-        // (e.g. drive prefix). Replace any remaining ones.
-        joined.replace('\\', "/")
+        result
     }
 }
 
@@ -210,6 +216,15 @@ mod tests {
         assert_eq!(
             PathResolver::normalize(&p),
             "cstrike/addons/goldsrc/plugins"
+        );
+    }
+
+    #[test]
+    fn normalize_windows_absolute_path() {
+        let p = PathBuf::from(r"C:\Users\Administrator\Desktop\server\goldsrc.toml");
+        assert_eq!(
+            PathResolver::normalize(&p),
+            "C:/Users/Administrator/Desktop/server/goldsrc.toml"
         );
     }
 }
