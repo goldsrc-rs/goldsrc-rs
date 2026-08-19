@@ -2,7 +2,7 @@
 
 use goldsrc_wasm_host::PluginManager;
 use lexopt::Arg;
-use std::ffi::{c_char, CStr, OsString};
+use std::ffi::{CStr, OsString, c_char};
 use std::sync::OnceLock;
 
 /// Backend accessors needed to run the host CLI as a server command.
@@ -44,10 +44,10 @@ pub unsafe extern "C" fn handle_host_command() {
         let mut raw_args = Vec::new();
         for i in 0..argc {
             let arg_ptr = (backend.argv)(i);
-            if !arg_ptr.is_null() {
-                if let Ok(cstr) = CStr::from_ptr(arg_ptr).to_str() {
-                    raw_args.push(OsString::from(cstr));
-                }
+            if !arg_ptr.is_null()
+                && let Ok(cstr) = unsafe { CStr::from_ptr(arg_ptr) }.to_str()
+            {
+                raw_args.push(OsString::from(cstr));
             }
         }
         crate::host::HostRuntime::with_manager(|manager| {

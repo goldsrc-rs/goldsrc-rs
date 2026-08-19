@@ -47,6 +47,76 @@ pub trait Engine {
     fn cvar_set_float(&self, name: &str, value: f32);
 }
 
+/// Global engine operations for WASM plugins.
+#[cfg(target_arch = "wasm32")]
+pub mod engine_api {
+    pub use crate::Vector3;
+    use crate::bindings::goldsrc::engine::api::*;
+
+    /// Precache a model file (e.g. "models/player.mdl").
+    pub fn precache_model(path: &str) -> i32 {
+        host_precache_model(path)
+    }
+
+    /// Precache a sound file (e.g. "events/tutor_msg.wav").
+    pub fn precache_sound(path: &str) -> i32 {
+        host_precache_sound(path)
+    }
+
+    /// Precache a generic resource file.
+    pub fn precache_generic(path: &str) -> i32 {
+        host_precache_generic(path)
+    }
+
+    /// Emit dynamic sound attached to an entity.
+    pub fn emit_sound(
+        entity: i32,
+        channel: i32,
+        sample: &str,
+        volume: f32,
+        attenuation: f32,
+        flags: i32,
+        pitch: i32,
+    ) {
+        host_emit_sound(entity, channel, sample, volume, attenuation, flags, pitch)
+    }
+
+    /// Read float console variable.
+    pub fn cvar_get_float(name: &str) -> f32 {
+        host_cvar_get_float(name)
+    }
+
+    /// Set float console variable.
+    pub fn cvar_set_float(name: &str, val: f32) {
+        host_cvar_set_float(name, val)
+    }
+
+    /// Read string console variable.
+    pub fn cvar_get_string(name: &str) -> Option<String> {
+        host_cvar_get_string(name)
+    }
+
+    /// Set string console variable.
+    pub fn cvar_set_string(name: &str, val: &str) {
+        host_cvar_set_string(name, val)
+    }
+
+    /// Spawn a named entity (e.g. "info_target", "armoury_entity").
+    pub fn create_named_entity(classname: &str) -> Option<i32> {
+        host_create_named_entity(classname)
+    }
+
+    /// Remove an entity from the world.
+    pub fn remove_entity(entity: i32) {
+        host_remove_entity(entity)
+    }
+
+    /// Drop an entity to the floor geometry.
+    pub fn drop_to_floor(entity: i32) -> i32 {
+        host_drop_to_floor(entity)
+    }
+}
+
 /// Safe wrapper around `edict_t` (entity dictionary).
 ///
 /// Delegates field access to [`EDict`] which validates the serial number on

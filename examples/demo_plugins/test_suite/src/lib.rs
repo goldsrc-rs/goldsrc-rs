@@ -1,4 +1,4 @@
-use goldsrc::{log_info, log_warn, plugin, EntityId, Vector3, World};
+use goldsrc::prelude::*;
 
 #[derive(Debug, PartialEq)]
 struct StatsComponent {
@@ -8,12 +8,13 @@ struct StatsComponent {
 
 pub struct TestSuite;
 
-#[plugin(name = "test_suite", version = "1.0.0", author = "Oleg")]
+#[plugin(name = "test_suite", version = "0.10.0", author = "GoldSrc.rs Team")]
 impl TestSuite {
     #[on_load]
     fn init() {
-        log_info!("[Test Suite] Plugin loaded with Component Model bindings!");
+        log_info!("[Test Suite] Initializing GoldSrc.rs test suite (v0.10.0)...");
 
+        // 1. ECS World Verification
         let mut world = World::new();
         let p1 = EntityId(1);
         let p2 = EntityId(2);
@@ -35,23 +36,21 @@ impl TestSuite {
 
         if let Some(stats) = world.get::<StatsComponent>(p1) {
             log_info!(
-                "[Test Suite] Player 1 Stats: Kills={}, Deaths={}",
+                "[Test Suite] ECS Player 1 Stats: Kills={}, Deaths={}",
                 stats.kills,
                 stats.deaths
             );
         }
 
-        let pos = Vector3 {
-            x: 100.0,
-            y: 200.0,
-            z: -50.0,
-        };
-        log_info!(
-            "[Test Suite] Vector3 Test: ({}, {}, {})",
-            pos.x,
-            pos.y,
-            pos.z
-        );
+        // 2. Precache Verification
+        #[cfg(target_arch = "wasm32")]
+        {
+            let s_idx = engine::precache_sound("buttons/bell1.wav");
+            log_info!(
+                "[Test Suite] Sound 'buttons/bell1.wav' precached with index: {}",
+                s_idx
+            );
+        }
     }
 
     #[event]
@@ -72,5 +71,99 @@ impl TestSuite {
             cmd,
             args
         );
+    }
+
+    /// Tests player inspection: origin, angles, health, armor.
+    #[command(name = "test_player")]
+    fn handle_test_player(_cmd: String, args: String) {
+        let idx = args.trim().parse::<i32>().unwrap_or(1);
+        let player = Player::new(idx);
+        if !player.is_valid() {
+            log_warn!("[Test Suite] Player {} is not connected/valid!", idx);
+            return;
+        }
+
+        let name = player.name().unwrap_or_else(|| "Unknown".to_string());
+        let pos = player.origin();
+        let ang = player.angles();
+        let hp = player.health();
+        let armor = player.armorvalue();
+
+        log_info!(
+            "[Test Suite] Player #{}: '{}' | HP: {} | Armor: {} | Pos: ({:.1}, {:.1}, {:.1}) | Angles: ({:.1}, {:.1}, {:.1})",
+            idx,
+            name,
+            hp,
+            armor,
+            pos.x,
+            pos.y,
+            pos.z,
+            ang.x,
+            ang.y,
+            ang.z
+        );
+    }
+
+    /// Tests setting player health, armor, and teleporting.
+    #[command(name = "test_buff")]
+    fn handle_test_buff(_cmd: String, args: String) {
+        let idx = args.trim().parse::<i32>().unwrap_or(1);
+        let mut player = Player::new(idx);
+        if !player.is_valid() {
+            log_warn!("[Test Suite] Player {} is not valid!", idx);
+            return;
+        }
+
+        player.set_health(250.0);
+        player.set_armorvalue(100.0);
+        log_info!("[Test Suite] Buffed player #{}: HP=250, Armor=100", idx);
+    }
+
+    /// Tests CVar reading and writing.
+    #[command(name = "test_cvar")]
+    fn handle_test_cvar(_cmd: String, args: String) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let mut parts = args.split_whitespace();
+            let cvar_name = parts.next().unwrap_or("sv_gravity");
+            let new_val = parts.next();
+
+            let old_val = engine::cvar_get_float(cvar_name);
+            log_info!(
+                "[Test Suite] CVar '{}' current value: {:.1}",
+                cvar_name,
+                old_val
+            );
+
+            if let Some(val_str) = new_val {
+                if let Ok(v) = val_str.parse::<f32>() {
+                    engine::cvar_set_float(cvar_name, v);
+                    log_info!("[Test Suite] CVar '{}' updated to: {:.1}", cvar_name, v);
+                }
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            log_info!("[Test Suite] test_cvar executed with: {}", args);
+        }
+    }
+
+    /// Tests playing a sound on player 1.
+    #[command(name = "test_sound")]
+    fn handle_test_sound(_cmd: String, args: String) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let sample = if args.trim().is_empty() {
+                "buttons/bell1.wav"
+            } else {
+                args.trim()
+            };
+            engine::emit_sound(1, 0, sample, 1.0, 0.8, 0, 100);
+            log_info!("[Test Suite] Emitted sound '{}' on entity #1", sample);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            log_info!("[Test Suite] test_sound executed with: {}", args);
+        }
     }
 }

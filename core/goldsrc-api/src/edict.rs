@@ -53,7 +53,8 @@ impl EDict {
         let serial = if edict.is_null() {
             0
         } else {
-            (*edict).serialnumber
+            // SAFETY: edict is verified non-null above
+            unsafe { (*edict).serialnumber }
         };
         Self {
             index,

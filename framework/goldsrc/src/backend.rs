@@ -376,11 +376,7 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             let funcs = (self.engfuncs)();
             let pent = funcs.pfnPEntityOfEntIndex.and_then(|f| {
                 let p = f(index);
-                if p.is_null() {
-                    None
-                } else {
-                    Some(p)
-                }
+                if p.is_null() { None } else { Some(p) }
             });
             if let Some(p) = pent {
                 call_engfunc!(funcs.pfnRemoveEntity, p);
@@ -393,11 +389,7 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             let funcs = (self.engfuncs)();
             let pent = funcs.pfnPEntityOfEntIndex.and_then(|f| {
                 let p = f(index);
-                if p.is_null() {
-                    None
-                } else {
-                    Some(p)
-                }
+                if p.is_null() { None } else { Some(p) }
             });
             if let Some(p) = pent {
                 call_engfunc_ret!(funcs.pfnDropToFloor, p)

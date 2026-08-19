@@ -7,7 +7,7 @@
 ///
 /// Use [`catch_ffi_panic`] in **every** `#[no_mangle] pub extern` entry-point
 /// and every `unsafe extern "C"` hook callback registered with the engine.
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// Marker wrapper to make a `&'static T` value `Sync` when it is only ever
 /// accessed from a single thread (the GoldSrc engine is single-threaded).

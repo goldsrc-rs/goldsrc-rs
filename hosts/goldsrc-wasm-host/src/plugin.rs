@@ -2,8 +2,8 @@ use crate::bindings::GoldsrcPlugin;
 use crate::manager::HostState;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use wasmtime::component::Component;
 use wasmtime::Store;
+use wasmtime::component::Component;
 
 /// Metadata structure exported by WASM plugins generated via the `#[plugin]` macro.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]

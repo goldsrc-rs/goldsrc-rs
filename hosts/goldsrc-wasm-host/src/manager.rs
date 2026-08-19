@@ -1,4 +1,4 @@
-use crate::bindings::{goldsrc::engine::api, GoldsrcPlugin};
+use crate::bindings::{GoldsrcPlugin, goldsrc::engine::api};
 use crate::error::{CommandError, LoadError};
 use crate::plugin::{LoadedPlugin, PluginMetadata};
 use goldsrc_api::EngineOps;
@@ -9,8 +9,8 @@ use wasmtime::{Config, Engine};
 
 use notify::Watcher;
 use std::collections::HashMap;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 /// Wasmtime store state exposed to WASM plugins via host functions.
@@ -743,11 +743,12 @@ mod tests {
         // The #[command(name = "testcmd")] marker must be discoverable in metadata.
         let meta = &manager.plugins[0].metadata;
         assert!(meta.is_some());
-        assert!(meta
-            .as_ref()
-            .unwrap()
-            .commands
-            .contains(&"testcmd".to_string()));
+        assert!(
+            meta.as_ref()
+                .unwrap()
+                .commands
+                .contains(&"testcmd".to_string())
+        );
 
         // Dispatch finds the plugin via the registry and consumes the command.
         assert!(manager.dispatch_command("testcmd", "hello"));

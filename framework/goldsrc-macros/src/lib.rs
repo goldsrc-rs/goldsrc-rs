@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, Expr, ExprArray, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token};
+use syn::{Expr, ExprArray, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token, parse_macro_input};
 
 /// Escapes a string for embedding inside a TOML double-quoted literal.
 fn toml_escape(s: &str) -> String {
@@ -38,20 +38,21 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                 return Err(syn::Error::new_spanned(
                     meta.path(),
                     "unsupported #[plugin] attribute",
-                ))
+                ));
             }
         };
         match meta {
             Meta::NameValue(nv) => {
                 if ident == "dependencies" {
-                    let array: ExprArray =
-                        match &nv.value {
-                            Expr::Array(arr) => arr.clone(),
-                            _ => return Err(syn::Error::new_spanned(
+                    let array: ExprArray = match &nv.value {
+                        Expr::Array(arr) => arr.clone(),
+                        _ => {
+                            return Err(syn::Error::new_spanned(
                                 &nv.value,
                                 "#[plugin(dependencies = ...)] expects an array of string literals",
-                            )),
-                        };
+                            ));
+                        }
+                    };
                     for expr in &array.elems {
                         match expr {
                             Expr::Lit(expr_lit) => match &expr_lit.lit {
@@ -60,14 +61,14 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                                     return Err(syn::Error::new_spanned(
                                         expr,
                                         "dependencies expects a list of string literals like \"name@>=1.0\"",
-                                    ))
+                                    ));
                                 }
                             },
                             _ => {
                                 return Err(syn::Error::new_spanned(
                                     expr,
                                     "dependencies expects a list of string literals like \"name@>=1.0\"",
-                                ))
+                                ));
                             }
                         }
                     }
@@ -80,14 +81,14 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                             return Err(syn::Error::new_spanned(
                                 &nv.value,
                                 format!("#[plugin({ident} = ...)] expects a string literal"),
-                            ))
+                            ));
                         }
                     },
                     _ => {
                         return Err(syn::Error::new_spanned(
                             &nv.value,
                             format!("#[plugin({ident} = ...)] expects a string literal"),
-                        ))
+                        ));
                     }
                 };
                 if ident == "name" {
@@ -105,10 +106,12 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                     ));
                 }
             }
-            other => return Err(syn::Error::new_spanned(
-                other,
-                "unsupported #[plugin] attribute; supported: name, version, author, dependencies",
-            )),
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "unsupported #[plugin] attribute; supported: name, version, author, dependencies",
+                ));
+            }
         }
     }
     Ok(out)

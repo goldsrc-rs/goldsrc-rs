@@ -61,10 +61,12 @@ pub unsafe fn init_backend(
     globals: *mut goldsrc_sys::globalvars_t,
 ) {
     if !engfuncs.is_null() {
-        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(&*engfuncs));
+        // SAFETY: engfuncs is checked for null
+        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(unsafe { &*engfuncs }));
     }
     if !globals.is_null() {
-        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(&*globals));
+        // SAFETY: globals is checked for null
+        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(unsafe { &*globals }));
     }
 }
 
@@ -104,7 +106,7 @@ pub fn backend() -> &'static MetamodBackend {
 }
 
 pub use entrypoints::{
-    GetEngineFunctions, GetEngineFunctions_Post, GetEntityAPI, GetEntityAPI2, GetEntityAPI2_Post,
-    GetEntityAPI_Post, GetNewDLLFunctions, GetNewDLLFunctions_Post, GiveFnptrsToDll, Meta_Attach,
+    GetEngineFunctions, GetEngineFunctions_Post, GetEntityAPI, GetEntityAPI_Post, GetEntityAPI2,
+    GetEntityAPI2_Post, GetNewDLLFunctions, GetNewDLLFunctions_Post, GiveFnptrsToDll, Meta_Attach,
     Meta_Detach, Meta_Query,
 };

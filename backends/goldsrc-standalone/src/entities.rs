@@ -3,10 +3,13 @@
 macro_rules! declare_entities {
     ($($name:ident),* $(,)?) => {
         $(
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             #[inline(never)]
             pub unsafe extern "C" fn $name(pev: *mut goldsrc_sys::entvars_t) {
-                crate::proxy::forward_entity(stringify!($name), pev);
+                // SAFETY: Forward entity instantiation to real GameDLL
+                unsafe {
+                    crate::proxy::forward_entity(stringify!($name), pev);
+                }
             }
         )*
     };
