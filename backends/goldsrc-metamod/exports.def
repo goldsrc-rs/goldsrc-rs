@@ -1,5 +1,0 @@
-EXPORTS
-    GiveFnptrsToDll=_GiveFnptrsToDll@8
-    Meta_Query=_Meta_Query@12
-    Meta_Attach=_Meta_Attach@16
-    Meta_Detach=_Meta_Detach@8

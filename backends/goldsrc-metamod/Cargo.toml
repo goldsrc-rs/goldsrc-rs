@@ -1,21 +1,18 @@
 [package]
 name = "goldsrc-metamod"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 license.workspace = true
 description = "Metamod backend implementation for GoldSrc.rs"
 
 [lib]
 crate-type = ["cdylib"]
 
-[build-dependencies]
-cc = "1.0"
-
 [dependencies]
 goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
 goldsrc-wasm-host = { workspace = true }
-lexopt = "0.3"
+goldsrc = { workspace = true, features = ["host-cli"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Memory", "Win32_Foundation"] }

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goldsrc-scripts"
+version = "0.1.0"
+description = "Unified CLI, automation, and diagnostics toolchain for GoldSrc.rs"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "ulquiorracode" }]
+license = { text = "MIT OR Apache-2.0" }
+dependencies = []
+
+[project.scripts]
+goldsrc-cli = "scripts.__main__:main"
+
+[tool.pyrefly]
+project-excludes = ["**/__pyrefly_virtual__/**"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501", # line length handled by formatter
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = ["_pyrefly_virtual__"]

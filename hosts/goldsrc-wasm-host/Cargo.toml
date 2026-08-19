@@ -1,0 +1,16 @@
+[package]
+name = "goldsrc-wasm-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WASM plugin host for GoldSrc.rs (using wasmtime runtime)"
+
+[dependencies]
+goldsrc-api = { workspace = true }
+wasmtime = { workspace = true }
+wit-component = { workspace = true }
+wit-parser = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+notify = { workspace = true }
+thiserror = { workspace = true }
