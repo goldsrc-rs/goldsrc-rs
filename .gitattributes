@@ -1,0 +1,49 @@
+# Auto-detect text files and normalize line endings to LF on checkout
+* text=auto eol=lf
+
+# Explicit text files with LF
+*.rs text eol=lf diff=rust
+*.py text eol=lf diff=python
+*.toml text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf diff=markdown
+*.txt text eol=lf
+*.c text eol=lf diff=cpp
+*.cpp text eol=lf diff=cpp
+*.h text eol=lf diff=cpp
+*.hpp text eol=lf diff=cpp
+*.sh text eol=lf
+*.svg text eol=lf
+
+# Windows Batch files require CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Compiled binaries and libraries
+*.dll binary
+*.so binary
+*.dylib binary
+*.a binary
+*.lib binary
+*.exp binary
+*.o binary
+*.obj binary
+*.pdb binary
+*.exe binary
+
+# WebAssembly binaries
+*.wasm binary
+*.wat text eol=lf
+
+# Media and graphical assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary

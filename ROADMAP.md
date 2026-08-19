@@ -92,20 +92,21 @@ directly via `liblist.gam`, proving the architecture works without any third-par
 
 ---
 
-## v0.9.0 — Core Refactoring, Panic Isolation & Unified Logger 🏗 In Progress
+## v0.9.0 — Core Refactoring, Panic Isolation & Host Separation ✅
 
 **Goal:** Eliminate code duplication between backends, harden the FFI safety boundary so no Rust
-panic can crash HLDS, and introduce a production-grade structured logger. After this milestone both
-backends are thin adapters over a shared `framework/goldsrc` core.
+panic can crash HLDS, introduce a production-grade structured logger, and cleanly separate backends from plugin hosts.
 
-- [ ] **Core Refactoring**: Move MRS CLI, plugin manager, command registration, and event hooks out of
+- [x] **Host / Backend Architecture Separation**: Segregated engine adapters (`backends/goldsrc-metamod`, `backends/goldsrc-standalone`) from plugin execution runtimes (`hosts/goldsrc-wasm-host`) with abstract `PluginHost` interface.
+- [x] **Core Refactoring**: Move MRS CLI, plugin manager, command registration, and event hooks out of
   `goldsrc-standalone` and `goldsrc-metamod` into `framework/goldsrc`. Both backends become thin adapters.
-- [ ] **Panic Isolation**: Wrap every `#[no_mangle] pub unsafe extern "C"` export in `std::panic::catch_unwind`
+- [x] **Panic Isolation**: Wrap every `#[no_mangle] pub unsafe extern "C"` export in `catch_ffi_panic` (`std::panic::catch_unwind`)
   to prevent Rust panics from crossing the C-ABI boundary and crashing HLDS.
-- [ ] **Safe Abstraction Layer**: All raw C pointers (`*mut edict_t`, `*const c_char`) wrapped in safe Rust
-  types (`Entity`, `Player`, `CStr`/`String`). Plugin-facing API becomes fully `unsafe`-free.
-- [ ] **Unified Logger (`goldsrc_log`)**: Structured logger with categories (`Core`, `Proxy`, `Wasm`, `Plugin`)
+- [x] **Safe Abstraction Layer**: All raw C pointers (`*mut edict_t`, `*const c_char`) wrapped in safe Rust
+  types (`Entity`, `Player`, `CStr`/`String`). Plugin-facing API becomes fully `unsafe`-free with raw FFI isolated behind `unsafe-sys`.
+- [x] **Unified Logger (`goldsrc_log`)**: Structured logger with categories (`Core`, `Proxy`, `Wasm`, `Plugin`)
   and levels (`Trace`, `Debug`, `Info`, `Warn`, `Error`). Controlled via `goldsrc.toml`:
+
   ```toml
   [logging]
   level = "debug"
@@ -113,15 +114,16 @@ backends are thin adapters over a shared `framework/goldsrc` core.
   console_output = true
   targets = ["core", "wasm"]
   ```
-- [ ] **Path Normalization**: Extend `PathResolver` with a unified normalization method (consistent separator
+
+- [x] **Path Normalization**: Extend `PathResolver` with a unified normalization method (consistent separator
   across OS via `Path::display()` / `to_slash_lossy()`).
-- [ ] **Modularize backends**: Break `goldsrc-wasm-host` and `goldsrc-metamod` into clean component sub-modules.
-- [ ] **Advanced macros**: Implement `#[command]` and `#[hook]` with State Injection (`&mut World`).
-- [ ] **Purge legacy C artifacts**: Remove `exports.def`, `metamod.def`, `wrapper.c` from `goldsrc-metamod`.
+- [x] **Modularize backends**: Break `goldsrc-standalone` and `goldsrc-metamod` into clean component sub-modules.
+- [x] **Centralized Project Toolchain**: Modular Python CLI (`__main__.py` with `setup`, `build`, `deploy`, `verify`, `pre-commit`, `analyze`, `logo`).
+- [x] **Purge legacy C artifacts**: Remove `exports.def`, `metamod.def`, `wrapper.c` from `goldsrc-metamod`.
 
 ---
 
-## v0.10.0 — Full HLSDK & WASM Host API Coverage 📝 Planned
+## v0.10.0 — Full HLSDK & WASM Host API Coverage 🏗 In Progress
 
 **Goal:** Bring engine API coverage from ~15% to production completeness and expose the full GoldSrc
 surface to WASM plugins through typed WIT interfaces.
