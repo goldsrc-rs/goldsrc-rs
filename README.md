@@ -63,7 +63,8 @@ goldsrc-rs/
 │   └── goldsrc-api/          # Pure Rust trait definitions, Entity/Player handles, and event signatures
 ├── backends/
 │   ├── goldsrc-metamod/      # Metamod-r C-ABI plugin adapter (Meta_Query, Meta_Attach)
-│   ├── goldsrc-standalone/   # Standalone proxy GameDLL adapter (GiveFnptrsToDll, GetEntityAPI2)
+│   └── goldsrc-standalone/   # Standalone proxy GameDLL adapter (GiveFnptrsToDll, GetEntityAPI2)
+├── hosts/
 │   └── goldsrc-wasm-host/    # Embedded Wasmtime runtime, JIT engine, and plugin manager
 ├── framework/
 │   ├── goldsrc/              # High-level SDK for developers: ECS, Event Bus, logging, config watchers

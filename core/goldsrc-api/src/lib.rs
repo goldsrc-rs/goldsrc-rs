@@ -15,10 +15,13 @@ pub mod consts;
 pub mod edict;
 /// Narrow object-safe engine bridge for the WASM host.
 pub mod engine_ops;
+/// Abstract interface for plugin runtime execution hosts.
+pub mod plugin_host;
 
 pub use caps::CapabilityRegistry;
 pub use edict::EDict;
 pub use engine_ops::EngineOps;
+pub use plugin_host::{HostError, HostResult, PluginHost};
 
 /// Engine interface — provides access to engine functions.
 pub trait Engine {

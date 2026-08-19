@@ -6,10 +6,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - 2026-08-19
+
+### Added
+- **Host / Backend Separation**: Separated engine adapters (`backends/`) from plugin execution environments (`hosts/`), moving `goldsrc-wasm-host` into `hosts/` and introducing the abstract `PluginHost` trait.
+- **Unified Python Automation CLI**: Created centralized `scripts` CLI (`__main__.py`) supporting `setup`, `build`, `deploy`, `verify`, `pre-commit`, `analyze` (crash-analyzer), and `logo` (vector SVG / raster PNG generator).
+- **Organization Infrastructure**: Migrated to GitHub organization `goldsrc-rs`, established `.github` profile landing page, and added global community health files (`SECURITY.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`).
+- **Dual Licensing**: Adopted standard Rust dual-license `MIT OR Apache-2.0`.
 
 ### Fixed
-
 - **Panic Isolation**: Kept `panic = "unwind"` in release profile so `catch_ffi_panic` (`catch_unwind`) stops Rust panics at the C-ABI boundary before crashing HLDS.
 - **Standalone Console Drain**: `PRINT_QUEUE` is drained each frame in `hook_start_frame` with fmtlib-safe `%`/`{}` escaping to avoid leaks and ReHLDS crashes.
 - **Aliasing Soundness**: Eliminated raw `&'static mut PluginManager` re-borrowing in `wasm_manager` using safe singletons.
@@ -17,12 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Watcher Debouncing**: Added 150ms reload debounce in `PluginManager` to prevent loading partially written files during compilation.
 
 ### Changed
-
 - **Backend Common Layer**: Backends (`goldsrc-metamod` and `goldsrc-standalone`) refactored into thin adapters over shared `EngineBackend` and `PrintQueue` in `goldsrc::backend`.
 - **SDK Facade & Prelude**: Exposed `goldsrc::api`, `goldsrc::macros`, and convenient `goldsrc::prelude::*` in `framework/goldsrc`.
+- **Safe Abstraction Layer**: Isolated raw `edict_t` handles behind `unsafe-sys` feature flag.
 
 ### Removed
-
+- Removed legacy C artifacts: `exports.def`, `metamod.def`, `wrapper.c`.
 - Dead legacy code: unused `wit-component` in `goldsrc-api`, empty `[build-dependencies]` in `goldsrc-standalone`, and dead types.
 
 ## [0.8.0] - 2026-08-13
