@@ -130,9 +130,14 @@ impl PathResolver {
     /// assert_eq!(PathResolver::normalize(&p), "cstrike/addons/goldsrc/plugins");
     /// ```
     pub fn normalize(path: &Path) -> String {
+        // Pre-convert all backslashes to forward slashes so that POSIX/Linux
+        // Path::components() properly parses Windows path segments.
+        let string_repr = path.to_string_lossy().replace('\\', "/");
+        let clean_path = Path::new(&string_repr);
+
         // Resolve . and .. without hitting the filesystem.
         let mut components: Vec<std::path::Component> = Vec::new();
-        for comp in path.components() {
+        for comp in clean_path.components() {
             match comp {
                 std::path::Component::CurDir => {}
                 std::path::Component::ParentDir => {
@@ -148,7 +153,7 @@ impl PathResolver {
         for comp in components {
             match comp {
                 std::path::Component::Prefix(prefix) => {
-                    result.push_str(&prefix.as_os_str().to_string_lossy().replace('\\', "/"));
+                    result.push_str(&prefix.as_os_str().to_string_lossy());
                 }
                 std::path::Component::RootDir => {
                     if !result.ends_with('/') {
@@ -166,7 +171,7 @@ impl PathResolver {
                     if !result.is_empty() && !result.ends_with('/') {
                         result.push('/');
                     }
-                    result.push_str(&c.to_string_lossy().replace('\\', "/"));
+                    result.push_str(&c.to_string_lossy());
                 }
             }
         }

@@ -24,9 +24,12 @@ jobs:
       - name: Cache Rust dependencies & build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install LLVM (winget)
+      - name: Install LLVM (if missing)
+        shell: pwsh
         run: |
-          winget install LLVM.LLVM --accept-package-agreements --accept-source-agreements
+          if (!(Test-Path "C:\Program Files\LLVM\lib")) {
+            winget install LLVM.LLVM --accept-package-agreements --accept-source-agreements
+          }
 
       - name: Setup references
         run: python -m scripts setup
@@ -59,16 +62,11 @@ jobs:
       - name: Cache Rust dependencies & build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install LLVM and clang
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm-18 clang-18 libclang-18-dev
-
-      - name: Install 32-bit libraries
+      - name: Install 32-bit build tools & Clang
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y gcc-multilib
+          sudo apt-get install -y gcc-multilib libclang-dev
 
       - name: Setup references
         run: python -m scripts setup
