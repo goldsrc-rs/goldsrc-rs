@@ -76,6 +76,13 @@ class CommandRegistry:
             aliases=("crash", "crash-analyzer", "dump", "module", "abi"),
             group="Diagnostics & Tools",
         )
+        self.register(
+            name="logo",
+            description="Generate vector (SVG) and raster (PNG) brand logos in various styles",
+            loader=lambda: __import__("commands.logo", fromlist=["main"]).main,
+            aliases=("generate-logo", "branding"),
+            group="Assets & Branding",
+        )
 
     def _load_crash_analyzer(self) -> Callable:
         try:

@@ -26,8 +26,8 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
-repository = "https://github.com/ulquiorracode/GoldSrc.rs"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/goldsrc-rs/goldsrc-rs"
 
 [workspace.dependencies]
 goldsrc-sys = { path = "core/goldsrc-sys", version = "0.1.0" }
