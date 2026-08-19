@@ -49,7 +49,7 @@ wit-component = "0.256.0"
 wit-parser = "0.256.0"
 notify = "8.0"
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+toml = "1.1"
 lexopt = "0.3"
 libloading = "0.9.0"
 libc = "0.2"
