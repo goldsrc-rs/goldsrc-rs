@@ -26,7 +26,7 @@ jobs:
           winget install LLVM.LLVM --accept-package-agreements --accept-source-agreements
 
       - name: Setup references
-        run: python scripts/setup.py
+        run: python -m scripts setup
 
       - name: Build
         run: cargo build --target i686-pc-windows-msvc --workspace
@@ -51,7 +51,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: i686-unknown-linux-gnu
+          targets: i686-unknown-linux-gnu,wasm32-unknown-unknown
 
       - name: Install LLVM and clang
         run: |
@@ -65,7 +65,7 @@ jobs:
           sudo apt-get install -y gcc-multilib
 
       - name: Setup references
-        run: python scripts/setup.py
+        run: python -m scripts setup
 
       - name: Build
         run: cargo build --target i686-unknown-linux-gnu --workspace
@@ -77,3 +77,6 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --target i686-unknown-linux-gnu --workspace -- -D warnings
+
+      - name: Run tests (host target)
+        run: cargo test --workspace
