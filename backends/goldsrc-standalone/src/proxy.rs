@@ -349,7 +349,7 @@ pub fn forward_client_connect(
     name: *const std::os::raw::c_char,
     address: *const std::os::raw::c_char,
     reject_reason: *mut std::os::raw::c_char,
-) -> i32 {
+) -> goldsrc_sys::qboolean {
     let func = PROXY.get().and_then(|lock| {
         let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
         guard.dll_funcs.pfnClientConnect
@@ -357,7 +357,7 @@ pub fn forward_client_connect(
     if let Some(f) = func {
         unsafe { f(edict, name, address, reject_reason) }
     } else {
-        1 // Allow by default if no real DLL
+        1 as goldsrc_sys::qboolean // Allow by default if no real DLL
     }
 }
 

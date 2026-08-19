@@ -110,9 +110,9 @@ unsafe extern "C" fn hook_client_connect(
     name: *const std::os::raw::c_char,
     address: *const std::os::raw::c_char,
     reject_reason: *mut std::os::raw::c_char,
-) -> i32 {
+) -> goldsrc_sys::qboolean {
     proxy::dbg_log("hook_client_connect called");
-    catch_ffi_panic("hook_client_connect", 1, || {
+    catch_ffi_panic("hook_client_connect", 1 as goldsrc_sys::qboolean, || {
         let result = proxy::forward_client_connect(edict, name, address, reject_reason);
         if result != 0 {
             let funcs = engine_api::engfuncs();
