@@ -153,7 +153,32 @@ impl Engine for EngineBackend {
     }
 
     fn server_print(&self, message: &str) {
-        self.print_queue.push(message);
+        unsafe {
+            let funcs = (self.engfuncs)();
+            if let Some(f) = funcs.pfnServerPrint {
+                for buffered in self.print_queue.drain() {
+                    if let Ok(cstr) = std::ffi::CString::new(buffered) {
+                        f(cstr.as_ptr());
+                    }
+                }
+                let safe = message
+                    .replace('%', "%%")
+                    .replace('{', "{{")
+                    .replace('}', "}}")
+                    .replace('\r', "")
+                    .replace('\n', " ");
+                let mut end = safe.len().min(400);
+                while end > 0 && !safe.is_char_boundary(end) {
+                    end -= 1;
+                }
+                let line = format!("{}\n", safe[..end].trim_end());
+                if let Ok(cstr) = std::ffi::CString::new(line) {
+                    f(cstr.as_ptr());
+                }
+            } else {
+                self.print_queue.push(message);
+            }
+        }
     }
 
     fn server_command(&self, command: &str) {
