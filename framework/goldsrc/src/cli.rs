@@ -71,7 +71,67 @@ pub unsafe extern "C" fn handle_host_command() {
     }
 }
 
-/// Register server commands pointing at the shared handler.
+/// Shared server-command handler for WASM plugin commands (e.g. `test_player`, `vip_add`).
+///
+/// # Safety
+/// Registered as a C server command via `pfnAddServerCommand`.
+pub unsafe extern "C" fn handle_plugin_server_command() {
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(backend) = HOST_CLI.get() else {
+            return;
+        };
+        let argc = (backend.argc)();
+        if argc == 0 {
+            return;
+        }
+        let name_ptr = (backend.argv)(0);
+        if name_ptr.is_null() {
+            return;
+        }
+        let Ok(cmd_name) = (unsafe { CStr::from_ptr(name_ptr) }).to_str() else {
+            return;
+        };
+
+        // Reconstruct args string from argv(1..argc)
+        let mut args = String::new();
+        for i in 1..argc {
+            let arg_ptr = (backend.argv)(i);
+            if !arg_ptr.is_null()
+                && let Ok(arg_s) = (unsafe { CStr::from_ptr(arg_ptr) }).to_str()
+            {
+                if !args.is_empty() {
+                    args.push(' ');
+                }
+                args.push_str(arg_s);
+            }
+        }
+
+        let handled = crate::hooks::dispatch_command(cmd_name, &args);
+        if !handled {
+            (backend.print)(&format!(
+                "[GoldSrc.rs] Command '{}' was not handled by any active plugin.\n",
+                cmd_name
+            ));
+        }
+    }));
+    if let Err(err) = res {
+        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = err.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic".to_string()
+        };
+        if let Some(backend) = HOST_CLI.get() {
+            (backend.print)(&format!(
+                "[GoldSrc.rs PANIC] Caught panic in plugin command handler: {}\n",
+                err_msg
+            ));
+        }
+    }
+}
+
+/// Register server commands pointing at the shared host CLI handler.
 ///
 /// If `names` is empty, defaults to `&["goldsrc-rs", "grs", "meta-rs", "mrs"]`.
 pub fn register_host_commands_with_names(
@@ -86,6 +146,17 @@ pub fn register_host_commands_with_names(
 /// Register default server commands (`goldsrc-rs`, `grs`, `meta-rs`, `mrs`).
 pub fn register_host_commands(add: impl FnMut(&str, unsafe extern "C" fn())) {
     register_host_commands_with_names(&["goldsrc-rs", "grs", "meta-rs", "mrs"], add);
+}
+
+/// Register all commands currently exposed by loaded plugins as direct server console commands.
+pub fn register_plugin_server_commands(mut add: impl FnMut(&str, unsafe extern "C" fn())) {
+    crate::host::HostRuntime::with_manager(|manager| {
+        if let Some(mgr) = manager {
+            for cmd in mgr.registered_commands() {
+                add(&cmd, handle_plugin_server_command);
+            }
+        }
+    });
 }
 
 pub fn print_host_help<F: FnMut(&str)>(mut out: F) {
@@ -401,6 +472,41 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 "  Watchers:   {} active directory watcher(s)\n",
                 watchers_count
             ));
+        }
+        "cmds" | "commands" => {
+            let cmds = manager.registered_commands();
+            out(&format!(
+                "--- Registered Plugin Commands ({}) ---\n",
+                cmds.len()
+            ));
+            if cmds.is_empty() {
+                out("  (No commands registered)\n");
+            } else {
+                for cmd in cmds {
+                    out(&format!("  * {}\n", cmd));
+                }
+            }
+        }
+        "cmd" | "exec" => {
+            let mut positional = Vec::new();
+            while let Ok(Some(arg)) = parser.next() {
+                if let Arg::Value(v) = arg {
+                    positional.push(v.to_string_lossy().to_string());
+                }
+            }
+            if positional.is_empty() {
+                out("Usage: grs cmd <command_name> [args...]\n");
+            } else {
+                let cmd_name = &positional[0];
+                let cmd_args = positional[1..].join(" ");
+                let handled = crate::hooks::dispatch_command(cmd_name, &cmd_args);
+                if !handled {
+                    out(&format!(
+                        "[GoldSrc.rs] Command '{}' was not handled by any plugin.\n",
+                        cmd_name
+                    ));
+                }
+            }
         }
         "version" => {
             out(&format!(

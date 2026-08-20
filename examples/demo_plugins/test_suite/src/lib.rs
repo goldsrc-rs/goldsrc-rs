@@ -146,7 +146,7 @@ impl TestSuite {
         #[cfg(target_arch = "wasm32")]
         {
             let sample = if args.trim().is_empty() {
-                "buttons/bell1.wav"
+                "events/tutor_msg.wav"
             } else {
                 args.trim()
             };

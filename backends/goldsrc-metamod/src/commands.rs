@@ -21,4 +21,10 @@ pub fn register_cli_commands() {
             call_engfunc!(engfuncs().pfnAddServerCommand, cname, Some(handler));
         }
     });
+    goldsrc::cli::register_plugin_server_commands(|name, handler| {
+        let cname = std::ffi::CString::new(name).unwrap().into_raw();
+        unsafe {
+            call_engfunc!(engfuncs().pfnAddServerCommand, cname, Some(handler));
+        }
+    });
 }

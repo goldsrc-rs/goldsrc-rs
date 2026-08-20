@@ -516,6 +516,11 @@ impl PluginManager {
         self.spawn_watcher(dir, "toml")
     }
 
+    /// Returns all registered command names across all loaded plugins.
+    pub fn registered_commands(&self) -> Vec<String> {
+        self.command_registry.keys().cloned().collect()
+    }
+
     /// Dispatches a server command to the plugins that registered it.
     /// Stops at the first plugin that reports handling it (consume).
     pub fn dispatch_command(&mut self, cmd: &str, args: &str) -> bool {
