@@ -42,15 +42,7 @@ impl TestSuite {
             );
         }
 
-        // 2. Precache Verification
-        #[cfg(target_arch = "wasm32")]
-        {
-            let s_idx = engine::precache_sound("buttons/bell1.wav");
-            log_info!(
-                "[Test Suite] Sound 'buttons/bell1.wav' precached with index: {}",
-                s_idx
-            );
-        }
+        log_info!("[Test Suite] ECS initialized successfully.");
     }
 
     #[event]

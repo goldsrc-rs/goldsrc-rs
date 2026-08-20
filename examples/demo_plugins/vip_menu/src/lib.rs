@@ -12,10 +12,6 @@ impl VipMenu {
     #[on_load]
     fn init() {
         log_info!("[VIP Menu] VIP Menu Plugin loaded successfully.");
-        #[cfg(target_arch = "wasm32")]
-        {
-            let _ = engine::precache_sound("events/tutor_msg.wav");
-        }
     }
 
     /// Claims VIP daily kit (HP + Armor + Sound) (e.g. `vipmenu 1`).

@@ -10,11 +10,6 @@ impl VipCore {
         Auth::register_capability("vip.access", "Grants access to VIP features");
         Auth::register_capability("vip.give_armor", "Allows giving armor to a player");
         Auth::register_capability("vip.heal", "Allows healing a player to full HP");
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            let _ = engine::precache_sound("items/suitchargeno1.wav");
-        }
     }
 
     /// Adds VIP status to player index (e.g. `vip_add 1`).
