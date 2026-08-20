@@ -354,7 +354,25 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     }
 
     fn entity_classname(&self, index: i32) -> Option<String> {
-        self.get_player(index).and_then(|e| e.classname())
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if pedict.is_null() {
+                return None;
+            }
+            let classname_offset = (*pedict).v.classname;
+            if classname_offset != 0
+                && let Some(sz_from_idx) = funcs.pfnSzFromIndex
+            {
+                let str_ptr = sz_from_idx(classname_offset as i32);
+                if !str_ptr.is_null()
+                    && let Ok(s) = std::ffi::CStr::from_ptr(str_ptr).to_str()
+                {
+                    return Some(s.to_string());
+                }
+            }
+            None
+        }
     }
 
     fn entity_health(&self, index: i32) -> f32 {
@@ -404,7 +422,41 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     }
 
     fn player_name(&self, index: i32) -> Option<String> {
-        self.get_player(index).and_then(|p| p.name())
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if pedict.is_null() {
+                return None;
+            }
+            // Method 1: pfnGetInfoKeyBuffer + pfnInfoKeyValue
+            if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
+                && let Some(infokey_val) = funcs.pfnInfoKeyValue
+            {
+                let buffer = get_infokey(pedict);
+                let key = std::ffi::CString::new("name").unwrap_or_default();
+                let val_ptr = infokey_val(buffer, key.as_ptr());
+                if !val_ptr.is_null()
+                    && let Ok(name_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
+                    && !name_str.is_empty()
+                {
+                    return Some(name_str.to_string());
+                }
+            }
+            // Method 2: pfnSzFromIndex(v.netname)
+            let netname_offset = (*pedict).v.netname;
+            if netname_offset != 0
+                && let Some(sz_from_idx) = funcs.pfnSzFromIndex
+            {
+                let str_ptr = sz_from_idx(netname_offset as i32);
+                if !str_ptr.is_null()
+                    && let Ok(name_str) = std::ffi::CStr::from_ptr(str_ptr).to_str()
+                    && !name_str.is_empty()
+                {
+                    return Some(name_str.to_string());
+                }
+            }
+            None
+        }
     }
 
     fn player_armorvalue(&self, index: i32) -> f32 {
