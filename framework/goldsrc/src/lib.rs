@@ -29,10 +29,35 @@ pub mod logging;
 /// Filesystem path resolution helpers.
 pub mod paths;
 
+#[macro_export]
+macro_rules! log_info {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("[INFO] {}", format_args!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! log_warn {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("[WARN] {}", format_args!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! log_err {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("[ERROR] {}", format_args!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! log_debug {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("[DEBUG] {}", format_args!($($arg)*)))
+    };
+}
+
 pub use ::log;
-pub use ::log::{
-    debug as log_debug, error as log_err, info as log_info, trace as log_trace, warn as log_warn,
-};
 pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
@@ -51,10 +76,7 @@ pub mod prelude {
     pub use crate::engine;
     pub use crate::{Engine, Entity, Player, Plugin, Vector3};
     pub use crate::{command, event, on_load, plugin};
-    pub use ::log::{
-        debug, debug as log_debug, error, error as log_err, info, info as log_info, trace,
-        trace as log_trace, warn, warn as log_warn,
-    };
+    pub use crate::{log_debug, log_err, log_info, log_warn};
 }
 
 /// Direct console print helper for WASM plugins.
