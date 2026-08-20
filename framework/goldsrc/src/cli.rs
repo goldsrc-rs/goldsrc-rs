@@ -113,6 +113,8 @@ pub unsafe extern "C" fn handle_plugin_server_command() {
                 cmd_name
             ));
         }
+        // Force flush deferred prints immediately so command output appears in real time
+        (backend.print)("");
     }));
     if let Err(err) = res {
         let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
