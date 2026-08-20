@@ -167,7 +167,10 @@ unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
 
 unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     proxy::dbg_log("hook_spawn called");
-    catch_ffi_panic("hook_spawn", 0, || proxy::forward_spawn(edict))
+    catch_ffi_panic("hook_spawn", 0, || {
+        crate::backend().precache_pending_resources();
+        proxy::forward_spawn(edict)
+    })
 }
 
 // ============================================================================
