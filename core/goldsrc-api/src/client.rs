@@ -13,12 +13,12 @@ use crate::edict::EDict;
 /// Client classification kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientKind {
-    /// Human player connected via GoldSrc network protocol.
-    Human,
+    /// Human player client.
+    Player,
     /// Fake client / AI Bot (`FL_FAKECLIENT`).
     Bot,
     /// HLTV spectator proxy (`FL_PROXY`).
-    HLTVProxy,
+    HLTV,
 }
 
 /// Network connection lifecycle of a client slot.

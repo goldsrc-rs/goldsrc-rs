@@ -39,28 +39,12 @@ pub struct GameDllProxy {
 
 static PROXY: OnceLock<std::sync::Mutex<GameDllProxy>> = OnceLock::new();
 
-pub fn dbg_log(msg: &str) {
-    use std::io::Write;
-    let _ = std::fs::create_dir_all("cstrike/goldsrc");
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("cstrike/goldsrc/debug.log")
-    {
-        let _ = writeln!(f, "[Standalone] {msg}");
-        let _ = f.flush();
-    }
-}
-
 /// Ensure the real game DLL is loaded and its function tables are populated.
 pub fn ensure_loaded() -> bool {
     if PROXY.get().is_some() {
         return true;
     }
     let dll_path = resolve_game_dll_path();
-    dbg_log(&format!(
-        "Attempting to load real GameDLL from path: {dll_path:?}"
-    ));
     let norm_path = goldsrc::paths::PathResolver::normalize(&dll_path);
     log::info!(
         target: "proxy",
@@ -72,9 +56,6 @@ pub fn ensure_loaded() -> bool {
 
     match result {
         Ok(proxy) => {
-            dbg_log(&format!(
-                "Successfully loaded real GameDLL from \"{norm_path}\""
-            ));
             log::info!(
                 target: "proxy",
                 "Successfully loaded real GameDLL from \"{}\"",
@@ -84,9 +65,6 @@ pub fn ensure_loaded() -> bool {
             true
         }
         Err(e) => {
-            dbg_log(&format!(
-                "ERROR: Failed to load real GameDLL from \"{norm_path}\": {e}"
-            ));
             log::error!(
                 target: "proxy",
                 "ERROR: Failed to load real GameDLL from \"{}\": {}",
@@ -116,14 +94,15 @@ pub unsafe fn forward_give_fnptrs_to_dll(engfuncs: *mut enginefuncs_t, globals: 
         > = unsafe { guard._lib.get(b"GiveFnptrsToDll\0") };
         match give_fns {
             Ok(f) => {
-                dbg_log("Forwarding GiveFnptrsToDll to real GameDLL...");
+                log::trace!(target: "proxy", "Forwarding GiveFnptrsToDll to real GameDLL...");
                 unsafe { f(engfuncs, globals) };
-                dbg_log("Real GameDLL GiveFnptrsToDll returned successfully");
+                log::trace!(target: "proxy", "Real GameDLL GiveFnptrsToDll returned successfully");
             }
             Err(e) => {
-                dbg_log(&format!(
+                log::error!(
+                    target: "proxy",
                     "ERROR: GiveFnptrsToDll not found in real GameDLL: {e}"
-                ));
+                );
             }
         }
     }
@@ -298,9 +277,9 @@ pub fn populate_dll_table(dll_table: *mut DLL_FUNCTIONS) {
             unsafe {
                 std::ptr::copy_nonoverlapping(&guard.dll_funcs, dll_table, 1);
             }
-            dbg_log("Successfully copied real DLL_FUNCTIONS to engine table!");
+            log::trace!(target: "proxy", "Successfully copied real DLL_FUNCTIONS to engine table!");
         } else {
-            dbg_log("ERROR: Real GameDLL not loaded when calling populate_dll_table!");
+            log::error!(target: "proxy", "ERROR: Real GameDLL not loaded when calling populate_dll_table!");
         }
     }
 }
@@ -321,7 +300,7 @@ pub fn populate_new_dll_table(new_dll_table: *mut std::ffi::c_void) -> bool {
                     1,
                 );
             }
-            dbg_log("Successfully copied real NEW_DLL_FUNCTIONS to engine table!");
+            log::trace!(target: "proxy", "Successfully copied real NEW_DLL_FUNCTIONS to engine table!");
             return true;
         }
     }
