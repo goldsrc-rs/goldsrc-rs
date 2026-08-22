@@ -64,17 +64,24 @@ pub use goldsrc_api as api;
 pub use goldsrc_api;
 #[cfg(target_arch = "wasm32")]
 pub use goldsrc_api::engine_api as engine;
-pub use goldsrc_api::{Engine, Entity, Player, Plugin, Vector3, auth::Auth};
+pub use goldsrc_api::{
+    Alive, Auth, Bot, CapExpr, ChatScope, Command, CommandBuilder, CommandContext, CommandError,
+    CommandResult, CommandTarget, CounterTerrorist, Dead, Engine, Entity, HLTV, Player,
+    PlayerStateFilter, Plugin, Spectator, Team, Terrorist, Vector3,
+};
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{command, event, on_load, plugin};
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
-    pub use crate::Auth;
     pub use crate::ecs::*;
     #[cfg(target_arch = "wasm32")]
     pub use crate::engine;
-    pub use crate::{Engine, Entity, Player, Plugin, Vector3};
+    pub use crate::{
+        Alive, Auth, Bot, CapExpr, ChatScope, Command, CommandBuilder, CommandContext,
+        CommandError, CommandResult, CommandTarget, CounterTerrorist, Dead, Engine, Entity, HLTV,
+        Player, PlayerStateFilter, Plugin, Spectator, Team, Terrorist, Vector3,
+    };
     pub use crate::{command, event, on_load, plugin};
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }

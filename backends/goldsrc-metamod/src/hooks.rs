@@ -92,10 +92,15 @@ pub unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::e
 ///
 /// # Safety
 /// `_entity` must be a valid pointer to an edict_t.
-#[allow(dead_code)]
-pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {
+pub unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
     // SAFETY: catch_unwind guards the ABI boundary; engine calls are safe at this point.
     catch_ffi_panic("hook_client_command", (), || {
+        let index = if !entity.is_null() {
+            call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity)
+        } else {
+            0
+        };
+
         let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
         if argc == 0 {
             return;
@@ -112,7 +117,7 @@ pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t)
             } else {
                 ""
             };
-            goldsrc::hooks::dispatch_command(cmd_str, args_str);
+            goldsrc::hooks::dispatch_client_command(index, cmd_str, args_str);
         }
     });
 }

@@ -139,7 +139,17 @@ unsafe extern "C" fn hook_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
 
 unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
     catch_ffi_panic("hook_client_command", (), || {
-        proxy::forward_client_command(edict);
+        let index = if !edict.is_null() {
+            unsafe {
+                crate::engine_api::engfuncs()
+                    .pfnIndexOfEdict
+                    .map(|f| f(edict))
+                    .unwrap_or(0)
+            }
+        } else {
+            0
+        };
+
         let cmd_str;
         let name_str;
         {
@@ -161,7 +171,11 @@ unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
                 String::new()
             };
         }
-        goldsrc::hooks::dispatch_command(&name_str, &cmd_str);
+
+        let handled = goldsrc::hooks::dispatch_client_command(index, &name_str, &cmd_str);
+        if !handled {
+            proxy::forward_client_command(edict);
+        }
     });
 }
 

@@ -15,9 +15,19 @@ impl VipMenu {
         log_info!("[VIP Menu] VIP Menu Plugin loaded successfully.");
     }
 
-    /// Claims VIP daily kit (HP + Armor + Sound) (e.g. `vipmenu 1`).
+    /// Claims VIP daily kit (HP + Armor + Sound) (e.g. `vipmenu 1` or chat `/vip`).
     #[command(name = "vipmenu")]
     fn handle_menu(_cmd: String, args: String) {
+        Self::apply_vip_kit(args);
+    }
+
+    /// Alias for `vipmenu` (e.g. `/vip`).
+    #[command(name = "vip")]
+    fn handle_vip_alias(_cmd: String, args: String) {
+        Self::apply_vip_kit(args);
+    }
+
+    fn apply_vip_kit(args: String) {
         let idx = args.trim().parse::<i32>().unwrap_or(1);
         let mut player = Player::new(idx);
         if !player.is_valid() {

@@ -27,14 +27,56 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
 /// Returns `true` if the host runtime is active and processed the command.
 pub fn dispatch_command(cmd: &str, args: &str) -> bool {
     HostRuntime::with_manager(|m| match m {
-        Some(manager) => {
-            manager.dispatch_command(cmd, args);
-            true
-        }
+        Some(manager) => manager.dispatch_command(cmd, args),
         None => {
             log::trace!(target: "core", "dispatch_command('{cmd}') skipped: WASM host not initialized");
             false
         }
+    })
+}
+
+/// Dispatches a client command (including chat commands e.g. `say /vip` or console `vipmenu`).
+/// Returns `true` if a plugin intercepted and handled the command (requesting suppression from GameDLL).
+pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bool {
+    HostRuntime::with_manager(|m| {
+        let Some(manager) = m else {
+            return false;
+        };
+
+        if cmd.eq_ignore_ascii_case("say") || cmd.eq_ignore_ascii_case("say_team") {
+            let mut text = raw_args.trim();
+            if text.starts_with('"') && text.ends_with('"') && text.len() >= 2 {
+                text = &text[1..text.len() - 1];
+            }
+            let mut parts = text.split_whitespace();
+            if let Some(trigger) = parts.next() {
+                let clean_trigger = trigger.trim_start_matches(['/', '!']);
+                let rest_args = parts.collect::<Vec<_>>().join(" ");
+                let formatted_args = if rest_args.is_empty() {
+                    format!("{player_idx}")
+                } else {
+                    format!("{player_idx} {rest_args}")
+                };
+
+                // 1. Try exact clean trigger (e.g. "vip" or "vipmenu")
+                if manager.dispatch_command(clean_trigger, &formatted_args) {
+                    return true;
+                }
+                // 2. Try raw trigger (e.g. "/vip")
+                if manager.dispatch_command(trigger, &formatted_args) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Direct client console command
+        let formatted_args = if raw_args.is_empty() {
+            format!("{player_idx}")
+        } else {
+            format!("{player_idx} {raw_args}")
+        };
+        manager.dispatch_command(cmd, &formatted_args)
     })
 }
 

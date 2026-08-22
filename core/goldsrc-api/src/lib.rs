@@ -7,8 +7,16 @@
 pub mod auth;
 /// Generated WASM bindings (wasm32 only).
 pub mod bindings;
+/// Capability DSL parser and AST evaluator.
+pub mod capability_dsl;
 /// Shared capability registry (host + native auth).
 pub mod caps;
+/// Command routing targets, scope filters, teams, and typestates.
+pub mod command;
+/// Programmatic builder API for runtime commands.
+pub mod command_builder;
+/// Command execution error taxonomy and context.
+pub mod command_error;
 /// Global constants for the engine and framework.
 pub mod consts;
 /// Validated `edict_t` handle.
@@ -20,7 +28,15 @@ pub mod engine_ops;
 /// Abstract interface for plugin runtime execution hosts.
 pub mod plugin_host;
 
+pub use auth::Auth;
+pub use capability_dsl::CapExpr;
 pub use caps::CapabilityRegistry;
+pub use command::{
+    Alive, Bot, ChatScope, CommandTarget, CounterTerrorist, Dead, HLTV, PlayerStateFilter,
+    Spectator, Team, Terrorist,
+};
+pub use command_builder::{Command, CommandBuilder};
+pub use command_error::{CommandContext, CommandError, CommandResult};
 pub use edict::EDict;
 pub use engine::*;
 pub use engine_ops::EngineOps;
