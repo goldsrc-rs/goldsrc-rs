@@ -48,7 +48,3 @@ impl<T> Engine for T where
         + Sync
 {
 }
-
-/// Alias for [`Engine`] for compatibility.
-pub trait EngineOps: Engine {}
-impl<T: Engine> EngineOps for T {}
