@@ -1,0 +1,61 @@
+//! Client classifications, connection lifecycles, life states, and team slots.
+
+/// Client classification kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientKind {
+    /// Human player client.
+    Player,
+    /// Fake client / AI Bot (`FL_FAKECLIENT`).
+    Bot,
+    /// HLTV spectator proxy (`FL_PROXY`).
+    HLTV,
+}
+
+/// Network connection lifecycle of a client slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionState {
+    /// Slot is vacant.
+    Disconnected,
+    /// Client is connecting and negotiating resources.
+    Connecting,
+    /// Client is fully connected and active in the game world.
+    Connected,
+    /// Client is disconnecting.
+    Disconnecting,
+}
+
+/// In-game life state of a player entity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LifeState {
+    /// Player is alive and participating in the round.
+    Alive,
+    /// Player is dead and awaiting respawn.
+    Dead,
+    /// Player is in free-look or spectator camera mode.
+    Spectating,
+}
+
+/// Game team identifiers (compatible with Counter-Strike 1.6 team slots).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum Team {
+    /// Unassigned / choosing team.
+    Unassigned = 0,
+    /// Terrorist team (T).
+    Terrorist = 1,
+    /// Counter-Terrorist team (CT).
+    CounterTerrorist = 2,
+    /// Spectator team (SPEC).
+    Spectator = 3,
+}
+
+impl From<i32> for Team {
+    fn from(val: i32) -> Self {
+        match val {
+            1 => Team::Terrorist,
+            2 => Team::CounterTerrorist,
+            3 => Team::Spectator,
+            _ => Team::Unassigned,
+        }
+    }
+}
