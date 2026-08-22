@@ -1,7 +1,3 @@
-//! Server console command handling for `meta-rs` / `mrs`.
-
-use goldsrc_api::Engine;
-
 use crate::{backend, call_engfunc, call_engfunc_ret, engfuncs};
 
 pub fn register_cli_commands() {

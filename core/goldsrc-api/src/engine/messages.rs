@@ -59,4 +59,10 @@ pub trait EngineMessages: Send + Sync {
 
     /// Write an entity index.
     fn write_entity(&self, val: i32);
+
+    /// Print a message to the server console.
+    fn server_print(&self, message: &str);
+
+    /// Execute a server command string.
+    fn server_command(&self, command: &str);
 }

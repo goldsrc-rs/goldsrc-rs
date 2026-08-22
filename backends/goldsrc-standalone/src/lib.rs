@@ -21,7 +21,6 @@ mod proxy;
 
 use goldsrc::backend::EngineBackend;
 use goldsrc::log;
-use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
 use goldsrc_sys::{DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
 use std::ffi::{CStr, CString};
@@ -50,7 +49,7 @@ pub use goldsrc::call_engfunc_ret;
 // ============================================================================
 
 fn init_wasm_host() {
-    let engine: std::sync::Arc<dyn goldsrc_api::EngineOps> = std::sync::Arc::new(*backend());
+    let engine: std::sync::Arc<dyn goldsrc_api::Engine> = std::sync::Arc::new(*backend());
     if let Err(e) = goldsrc::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Standalone,
         |msg| {

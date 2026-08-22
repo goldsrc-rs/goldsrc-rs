@@ -2,7 +2,6 @@
 //! engfunc-call macros. Both Metamod and Standalone backends are thin
 //! adapters over this module (enabled by the `host` feature).
 
-use goldsrc_api::Engine;
 use goldsrc_sys::enginefuncs_t;
 
 /// Invokes an optional engfunc pointer with no arguments.
@@ -122,10 +121,20 @@ impl EngineBackend {
             print_queue,
         }
     }
-}
+    /// Creates a player handle from an index if valid.
+    pub fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let edict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if edict.is_null() {
+                return None;
+            }
+            Some(goldsrc_api::Player::from_raw(index, edict))
+        }
+    }
 
-impl Engine for EngineBackend {
-    fn spawn_entity(&self, classname: &str) -> Option<goldsrc_api::Entity> {
+    /// Spawns an entity by classname.
+    pub fn spawn_entity(&self, classname: &str) -> Option<goldsrc_api::Entity> {
         unsafe {
             let funcs = (self.engfuncs)();
             let edict = (funcs.pfnCreateEntity)?();
@@ -141,65 +150,14 @@ impl Engine for EngineBackend {
         }
     }
 
-    fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
-        unsafe {
-            let funcs = (self.engfuncs)();
-            let edict = (funcs.pfnPEntityOfEntIndex)?(index);
-            if edict.is_null() {
-                return None;
-            }
-            Some(goldsrc_api::Player::from_raw(index, edict))
-        }
+    /// Prints a message to the server console.
+    pub fn server_print(&self, message: &str) {
+        goldsrc_api::EngineMessages::server_print(self, message);
     }
 
-    fn server_print(&self, message: &str) {
-        unsafe {
-            let funcs = (self.engfuncs)();
-            if let Some(f) = funcs.pfnServerPrint {
-                for buffered in self.print_queue.drain() {
-                    if let Ok(cstr) = std::ffi::CString::new(buffered) {
-                        f(cstr.as_ptr());
-                    }
-                }
-                let safe = message
-                    .replace('%', "%%")
-                    .replace('{', "{{")
-                    .replace('}', "}}")
-                    .replace('\r', "")
-                    .replace('\n', " ");
-                let mut end = safe.len().min(400);
-                while end > 0 && !safe.is_char_boundary(end) {
-                    end -= 1;
-                }
-                let line = format!("{}\n", safe[..end].trim_end());
-                if let Ok(cstr) = std::ffi::CString::new(line) {
-                    f(cstr.as_ptr());
-                }
-            } else {
-                self.print_queue.push(message);
-            }
-        }
-    }
-
-    fn server_command(&self, command: &str) {
-        unsafe {
-            let cmd = std::ffi::CString::new(command).unwrap_or_default();
-            call_engfunc!((self.engfuncs)().pfnServerCommand, cmd.as_ptr());
-        }
-    }
-
-    fn cvar_get_float(&self, name: &str) -> f32 {
-        unsafe {
-            let cname = std::ffi::CString::new(name).unwrap_or_default();
-            call_engfunc_ret!((self.engfuncs)().pfnCVarGetFloat, cname.as_ptr())
-        }
-    }
-
-    fn cvar_set_float(&self, name: &str, value: f32) {
-        unsafe {
-            let cname = std::ffi::CString::new(name).unwrap_or_default();
-            call_engfunc!((self.engfuncs)().pfnCVarSetFloat, cname.as_ptr(), value);
-        }
+    /// Executes a server command string.
+    pub fn server_command(&self, command: &str) {
+        goldsrc_api::EngineMessages::server_command(self, command);
     }
 }
 
@@ -369,6 +327,42 @@ impl goldsrc_api::EngineMessages for EngineBackend {
     fn write_entity(&self, val: i32) {
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteEntity, val);
+        }
+    }
+
+    fn server_print(&self, message: &str) {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            if let Some(f) = funcs.pfnServerPrint {
+                for buffered in self.print_queue.drain() {
+                    if let Ok(cstr) = std::ffi::CString::new(buffered) {
+                        f(cstr.as_ptr());
+                    }
+                }
+                let safe = message
+                    .replace('%', "%%")
+                    .replace('{', "{{")
+                    .replace('}', "}}")
+                    .replace('\r', "")
+                    .replace('\n', " ");
+                let mut end = safe.len().min(400);
+                while end > 0 && !safe.is_char_boundary(end) {
+                    end -= 1;
+                }
+                let line = format!("{}\n", safe[..end].trim_end());
+                if let Ok(cstr) = std::ffi::CString::new(line) {
+                    f(cstr.as_ptr());
+                }
+            } else {
+                self.print_queue.push(message);
+            }
+        }
+    }
+
+    fn server_command(&self, command: &str) {
+        unsafe {
+            let cmd = std::ffi::CString::new(command).unwrap_or_default();
+            call_engfunc!((self.engfuncs)().pfnServerCommand, cmd.as_ptr());
         }
     }
 }

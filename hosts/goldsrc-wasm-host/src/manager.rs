@@ -1,7 +1,7 @@
 use crate::bindings::{GoldsrcPlugin, goldsrc::engine::api};
 use crate::error::{CommandError, LoadError};
 use crate::plugin::{LoadedPlugin, PluginMetadata};
-use goldsrc_api::EngineOps;
+use goldsrc_api::Engine as GoldsrcEngine;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wasmtime::component::{Component, Linker};
@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 /// Wasmtime store state exposed to WASM plugins via host functions.
 pub struct HostState {
     /// Engine bridge for real game-state access.
-    pub engine: Arc<dyn EngineOps>,
+    pub engine: Arc<dyn GoldsrcEngine>,
 }
 
 /// Read-only snapshot of a loaded plugin, used for CLI listing/info.
@@ -196,7 +196,7 @@ impl api::Host for HostState {
 pub struct PluginManager {
     plugins: Vec<LoadedPlugin>,
     engine: Engine,
-    engine_ops: Arc<dyn EngineOps>,
+    engine_ops: Arc<dyn GoldsrcEngine>,
     event_rx: Receiver<PathBuf>,
     event_tx: Sender<PathBuf>,
     watchers: Vec<notify::RecommendedWatcher>,
@@ -213,7 +213,7 @@ const RELOAD_DEBOUNCE: Duration = Duration::from_millis(150);
 impl PluginManager {
     /// Creates an empty plugin manager backed by a fresh wasmtime engine
     /// with the Component Model enabled.
-    pub fn new(engine_ops: Arc<dyn EngineOps>) -> wasmtime::Result<Self> {
+    pub fn new(engine_ops: Arc<dyn GoldsrcEngine>) -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
         // config.target("pulley32").unwrap();
@@ -627,6 +627,8 @@ mod tests {
         fn write_coord(&self, _val: f32) {}
         fn write_string(&self, _val: &str) {}
         fn write_entity(&self, _val: i32) {}
+        fn server_print(&self, _message: &str) {}
+        fn server_command(&self, _command: &str) {}
     }
 
     impl goldsrc_api::EngineEntities for NoopEngineOps {

@@ -14,12 +14,12 @@ static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration and hot reload watchers.
     ///
-    /// `engine` is the backend's [`goldsrc_api::EngineOps`] bridge — it gives
+    /// `engine` is the backend's [`goldsrc_api::Engine`] bridge — it gives
     /// WASM plugins access to the real game state. Call once at backend init.
     pub fn init(
         backend: BackendType,
         print_cb: fn(&str),
-        engine: std::sync::Arc<dyn goldsrc_api::EngineOps>,
+        engine: std::sync::Arc<dyn goldsrc_api::Engine>,
     ) -> Result<(), HostError> {
         let backend_name = match backend {
             BackendType::Metamod => "Metamod",

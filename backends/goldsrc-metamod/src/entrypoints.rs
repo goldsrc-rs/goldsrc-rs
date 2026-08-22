@@ -1,6 +1,5 @@
 //! Metamod `#[unsafe(no_mangle)]` entry points (FFI boundary).
 
-use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
 use std::ffi::c_void;
 

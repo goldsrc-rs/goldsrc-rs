@@ -23,7 +23,6 @@ mod hooks;
 mod meta_types;
 
 use goldsrc::log;
-use goldsrc_api::Engine;
 
 use meta_types::*;
 
@@ -41,7 +40,7 @@ pub static PRINT_QUEUE: goldsrc::backend::PrintQueue = goldsrc::backend::PrintQu
 
 /// Initialize WASM plugin subsystem and the unified logger.
 pub fn init_wasm_host() {
-    let engine: std::sync::Arc<dyn goldsrc_api::EngineOps> =
+    let engine: std::sync::Arc<dyn goldsrc_api::Engine> =
         std::sync::Arc::new(goldsrc::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE));
     if let Err(e) = goldsrc::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Metamod,
