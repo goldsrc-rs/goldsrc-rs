@@ -65,9 +65,10 @@ pub use goldsrc_api;
 #[cfg(target_arch = "wasm32")]
 pub use goldsrc_api::engine_api as engine;
 pub use goldsrc_api::{
-    Alive, Auth, Bot, CapExpr, ChatScope, Command, CommandBuilder, CommandContext, CommandError,
-    CommandResult, CommandTarget, CounterTerrorist, Dead, Engine, Entity, FromArg, HLTV, Player,
-    PlayerStateFilter, Plugin, Spectator, Team, Terrorist, Vector3,
+    Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
+    CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead, Engine,
+    Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Plugin, Spectator, Team,
+    Terrorist, Vector3,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{command, event, on_load, plugin};
@@ -78,9 +79,10 @@ pub mod prelude {
     #[cfg(target_arch = "wasm32")]
     pub use crate::engine;
     pub use crate::{
-        Alive, Auth, Bot, CapExpr, ChatScope, Command, CommandBuilder, CommandContext,
-        CommandError, CommandResult, CommandTarget, CounterTerrorist, Dead, Engine, Entity,
-        FromArg, HLTV, Player, PlayerStateFilter, Plugin, Spectator, Team, Terrorist, Vector3,
+        Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
+        CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead,
+        Engine, Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Plugin, Spectator,
+        Team, Terrorist, Vector3,
     };
     pub use crate::{command, event, on_load, plugin};
     pub use crate::{log_debug, log_err, log_info, log_warn};
