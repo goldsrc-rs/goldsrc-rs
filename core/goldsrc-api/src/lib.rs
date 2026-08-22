@@ -31,8 +31,8 @@ pub use command::{
 };
 pub use edict::EDict;
 pub use engine::{
-    Engine, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
-    EngineSound, MessageDest, TraceResult, engine_api,
+    Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
+    EnginePrecache, EngineSound, MessageDest, TraceResult, engine_api,
 };
 pub use plugin_host::{HostError, HostResult, PluginHost};
 

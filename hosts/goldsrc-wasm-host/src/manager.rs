@@ -627,6 +627,9 @@ mod tests {
         fn write_coord(&self, _val: f32) {}
         fn write_string(&self, _val: &str) {}
         fn write_entity(&self, _val: i32) {}
+    }
+
+    impl goldsrc_api::EngineConsole for NoopEngineOps {
         fn server_print(&self, _message: &str) {}
         fn server_command(&self, _command: &str) {}
     }

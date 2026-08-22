@@ -1,6 +1,7 @@
 //! Modular engine sub-system traits, composite engine bridge, and API facade.
 
 pub mod api;
+pub mod console;
 pub mod cvars;
 pub mod entities;
 pub mod messages;
@@ -9,6 +10,7 @@ pub mod precache;
 pub mod sound;
 
 pub use api as engine_api;
+pub use console::EngineConsole;
 pub use cvars::EngineCvars;
 pub use entities::EngineEntities;
 pub use messages::{EngineMessages, MessageDest};
@@ -27,6 +29,7 @@ pub trait Engine:
     + EngineCvars
     + EnginePhysics
     + EngineSound
+    + EngineConsole
     + Send
     + Sync
 {
@@ -40,7 +43,12 @@ impl<T> Engine for T where
         + EngineCvars
         + EnginePhysics
         + EngineSound
+        + EngineConsole
         + Send
         + Sync
 {
 }
+
+/// Alias for [`Engine`] for compatibility.
+pub trait EngineOps: Engine {}
+impl<T: Engine> EngineOps for T {}

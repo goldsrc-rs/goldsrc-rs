@@ -152,12 +152,12 @@ impl EngineBackend {
 
     /// Prints a message to the server console.
     pub fn server_print(&self, message: &str) {
-        goldsrc_api::EngineMessages::server_print(self, message);
+        <Self as goldsrc_api::EngineConsole>::server_print(self, message);
     }
 
     /// Executes a server command string.
     pub fn server_command(&self, command: &str) {
-        goldsrc_api::EngineMessages::server_command(self, command);
+        <Self as goldsrc_api::EngineConsole>::server_command(self, command);
     }
 }
 
@@ -329,7 +329,9 @@ impl goldsrc_api::EngineMessages for EngineBackend {
             call_engfunc!((self.engfuncs)().pfnWriteEntity, val);
         }
     }
+}
 
+impl goldsrc_api::EngineConsole for EngineBackend {
     fn server_print(&self, message: &str) {
         unsafe {
             let funcs = (self.engfuncs)();
