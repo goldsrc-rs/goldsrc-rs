@@ -66,10 +66,9 @@ We strictly follow the [Conventional Commits](https://www.conventionalcommits.or
 
 Ensure you have installed:
 
-1. **Rust 1.80+** with required compilation targets:
+1. **Rust 1.85+ (Edition 2024)** with required compilation targets:
 
    ```bash
-   rustup default stable
    rustup target add i686-pc-windows-msvc      # Windows 32-bit HLDS target
    rustup target add i686-unknown-linux-gnu   # Linux 32-bit HLDS target
    rustup target add wasm32-unknown-unknown   # WASM plugin target

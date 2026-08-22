@@ -16,10 +16,12 @@ static G_GLOBALS: std::sync::OnceLock<
 /// `engfuncs` and `globals` must be valid pointers provided by the engine.
 pub unsafe fn init(engfuncs: *mut enginefuncs_t, globals: *mut goldsrc_sys::globalvars_t) {
     if !engfuncs.is_null() {
-        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(&*engfuncs));
+        // SAFETY: engfuncs is checked for null
+        let _ = G_ENGFUNCS.set(goldsrc_sys::ffi::SyncWrapper::new(unsafe { &*engfuncs }));
     }
     if !globals.is_null() {
-        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(&*globals));
+        // SAFETY: globals is checked for null
+        let _ = G_GLOBALS.set(goldsrc_sys::ffi::SyncWrapper::new(unsafe { &*globals }));
     }
 }
 

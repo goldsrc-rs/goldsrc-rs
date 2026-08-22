@@ -34,6 +34,21 @@ interface api {
     /// Sets an entity's velocity.
     host-entity-set-velocity: func(index: s32, vel: vector3);
 
+    /// Gets an entity's angles (pitch, yaw, roll).
+    host-entity-angles: func(index: s32) -> vector3;
+
+    /// Sets an entity's angles.
+    host-entity-set-angles: func(index: s32, angles: vector3);
+
+    /// Spawns a new entity by classname.
+    host-create-named-entity: func(classname: string) -> option<s32>;
+
+    /// Removes an entity from the world.
+    host-remove-entity: func(index: s32);
+
+    /// Drops an entity to the floor beneath it.
+    host-drop-to-floor: func(index: s32) -> s32;
+
     /// Retrieves a player's name.
     host-player-name: func(index: s32) -> option<string>;
     
@@ -42,6 +57,42 @@ interface api {
 
     /// Sets a player's armor value.
     host-player-set-armorvalue: func(index: s32, armor: f32);
+
+    /// --- Cvar API ---
+
+    /// Gets a console variable value as a float.
+    host-cvar-get-float: func(name: string) -> f32;
+
+    /// Sets a console variable value as a float.
+    host-cvar-set-float: func(name: string, val: f32);
+
+    /// Gets a console variable value as a string.
+    host-cvar-get-string: func(name: string) -> option<string>;
+
+    /// Sets a console variable value as a string.
+    host-cvar-set-string: func(name: string, val: string);
+
+    /// --- Precache & Sound API ---
+
+    /// Precaches a model and returns its resource index.
+    host-precache-model: func(path: string) -> s32;
+
+    /// Precaches a sound and returns its resource index.
+    host-precache-sound: func(path: string) -> s32;
+
+    /// Precaches a generic asset.
+    host-precache-generic: func(path: string) -> s32;
+
+    /// Emits a dynamic sound from an entity.
+    host-emit-sound: func(
+        entity: s32,
+        channel: s32,
+        sample: string,
+        volume: f32,
+        attenuation: f32,
+        sound-flags: s32,
+        pitch: s32
+    );
 
     /// --- Capability & Auth API ---
 

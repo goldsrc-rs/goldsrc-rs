@@ -19,9 +19,6 @@
 
 #![allow(dead_code)]
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::ffi::CStr;
-
 /// Validated handle to a GoldSrc engine entity.
 ///
 /// Cheap to copy (two words) — safe to store across frames, checked on access.
@@ -53,7 +50,8 @@ impl EDict {
         let serial = if edict.is_null() {
             0
         } else {
-            (*edict).serialnumber
+            // SAFETY: edict is verified non-null above
+            unsafe { (*edict).serialnumber }
         };
         Self {
             index,
@@ -122,22 +120,12 @@ impl EDict {
     // Field accessors (safe wrappers)
     // =========================================================================
 
-    /// Entity classname string, e.g. `"player"`, `"func_door"`.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn classname(self) -> Option<String> {
-        let ptr = self.raw_ptr()?;
-        // SAFETY: ptr is validated by raw_ptr(). classname is a string offset
-        // into the engine string table; 0 means "not set".
-        unsafe {
-            let offset = (*ptr).v.classname;
-            if offset == 0 {
-                return None;
-            }
-            // The engine stores classname as an integer offset into the
-            // string pool. Cast to pointer and read as C string.
-            let cstr = CStr::from_ptr(offset as *const i8);
-            Some(cstr.to_string_lossy().into_owned())
-        }
+        let _ptr = self.raw_ptr()?;
+        // String offset requires engine pfnSzFromIndex / pStringBase resolver;
+        // fallback returns None if called directly on raw handle without engine context.
+        None
     }
 
     /// Entity origin (world position).
@@ -186,18 +174,12 @@ impl EDict {
         self.health().map(|h| h > 0.0).unwrap_or(false)
     }
 
-    /// Player `netname` field (display name). Only meaningful for player entities.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn netname(self) -> Option<String> {
-        let ptr = self.raw_ptr()?;
-        unsafe {
-            let offset = (*ptr).v.netname;
-            if offset == 0 {
-                return None;
-            }
-            let cstr = CStr::from_ptr(offset as *const i8);
-            Some(cstr.to_string_lossy().into_owned())
-        }
+        let _ptr = self.raw_ptr()?;
+        // String offset requires engine pfnSzFromIndex / pStringBase resolver;
+        // fallback returns None if called directly on raw handle without engine context.
+        None
     }
 
     /// Player armor value. Only meaningful for player entities.
@@ -232,6 +214,25 @@ impl EDict {
         match self.raw_ptr() {
             Some(ptr) => {
                 unsafe { (*ptr).v.velocity = velocity };
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Entity angles (pitch, yaw, roll).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn angles(self) -> Option<[f32; 3]> {
+        let ptr = self.raw_ptr()?;
+        Some(unsafe { (*ptr).v.angles })
+    }
+
+    /// Set entity angles.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_angles(self, angles: [f32; 3]) -> bool {
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.angles = angles };
                 true
             }
             None => false,

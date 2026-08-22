@@ -211,29 +211,29 @@ impl GoldSrcLogger {
         }
 
         // Console output with ANSI colors
-        if self.config.console_output {
-            if let Some(ref cb) = self.console_cb {
-                // ANSI color mapping:
-                // Trace: Cyan (\x1b[36m), Debug: Gray/Dim (\x1b[90m), Info: Green (\x1b[32m),
-                // Warn: Yellow (\x1b[33m), Error: Red (\x1b[31m), Reset: \x1b[0m
-                let level_color = match level {
-                    LogLevel::Trace => "\x1b[36m",
-                    LogLevel::Debug => "\x1b[90m",
-                    LogLevel::Info => "\x1b[32m",
-                    LogLevel::Warn => "\x1b[33m",
-                    LogLevel::Error => "\x1b[31m",
-                };
-                let target_color = "\x1b[35m"; // Magenta for target
-                let reset = "\x1b[0m";
+        if self.config.console_output
+            && let Some(ref cb) = self.console_cb
+        {
+            // ANSI color mapping:
+            // Trace: Cyan (\x1b[36m), Debug: Gray/Dim (\x1b[90m), Info: Green (\x1b[32m),
+            // Warn: Yellow (\x1b[33m), Error: Red (\x1b[31m), Reset: \x1b[0m
+            let level_color = match level {
+                LogLevel::Trace => "\x1b[36m",
+                LogLevel::Debug => "\x1b[90m",
+                LogLevel::Info => "\x1b[32m",
+                LogLevel::Warn => "\x1b[33m",
+                LogLevel::Error => "\x1b[31m",
+            };
+            let target_color = "\x1b[35m"; // Magenta for target
+            let reset = "\x1b[0m";
 
-                let console_line = format!(
-                    "[{level_color}{}{reset}][{target_color}{}{reset}] {}\n",
-                    level.as_str(),
-                    target.as_str(),
-                    message
-                );
-                cb(&console_line);
-            }
+            let console_line = format!(
+                "[{level_color}{}{reset}][{target_color}{}{reset}] {}\n",
+                level.as_str(),
+                target.as_str(),
+                message
+            );
+            cb(&console_line);
         }
     }
 }

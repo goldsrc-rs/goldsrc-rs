@@ -123,29 +123,70 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 
 ---
 
-## v0.10.0 — Full HLSDK & WASM Host API Coverage 🏗 In Progress
+## v0.10.0 — Rust 2024 Migration, Engine Bridge & WASM Plugin Ecosystem ✅
 
-**Goal:** Bring engine API coverage from ~15% to production completeness and expose the full GoldSrc
-surface to WASM plugins through typed WIT interfaces.
+**Goal:** Modernize codebase to Rust 2024 Edition, implement pure-Rust WASM runtime with Pulley32, unify Standalone & Metamod backends with direct engine FFI, implement automatic precaching lifecycle, and demonstrate a full suite of functional in-game plugins.
 
-- [ ] **Engine Functions (`enginefuncs_t`)**: Cover the 140+ engine functions
-  (`pfnCreateNamedEntity`, `pfnMessageBegin`, `pfnRegUserMsg`, `pfnTraceLine`, `pfnPrecacheModel`, …).
-- [ ] **DLL Hooks (`DLL_FUNCTIONS`)**: Expand from the current 5 to all 50+ GameDLL callbacks
-  (`TraceAttack`, `PlayerKilled`, `Touch`, `Think`, `Use`, `PlayerPostThink`, …).
-- [ ] **ReHLDS / ReGameDLL API**: Dynamic detection and optional binding to extended ReAPI interfaces.
-- [ ] **WASM Bindings (WIT)**: Expose the expanded engine surface to plugins:
-  - Console: `server_print`, `client_print`.
-  - Commands: `pfnAddServerCommand`, per-player command hooks.
-  - Entities: coordinates, health, model, weapon, team.
-  - Damage & death: `TraceAttack`, `PlayerKilled`, damage multipliers.
-  - Menus: `ShowMenu`, `pfnMessageBegin` / `pfnMessageEnd` wrappers.
-- [ ] **Demo plugin validation**: Verify `vip_core` and `admin_system` on a live HLDS with the expanded API.
+- [x] **Rust 2024 Edition Migration**: Modernized entire workspace to Rust 2024 edition across all crates, resolving all lint rules and 2024 idioms.
+- [x] **WASM Component Model with Pulley32**: Upgraded `goldsrc-wasm-host` to pure-Rust bytecode execution via Wasmtime Pulley32 for full 32-bit HLDS stability.
+- [x] **Engine Bridge & String Pool Resolver**: Implemented safe `EngineOps` with native engine string table resolution (`pfnGetInfoKeyBuffer`/`pfnInfoKeyValue` and `pfnSzFromIndex`) preventing memory faults on string offsets.
+- [x] **Automatic Resource Precaching**: Implemented thread-safe precache queue in `EngineBackend` executed during `hook_spawn` (`worldspawn`) for flawless audio/model precaching without engine panics.
+- [x] **Direct Real-Time Console & Server Commands**: Integrated `pfnAddServerCommand` with synchronous print flush, providing real-time plugin CLI commands (`grs cmds`, `test_player`, `test_buff`, `test_sound`, `test_cvar`, `vipmenu`, `vip_add`, `vip_heal`, `vip_armor`, `admin_grant`, `admin_slay`, `admin_teleport`, `admin_gravity`).
+- [x] **Functional Demo Plugin Suite**:
+  - `test_suite`: ECS verification, player inspection (health, armor, origin, angles), CVar manipulation, sound playback.
+  - `vip_core`: Dynamic capability authorization (`vip.access`), player buffing and healing.
+  - `vip_menu`: Interactive VIP kit deployment with sound and visual feedback.
+  - `admin_system`: Administration utilities (granting capabilities, slaying players, teleportation, gravity manipulation).
 
-## v0.11.0 — Game-Specific Framework (CS 1.6) 📝 Planned
+---
 
-**Goal:** Layer CS 1.6–specific abstractions on top of the generic engine API so plugin authors
-write game logic, not FFI glue.
+## v0.11.0 — Advanced Command Engine & Capability DSL 📝 Planned
 
-- [ ] Split the SDK into a core engine module and game-specific extension crates.
-- [ ] Create `goldsrc-cstrike` crate: CS 1.6 entities, weapons, buy zones, game events.
-- [ ] Provide abstraction layers for game rules, map objectives, round state, and player states.
+**Goal:** Provide an ergonomic, declarative command system and a hierarchical capability DSL, eliminating manual string parsing and boilerplate permission checks.
+
+- [ ] **Command Targets & Channels**:
+  - Declarative routing for `Server`, `ClientConsole`, `Chat` (`say`, `say_team`), and `MessageMode` dialogs.
+  - Silent chat triggers (e.g. executing `/vip` without polluting public game chat).
+- [ ] **Typestate Guards & Extractors**:
+  - Type-driven precondition checks (`Alive<Player>`, `Dead<Player>`, `Terrorist(Player)`, `CounterTerrorist(Player)`, `Bot`, `HLTV`).
+- [ ] **Command Error Pipeline (`CommandResult`)**:
+  - Typed error taxonomy (`AccessDenied`, `InvalidArguments`, `InvalidState`, `TargetNotFound`, `Cooldown`, `Custom`).
+  - Extensible `ErrorHandler` with plugin-level overrides (`Plugin::on_command_error`).
+- [ ] **Hierarchical Capability DSL**:
+  - Rich grammar: namespaces (`admin.*`), wildcards, negation (`!admin.rcon`), logical combinators (`&`, `|`, `all_of!`, `any_of!`), and parametric claims (`teleport(target=self)`).
+  - High-performance prefix-tree (Trie) / bitset evaluation cache.
+- [ ] **Runtime Command Builder API**:
+  - Programmatic `Command::builder(...)` for dynamic runtime command registration (configs, scripting hosts, unit testing).
+
+---
+
+## v0.12.0 — Game Events, HUD/Menus & Combat Hooks 📝 Planned
+
+**Goal:** Expand GameDLL hook coverage, provide declarative UI builders for HUD/Menus, and implement native combat and damage callbacks.
+
+- [ ] **Gameplay Hooks & Engine Events**:
+  - Combat hooks: `TakeDamage`, `TraceAttack`, `WeaponFire`, `Killed`.
+  - World interaction hooks: `Touch`, `Use`, `Think`, `PlayerPostThink`.
+  - Proper native player death sequence (`Player::kill` via `pfnClientKill` / `pfnTakeDamage`).
+- [ ] **VGUI / Text Menus & HUD Builders**:
+  - Declarative `Menu::builder` with pagination, dynamic callbacks, and item disabling.
+  - Screen messaging: `HudMessage` with color, fade, coordinates, and channel management.
+- [ ] **Game Rules & CS 1.6 Extensions**:
+  - Round state events (`RoundStart`, `RoundEnd`, `BombPlanted`, `BombDefused`).
+  - CS 1.6 specific entities, buy zones, and weapon inventory management.
+
+---
+
+## v0.13.0 — Multi-Host Ecosystem (Lua, Python, Dynamic DLLs) 📝 Planned
+
+**Goal:** Support polyglot plugin development by dynamically loading external language runtimes from `hosts/` with strict ABI versioning.
+
+- [ ] **Dynamic Host Runtime Architecture**:
+  - Modular `cstrike/goldsrc/hosts/` discovery directory with configurable resolution policy (`prefer_builtin` vs `prefer_external`).
+  - C-ABI `PluginHostFactory` handshake with version validation.
+- [ ] **Python Plugin Host (`goldsrc-python-host`)**:
+  - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
+- [ ] **Lua Plugin Host (`goldsrc-lua-host`)**:
+  - Lightweight Lua 5.1/LuaJIT runtime integration via `mlua`.
+- [ ] **Multi-Version Host Isolation**:
+  - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.

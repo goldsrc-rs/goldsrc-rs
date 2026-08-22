@@ -1,7 +1,7 @@
-use crate::{paths::PathResolver, GoldSrcConfig};
+use crate::{GoldSrcConfig, paths::PathResolver};
 use goldsrc_api::consts::BackendType;
-use goldsrc_wasm_host::error::HostError;
 use goldsrc_wasm_host::PluginManager;
+use goldsrc_wasm_host::error::HostError;
 
 pub struct HostRuntime {
     manager: PluginManager,

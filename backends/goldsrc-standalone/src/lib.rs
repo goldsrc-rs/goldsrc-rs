@@ -23,7 +23,7 @@ use goldsrc::backend::EngineBackend;
 use goldsrc::log;
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
-use goldsrc_sys::{enginefuncs_t, globalvars_t, DLL_FUNCTIONS};
+use goldsrc_sys::{DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
 use std::ffi::{CStr, CString};
 
 // ============================================================================
@@ -94,13 +94,11 @@ unsafe extern "C" fn hook_start_frame() {
 /// text would throw and crash the server, so they are escaped before printing.
 fn drain_print_queue() {
     for message in PRINT_QUEUE.drain() {
-        unsafe {
-            let funcs = engine_api::engfuncs();
-            if let Some(f) = funcs.pfnServerPrint {
-                if let Ok(cstr) = CString::new(message) {
-                    f(cstr.as_ptr());
-                }
-            }
+        let funcs = engine_api::engfuncs();
+        if let Some(f) = funcs.pfnServerPrint
+            && let Ok(cstr) = CString::new(message)
+        {
+            unsafe { f(cstr.as_ptr()) };
         }
     }
 }
@@ -146,15 +144,19 @@ unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
         let name_str;
         {
             let funcs = engine_api::engfuncs();
-            let cmd_ptr = funcs.pfnCmd_Args.map(|f| f()).unwrap_or(std::ptr::null());
+            let cmd_ptr = unsafe { funcs.pfnCmd_Args.map(|f| f()).unwrap_or(std::ptr::null()) };
             cmd_str = if !cmd_ptr.is_null() {
-                CStr::from_ptr(cmd_ptr).to_string_lossy().into_owned()
+                unsafe { CStr::from_ptr(cmd_ptr) }
+                    .to_string_lossy()
+                    .into_owned()
             } else {
                 String::new()
             };
-            let name_ptr = funcs.pfnCmd_Argv.map(|f| f(0)).unwrap_or(std::ptr::null());
+            let name_ptr = unsafe { funcs.pfnCmd_Argv.map(|f| f(0)).unwrap_or(std::ptr::null()) };
             name_str = if !name_ptr.is_null() {
-                CStr::from_ptr(name_ptr).to_string_lossy().into_owned()
+                unsafe { CStr::from_ptr(name_ptr) }
+                    .to_string_lossy()
+                    .into_owned()
             } else {
                 String::new()
             };
@@ -165,7 +167,10 @@ unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
 
 unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     proxy::dbg_log("hook_spawn called");
-    catch_ffi_panic("hook_spawn", 0, || proxy::forward_spawn(edict))
+    catch_ffi_panic("hook_spawn", 0, || {
+        crate::backend().precache_pending_resources();
+        proxy::forward_spawn(edict)
+    })
 }
 
 // ============================================================================
@@ -178,7 +183,7 @@ unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
 /// # Safety
 /// Pointers are provided by `hlds.exe` / `hlds_linux` and are always valid at this point.
 /// Any Rust panic is caught — an unhandled panic here would crash HLDS.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "system" fn GiveFnptrsToDll(
     engfuncs: *mut enginefuncs_t,
@@ -201,7 +206,7 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
 /// # Safety
 /// `dll_table` is a valid pointer provided by the engine.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI2(
     dll_table: *mut DLL_FUNCTIONS,
@@ -238,7 +243,7 @@ pub unsafe extern "C" fn GetEntityAPI2(
 /// # Safety
 /// `dll_table` must be a valid pointer.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI(
     dll_table: *mut DLL_FUNCTIONS,
@@ -262,7 +267,7 @@ pub unsafe extern "C" fn GetEntityAPI(
 /// # Safety
 /// Pointers must be valid.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetNewDLLFunctions(
     new_dll_table: *mut std::ffi::c_void,
@@ -290,7 +295,7 @@ pub unsafe extern "C" fn GetNewDLLFunctions(
 ///
 /// # Safety
 /// Pointers must be valid or null as accepted by HLSDK.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn Server_GetBlendingInterface(
     version: i32,
@@ -317,14 +322,16 @@ pub unsafe extern "C" fn Server_GetBlendingInterface(
 ///
 /// # Safety
 /// `name` must be a valid null-terminated C string.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn CreateInterface(
     name: *const std::os::raw::c_char,
     return_code: *mut i32,
 ) -> *mut std::ffi::c_void {
     let name_str = if !name.is_null() {
-        CStr::from_ptr(name).to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(name) }
+            .to_string_lossy()
+            .into_owned()
     } else {
         String::new()
     };

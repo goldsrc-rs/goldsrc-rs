@@ -4,7 +4,7 @@
 //! GameDLL exports to it, while inserting our hooks around the key callbacks.
 
 use goldsrc::log;
-use goldsrc_sys::{enginefuncs_t, globalvars_t, DLL_FUNCTIONS, NEW_DLL_FUNCTIONS};
+use goldsrc_sys::{DLL_FUNCTIONS, NEW_DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -113,11 +113,11 @@ pub unsafe fn forward_give_fnptrs_to_dll(engfuncs: *mut enginefuncs_t, globals: 
         let give_fns: Result<
             libloading::Symbol<unsafe extern "system" fn(*mut enginefuncs_t, *mut globalvars_t)>,
             _,
-        > = guard._lib.get(b"GiveFnptrsToDll\0");
+        > = unsafe { guard._lib.get(b"GiveFnptrsToDll\0") };
         match give_fns {
             Ok(f) => {
                 dbg_log("Forwarding GiveFnptrsToDll to real GameDLL...");
-                f(engfuncs, globals);
+                unsafe { f(engfuncs, globals) };
                 dbg_log("Real GameDLL GiveFnptrsToDll returned successfully");
             }
             Err(e) => {
@@ -143,16 +143,14 @@ fn resolve_game_dll_path() -> PathBuf {
                 {
                     // Clean up comments and extract value
                     let clean = trimmed.trim_start_matches(';').trim();
-                    if clean.starts_with("gamedll") {
-                        // Extract quoted path
-                        if let Some(start) = clean.find('"') {
-                            if let Some(end) = clean[start + 1..].find('"') {
-                                let orig_path = &clean[start + 1..start + 1 + end];
-                                let target_path = PathBuf::from(orig_path);
-                                if target_path.exists() {
-                                    return target_path;
-                                }
-                            }
+                    if clean.starts_with("gamedll")
+                        && let Some(start) = clean.find('"')
+                        && let Some(end) = clean[start + 1..].find('"')
+                    {
+                        let orig_path = &clean[start + 1..start + 1 + end];
+                        let target_path = PathBuf::from(orig_path);
+                        if target_path.exists() {
+                            return target_path;
                         }
                     }
                 }
@@ -430,9 +428,9 @@ pub unsafe fn forward_server_get_blending_interface(
                 ) -> i32,
             >,
             _,
-        > = guard._lib.get(b"Server_GetBlendingInterface\0");
+        > = unsafe { guard._lib.get(b"Server_GetBlendingInterface\0") };
         if let Ok(f) = func {
-            return f(version, ppinterface, pstudio, rotationmatrix, bonetransform);
+            return unsafe { f(version, ppinterface, pstudio, rotationmatrix, bonetransform) };
         }
     }
     0
@@ -449,9 +447,9 @@ pub unsafe fn forward_entity(name: &str, pev: *mut goldsrc_sys::entvars_t) {
         let mut name_bytes = name.as_bytes().to_vec();
         name_bytes.push(0);
         let func: Result<libloading::Symbol<unsafe extern "C" fn(*mut goldsrc_sys::entvars_t)>, _> =
-            guard._lib.get(&name_bytes[..]);
+            unsafe { guard._lib.get(&name_bytes[..]) };
         if let Ok(f) = func {
-            f(pev);
+            unsafe { f(pev) };
         }
     }
 }
@@ -475,9 +473,9 @@ pub unsafe fn forward_create_interface(
                 ) -> *mut std::ffi::c_void,
             >,
             _,
-        > = guard._lib.get(b"CreateInterface\0");
+        > = unsafe { guard._lib.get(b"CreateInterface\0") };
         if let Ok(f) = func {
-            return f(name, return_code);
+            return unsafe { f(name, return_code) };
         }
     }
     std::ptr::null_mut()

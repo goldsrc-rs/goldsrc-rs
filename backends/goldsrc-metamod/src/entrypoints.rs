@@ -1,4 +1,4 @@
-//! Metamod `#[no_mangle]` entry points (FFI boundary).
+//! Metamod `#[unsafe(no_mangle)]` entry points (FFI boundary).
 
 use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
@@ -11,7 +11,7 @@ use crate::{backend, init_backend, init_wasm_host};
 /// Called by the engine during DLL loading. `engfuncs` and `globals` are
 /// valid pointers for the lifetime of the server process.
 /// Any Rust panic is caught — an unhandled panic here would crash HLDS.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "system" fn GiveFnptrsToDll(
     engfuncs: *mut goldsrc_sys::enginefuncs_t,
@@ -27,7 +27,7 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
 /// # Safety
 /// Called by Metamod during plugin loading. Pointers must be valid.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn Meta_Query(
     _ifvers: *const std::os::raw::c_char,
@@ -51,7 +51,7 @@ pub unsafe extern "C" fn Meta_Query(
 /// # Safety
 /// Called by Metamod after Meta_Query. Pointers must be valid.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
@@ -91,7 +91,7 @@ pub unsafe extern "C" fn Meta_Attach(
 /// # Safety
 /// Called by Metamod during plugin unloading.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn Meta_Detach(
     _now: PLUG_LOADTIME,
@@ -136,7 +136,7 @@ fn get_meta_util_funcs() -> mutil_funcs_t {
 /// Called by Metamod to get entity API hooks. Pointers must be valid.
 /// Note: This is only called when the plugin is loaded as a game DLL plugin.
 /// Any Rust panic is caught and contained — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI2(
     dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn GetEntityAPI2(
 /// # Safety
 /// Called by Metamod to get post-entity API hooks.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI2_Post(
     dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
@@ -195,7 +195,7 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
 /// # Safety
 /// Called by Metamod to get entity API hooks (old interface).
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI(
     dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
@@ -212,7 +212,7 @@ pub unsafe extern "C" fn GetEntityAPI(
 
 /// # Safety
 /// Called by Metamod to get post-entity API hooks (old interface).
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEntityAPI_Post(
     _dll_table: *mut goldsrc_sys::DLL_FUNCTIONS,
@@ -223,7 +223,7 @@ pub unsafe extern "C" fn GetEntityAPI_Post(
 
 /// # Safety
 /// Called by Metamod to get new DLL functions.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetNewDLLFunctions(
     _new_table: *mut c_void,
@@ -234,7 +234,7 @@ pub unsafe extern "C" fn GetNewDLLFunctions(
 
 /// # Safety
 /// Called by Metamod to get post-new DLL functions.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetNewDLLFunctions_Post(
     _new_table: *mut c_void,
@@ -246,7 +246,7 @@ pub unsafe extern "C" fn GetNewDLLFunctions_Post(
 /// # Safety
 /// Called by Metamod to get engine functions. Pointers must be valid.
 /// Any Rust panic is caught — the C caller receives 0 instead of UB.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEngineFunctions(
     engfuncs: *mut goldsrc_sys::enginefuncs_t,
@@ -263,7 +263,7 @@ pub unsafe extern "C" fn GetEngineFunctions(
 
 /// # Safety
 /// Called by Metamod to get post-engine functions.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEngineFunctions_Post(
     _engfuncs: *mut goldsrc_sys::enginefuncs_t,

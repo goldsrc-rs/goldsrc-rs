@@ -18,11 +18,11 @@ from pathlib import Path
 
 # Import build function from sibling module
 try:
-    from build import build_plugin, build_wasm_plugins
+    from .build import build_plugin, build_wasm_plugins
 except ImportError:
     # Allow running directly without package context
     sys.path.insert(0, str(Path(__file__).parent))
-    from build import build_plugin, build_wasm_plugins
+    from .build import build_plugin, build_wasm_plugins
 
 
 def get_platform_prefix(target: str) -> str:
@@ -375,7 +375,7 @@ def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
             print(f"Using server path from environment variable: {path}")
             return path
 
-    # 3. Unified local config (goldsrc.local.toml)
+    # 3. Unified local config (.goldsrc.local.toml / .goldsrc.toml / goldsrc.local.toml)
     try:
         import tomllib
     except ImportError:
@@ -385,29 +385,32 @@ def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
             tomllib = None
 
     if tomllib:
-        local_config = repo_root / "goldsrc.local.toml"
-        if local_config.exists():
-            try:
-                data = tomllib.loads(local_config.read_text(encoding="utf-8"))
-                server_path = (
-                    data.get("deploy", {}).get("server_path")
-                    if "deploy" in data
-                    else data.get("server_path")
-                )
-                if server_path:
-                    path = Path(server_path)
-                    if path.exists():
-                        print(f"Using server path from {local_config.name}: {path}")
-                        return path
-            except Exception:
-                pass
+        for cfg_name in [".goldsrc.local.toml", ".goldsrc.toml", "goldsrc.local.toml", "deploy.local.toml"]:
+            local_config = repo_root / cfg_name
+            if local_config.exists():
+                try:
+                    data = tomllib.loads(local_config.read_text(encoding="utf-8"))
+                    server_path = (
+                        data.get("deploy", {}).get("server_path")
+                        if "deploy" in data
+                        else data.get("server_path")
+                    )
+                    if server_path:
+                        path = Path(server_path)
+                        if path.exists():
+                            print(f"Using server path from {local_config.name}: {path}")
+                            return path
+                        else:
+                            print(f"Warning: {local_config.name} specifies server_path = \"{server_path}\", but that directory does not exist!", file=sys.stderr)
+                except Exception:
+                    pass
 
     # 4. Error if no valid path resolved
     print("Error: No game server path specified!", file=sys.stderr)
     print("\nPlease provide the server path using one of the following methods:", file=sys.stderr)
     print('  1. Pass --path argument: python -m scripts deploy --path "C:\\path\\to\\hlds"', file=sys.stderr)
     print('  2. Set environment variable: set GOLDSRC_SERVER_DIR="C:\\path\\to\\hlds"', file=sys.stderr)
-    print('  3. In goldsrc.local.toml under [deploy]: server_path = "C:\\\\path\\\\to\\\\hlds"', file=sys.stderr)
+    print('  3. In .goldsrc.local.toml under [deploy]: server_path = "C:\\\\path\\\\to\\\\hlds"', file=sys.stderr)
     sys.exit(1)
 
 

@@ -267,8 +267,14 @@ def detect_macos_paths() -> tuple[list[str], str]:
 
 
 def write_build_config(repo_root: Path, include_paths: list[str], llvm_path: str, server_path: str = "") -> None:
-    """Write unified goldsrc.local.toml preserving any existing custom settings."""
-    config_path = repo_root / "goldsrc.local.toml"
+    """Write unified local config preserving any existing custom settings."""
+    existing_cfg = None
+    for name in [".goldsrc.local.toml", ".goldsrc.toml", "goldsrc.local.toml"]:
+        p = repo_root / name
+        if p.exists():
+            existing_cfg = p
+            break
+    config_path = existing_cfg if existing_cfg else (repo_root / ".goldsrc.local.toml")
     existing_server = server_path
 
     # If file exists, try preserving existing [deploy] server_path if not provided
@@ -289,7 +295,7 @@ def write_build_config(repo_root: Path, include_paths: list[str], llvm_path: str
 
     lines = [
         "# GoldSrc.rs Local Configuration",
-        "# Generated & updated by scripts/setup.py. Gitignored — machine-specific.",
+        "# Generated via 'python -m scripts setup'. Gitignored — machine-specific.",
         "",
         "[build]",
         "include_paths = [",

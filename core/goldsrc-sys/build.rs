@@ -61,13 +61,14 @@ fn main() {
         );
     }
 
-    // Read local configuration (goldsrc.local.toml)
-    let config_path = repo_root.join("goldsrc.local.toml");
-    let config = if config_path.exists() {
-        std::fs::read_to_string(&config_path).unwrap_or_default()
-    } else {
-        String::new()
-    };
+    // Read local configuration (.goldsrc.local.toml / .goldsrc.toml / goldsrc.local.toml)
+    let config_names = [".goldsrc.local.toml", ".goldsrc.toml", "goldsrc.local.toml"];
+    let config = config_names
+        .iter()
+        .map(|name| repo_root.join(name))
+        .find(|p| p.exists())
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_default();
 
     let mut includes: Vec<String> = Vec::new();
 
