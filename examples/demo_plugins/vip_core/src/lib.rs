@@ -29,18 +29,15 @@ impl VipCore {
         player.grant_capability("vip.give_armor");
         player.grant_capability("vip.heal");
 
-        #[cfg(target_arch = "wasm32")]
-        {
-            engine::emit_sound(
-                player.index(),
-                0,
-                "items/suitchargeno1.wav",
-                1.0,
-                0.8,
-                0,
-                100,
-            );
-        }
+        engine::emit_sound(
+            player.index(),
+            0,
+            "items/suitchargeno1.wav",
+            1.0,
+            0.8,
+            0,
+            100,
+        );
 
         let name = player
             .name()

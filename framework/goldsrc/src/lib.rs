@@ -62,7 +62,6 @@ pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
-#[cfg(target_arch = "wasm32")]
 pub use goldsrc_api::engine_api as engine;
 pub use goldsrc_api::{
     Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
@@ -76,7 +75,6 @@ pub use goldsrc_macros::{command, event, on_load, plugin};
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
     pub use crate::ecs::*;
-    #[cfg(target_arch = "wasm32")]
     pub use crate::engine;
     pub use crate::{
         Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,

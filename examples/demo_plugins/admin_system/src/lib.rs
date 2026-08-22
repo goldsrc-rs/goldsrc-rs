@@ -92,14 +92,7 @@ impl AdminSystem {
         usage = "admin_gravity <gravity_value>"
     )]
     fn handle_gravity(gravity: f32) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            engine::cvar_set_float("sv_gravity", gravity);
-            log_info!("[Admin System] Set server sv_gravity to {:.0}", gravity);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            log_info!("[Admin System] admin_gravity set to {:.0}", gravity);
-        }
+        engine::cvar_set_float("sv_gravity", gravity);
+        log_info!("[Admin System] Set server sv_gravity to {:.0}", gravity);
     }
 }

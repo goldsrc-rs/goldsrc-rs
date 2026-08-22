@@ -28,11 +28,7 @@ impl VipMenu {
         // Apply VIP Perks: 120 HP, 100 Armor
         player.set_health(120.0);
         player.set_armorvalue(100.0);
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            engine::emit_sound(player.index(), 0, "events/tutor_msg.wav", 1.0, 0.8, 0, 100);
-        }
+        engine::emit_sound(player.index(), 0, "events/tutor_msg.wav", 1.0, 0.8, 0, 100);
 
         let name = player
             .name()
