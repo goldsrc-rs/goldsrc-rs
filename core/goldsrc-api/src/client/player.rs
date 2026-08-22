@@ -251,14 +251,11 @@ impl Player {
     pub fn print_chat(&self, msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_log(&format!(
-                "Print to player {}: {}",
-                self.index, msg
-            ));
+            crate::bindings::goldsrc::engine::api::host_print_chat(self.index, msg);
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = msg;
+            let _ = (self.index, msg);
         }
     }
 

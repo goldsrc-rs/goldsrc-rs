@@ -33,7 +33,7 @@ impl Auth {
         }
     }
 
-    /// Checks if a player has a specific capability.
+    /// Checks if a player has a specific capability (with wildcard resolution).
     pub fn has_capability(player_index: i32, name: &str) -> bool {
         #[cfg(target_arch = "wasm32")]
         {
@@ -44,7 +44,42 @@ impl Auth {
             let caps = CAPS.read().unwrap_or_else(|e| e.into_inner());
             caps.player_capabilities
                 .get(&player_index)
-                .is_some_and(|player_caps| player_caps.contains(name))
+                .is_some_and(|player_caps| {
+                    if player_caps.contains(name) || player_caps.contains("*") {
+                        return true;
+                    }
+                    for g in player_caps {
+                        if let Some(prefix) = g.strip_suffix(".*")
+                            && name.starts_with(prefix)
+                            && name[prefix.len()..].starts_with('.')
+                        {
+                            return true;
+                        }
+                    }
+                    false
+                })
+        }
+    }
+
+    /// Removes all capability grants for a player (e.g. on client disconnect).
+    pub fn remove_player(player_index: i32) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
+            caps.player_capabilities.remove(&player_index);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = player_index;
+        }
+    }
+
+    /// Clears all player capability grants (e.g. on map change / server deactivate).
+    pub fn clear_all_players() {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
+            caps.player_capabilities.clear();
         }
     }
 
@@ -57,7 +92,7 @@ impl Auth {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
-            if !caps.registered.contains_key(name) {
+            if !caps.registered.contains_key(name) && !name.ends_with(".*") && name != "*" {
                 return false;
             }
             caps.player_capabilities
@@ -98,5 +133,25 @@ mod tests {
         assert!(!Auth::grant_capability(1, "missing"));
         assert!(Auth::revoke_capability(1, "admin"));
         assert!(!Auth::has_capability(1, "admin"));
+    }
+
+    #[test]
+    fn test_wildcard_and_eviction_lifecycle() {
+        Auth::register_capability("vip.heal", "heal ability");
+        Auth::grant_capability(2, "vip.*");
+
+        // Wildcard match
+        assert!(Auth::has_capability(2, "vip.heal"));
+        assert!(!Auth::has_capability(2, "admin.slay"));
+
+        // Eviction on disconnect
+        Auth::remove_player(2);
+        assert!(!Auth::has_capability(2, "vip.heal"));
+
+        // Clear all on map change
+        Auth::grant_capability(3, "vip.heal");
+        assert!(Auth::has_capability(3, "vip.heal"));
+        Auth::clear_all_players();
+        assert!(!Auth::has_capability(3, "vip.heal"));
     }
 }

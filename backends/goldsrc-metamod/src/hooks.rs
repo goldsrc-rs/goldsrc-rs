@@ -117,8 +117,30 @@ pub unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) 
             } else {
                 ""
             };
-            goldsrc::hooks::dispatch_client_command(index, cmd_str, args_str);
+            let handled = goldsrc::hooks::dispatch_client_command(index, cmd_str, args_str);
+            if handled {
+                let mg = crate::meta_globals();
+                mg.mres = crate::meta_types::MRES_SUPERCEDE;
+            }
         }
+    });
+}
+
+/// Hook for ServerActivate - called when a new map is loaded and activated.
+pub unsafe extern "C" fn hook_server_activate(
+    _pedict_list: *mut goldsrc_sys::edict_t,
+    _edict_count: i32,
+    _client_max: i32,
+) {
+    catch_ffi_panic("hook_server_activate", (), || {
+        goldsrc::hooks::on_server_activate();
+    });
+}
+
+/// Hook for ServerDeactivate - called when the current map ends.
+pub unsafe extern "C" fn hook_server_deactivate() {
+    catch_ffi_panic("hook_server_deactivate", (), || {
+        goldsrc::hooks::on_server_deactivate();
     });
 }
 

@@ -526,6 +526,7 @@ dependencies = [
 name = "goldsrc-macros"
 version = "0.10.0"
 dependencies = [
+ "goldsrc-api",
  "proc-macro2",
  "quote",
  "syn 3.0.3",

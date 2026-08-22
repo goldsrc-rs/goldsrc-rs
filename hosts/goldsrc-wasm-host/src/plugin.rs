@@ -91,11 +91,13 @@ pub struct LoadedPlugin {
 impl LoadedPlugin {
     /// Invokes the plugin's `on_load` export.
     pub fn call_on_load(&mut self) -> wasmtime::Result<()> {
+        self.store.set_epoch_deadline(50);
         self.bindings.call_on_load(&mut self.store)
     }
 
     /// Invokes the plugin's `on_unload` export, if present.
     pub fn call_on_unload(&mut self) -> wasmtime::Result<()> {
+        self.store.set_epoch_deadline(50);
         self.bindings.call_on_unload(&mut self.store)
     }
 
@@ -105,6 +107,7 @@ impl LoadedPlugin {
         if self.is_paused || self.is_poisoned {
             return Ok(());
         }
+        self.store.set_epoch_deadline(5);
         let res = self.bindings.call_on_frame(&mut self.store);
         if let Err(ref e) = res {
             self.poison(e);
@@ -117,6 +120,7 @@ impl LoadedPlugin {
         if self.is_paused || self.is_poisoned {
             return Ok(());
         }
+        self.store.set_epoch_deadline(10);
         let res = self
             .bindings
             .call_on_event(&mut self.store, event_name, data);
@@ -128,13 +132,19 @@ impl LoadedPlugin {
 
     /// Invokes the plugin's `on_command` export (skipped if paused/poisoned).
     /// Returns whether the plugin consumed the command.
-    pub fn call_on_command(&mut self, cmd_name: &str, args: &str) -> wasmtime::Result<bool> {
+    pub fn call_on_command(
+        &mut self,
+        cmd_name: &str,
+        caller: i32,
+        args: &str,
+    ) -> wasmtime::Result<bool> {
         if self.is_paused || self.is_poisoned {
             return Ok(false);
         }
+        self.store.set_epoch_deadline(10);
         let res = self
             .bindings
-            .call_on_command(&mut self.store, cmd_name, args);
+            .call_on_command(&mut self.store, cmd_name, caller, args);
         match res {
             Err(e) => {
                 self.poison(&e);

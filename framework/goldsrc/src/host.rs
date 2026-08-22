@@ -64,11 +64,15 @@ impl HostRuntime {
             PathResolver::normalize(&config_dir)
         );
 
-        if sys_config.wasm.hot_reload {
-            let _ = manager.enable_hot_reload(&plugin_dir);
+        if sys_config.wasm.hot_reload
+            && let Err(e) = manager.enable_hot_reload(&plugin_dir)
+        {
+            log::warn!(target: "wasm", "Failed to enable hot reload on {:?}: {e}", plugin_dir);
         }
-        if sys_config.wasm.config_watcher {
-            let _ = manager.enable_config_watcher(&config_dir);
+        if sys_config.wasm.config_watcher
+            && let Err(e) = manager.enable_config_watcher(&config_dir)
+        {
+            log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
 
         // Auto-load all .wasm plugins in plugin_dir

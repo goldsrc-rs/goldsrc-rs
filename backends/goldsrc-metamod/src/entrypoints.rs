@@ -153,6 +153,8 @@ pub unsafe extern "C" fn GetEntityAPI2(
             }
             let table = &mut *dll_table;
             table.pfnSpawn = Some(crate::hooks::hook_spawn);
+            table.pfnServerActivate = Some(crate::hooks::hook_server_activate);
+            table.pfnServerDeactivate = Some(crate::hooks::hook_server_deactivate);
             table.pfnClientConnect = Some(crate::hooks::hook_client_connect);
             table.pfnClientDisconnect = Some(crate::hooks::hook_client_disconnect);
             table.pfnClientCommand = Some(crate::hooks::hook_client_command);

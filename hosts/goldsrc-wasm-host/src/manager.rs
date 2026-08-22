@@ -142,50 +142,37 @@ impl api::Host for HostState {
         );
     }
 
-    fn host_register_capability(&mut self, name: String, description: String) -> bool {
-        let mut caps = goldsrc_api::auth::CAPS
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        if let std::collections::hash_map::Entry::Vacant(e) = caps.registered.entry(name) {
-            e.insert(description);
-            true
-        } else {
-            false
+    fn host_print_chat(&mut self, player_index: i32, message: String) {
+        if !self.engine.entity_is_valid(player_index) {
+            self.engine
+                .server_print(&format!("[Chat to #{player_index}] {message}\n"));
+            return;
         }
+        self.engine.message_begin(
+            goldsrc_api::MessageDest::One as i32,
+            76, // Standard SayText user message id
+            None,
+            Some(player_index),
+        );
+        self.engine.write_byte(player_index);
+        self.engine.write_string(&message);
+        self.engine.message_end();
+    }
+
+    fn host_register_capability(&mut self, name: String, description: String) -> bool {
+        goldsrc_api::auth::Auth::register_capability(&name, &description)
     }
 
     fn host_has_capability(&mut self, player_index: i32, name: String) -> bool {
-        let caps = goldsrc_api::auth::CAPS
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
-        caps.player_capabilities
-            .get(&player_index)
-            .is_some_and(|player_caps| player_caps.contains(&name))
+        goldsrc_api::auth::Auth::has_capability(player_index, &name)
     }
 
     fn host_grant_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = goldsrc_api::auth::CAPS
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        // Check if capability exists in the registry
-        if !caps.registered.contains_key(&name) {
-            return false;
-        }
-        caps.player_capabilities
-            .entry(player_index)
-            .or_default()
-            .insert(name)
+        goldsrc_api::auth::Auth::grant_capability(player_index, &name)
     }
 
     fn host_revoke_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = goldsrc_api::auth::CAPS
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some(player_caps) = caps.player_capabilities.get_mut(&player_index) {
-            player_caps.remove(&name)
-        } else {
-            false
-        }
+        goldsrc_api::auth::Auth::revoke_capability(player_index, &name)
     }
 }
 
@@ -212,10 +199,11 @@ const RELOAD_DEBOUNCE: Duration = Duration::from_millis(150);
 
 impl PluginManager {
     /// Creates an empty plugin manager backed by a fresh wasmtime engine
-    /// with the Component Model enabled.
+    /// with the Component Model and epoch interruption enabled.
     pub fn new(engine_ops: Arc<dyn GoldsrcEngine>) -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
+        config.epoch_interruption(true);
         // config.target("pulley32").unwrap();
         let engine = Engine::new(&config)?;
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
@@ -232,10 +220,8 @@ impl PluginManager {
         })
     }
 
-    /// Loads a WASM plugin from `path`. Accepts either a pre-compiled
-    /// component (magic `\0asm`) or a plain core module, which is embedded
-    /// with component metadata first. Calls the plugin's `on_load`.
-    pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, LoadError> {
+    /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
+    pub fn instantiate_plugin<P: AsRef<Path>>(&self, path: P) -> Result<LoadedPlugin, LoadError> {
         let path = path.as_ref();
         let bytes = fs::read(path).map_err(|source| LoadError::Io {
             path: path.to_path_buf(),
@@ -290,15 +276,25 @@ impl PluginManager {
             engine: self.engine_ops.clone(),
         };
         let mut store = wasmtime::Store::new(&self.engine, state);
+        store.set_epoch_deadline(100);
         let bindings = GoldsrcPlugin::instantiate(&mut store, &component, &linker)
             .map_err(|e| LoadError::Instantiate(e.to_string()))?;
 
-        let metadata = bindings
-            .call_get_metadata(&mut store)
-            .ok()
-            .and_then(|meta_str| toml::from_str::<PluginMetadata>(&meta_str).ok());
+        let metadata = match bindings.call_get_metadata(&mut store) {
+            Ok(meta_str) => match toml::from_str::<PluginMetadata>(&meta_str) {
+                Ok(meta) => Some(meta),
+                Err(err) => {
+                    crate::host_log(&format!(
+                        "Warning: Failed to parse metadata for plugin at {:?}: {}",
+                        path, err
+                    ));
+                    None
+                }
+            },
+            Err(_) => None,
+        };
 
-        let mut plugin = LoadedPlugin {
+        Ok(LoadedPlugin {
             name: path.file_stem().unwrap().to_string_lossy().to_string(),
             path: path.to_path_buf(),
             is_paused: false,
@@ -307,8 +303,15 @@ impl PluginManager {
             store,
             bindings,
             component,
-        };
+        })
+    }
 
+    /// Loads a WASM plugin from `path`. Accepts either a pre-compiled
+    /// component (magic `\0asm`) or a plain core module, which is embedded
+    /// with component metadata first. Calls the plugin's `on_load`.
+    pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, LoadError> {
+        let path = path.as_ref();
+        let mut plugin = self.instantiate_plugin(path)?;
         plugin
             .call_on_load()
             .map_err(|e| LoadError::LoadPanic(e.to_string()))?;
@@ -322,8 +325,9 @@ impl PluginManager {
                     .push(idx);
             }
         }
+        let name = plugin.name.clone();
         self.plugins.push(plugin);
-        Ok("Loaded successfully".to_string())
+        Ok(name)
     }
 
     /// Resolves a plugin query (either numeric index or name) to a plugin index.
@@ -446,11 +450,33 @@ impl PluginManager {
             .position(|p| p.path == path || p.path.canonicalize().is_ok_and(|c| c == canonical))
         {
             let name = self.plugins[idx].name.clone();
-            let path = self.plugins[idx].path.clone();
-            self.unload_plugin_at(idx);
-            match self.load_plugin(&path) {
-                Ok(_) => crate::host_log(&format!("Hot-reloaded plugin '{}'", name)),
-                Err(e) => crate::host_log(&format!("Hot-reload of '{}' failed: {}", name, e)),
+            let old_path = self.plugins[idx].path.clone();
+
+            match self.instantiate_plugin(&old_path) {
+                Ok(mut new_plugin) => {
+                    if let Err(e) = new_plugin.call_on_load() {
+                        crate::host_log(&format!("Hot-reload on_load of '{}' failed: {e}", name));
+                        return;
+                    }
+                    self.unload_plugin_at(idx);
+                    let new_idx = self.plugins.len();
+                    if let Some(meta) = &new_plugin.metadata {
+                        for cmd in &meta.commands {
+                            self.command_registry
+                                .entry(cmd.clone())
+                                .or_default()
+                                .push(new_idx);
+                        }
+                    }
+                    self.plugins.push(new_plugin);
+                    crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
+                }
+                Err(e) => {
+                    crate::host_log(&format!(
+                        "Hot-reload of '{}' failed (previous version kept active): {e}",
+                        name
+                    ));
+                }
             }
         }
     }
@@ -523,13 +549,13 @@ impl PluginManager {
 
     /// Dispatches a server command to the plugins that registered it.
     /// Stops at the first plugin that reports handling it (consume).
-    pub fn dispatch_command(&mut self, cmd: &str, args: &str) -> bool {
+    pub fn dispatch_command(&mut self, cmd: &str, caller: i32, args: &str) -> bool {
         let Some(owners) = self.command_registry.get(cmd).cloned() else {
             return false;
         };
         for idx in owners {
             if let Some(plugin) = self.plugins.get_mut(idx) {
-                if plugin.call_on_command(cmd, args).unwrap_or(false) {
+                if plugin.call_on_command(cmd, caller, args).unwrap_or(false) {
                     return true;
                 }
             }
@@ -541,6 +567,7 @@ impl PluginManager {
     /// then ticks every plugin's `on_frame`. `.toml` events are forwarded to
     /// plugins as `on_event("config_changed", <path>)`. Call once per frame.
     pub fn on_server_frame(&mut self) {
+        self.engine.increment_epoch();
         while let Ok(path) = self.event_rx.try_recv() {
             match path.extension().and_then(|s| s.to_str()) {
                 Some("wasm") => self.reload_plugin_path_debounced(&path),
@@ -761,8 +788,8 @@ mod tests {
         );
 
         // Dispatch finds the plugin via the registry and consumes the command.
-        assert!(manager.dispatch_command("testcmd", "hello"));
+        assert!(manager.dispatch_command("testcmd", 0, "hello"));
         // Unknown commands are not dispatched at all.
-        assert!(!manager.dispatch_command("nonexistent", ""));
+        assert!(!manager.dispatch_command("nonexistent", 0, ""));
     }
 }

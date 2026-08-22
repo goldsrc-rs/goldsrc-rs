@@ -307,6 +307,32 @@ pub fn populate_new_dll_table(new_dll_table: *mut std::ffi::c_void) -> bool {
     false
 }
 
+/// Forward a server activate call to the real game DLL if loaded.
+pub fn forward_server_activate(
+    edict_list: *mut goldsrc_sys::edict_t,
+    edict_count: i32,
+    client_max: i32,
+) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnServerActivate
+    });
+    if let Some(f) = func {
+        unsafe { f(edict_list, edict_count, client_max) };
+    }
+}
+
+/// Forward a server deactivate call to the real game DLL if loaded.
+pub fn forward_server_deactivate() {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnServerDeactivate
+    });
+    if let Some(f) = func {
+        unsafe { f() };
+    }
+}
+
 /// Forward a spawn call to the real game DLL if loaded.
 pub fn forward_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     let func = PROXY.get().and_then(|lock| {

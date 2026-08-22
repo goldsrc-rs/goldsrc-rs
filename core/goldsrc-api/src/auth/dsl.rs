@@ -285,7 +285,9 @@ impl Parser {
                             }
                             match self.next() {
                                 Some(Token::RBracket) => {
-                                    if sub_nodes.len() == 1 {
+                                    if sub_nodes.is_empty() {
+                                        Err("Empty capability group '[]' is forbidden".to_string())
+                                    } else if sub_nodes.len() == 1 {
                                         Ok(sub_nodes.remove(0))
                                     } else {
                                         Ok(CapExpr::And(sub_nodes))
@@ -398,5 +400,10 @@ mod tests {
     fn test_group_wildcard_syntax() {
         let ast = CapExpr::parse("admin:*").unwrap();
         assert_eq!(ast, CapExpr::Node("admin.*".to_string()));
+    }
+
+    #[test]
+    fn test_empty_group_rejected() {
+        assert!(CapExpr::parse("admin:[]").is_err());
     }
 }

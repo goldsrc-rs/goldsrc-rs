@@ -181,8 +181,10 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut on_load_fn = quote! {};
     let mut on_unload_fn = quote! {};
     let mut on_frame_fn = quote! {};
-    let mut on_event_fn = quote! {};
     let mut on_command_fn = quote! {};
+    let mut event_handlers: Vec<(Option<String>, syn::Ident, usize)> = Vec::new();
+    let mut registered_events: std::collections::HashSet<Option<String>> =
+        std::collections::HashSet::new();
 
     let mut command_matchers = Vec::new();
     let mut plugin_commands: Vec<String> = Vec::new();
@@ -194,11 +196,13 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut is_on_unload = false;
             let mut is_on_frame = false;
             let mut is_on_event = false;
+            let mut event_name: Option<String> = None;
             let mut cmd_name = None;
             let mut cmd_aliases = Vec::new();
             let mut cmd_capability: Option<String> = None;
             let mut cmd_description: Option<String> = None;
             let mut cmd_usage: Option<String> = None;
+            let mut macro_error: Option<syn::Error> = None;
 
             // Retain attributes that are NOT our custom ones
             method.attrs.retain(|attr| {
@@ -213,17 +217,36 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                     false
                 } else if attr.path().is_ident("event") {
                     is_on_event = true;
+                    if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                        event_name = Some(s.value());
+                    } else if let Ok(meta_list) = attr.meta.require_list() {
+                        let _ = meta_list.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("name") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    event_name = Some(s.value());
+                                }
+                            }
+                            Ok(())
+                        });
+                    }
                     false
                 } else if attr.path().is_ident("command") {
                     if let Ok(meta_list) = attr.meta.require_list() {
-                        let _ = meta_list.parse_nested_meta(|meta| {
+                        let res = meta_list.parse_nested_meta(|meta| {
                             if meta.path.is_ident("name") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
                                     cmd_name = Some(s.value());
                                 }
                             } else if meta.path.is_ident("capability") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
-                                    cmd_capability = Some(s.value());
+                                    let cap_val = s.value();
+                                    if let Err(err) = ::goldsrc_api::auth::CapExpr::parse(&cap_val)
+                                    {
+                                        return Err(meta.error(format!(
+                                            "invalid capability expression '{cap_val}': {err}"
+                                        )));
+                                    }
+                                    cmd_capability = Some(cap_val);
                                 }
                             } else if meta.path.is_ident("description") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
@@ -246,15 +269,30 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                                         }
                                     }
                                 }
+                            } else {
+                                return Err(meta.error(format!(
+                                    "unknown #[command] key '{}'",
+                                    meta.path
+                                        .get_ident()
+                                        .map(|i| i.to_string())
+                                        .unwrap_or_default()
+                                )));
                             }
                             Ok(())
                         });
+                        if let Err(e) = res {
+                            macro_error = Some(e);
+                        }
                     }
                     false
                 } else {
                     true
                 }
             });
+
+            if let Some(err) = macro_error {
+                return err.to_compile_error().into();
+            }
 
             let fn_name = &method.sig.ident;
             let inputs_len = method.sig.inputs.len();
@@ -281,12 +319,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 if let Err(e) = check_handler_args(method, "event", &[0, 1, 2]) {
                     return e.to_compile_error().into();
                 }
-                let call_expr = match inputs_len {
-                    0 => quote! { #struct_name::#fn_name() },
-                    1 => quote! { #struct_name::#fn_name(name) },
-                    _ => quote! { #struct_name::#fn_name(name, payload) },
-                };
-                on_event_fn = quote! { #call_expr; };
+                if !registered_events.insert(event_name.clone()) {
+                    return syn::Error::new_spanned(
+                        method,
+                        format!("duplicate handler for event {:?}", event_name),
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+                event_handlers.push((event_name, fn_name.clone(), inputs_len));
             }
             if let Some(cmd) = cmd_name {
                 plugin_commands.push(cmd.clone());
@@ -299,7 +340,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                     1 => {
                         if let Some(syn::FnArg::Typed(pat_type)) = method.sig.inputs.first() {
                             if let syn::Type::Path(type_path) = &*pat_type.ty {
-                                type_path.path.is_ident("String")
+                                type_path.path.is_ident("String") || type_path.path.is_ident("str")
                             } else {
                                 false
                             }
@@ -312,7 +353,9 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                         for input in &method.sig.inputs {
                             if let syn::FnArg::Typed(pat_type) = input {
                                 if let syn::Type::Path(type_path) = &*pat_type.ty {
-                                    if !type_path.path.is_ident("String") {
+                                    if !type_path.path.is_ident("String")
+                                        && !type_path.path.is_ident("str")
+                                    {
                                         all_string = false;
                                     }
                                 } else {
@@ -352,15 +395,21 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                             };
                             let ty = &pat_type.ty;
                             param_idents.push(ident.clone());
-                            param_bindings.push(quote! {
-                                let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(__iter.next().unwrap_or_default()) {
-                                    Ok(val) => val,
-                                    Err(err) => {
-                                        ::goldsrc::log_warn!("[Command '{}'] Parameter '{}' invalid: {}", name, stringify!(#ident), err);
-                                        return true;
-                                    }
-                                };
-                            });
+                            if ident == "caller" || ident == "caller_idx" {
+                                param_bindings.push(quote! {
+                                    let mut #ident: #ty = caller;
+                                });
+                            } else {
+                                param_bindings.push(quote! {
+                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(__iter.next().unwrap_or_default()) {
+                                        Ok(val) => val,
+                                        Err(err) => {
+                                            ::goldsrc::log_warn!("[Command '{}'] Parameter '{}' invalid: {}", name, stringify!(#ident), err);
+                                            return true;
+                                        }
+                                    };
+                                });
+                            }
                         }
                     }
 
@@ -388,13 +437,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 let handler_body = if let Some(ref cap_str) = cmd_capability {
                     quote! {
-                        let caller_idx = args.split_whitespace().next().and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
-                        if caller_idx > 0 {
-                            if let Ok(ast) = ::goldsrc::CapExpr::parse(#cap_str) {
-                                if !ast.evaluate(&|c| ::goldsrc::Auth::has_capability(caller_idx, c)) {
-                                    ::goldsrc::log_warn!("[Auth] Access denied for player #{}: requires '{}'", caller_idx, #cap_str);
-                                    return true;
-                                }
+                        if caller > 0 {
+                            let allowed = if let Ok(ast) = ::goldsrc::CapExpr::parse(#cap_str) {
+                                ast.evaluate(&|c| ::goldsrc::Auth::has_capability(caller, c))
+                            } else {
+                                false
+                            };
+                            if !allowed {
+                                ::goldsrc::log_warn!("[Auth] Access denied for player #{}: requires '{}'", caller, #cap_str);
+                                return true;
                             }
                         }
                         #call_expr
@@ -414,6 +465,29 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     }
+
+    let mut event_arms = Vec::new();
+    let mut fallback_event = quote! {};
+    for (evt_name, f_name, in_len) in event_handlers {
+        let call_expr = match in_len {
+            0 => quote! { #struct_name::#f_name() },
+            1 => quote! { #struct_name::#f_name(name.clone()) },
+            _ => quote! { #struct_name::#f_name(name.clone(), payload.clone()) },
+        };
+        if let Some(n) = evt_name {
+            event_arms.push(quote! {
+                #n => { #call_expr; }
+            });
+        } else {
+            fallback_event = quote! { #call_expr; };
+        }
+    }
+    let on_event_fn = quote! {
+        match name.as_str() {
+            #(#event_arms)*
+            _ => { #fallback_event }
+        }
+    };
 
     if !command_matchers.is_empty() {
         on_command_fn = quote! {
@@ -484,7 +558,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #on_event_fn
             }
 
-            fn on_command(name: String, args: String) -> bool {
+            fn on_command(name: String, caller: i32, args: String) -> bool {
                 #on_command_fn
             }
         }

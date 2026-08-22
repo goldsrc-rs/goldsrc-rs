@@ -17,7 +17,19 @@
 //! The raw pointer is never stored as `*mut` in a `pub` field, preventing
 //! accidental unsynchronised access from plugin code.
 
-#![allow(dead_code)]
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static MAP_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+/// Returns the current map session generation counter.
+pub fn current_map_generation() -> u64 {
+    MAP_GENERATION.load(Ordering::Relaxed)
+}
+
+/// Advances the map session generation counter, invalidating all handles from prior maps.
+pub fn bump_map_generation() {
+    MAP_GENERATION.fetch_add(1, Ordering::SeqCst);
+}
 
 /// Validated handle to a GoldSrc engine entity.
 ///
@@ -33,6 +45,8 @@ pub struct EDict {
     /// Serial number at the time this handle was created. If the edict slot
     /// has since been recycled, `edict_t.serialnumber` will differ.
     serial: i32,
+    /// Map session generation at creation time to prevent cross-map UAF.
+    generation: u64,
 }
 
 impl EDict {
@@ -57,6 +71,7 @@ impl EDict {
             index,
             ptr: edict as usize,
             serial,
+            generation: current_map_generation(),
         }
     }
 
@@ -66,6 +81,7 @@ impl EDict {
             index: -1,
             ptr: 0,
             serial: -1,
+            generation: 0,
         }
     }
 
@@ -78,12 +94,11 @@ impl EDict {
     /// same logical entity (serial number unchanged and pointer non-null).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn is_valid(self) -> bool {
-        if self.ptr == 0 {
+        if self.ptr == 0 || self.generation != current_map_generation() {
             return false;
         }
-        // SAFETY: We check ptr != 0 above; the engine guarantees edict_t
-        // slots remain addressable for the process lifetime even after freeing.
-        // We only read `serialnumber` — a plain i32 field with no side effects.
+        // SAFETY: We check ptr != 0 and generation match above.
+        // We only read `serialnumber` and `free` — plain i32 fields.
         let current_serial = unsafe { (*(self.ptr as *const goldsrc_sys::edict_t)).serialnumber };
         current_serial == self.serial
             && !(unsafe { (*(self.ptr as *const goldsrc_sys::edict_t)).free } != 0)
@@ -278,5 +293,20 @@ mod tests {
         assert!(!e.set_origin([0.0, 0.0, 0.0]));
         assert!(!e.set_velocity([0.0, 0.0, 0.0]));
         assert!(!e.set_armorvalue(0.0));
+    }
+
+    #[test]
+    fn map_generation_invalidation() {
+        let mut raw_edict: goldsrc_sys::edict_t = unsafe { std::mem::zeroed() };
+        raw_edict.serialnumber = 42;
+        raw_edict.free = 0;
+
+        let handle = unsafe { EDict::from_raw(1, &mut raw_edict as *mut _) };
+        assert!(handle.is_valid());
+
+        bump_map_generation();
+
+        assert!(!handle.is_valid());
+        assert!(handle.as_ptr().is_none());
     }
 }

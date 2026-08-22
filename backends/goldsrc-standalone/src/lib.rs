@@ -175,6 +175,24 @@ unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
     });
 }
 
+unsafe extern "C" fn hook_server_activate(
+    edict_list: *mut goldsrc_sys::edict_t,
+    edict_count: i32,
+    client_max: i32,
+) {
+    catch_ffi_panic("hook_server_activate", (), || {
+        proxy::forward_server_activate(edict_list, edict_count, client_max);
+        goldsrc::hooks::on_server_activate();
+    });
+}
+
+unsafe extern "C" fn hook_server_deactivate() {
+    catch_ffi_panic("hook_server_deactivate", (), || {
+        proxy::forward_server_deactivate();
+        goldsrc::hooks::on_server_deactivate();
+    });
+}
+
 unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     catch_ffi_panic("hook_spawn", 0, || {
         crate::backend().precache_pending_resources();
@@ -236,6 +254,8 @@ pub unsafe extern "C" fn GetEntityAPI2(
             let table = &mut *dll_table;
             table.pfnGameInit = Some(hook_game_init);
             table.pfnSpawn = Some(hook_spawn);
+            table.pfnServerActivate = Some(hook_server_activate);
+            table.pfnServerDeactivate = Some(hook_server_deactivate);
             table.pfnClientConnect = Some(hook_client_connect);
             table.pfnClientDisconnect = Some(hook_client_disconnect);
             table.pfnClientCommand = Some(hook_client_command);
