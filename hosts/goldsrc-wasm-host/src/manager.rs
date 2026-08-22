@@ -294,8 +294,14 @@ impl PluginManager {
             Err(_) => None,
         };
 
+        let name = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
         Ok(LoadedPlugin {
-            name: path.file_stem().unwrap().to_string_lossy().to_string(),
+            name,
             path: path.to_path_buf(),
             is_paused: false,
             is_poisoned: false,

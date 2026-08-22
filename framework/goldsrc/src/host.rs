@@ -33,7 +33,13 @@ impl HostRuntime {
         let sys_config = GoldSrcConfig::load_or_create(backend);
 
         // Initialise unified logger
-        crate::logging::init(sys_config.logging.clone(), backend, Some(print_cb));
+        let logs_dir = std::path::PathBuf::from(&sys_config.core.logs_dir);
+        crate::logging::init_with_dir(
+            sys_config.logging.clone(),
+            Some(logs_dir),
+            backend,
+            Some(print_cb),
+        );
 
         // Initial startup banner stating active backend and version
         log::info!(

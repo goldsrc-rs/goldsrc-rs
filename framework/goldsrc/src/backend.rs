@@ -47,6 +47,24 @@ macro_rules! call_engfunc_ret {
 /// and unescaped braces would crash the server.
 pub struct PrintQueue(std::sync::Mutex<std::collections::VecDeque<String>>);
 
+/// Helper to escape format specifiers and braces for ReHLDS fmtlib safety.
+///
+/// Strips NUL bytes, escapes `%` → `%%`, `{`/`}` → `{{`/`}}`, CR/LF stripped, lines trimmed to 400 chars.
+pub fn escape_server_print(message: &str) -> String {
+    let safe = message
+        .replace('\0', "")
+        .replace('%', "%%")
+        .replace('{', "{{")
+        .replace('}', "}}")
+        .replace('\r', "")
+        .replace('\n', " ");
+    let mut end = safe.len().min(400);
+    while end > 0 && !safe.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}\n", safe[..end].trim_end())
+}
+
 impl Default for PrintQueue {
     fn default() -> Self {
         Self::new()
@@ -58,7 +76,8 @@ impl PrintQueue {
     pub const fn new() -> Self {
         Self(std::sync::Mutex::new(std::collections::VecDeque::new()))
     }
-    /// Queue a message for later printing.
+
+    /// Add a message to the back of the queue.
     pub fn push(&self, message: &str) {
         let mut queue = match self.0.lock() {
             Ok(q) => q,
@@ -68,8 +87,6 @@ impl PrintQueue {
     }
 
     /// Take all pending messages, escaping fmtlib-sensitive characters.
-    ///
-    /// `%` → `%%`, `{`/`}` → `{{`/`}}`, CR/LF stripped, lines trimmed to 400 chars.
     pub fn drain(&self) -> Vec<String> {
         let messages = {
             let mut queue = match self.0.lock() {
@@ -83,19 +100,7 @@ impl PrintQueue {
         };
         messages
             .into_iter()
-            .map(|message| {
-                let safe = message
-                    .replace('%', "%%")
-                    .replace('{', "{{")
-                    .replace('}', "}}")
-                    .replace('\r', "")
-                    .replace('\n', " ");
-                let mut end = safe.len().min(400);
-                while end > 0 && !safe.is_char_boundary(end) {
-                    end -= 1;
-                }
-                format!("{}\n", safe[..end].trim_end())
-            })
+            .map(|message| escape_server_print(&message))
             .collect()
     }
 }
@@ -337,12 +342,11 @@ impl goldsrc_api::EngineConsole for EngineBackend {
             let funcs = (self.engfuncs)();
             if let Some(f) = funcs.pfnServerPrint {
                 for buffered in self.print_queue.drain() {
-                    let safe_buf = buffered.replace('%', "%%").replace('\0', "");
-                    if let Ok(cstr) = std::ffi::CString::new(safe_buf) {
+                    if let Ok(cstr) = std::ffi::CString::new(buffered) {
                         f(cstr.as_ptr());
                     }
                 }
-                let safe = message.replace('%', "%%").replace('\0', "");
+                let safe = escape_server_print(message);
                 if let Ok(cstr) = std::ffi::CString::new(safe) {
                     f(cstr.as_ptr());
                 }

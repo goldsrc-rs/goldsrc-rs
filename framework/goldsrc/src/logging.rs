@@ -96,6 +96,16 @@ pub enum LogTarget {
 }
 
 impl LogTarget {
+    /// Parses a target string into a `LogTarget`.
+    pub fn from_target_str(target: &str) -> Self {
+        match target {
+            "proxy" => Self::Proxy,
+            "wasm" => Self::Wasm,
+            "plugin" => Self::Plugin,
+            _ => Self::Core,
+        }
+    }
+
     /// Returns the lowercase name used in log lines (e.g. `"core"`).
     pub fn as_str(self) -> &'static str {
         match self {
@@ -160,9 +170,16 @@ struct GoldSrcLogger {
 }
 
 impl GoldSrcLogger {
-    fn new(config: LogConfig, backend_type: BackendType, console_cb: Option<ConsoleCb>) -> Self {
-        let fw_dir = PathResolver::framework_dir(backend_type);
-        let log_dir = fw_dir.join(crate::paths::LOGS_DIR_NAME);
+    fn new(
+        config: LogConfig,
+        logs_dir: Option<PathBuf>,
+        backend_type: BackendType,
+        console_cb: Option<ConsoleCb>,
+    ) -> Self {
+        let log_dir = logs_dir.unwrap_or_else(|| {
+            let fw_dir = PathResolver::framework_dir(backend_type);
+            fw_dir.join(crate::paths::LOGS_DIR_NAME)
+        });
         let _ = fs::create_dir_all(&log_dir);
         let log_path = log_dir.join(goldsrc_api::consts::DEFAULT_LOG_FILE_NAME);
         let file_handle = OpenOptions::new()
@@ -214,9 +231,6 @@ impl GoldSrcLogger {
         if self.config.console_output
             && let Some(ref cb) = self.console_cb
         {
-            // ANSI color mapping:
-            // Trace: Cyan (\x1b[36m), Debug: Gray/Dim (\x1b[90m), Info: Green (\x1b[32m),
-            // Warn: Yellow (\x1b[33m), Error: Red (\x1b[31m), Reset: \x1b[0m
             let level_color = match level {
                 LogLevel::Trace => "\x1b[36m",
                 LogLevel::Debug => "\x1b[90m",
@@ -238,34 +252,25 @@ impl GoldSrcLogger {
     }
 }
 
-// ============================================================================
-// Global singleton access
-// ============================================================================
-
 struct LoggerImpl {
     inner: Mutex<GoldSrcLogger>,
 }
 
 impl log::Log for LoggerImpl {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        true
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        let level = LogLevel::from_log_level(metadata.level());
+        let target = LogTarget::from_target_str(metadata.target());
+        let guard = match self.inner.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
+        guard.should_emit(level, target)
     }
 
     fn log(&self, record: &log::Record) {
-        if !self.enabled(record.metadata()) {
-            return;
-        }
-
         let level = LogLevel::from_log_level(record.level());
-
-        let target = match record.target() {
-            "proxy" => LogTarget::Proxy,
-            "wasm" => LogTarget::Wasm,
-            "plugin" => LogTarget::Plugin,
-            _ => LogTarget::Core,
-        };
-
-        let message = format!("{}", record.args());
+        let target = LogTarget::from_target_str(record.target());
+        let message = record.args().to_string();
 
         let mut guard = match self.inner.lock() {
             Ok(g) => g,
@@ -288,11 +293,23 @@ pub fn init<F>(config: LogConfig, backend_type: BackendType, console_cb: Option<
 where
     F: Fn(&str) + Send + Sync + 'static,
 {
+    init_with_dir(config, None, backend_type, console_cb);
+}
+
+/// Initialise the global logger with a custom log directory path.
+pub fn init_with_dir<F>(
+    config: LogConfig,
+    logs_dir: Option<PathBuf>,
+    backend_type: BackendType,
+    console_cb: Option<F>,
+) where
+    F: Fn(&str) + Send + Sync + 'static,
+{
     let cb: Option<ConsoleCb> = console_cb.map(|f| Box::new(f) as ConsoleCb);
     let level_filter = config.level.to_level_filter();
 
     if let Ok(_logger) = LOGGER_INSTANCE.set(LoggerImpl {
-        inner: Mutex::new(GoldSrcLogger::new(config, backend_type, cb)),
+        inner: Mutex::new(GoldSrcLogger::new(config, logs_dir, backend_type, cb)),
     }) {
         let _ = log::set_logger(LOGGER_INSTANCE.get().unwrap());
         log::set_max_level(level_filter);

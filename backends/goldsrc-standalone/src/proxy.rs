@@ -420,7 +420,7 @@ pub unsafe fn forward_server_get_blending_interface(
     bonetransform: *mut std::ffi::c_void,
 ) -> i32 {
     ensure_loaded();
-    if let Some(proxy_lock) = PROXY.get() {
+    let func = PROXY.get().and_then(|proxy_lock| {
         let guard = proxy_lock.lock().unwrap_or_else(|e| e.into_inner());
         let func: Result<
             libloading::Symbol<
@@ -434,11 +434,13 @@ pub unsafe fn forward_server_get_blending_interface(
             >,
             _,
         > = unsafe { guard._lib.get(b"Server_GetBlendingInterface\0") };
-        if let Ok(f) = func {
-            return unsafe { f(version, ppinterface, pstudio, rotationmatrix, bonetransform) };
-        }
+        func.ok().map(|sym| *sym)
+    });
+    if let Some(f) = func {
+        unsafe { f(version, ppinterface, pstudio, rotationmatrix, bonetransform) }
+    } else {
+        0
     }
-    0
 }
 
 /// Forward an entity factory function call (e.g. worldspawn, info_player_start) to the real game DLL.
@@ -447,15 +449,16 @@ pub unsafe fn forward_server_get_blending_interface(
 /// `pev` is a valid pointer to an `entvars_t` allocated by the engine.
 pub unsafe fn forward_entity(name: &str, pev: *mut goldsrc_sys::entvars_t) {
     ensure_loaded();
-    if let Some(proxy_lock) = PROXY.get() {
+    let func = PROXY.get().and_then(|proxy_lock| {
         let guard = proxy_lock.lock().unwrap_or_else(|e| e.into_inner());
         let mut name_bytes = name.as_bytes().to_vec();
         name_bytes.push(0);
         let func: Result<libloading::Symbol<unsafe extern "C" fn(*mut goldsrc_sys::entvars_t)>, _> =
             unsafe { guard._lib.get(&name_bytes[..]) };
-        if let Ok(f) = func {
-            unsafe { f(pev) };
-        }
+        func.ok().map(|sym| *sym)
+    });
+    if let Some(f) = func {
+        unsafe { f(pev) };
     }
 }
 
@@ -468,7 +471,7 @@ pub unsafe fn forward_create_interface(
     return_code: *mut i32,
 ) -> *mut std::ffi::c_void {
     ensure_loaded();
-    if let Some(proxy_lock) = PROXY.get() {
+    let func = PROXY.get().and_then(|proxy_lock| {
         let guard = proxy_lock.lock().unwrap_or_else(|e| e.into_inner());
         let func: Result<
             libloading::Symbol<
@@ -479,9 +482,11 @@ pub unsafe fn forward_create_interface(
             >,
             _,
         > = unsafe { guard._lib.get(b"CreateInterface\0") };
-        if let Ok(f) = func {
-            return unsafe { f(name, return_code) };
-        }
+        func.ok().map(|sym| *sym)
+    });
+    if let Some(f) = func {
+        unsafe { f(name, return_code) }
+    } else {
+        std::ptr::null_mut()
     }
-    std::ptr::null_mut()
 }

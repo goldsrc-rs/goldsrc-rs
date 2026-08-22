@@ -17,8 +17,6 @@ pub mod consts;
 pub mod edict;
 /// Modular engine sub-system traits, unified engine bridge, and API facade.
 pub mod engine;
-/// Abstract interface for plugin runtime execution hosts.
-pub mod plugin_host;
 
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use client::{
@@ -34,7 +32,6 @@ pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
     EnginePrecache, EngineSound, MessageDest, TraceResult, engine_api,
 };
-pub use plugin_host::{HostError, HostResult, PluginHost};
 
 /// Safe wrapper around `edict_t` (entity dictionary).
 ///
@@ -239,30 +236,6 @@ impl From<Vector3> for [f32; 3] {
     fn from(v: Vector3) -> Self {
         [v.x, v.y, v.z]
     }
-}
-
-/// Plugin trait — implement this for your plugin.
-pub trait Plugin: Send + Sync {
-    /// Called when the plugin is loaded.
-    fn on_load(&mut self) {}
-
-    /// Called when the plugin is unloaded.
-    fn on_unload(&self) {}
-
-    /// Called when a player connects.
-    fn on_client_connect(&self, _player: &Player) {}
-
-    /// Called when a player disconnects.
-    fn on_client_disconnect(&self, _player: &Player) {}
-
-    /// Called when a player spawns.
-    fn on_client_spawn(&self, _player: &Player) {}
-
-    /// Called when a player dies.
-    fn on_client_killed(&self, _victim: &Player, _killer: &Player) {}
-
-    /// Called every server frame.
-    fn on_server_frame(&self) {}
 }
 
 // SAFETY: Entity is just a wrapper around raw pointers / integer index.
