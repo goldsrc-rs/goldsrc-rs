@@ -2,7 +2,12 @@ use goldsrc::prelude::*;
 
 pub struct AdminSystem;
 
-#[plugin(name = "admin_system", version = "0.10.0", author = "GoldSrc.rs Team")]
+#[plugin(
+    name = "admin_system",
+    version = "0.10.0",
+    author = "GoldSrc.rs Team",
+    description = "Administration utilities and capability-based player management"
+)]
 impl AdminSystem {
     #[on_load]
     fn init() {

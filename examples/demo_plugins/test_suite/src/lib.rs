@@ -8,7 +8,12 @@ struct StatsComponent {
 
 pub struct TestSuite;
 
-#[plugin(name = "test_suite", version = "0.10.0", author = "GoldSrc.rs Team")]
+#[plugin(
+    name = "test_suite",
+    version = "0.10.0",
+    author = "GoldSrc.rs Team",
+    description = "ECS, entity inspection, sound playback, and CVar test suite"
+)]
 impl TestSuite {
     #[on_load]
     fn init() {

@@ -32,28 +32,28 @@ pub mod paths;
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("[INFO] {}", format_args!($($arg)*)))
+        $crate::wasm_log::print(&format!("\x1b[1;32m[INFO]\x1b[0m {}", format_args!($($arg)*)))
     };
 }
 
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("[WARN] {}", format_args!($($arg)*)))
+        $crate::wasm_log::print(&format!("\x1b[1;33m[WARN]\x1b[0m {}", format_args!($($arg)*)))
     };
 }
 
 #[macro_export]
 macro_rules! log_err {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("[ERROR] {}", format_args!($($arg)*)))
+        $crate::wasm_log::print(&format!("\x1b[1;31m[ERROR]\x1b[0m {}", format_args!($($arg)*)))
     };
 }
 
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("[DEBUG] {}", format_args!($($arg)*)))
+        $crate::wasm_log::print(&format!("\x1b[1;36m[DEBUG]\x1b[0m {}", format_args!($($arg)*)))
     };
 }
 

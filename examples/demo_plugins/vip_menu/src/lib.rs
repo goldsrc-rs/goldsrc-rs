@@ -6,6 +6,7 @@ pub struct VipMenu;
     name = "vip_menu",
     version = "0.10.0",
     author = "GoldSrc.rs Team",
+    description = "VIP equipment menu and daily supply package deployment",
     dependencies = ["vip_core@>=0.10.0"]
 )]
 impl VipMenu {

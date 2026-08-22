@@ -435,6 +435,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     if let Some(meta) = &info.metadata {
                         out(&format!("  Meta Name:    {}\n", meta.name));
                         out(&format!("  Version:      {}\n", meta.version));
+                        out(&format!("  Author:       {}\n", meta.author));
+                        if !meta.description.is_empty() {
+                            out(&format!("  Description:  {}\n", meta.description));
+                        }
                         let systems_str = if meta.systems.is_empty() {
                             "none".to_string()
                         } else {
@@ -476,16 +480,36 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             ));
         }
         "cmds" | "commands" => {
-            let cmds = manager.registered_commands();
+            let plugins = manager.get_plugins_info();
+            let total_cmds: usize = plugins
+                .iter()
+                .filter_map(|p| p.metadata.as_ref().map(|m| m.commands.len()))
+                .sum();
             out(&format!(
                 "--- Registered Plugin Commands ({}) ---\n",
-                cmds.len()
+                total_cmds
             ));
-            if cmds.is_empty() {
+            if total_cmds == 0 {
                 out("  (No commands registered)\n");
             } else {
-                for cmd in cmds {
-                    out(&format!("  * {}\n", cmd));
+                for p in plugins {
+                    if let Some(meta) = &p.metadata
+                        && !meta.commands.is_empty()
+                    {
+                        let desc = if !meta.description.is_empty() {
+                            format!(" - {}", meta.description)
+                        } else {
+                            String::new()
+                        };
+                        out(&format!(
+                            "\n[{name} v{ver}]{desc}\n",
+                            name = meta.name,
+                            ver = meta.version
+                        ));
+                        for cmd in &meta.commands {
+                            out(&format!("  * {}\n", cmd));
+                        }
+                    }
                 }
             }
         }

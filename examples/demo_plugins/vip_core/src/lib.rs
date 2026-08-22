@@ -2,7 +2,12 @@ use goldsrc::prelude::*;
 
 pub struct VipCore;
 
-#[plugin(name = "vip_core", version = "0.10.0", author = "GoldSrc.rs Team")]
+#[plugin(
+    name = "vip_core",
+    version = "0.10.0",
+    author = "GoldSrc.rs Team",
+    description = "Core VIP authorization, capability registration, and player health/armor services"
+)]
 impl VipCore {
     #[on_load]
     fn init() {

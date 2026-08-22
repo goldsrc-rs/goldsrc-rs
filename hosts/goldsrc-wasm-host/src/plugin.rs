@@ -16,6 +16,9 @@ pub struct PluginMetadata {
     /// Plugin author.
     #[serde(default = "default_author")]
     pub author: String,
+    /// Plugin description.
+    #[serde(default)]
+    pub description: String,
     /// Registered system names (from `#[plugin(system = ...)]`).
     #[serde(default)]
     pub systems: Vec<String>,
