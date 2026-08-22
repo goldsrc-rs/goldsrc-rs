@@ -5,7 +5,7 @@
 <!-- Repository & Community -->
 ![GitHub Created At](https://img.shields.io/github/created-at/goldsrc-rs/goldsrc-rs?logo=github) [![Last Commit](https://img.shields.io/github/last-commit/goldsrc-rs/goldsrc-rs)](https://github.com/goldsrc-rs/goldsrc-rs/commits/main) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md) ![GitHub contributors](https://img.shields.io/github/contributors/goldsrc-rs/goldsrc-rs?logo=github) [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?logo=readme)](https://github.com/RichardLitt/standard-readme)  
 <!-- Tech Stack & Targets -->
-[![Rust: 2021 Edition](https://img.shields.io/badge/rust-2021_edition-orange.svg?logo=rust&logoColor=orange)](https://doc.rust-lang.org/edition-guide/rust-2021/) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?logo=python)](https://www.python.org/) ![Targets: i686-windows | i686-linux](https://img.shields.io/badge/targets-i686--windows%20%7C%20i686--linux-lightgray.svg?logo=linux&logoColor=black)
+[![Rust: 2024 Edition](https://img.shields.io/badge/rust-2024_edition-orange.svg?logo=rust&logoColor=orange)](https://doc.rust-lang.org/edition-guide/rust-2024/) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?logo=python)](https://www.python.org/) ![Targets: i686-windows | i686-linux](https://img.shields.io/badge/targets-i686--windows%20%7C%20i686--linux-lightgray.svg?logo=linux&logoColor=black)
 
 > A modern, memory-safe Rust framework and WebAssembly plugin runtime for GoldSrc engine modding.
 

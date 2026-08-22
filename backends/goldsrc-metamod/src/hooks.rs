@@ -2,7 +2,7 @@
 
 use goldsrc_sys::ffi::catch_ffi_panic;
 
-use crate::{call_engfunc, call_engfunc_ret, engfuncs, PRINT_QUEUE};
+use crate::{PRINT_QUEUE, call_engfunc, call_engfunc_ret, engfuncs};
 
 /// Hook for DispatchSpawn - called when an entity spawns.
 ///
@@ -102,17 +102,17 @@ pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t)
         }
         let cmd_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Argv, 0);
         let args_ptr = call_engfunc_ret!(engfuncs().pfnCmd_Args);
-        if !cmd_ptr.is_null() {
-            if let Ok(cmd_str) = std::ffi::CStr::from_ptr(cmd_ptr).to_str() {
-                let args_str = if !args_ptr.is_null() {
-                    std::ffi::CStr::from_ptr(args_ptr)
-                        .to_str()
-                        .unwrap_or_default()
-                } else {
-                    ""
-                };
-                goldsrc::hooks::dispatch_command(cmd_str, args_str);
-            }
+        if !cmd_ptr.is_null()
+            && let Ok(cmd_str) = unsafe { std::ffi::CStr::from_ptr(cmd_ptr) }.to_str()
+        {
+            let args_str = if !args_ptr.is_null() {
+                unsafe { std::ffi::CStr::from_ptr(args_ptr) }
+                    .to_str()
+                    .unwrap_or_default()
+            } else {
+                ""
+            };
+            goldsrc::hooks::dispatch_command(cmd_str, args_str);
         }
     });
 }

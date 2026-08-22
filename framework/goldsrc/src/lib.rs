@@ -29,28 +29,54 @@ pub mod logging;
 /// Filesystem path resolution helpers.
 pub mod paths;
 
+#[macro_export]
+macro_rules! log_info {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("\x1b[1;32m[INFO]\x1b[0m {}", format_args!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! log_warn {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("\x1b[1;33m[WARN]\x1b[0m {}", format_args!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! log_err {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("\x1b[1;31m[ERROR]\x1b[0m {}", format_args!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! log_debug {
+    ($($arg:tt)*) => {
+        $crate::wasm_log::print(&format!("\x1b[1;36m[DEBUG]\x1b[0m {}", format_args!($($arg)*)))
+    };
+}
+
 pub use ::log;
-pub use ::log::{
-    debug as log_debug, error as log_err, info as log_info, trace as log_trace, warn as log_warn,
-};
 pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
-pub use goldsrc_api::{auth::Auth, Engine, Entity, Player, Plugin, Vector3};
+#[cfg(target_arch = "wasm32")]
+pub use goldsrc_api::engine_api as engine;
+pub use goldsrc_api::{Engine, Entity, Player, Plugin, Vector3, auth::Auth};
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{command, event, on_load, plugin};
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
-    pub use crate::ecs::*;
     pub use crate::Auth;
-    pub use crate::{command, event, on_load, plugin};
+    pub use crate::ecs::*;
+    #[cfg(target_arch = "wasm32")]
+    pub use crate::engine;
     pub use crate::{Engine, Entity, Player, Plugin, Vector3};
-    pub use ::log::{
-        debug, debug as log_debug, error, error as log_err, info, info as log_info, trace,
-        trace as log_trace, warn, warn as log_warn,
-    };
+    pub use crate::{command, event, on_load, plugin};
+    pub use crate::{log_debug, log_err, log_info, log_warn};
 }
 
 /// Direct console print helper for WASM plugins.

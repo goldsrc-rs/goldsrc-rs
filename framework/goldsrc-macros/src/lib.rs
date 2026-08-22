@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, Expr, ExprArray, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token};
+use syn::{Expr, ExprArray, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token, parse_macro_input};
 
 /// Escapes a string for embedding inside a TOML double-quoted literal.
 fn toml_escape(s: &str) -> String {
@@ -20,6 +20,7 @@ struct PluginAttr {
     name: String,
     version: String,
     author: String,
+    description: String,
     dependencies: Vec<String>,
 }
 
@@ -28,6 +29,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
         name: "Unknown".to_string(),
         version: "1.0.0".to_string(),
         author: "Unknown".to_string(),
+        description: String::new(),
         dependencies: Vec::new(),
     };
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -38,20 +40,21 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                 return Err(syn::Error::new_spanned(
                     meta.path(),
                     "unsupported #[plugin] attribute",
-                ))
+                ));
             }
         };
         match meta {
             Meta::NameValue(nv) => {
                 if ident == "dependencies" {
-                    let array: ExprArray =
-                        match &nv.value {
-                            Expr::Array(arr) => arr.clone(),
-                            _ => return Err(syn::Error::new_spanned(
+                    let array: ExprArray = match &nv.value {
+                        Expr::Array(arr) => arr.clone(),
+                        _ => {
+                            return Err(syn::Error::new_spanned(
                                 &nv.value,
                                 "#[plugin(dependencies = ...)] expects an array of string literals",
-                            )),
-                        };
+                            ));
+                        }
+                    };
                     for expr in &array.elems {
                         match expr {
                             Expr::Lit(expr_lit) => match &expr_lit.lit {
@@ -60,14 +63,14 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                                     return Err(syn::Error::new_spanned(
                                         expr,
                                         "dependencies expects a list of string literals like \"name@>=1.0\"",
-                                    ))
+                                    ));
                                 }
                             },
                             _ => {
                                 return Err(syn::Error::new_spanned(
                                     expr,
                                     "dependencies expects a list of string literals like \"name@>=1.0\"",
-                                ))
+                                ));
                             }
                         }
                     }
@@ -80,14 +83,14 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                             return Err(syn::Error::new_spanned(
                                 &nv.value,
                                 format!("#[plugin({ident} = ...)] expects a string literal"),
-                            ))
+                            ));
                         }
                     },
                     _ => {
                         return Err(syn::Error::new_spanned(
                             &nv.value,
                             format!("#[plugin({ident} = ...)] expects a string literal"),
-                        ))
+                        ));
                     }
                 };
                 if ident == "name" {
@@ -96,19 +99,23 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                     out.version = value;
                 } else if ident == "author" {
                     out.author = value;
+                } else if ident == "description" {
+                    out.description = value;
                 } else {
                     return Err(syn::Error::new_spanned(
                         nv.path,
                         format!(
-                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, dependencies"
+                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, dependencies"
                         ),
                     ));
                 }
             }
-            other => return Err(syn::Error::new_spanned(
-                other,
-                "unsupported #[plugin] attribute; supported: name, version, author, dependencies",
-            )),
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "unsupported #[plugin] attribute; supported: name, version, author, description, dependencies",
+                ));
+            }
         }
     }
     Ok(out)
@@ -285,11 +292,18 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         commands_toml = format!("commands = [{}]\n", cmds.join(", "));
     }
 
+    let desc_toml = if !attr.description.is_empty() {
+        format!("description = \"{}\"\n", toml_escape(&attr.description))
+    } else {
+        String::new()
+    };
+
     let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}",
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}",
         toml_escape(&plugin_name),
         toml_escape(&plugin_version),
         toml_escape(&plugin_author),
+        desc_toml,
         deps_toml,
         commands_toml
     );
@@ -390,12 +404,13 @@ mod tests {
     #[test]
     fn parses_all_attrs() {
         let a = parse(
-            r#"name = "x", version = "2.0", author = "A", dependencies = ["b@>=1", "c@1.0"]"#,
+            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", dependencies = ["b@>=1", "c@1.0"]"#,
         )
         .unwrap();
         assert_eq!(a.name, "x");
         assert_eq!(a.version, "2.0");
         assert_eq!(a.author, "A");
+        assert_eq!(a.description, "Test Desc");
         assert_eq!(a.dependencies, vec!["b@>=1", "c@1.0"]);
     }
 
