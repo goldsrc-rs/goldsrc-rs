@@ -173,7 +173,7 @@ GoldSrc.rs builds upon decades of community reverse engineering and tooling:
 - **Valve Software** — for Half-Life and the GoldSrc engine.
 - **[AlliedModders](https://github.com/alliedmodders)** — for canonical HLSDK headers, Metamod, and AMX Mod X.
 - **[ReHLDS Team](https://github.com/dreamstalker/rehlds)** & **[ReGameDLL Team](https://github.com/s1lentq/ReGameDLL_CS)** — for reverse-engineered engine/gamedll insights.
-- **[GoldSrcMod.Net](https://github.com/Gamer-L/GoldSrcMod.Net)** — for architectural inspiration on modern language runtimes in GoldSrc.
+- **[GoldSrcMod.Net](https://github.com/DrAbcOfficial/GoldSrcMod.Net)** — for architectural inspiration on modern language runtimes in GoldSrc.
 - **[Bytecode Alliance](https://bytecodealliance.org/)** — for the `wasmtime` runtime and WASM Component Model.
 
 > [!NOTE]
