@@ -6,7 +6,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{Expr, ExprArray, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token, parse_macro_input};
+use syn::{
+    Expr, ExprArray, ExprLit, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token, parse_macro_input,
+};
 
 /// Escapes a string for embedding inside a TOML double-quoted literal.
 fn toml_escape(s: &str) -> String {
@@ -193,6 +195,10 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut is_on_frame = false;
             let mut is_on_event = false;
             let mut cmd_name = None;
+            let mut cmd_aliases = Vec::new();
+            let mut cmd_capability: Option<String> = None;
+            let mut cmd_description: Option<String> = None;
+            let mut cmd_usage: Option<String> = None;
 
             // Retain attributes that are NOT our custom ones
             method.attrs.retain(|attr| {
@@ -214,6 +220,31 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                             if meta.path.is_ident("name") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
                                     cmd_name = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("capability") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_capability = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("description") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_description = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("usage") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_usage = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("aliases") {
+                                if let Ok(ExprArray { elems, .. }) =
+                                    meta.value()?.parse::<ExprArray>()
+                                {
+                                    for elem in elems {
+                                        if let Expr::Lit(ExprLit {
+                                            lit: Lit::Str(s), ..
+                                        }) = elem
+                                        {
+                                            cmd_aliases.push(s.value());
+                                        }
+                                    }
                                 }
                             }
                             Ok(())
@@ -262,14 +293,41 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                     return e.to_compile_error().into();
                 }
                 plugin_commands.push(cmd.clone());
+                for alias in &cmd_aliases {
+                    plugin_commands.push(alias.clone());
+                }
+
                 let call_expr = match inputs_len {
                     0 => quote! { #struct_name::#fn_name() },
                     1 => quote! { #struct_name::#fn_name(args) },
                     _ => quote! { #struct_name::#fn_name(name, args) },
                 };
-                command_matchers.push(quote! {
-                    #cmd => { #call_expr; },
-                });
+
+                let handler_body = if let Some(ref cap_str) = cmd_capability {
+                    quote! {
+                        let caller_idx = args.split_whitespace().next().and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
+                        if caller_idx > 0 {
+                            if let Ok(ast) = ::goldsrc::CapExpr::parse(#cap_str) {
+                                if !ast.evaluate(&|c| ::goldsrc::Auth::has_capability(caller_idx, c)) {
+                                    ::goldsrc::log_warn!("[Auth] Access denied for player #{}: requires '{}'", caller_idx, #cap_str);
+                                    return true;
+                                }
+                            }
+                        }
+                        #call_expr;
+                    }
+                } else {
+                    quote! { #call_expr; }
+                };
+
+                let mut all_match_names = vec![cmd.clone()];
+                all_match_names.extend(cmd_aliases);
+
+                for match_name in all_match_names {
+                    command_matchers.push(quote! {
+                        #match_name => { #handler_body },
+                    });
+                }
             }
         }
     }

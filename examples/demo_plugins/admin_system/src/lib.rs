@@ -20,7 +20,12 @@ impl AdminSystem {
     }
 
     /// Grants a capability to a player (e.g. `admin_grant 1 admin.slay`).
-    #[command(name = "admin_grant")]
+    #[command(
+        name = "admin_grant",
+        capability = "admin.grant",
+        description = "Grants a permission capability to a player",
+        usage = "admin_grant <player_index> <capability_name>"
+    )]
     fn handle_grant(_cmd: String, args: String) {
         let mut parts = args.split_whitespace();
         let target_idx_str = parts.next();
@@ -48,7 +53,13 @@ impl AdminSystem {
     }
 
     /// Slays a player (sets HP to 0) (e.g. `admin_slay 1`).
-    #[command(name = "admin_slay")]
+    #[command(
+        name = "admin_slay",
+        aliases = ["slay", "/slay"],
+        capability = "admin.slay",
+        description = "Instantly slays a target player",
+        usage = "admin_slay <player_index>"
+    )]
     fn handle_slay(_cmd: String, args: String) {
         let idx = args.trim().parse::<i32>().unwrap_or(1);
         let mut player = Player::new(idx);
@@ -63,7 +74,13 @@ impl AdminSystem {
     }
 
     /// Teleports a player to target coordinates (e.g. `admin_teleport 1 0 0 100`).
-    #[command(name = "admin_teleport")]
+    #[command(
+        name = "admin_teleport",
+        aliases = ["tp", "/tp"],
+        capability = "admin.teleport",
+        description = "Teleports a player to designated XYZ coordinates",
+        usage = "admin_teleport <player_index> <x> <y> <z>"
+    )]
     fn handle_teleport(_cmd: String, args: String) {
         let mut parts = args.split_whitespace();
         let idx = parts
