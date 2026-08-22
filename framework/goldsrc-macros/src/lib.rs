@@ -21,6 +21,7 @@ struct PluginAttr {
     version: String,
     author: String,
     description: String,
+    url: String,
     dependencies: Vec<String>,
 }
 
@@ -30,6 +31,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
         version: "1.0.0".to_string(),
         author: "Unknown".to_string(),
         description: String::new(),
+        url: String::new(),
         dependencies: Vec::new(),
     };
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -101,11 +103,13 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                     out.author = value;
                 } else if ident == "description" {
                     out.description = value;
+                } else if ident == "url" {
+                    out.url = value;
                 } else {
                     return Err(syn::Error::new_spanned(
                         nv.path,
                         format!(
-                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, dependencies"
+                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url, dependencies"
                         ),
                     ));
                 }
@@ -113,7 +117,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "unsupported #[plugin] attribute; supported: name, version, author, description, dependencies",
+                    "unsupported #[plugin] attribute; supported: name, version, author, description, url, dependencies",
                 ));
             }
         }
@@ -298,12 +302,19 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         String::new()
     };
 
+    let url_toml = if !attr.url.is_empty() {
+        format!("url = \"{}\"\n", toml_escape(&attr.url))
+    } else {
+        String::new()
+    };
+
     let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}",
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}",
         toml_escape(&plugin_name),
         toml_escape(&plugin_version),
         toml_escape(&plugin_author),
         desc_toml,
+        url_toml,
         deps_toml,
         commands_toml
     );
@@ -404,13 +415,14 @@ mod tests {
     #[test]
     fn parses_all_attrs() {
         let a = parse(
-            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", dependencies = ["b@>=1", "c@1.0"]"#,
+            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", url = "https://github.com", dependencies = ["b@>=1", "c@1.0"]"#,
         )
         .unwrap();
         assert_eq!(a.name, "x");
         assert_eq!(a.version, "2.0");
         assert_eq!(a.author, "A");
         assert_eq!(a.description, "Test Desc");
+        assert_eq!(a.url, "https://github.com");
         assert_eq!(a.dependencies, vec!["b@>=1", "c@1.0"]);
     }
 

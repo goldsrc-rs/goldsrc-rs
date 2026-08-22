@@ -19,6 +19,9 @@ pub struct PluginMetadata {
     /// Plugin description.
     #[serde(default)]
     pub description: String,
+    /// Plugin website or repository URL.
+    #[serde(default)]
+    pub url: String,
     /// Registered system names (from `#[plugin(system = ...)]`).
     #[serde(default)]
     pub systems: Vec<String>,

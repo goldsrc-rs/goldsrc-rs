@@ -7,6 +7,7 @@ pub struct VipMenu;
     version = "0.10.0",
     author = "GoldSrc.rs Team",
     description = "VIP equipment menu and daily supply package deployment",
+    url = "https://github.com/goldsrc-rs/goldsrc-rs",
     dependencies = ["vip_core@>=0.10.0"]
 )]
 impl VipMenu {

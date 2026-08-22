@@ -6,7 +6,8 @@ pub struct AdminSystem;
     name = "admin_system",
     version = "0.10.0",
     author = "GoldSrc.rs Team",
-    description = "Administration utilities and capability-based player management"
+    description = "Administration utilities and capability-based player management",
+    url = "https://github.com/goldsrc-rs/goldsrc-rs"
 )]
 impl AdminSystem {
     #[on_load]

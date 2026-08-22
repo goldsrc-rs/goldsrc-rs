@@ -439,6 +439,9 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         if !meta.description.is_empty() {
                             out(&format!("  Description:  {}\n", meta.description));
                         }
+                        if !meta.url.is_empty() {
+                            out(&format!("  URL:          {}\n", meta.url));
+                        }
                         let systems_str = if meta.systems.is_empty() {
                             "none".to_string()
                         } else {

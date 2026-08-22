@@ -6,7 +6,8 @@ pub struct VipCore;
     name = "vip_core",
     version = "0.10.0",
     author = "GoldSrc.rs Team",
-    description = "Core VIP authorization, capability registration, and player health/armor services"
+    description = "Core VIP authorization, capability registration, and player health/armor services",
+    url = "https://github.com/goldsrc-rs/goldsrc-rs"
 )]
 impl VipCore {
     #[on_load]

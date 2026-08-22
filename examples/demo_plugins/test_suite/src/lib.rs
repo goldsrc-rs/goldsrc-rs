@@ -12,7 +12,8 @@ pub struct TestSuite;
     name = "test_suite",
     version = "0.10.0",
     author = "GoldSrc.rs Team",
-    description = "ECS, entity inspection, sound playback, and CVar test suite"
+    description = "ECS, entity inspection, sound playback, and CVar test suite",
+    url = "https://github.com/goldsrc-rs/goldsrc-rs"
 )]
 impl TestSuite {
     #[on_load]
