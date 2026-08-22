@@ -289,18 +289,101 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 on_event_fn = quote! { #call_expr; };
             }
             if let Some(cmd) = cmd_name {
-                if let Err(e) = check_handler_args(method, "command", &[0, 1, 2]) {
-                    return e.to_compile_error().into();
-                }
                 plugin_commands.push(cmd.clone());
                 for alias in &cmd_aliases {
                     plugin_commands.push(alias.clone());
                 }
 
-                let call_expr = match inputs_len {
-                    0 => quote! { #struct_name::#fn_name() },
-                    1 => quote! { #struct_name::#fn_name(args) },
-                    _ => quote! { #struct_name::#fn_name(name, args) },
+                let is_raw_signature = match inputs_len {
+                    0 => true,
+                    1 => {
+                        if let Some(syn::FnArg::Typed(pat_type)) = method.sig.inputs.first() {
+                            if let syn::Type::Path(type_path) = &*pat_type.ty {
+                                type_path.path.is_ident("String")
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    2 => {
+                        let mut all_string = true;
+                        for input in &method.sig.inputs {
+                            if let syn::FnArg::Typed(pat_type) = input {
+                                if let syn::Type::Path(type_path) = &*pat_type.ty {
+                                    if !type_path.path.is_ident("String") {
+                                        all_string = false;
+                                    }
+                                } else {
+                                    all_string = false;
+                                }
+                            } else {
+                                all_string = false;
+                            }
+                        }
+                        all_string
+                    }
+                    _ => false,
+                };
+
+                let call_expr = if is_raw_signature {
+                    match inputs_len {
+                        0 => quote! { #struct_name::#fn_name(); },
+                        1 => quote! { #struct_name::#fn_name(args); },
+                        _ => quote! { #struct_name::#fn_name(name, args); },
+                    }
+                } else {
+                    let mut param_bindings = Vec::new();
+                    let mut param_idents = Vec::new();
+
+                    for input in &method.sig.inputs {
+                        if let syn::FnArg::Typed(pat_type) = input {
+                            let ident = match &*pat_type.pat {
+                                syn::Pat::Ident(p) => &p.ident,
+                                _ => {
+                                    return syn::Error::new_spanned(
+                                        pat_type,
+                                        "unsupported parameter pattern",
+                                    )
+                                    .to_compile_error()
+                                    .into();
+                                }
+                            };
+                            let ty = &pat_type.ty;
+                            param_idents.push(ident.clone());
+                            param_bindings.push(quote! {
+                                let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(__iter.next().unwrap_or_default()) {
+                                    Ok(val) => val,
+                                    Err(err) => {
+                                        ::goldsrc::log_warn!("[Command '{}'] Parameter '{}' invalid: {}", name, stringify!(#ident), err);
+                                        return true;
+                                    }
+                                };
+                            });
+                        }
+                    }
+
+                    let is_result = match &method.sig.output {
+                        syn::ReturnType::Default => false,
+                        syn::ReturnType::Type(_, _) => true,
+                    };
+
+                    if is_result {
+                        quote! {
+                            let mut __iter = args.split_whitespace();
+                            #(#param_bindings)*
+                            if let Err(err) = #struct_name::#fn_name(#(#param_idents),*) {
+                                ::goldsrc::log_warn!("[Command '{}'] Error: {}", name, err);
+                            }
+                        }
+                    } else {
+                        quote! {
+                            let mut __iter = args.split_whitespace();
+                            #(#param_bindings)*
+                            #struct_name::#fn_name(#(#param_idents),*);
+                        }
+                    }
                 };
 
                 let handler_body = if let Some(ref cap_str) = cmd_capability {
@@ -314,10 +397,10 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 }
                             }
                         }
-                        #call_expr;
+                        #call_expr
                     }
                 } else {
-                    quote! { #call_expr; }
+                    quote! { #call_expr }
                 };
 
                 let mut all_match_names = vec![cmd.clone()];

@@ -32,7 +32,7 @@ pub use auth::Auth;
 pub use capability_dsl::CapExpr;
 pub use caps::CapabilityRegistry;
 pub use command::{
-    Alive, Bot, ChatScope, CommandTarget, CounterTerrorist, Dead, HLTV, PlayerStateFilter,
+    Alive, Bot, ChatScope, CommandTarget, CounterTerrorist, Dead, FromArg, HLTV, PlayerStateFilter,
     Spectator, Team, Terrorist,
 };
 pub use command_builder::{Command, CommandBuilder};
@@ -313,6 +313,13 @@ pub struct Vector3 {
     pub y: f32,
     /// Z component.
     pub z: f32,
+}
+
+impl Vector3 {
+    /// Create a new 3D vector.
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
 }
 
 impl From<[f32; 3]> for Vector3 {

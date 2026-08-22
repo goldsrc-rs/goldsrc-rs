@@ -19,72 +19,80 @@ impl VipCore {
     }
 
     /// Adds VIP status to player index (e.g. `vip_add 1`).
-    #[command(name = "vip_add")]
-    fn handle_vip_add(_cmd: String, args: String) {
-        let idx = args.trim().parse::<i32>().unwrap_or(1);
-        let player = Player::new(idx);
-        if !player.is_valid() {
-            log_warn!("[VIP Core] Player #{} is not connected/valid!", idx);
-            return;
-        }
-
+    #[command(
+        name = "vip_add",
+        description = "Grants full VIP capabilities to a target player",
+        usage = "vip_add <player_index>"
+    )]
+    fn handle_vip_add(player: Player) {
         player.grant_capability("vip.access");
         player.grant_capability("vip.give_armor");
         player.grant_capability("vip.heal");
 
         #[cfg(target_arch = "wasm32")]
         {
-            engine::emit_sound(idx, 0, "items/suitchargeno1.wav", 1.0, 0.8, 0, 100);
+            engine::emit_sound(
+                player.index(),
+                0,
+                "items/suitchargeno1.wav",
+                1.0,
+                0.8,
+                0,
+                100,
+            );
         }
 
-        let name = player.name().unwrap_or_else(|| format!("Player #{}", idx));
-        log_info!("[VIP Core] Granted VIP status to '{}' (idx={})", name, idx);
+        let name = player
+            .name()
+            .unwrap_or_else(|| format!("Player #{}", player.index()));
+        log_info!(
+            "[VIP Core] Granted VIP status to '{}' (idx={})",
+            name,
+            player.index()
+        );
     }
 
     /// Checks if a player has VIP status (e.g. `vip_check 1`).
-    #[command(name = "vip_check")]
-    fn handle_vip_check(_cmd: String, args: String) {
-        let idx = args.trim().parse::<i32>().unwrap_or(1);
-        let player = Player::new(idx);
+    #[command(
+        name = "vip_check",
+        description = "Checks VIP capability status for a target player",
+        usage = "vip_check <player_index>"
+    )]
+    fn handle_vip_check(player: Player) {
         let is_vip = player.has_capability("vip.access");
-        let name = player.name().unwrap_or_else(|| format!("Player #{}", idx));
+        let name = player
+            .name()
+            .unwrap_or_else(|| format!("Player #{}", player.index()));
 
         log_info!(
             "[VIP Core] Player '{}' (idx={}): VIP status = {}",
             name,
-            idx,
+            player.index(),
             if is_vip { "ACTIVE" } else { "NONE" }
         );
     }
 
-    /// Heals player to 100 HP (e.g. `vip_heal 1`).
-    #[command(name = "vip_heal")]
-    fn handle_vip_heal(_cmd: String, args: String) {
-        let idx = args.trim().parse::<i32>().unwrap_or(1);
-        let mut player = Player::new(idx);
-        if !player.has_capability("vip.heal") {
-            log_warn!("[VIP Core] Player #{} lacks 'vip.heal' capability!", idx);
-            return;
-        }
-
+    /// Heals living player to 100 HP (e.g. `vip_heal 1`).
+    #[command(
+        name = "vip_heal",
+        capability = "vip.heal",
+        description = "Restores target living player health to 100 HP",
+        usage = "vip_heal <player_index>"
+    )]
+    fn handle_vip_heal(mut player: Alive<Player>) {
         player.set_health(100.0);
-        log_info!("[VIP Core] Healed player #{} to 100 HP", idx);
+        log_info!("[VIP Core] Healed player #{} to 100 HP", player.index());
     }
 
-    /// Gives 100 armor to player (e.g. `vip_armor 1`).
-    #[command(name = "vip_armor")]
-    fn handle_give_armor(_cmd: String, args: String) {
-        let idx = args.trim().parse::<i32>().unwrap_or(1);
-        let mut player = Player::new(idx);
-        if !player.has_capability("vip.give_armor") {
-            log_warn!(
-                "[VIP Core] Player #{} lacks 'vip.give_armor' capability!",
-                idx
-            );
-            return;
-        }
-
+    /// Gives 100 armor to living player (e.g. `vip_armor 1`).
+    #[command(
+        name = "vip_armor",
+        capability = "vip.give_armor",
+        description = "Restores target living player armor to 100 AP",
+        usage = "vip_armor <player_index>"
+    )]
+    fn handle_give_armor(mut player: Alive<Player>) {
         player.set_armorvalue(100.0);
-        log_info!("[VIP Core] Set armor to 100 AP for player #{}", idx);
+        log_info!("[VIP Core] Given 100 armor to player #{}", player.index());
     }
 }
