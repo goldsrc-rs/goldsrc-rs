@@ -1,6 +1,6 @@
 //! Command execution error pipeline, result types, and invocation context.
 
-use crate::Player;
+use crate::client::Player;
 use crate::command::CommandTarget;
 
 /// Taxonomy of errors that can occur during command parsing, guard checks, or execution.

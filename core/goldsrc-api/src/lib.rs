@@ -3,228 +3,38 @@
 //! This crate defines the abstract interface that plugin developers use.
 //! It has no dependency on any specific backend (Metamod or Standalone).
 
-/// Capability-based access control.
+/// Capability-based access control, registry, and hierarchical DSL.
 pub mod auth;
 /// Generated WASM bindings (wasm32 only).
 pub mod bindings;
-/// Capability DSL parser and AST evaluator.
-pub mod capability_dsl;
-/// Shared capability registry (host + native auth).
-pub mod caps;
 /// Core player and client domain abstractions, states, and typestate guards.
 pub mod client;
-/// Command routing targets, scope filters, and typed argument extractors.
+/// Command routing targets, scope filters, programmatic builder, and errors.
 pub mod command;
-/// Programmatic builder API for runtime commands.
-pub mod command_builder;
-/// Command execution error taxonomy and context.
-pub mod command_error;
 /// Global constants for the engine and framework.
 pub mod consts;
 /// Validated `edict_t` handle.
 pub mod edict;
-/// Modular engine sub-system traits.
+/// Modular engine sub-system traits, unified engine bridge, and API facade.
 pub mod engine;
-/// Narrow object-safe engine bridge for the WASM host.
-pub mod engine_ops;
 /// Abstract interface for plugin runtime execution hosts.
 pub mod plugin_host;
 
-pub use auth::Auth;
-pub use capability_dsl::CapExpr;
-pub use caps::CapabilityRegistry;
+pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use client::{
     Alive, Bot, ClientKind, ConnectionState, CounterTerrorist, Dead, HLTV, LifeState, Player,
     Spectator, Team, Terrorist,
 };
-pub use command::{ChatScope, CommandTarget, FromArg, PlayerStateFilter};
-pub use command_builder::{Command, CommandBuilder};
-pub use command_error::{CommandContext, CommandError, CommandResult};
+pub use command::{
+    ChatScope, Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget,
+    FromArg, PlayerStateFilter,
+};
 pub use edict::EDict;
-pub use engine::*;
-pub use engine_ops::EngineOps;
+pub use engine::{
+    Engine, EngineCvars, EngineEntities, EngineMessages, EngineOps, EnginePhysics, EnginePrecache,
+    EngineSound, MessageDest, TraceResult, engine_api,
+};
 pub use plugin_host::{HostError, HostResult, PluginHost};
-
-/// Engine interface — provides access to engine functions.
-pub trait Engine {
-    /// Spawn an entity by classname.
-    fn spawn_entity(&self, classname: &str) -> Option<Entity>;
-
-    /// Get a player by index (1-based).
-    fn get_player(&self, index: i32) -> Option<Player>;
-
-    /// Print a message to the server console.
-    fn server_print(&self, message: &str);
-
-    /// Execute a server command.
-    fn server_command(&self, command: &str);
-
-    /// Get a cvar value as float.
-    fn cvar_get_float(&self, name: &str) -> f32;
-
-    /// Set a cvar value.
-    fn cvar_set_float(&self, name: &str, value: f32);
-}
-
-/// Global engine operations for plugins (WASM guest & native host mock).
-pub mod engine_api {
-    pub use crate::Vector3;
-
-    /// Precache a model file (e.g. "models/player.mdl").
-    pub fn precache_model(path: &str) -> i32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_precache_model(path)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = path;
-            1
-        }
-    }
-
-    /// Precache a sound file (e.g. "events/tutor_msg.wav").
-    pub fn precache_sound(path: &str) -> i32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_precache_sound(path)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = path;
-            1
-        }
-    }
-
-    /// Precache a generic resource file.
-    pub fn precache_generic(path: &str) -> i32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_precache_generic(path)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = path;
-            1
-        }
-    }
-
-    /// Emit dynamic sound attached to an entity.
-    pub fn emit_sound(
-        entity: i32,
-        channel: i32,
-        sample: &str,
-        volume: f32,
-        attenuation: f32,
-        flags: i32,
-        pitch: i32,
-    ) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_emit_sound(
-                entity,
-                channel,
-                sample,
-                volume,
-                attenuation,
-                flags,
-                pitch,
-            );
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = (entity, channel, sample, volume, attenuation, flags, pitch);
-        }
-    }
-
-    /// Read float console variable.
-    pub fn cvar_get_float(name: &str) -> f32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_cvar_get_float(name)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = name;
-            800.0
-        }
-    }
-
-    /// Set float console variable.
-    pub fn cvar_set_float(name: &str, val: f32) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_cvar_set_float(name, val);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = (name, val);
-        }
-    }
-
-    /// Read string console variable.
-    pub fn cvar_get_string(name: &str) -> Option<String> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_cvar_get_string(name)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = name;
-            None
-        }
-    }
-
-    /// Set string console variable.
-    pub fn cvar_set_string(name: &str, val: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_cvar_set_string(name, val);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = (name, val);
-        }
-    }
-
-    /// Spawn a named entity (e.g. "info_target", "armoury_entity").
-    pub fn create_named_entity(classname: &str) -> Option<i32> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_create_named_entity(classname)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = classname;
-            None
-        }
-    }
-
-    /// Remove an entity from the world.
-    pub fn remove_entity(entity: i32) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_remove_entity(entity);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = entity;
-        }
-    }
-
-    /// Drop an entity to the floor geometry.
-    pub fn drop_to_floor(entity: i32) -> i32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_drop_to_floor(entity)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = entity;
-            1
-        }
-    }
-}
 
 /// Safe wrapper around `edict_t` (entity dictionary).
 ///

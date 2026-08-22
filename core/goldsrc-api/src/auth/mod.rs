@@ -1,5 +1,10 @@
-#[cfg(not(target_arch = "wasm32"))]
-use crate::caps::CAPS;
+//! Capability-based access control, registry, and hierarchical DSL.
+
+pub mod dsl;
+pub mod registry;
+
+pub use dsl::CapExpr;
+pub use registry::{CAPS, CapabilityRegistry};
 
 #[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api;

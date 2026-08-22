@@ -1,5 +1,11 @@
 //! Command routing targets, scope filters, and typed argument extractors.
 
+pub mod builder;
+pub mod error;
+
+pub use builder::{Command, CommandBuilder};
+pub use error::{CommandContext, CommandError, CommandResult};
+
 use crate::client::{Alive, Dead, Player};
 
 /// Scope for in-game chat command execution (`say` vs `say_team`).

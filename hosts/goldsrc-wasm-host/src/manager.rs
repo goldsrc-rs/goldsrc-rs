@@ -143,7 +143,7 @@ impl api::Host for HostState {
     }
 
     fn host_register_capability(&mut self, name: String, description: String) -> bool {
-        let mut caps = goldsrc_api::caps::CAPS
+        let mut caps = goldsrc_api::auth::CAPS
             .write()
             .unwrap_or_else(|e| e.into_inner());
         if let std::collections::hash_map::Entry::Vacant(e) = caps.registered.entry(name) {
@@ -155,7 +155,7 @@ impl api::Host for HostState {
     }
 
     fn host_has_capability(&mut self, player_index: i32, name: String) -> bool {
-        let caps = goldsrc_api::caps::CAPS
+        let caps = goldsrc_api::auth::CAPS
             .read()
             .unwrap_or_else(|e| e.into_inner());
         caps.player_capabilities
@@ -164,7 +164,7 @@ impl api::Host for HostState {
     }
 
     fn host_grant_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = goldsrc_api::caps::CAPS
+        let mut caps = goldsrc_api::auth::CAPS
             .write()
             .unwrap_or_else(|e| e.into_inner());
         // Check if capability exists in the registry
@@ -178,7 +178,7 @@ impl api::Host for HostState {
     }
 
     fn host_revoke_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = goldsrc_api::caps::CAPS
+        let mut caps = goldsrc_api::auth::CAPS
             .write()
             .unwrap_or_else(|e| e.into_inner());
         if let Some(player_caps) = caps.player_capabilities.get_mut(&player_index) {
