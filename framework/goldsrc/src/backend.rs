@@ -337,22 +337,13 @@ impl goldsrc_api::EngineConsole for EngineBackend {
             let funcs = (self.engfuncs)();
             if let Some(f) = funcs.pfnServerPrint {
                 for buffered in self.print_queue.drain() {
-                    if let Ok(cstr) = std::ffi::CString::new(buffered) {
+                    let safe_buf = buffered.replace('%', "%%").replace('\0', "");
+                    if let Ok(cstr) = std::ffi::CString::new(safe_buf) {
                         f(cstr.as_ptr());
                     }
                 }
-                let safe = message
-                    .replace('%', "%%")
-                    .replace('{', "{{")
-                    .replace('}', "}}")
-                    .replace('\r', "")
-                    .replace('\n', " ");
-                let mut end = safe.len().min(400);
-                while end > 0 && !safe.is_char_boundary(end) {
-                    end -= 1;
-                }
-                let line = format!("{}\n", safe[..end].trim_end());
-                if let Ok(cstr) = std::ffi::CString::new(line) {
+                let safe = message.replace('%', "%%").replace('\0', "");
+                if let Ok(cstr) = std::ffi::CString::new(safe) {
                     f(cstr.as_ptr());
                 }
             } else {

@@ -395,14 +395,6 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
 ) {
     let (pkg_version, git_hash, build_target) = version_info;
 
-    let manager = match manager {
-        Some(m) => m,
-        None => {
-            out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
-            return;
-        }
-    };
-
     let mut parser = lexopt::Parser::from_args(raw_args);
     // Skip binary name ("mrs", "meta-rs", or "grs")
     let _ = parser.next();
@@ -474,6 +466,11 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             }
 
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
+
             let mut plugins = manager.get_plugins_info();
             if only_paused {
                 plugins.retain(|p| p.is_paused);
@@ -544,6 +541,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 print_command_help(spec, out);
                 return;
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             for t in targets {
                 match manager.load_plugin_by_name(&t) {
                     Ok(msg) => out(&msg),
@@ -565,6 +566,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     _ => {}
                 }
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             if all {
                 let msg = manager.unload_all_plugins();
                 out(&msg);
@@ -593,6 +598,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     _ => {}
                 }
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             if all {
                 let msg = manager.reload_all_plugins();
                 out(&msg);
@@ -621,6 +630,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     _ => {}
                 }
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             if all {
                 let msg = manager.pause_all_plugins(true);
                 out(&msg);
@@ -649,6 +662,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     _ => {}
                 }
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             if all {
                 let msg = manager.pause_all_plugins(false);
                 out(&msg);
@@ -679,6 +696,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 print_command_help(spec, out);
                 return;
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             for t in targets {
                 if let Some(idx) = manager.find_plugin(&t) {
                     let info = &manager.get_plugins_info()[idx];
@@ -732,6 +753,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     return;
                 }
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             let (plugins_count, watchers_count) = manager.get_status_info();
             out("--- GoldSrc.rs Host Engine Status ---\n");
             out(&format!(
@@ -753,6 +778,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     return;
                 }
             }
+            let Some(manager) = manager else {
+                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                return;
+            };
             let plugins = manager.get_plugins_info();
             let total_cmds: usize = plugins
                 .iter()
@@ -871,5 +900,39 @@ mod tests {
         assert!(buffer.contains("Inspection & Debugging:"));
         assert!(buffer.contains("System:"));
         assert!(buffer.contains("grs help <COMMAND>"));
+    }
+
+    #[test]
+    fn test_dispatch_command_help() {
+        let mut buffer = String::new();
+        let args = vec![
+            std::ffi::OsString::from("grs"),
+            std::ffi::OsString::from("list"),
+            std::ffi::OsString::from("--help"),
+        ];
+        dispatch_host_command(
+            args,
+            None,
+            ("0.11.0", "test", "i686-pc-windows-msvc"),
+            |msg| buffer.push_str(msg),
+        );
+        assert!(buffer.contains("--- GoldSrc.rs Help: grs list ---"));
+        assert!(buffer.contains("-p, --page <N>"));
+        assert!(buffer.contains("Examples:"));
+
+        let mut buffer2 = String::new();
+        let args2 = vec![
+            std::ffi::OsString::from("grs"),
+            std::ffi::OsString::from("help"),
+            std::ffi::OsString::from("reload"),
+        ];
+        dispatch_host_command(
+            args2,
+            None,
+            ("0.11.0", "test", "i686-pc-windows-msvc"),
+            |msg| buffer2.push_str(msg),
+        );
+        assert!(buffer2.contains("--- GoldSrc.rs Help: grs reload ---"));
+        assert!(buffer2.contains("-a, --all"));
     }
 }

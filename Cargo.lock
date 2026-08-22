@@ -567,6 +567,7 @@ name = "goldsrc-wasm-host"
 version = "0.10.0"
 dependencies = [
  "goldsrc-api",
+ "log",
  "notify",
  "serde",
  "thiserror",
