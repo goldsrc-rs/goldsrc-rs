@@ -18,6 +18,7 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
 ) {
     // SAFETY: engfuncs and globals are engine-provided; valid for the server lifetime.
     catch_ffi_panic("GiveFnptrsToDll", (), || {
+        goldsrc_sys::guard::install_crash_guard();
         unsafe { init_backend(engfuncs, globals) };
         backend().server_print("[GoldSrc.rs] Engine functions received.\n");
     });
