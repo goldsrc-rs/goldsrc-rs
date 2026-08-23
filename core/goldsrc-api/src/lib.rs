@@ -19,6 +19,8 @@ pub mod edict;
 pub mod engine;
 /// Screen HUD and DHUD message builders and styling.
 pub mod hud;
+/// Mod descriptor manifest (`liblist.gam`) parser and model.
+pub mod liblist;
 /// Declarative multi-page menu system.
 pub mod menu;
 
@@ -37,6 +39,7 @@ pub use engine::{
     EnginePrecache, EngineSound, MessageDest, TraceResult, engine_api,
 };
 pub use hud::{HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder};
+pub use liblist::{LIBLIST_FILENAME, LibList};
 pub use menu::{
     Condition, DenyAction, DenyPolicy, ExitBehavior, ItemKind, ItemTitle, Menu, MenuBuilder,
     MenuContext, MenuItem, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,

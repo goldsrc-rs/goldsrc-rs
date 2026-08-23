@@ -110,28 +110,40 @@ pub unsafe fn forward_give_fnptrs_to_dll(engfuncs: *mut enginefuncs_t, globals: 
 
 /// Helper to resolve the path of the original game DLL to proxy.
 fn resolve_game_dll_path() -> PathBuf {
-    // 1. Try reading original gamedll from liblist.gam
-    let liblist_paths = ["cstrike/liblist.gam", "liblist.gam"];
-    for liblist_path in &liblist_paths {
-        if let Ok(content) = std::fs::read_to_string(liblist_path) {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                // Find commented out original gamedll or active gamedll that isn't us
-                if (trimmed.starts_with("gamedll") || trimmed.starts_with("; gamedll"))
-                    && !trimmed.contains("goldsrc")
-                {
-                    // Clean up comments and extract value
-                    let clean = trimmed.trim_start_matches(';').trim();
-                    if clean.starts_with("gamedll")
-                        && let Some(start) = clean.find('"')
-                        && let Some(end) = clean[start + 1..].find('"')
-                    {
-                        let orig_path = &clean[start + 1..start + 1 + end];
-                        let target_path = PathBuf::from(orig_path);
-                        if target_path.exists() {
-                            return target_path;
-                        }
-                    }
+    let mod_dirs = [
+        "cstrike", "svencoop", "valve", "czero", "dod", "tfc", "gearbox", ".",
+    ];
+
+    // 1. Try reading and parsing mod descriptor manifest (liblist.gam)
+    if let Some((manifest_path, manifest)) = goldsrc_api::LibList::find_and_load(&mod_dirs) {
+        log::info!(
+            target: "proxy",
+            "Parsed mod manifest \"{}\": game=\"{}\" version=\"{}\" edicts={:?}",
+            goldsrc::paths::PathResolver::normalize(&manifest_path),
+            manifest.game.as_deref().unwrap_or("Unknown"),
+            manifest.version.as_deref().unwrap_or("1.0"),
+            manifest.edicts
+        );
+
+        if let Some(target) = manifest.target_gamedll() {
+            let target_path = PathBuf::from(target);
+            if target_path.exists() {
+                log::info!(
+                    target: "proxy",
+                    "Resolved GameDLL from manifest: \"{}\"",
+                    goldsrc::paths::PathResolver::normalize(&target_path)
+                );
+                return target_path;
+            }
+            if let Some(parent) = manifest_path.parent() {
+                let rel_path = parent.join(target);
+                if rel_path.exists() {
+                    log::info!(
+                        target: "proxy",
+                        "Resolved GameDLL relative to manifest: \"{}\"",
+                        goldsrc::paths::PathResolver::normalize(&rel_path)
+                    );
+                    return rel_path;
                 }
             }
         }
