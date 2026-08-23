@@ -73,13 +73,7 @@ pub unsafe extern "C" fn Meta_Attach(
             }
 
             // Fill the META_FUNCTIONS table with our hook functions.
-            (*meta_functions).pfnGetEntityAPI = Some(crate::GetEntityAPI);
-            (*meta_functions).pfnGetEntityAPI_Post = Some(crate::GetEntityAPI_Post);
             (*meta_functions).pfnGetEntityAPI2 = Some(crate::GetEntityAPI2);
-            (*meta_functions).pfnGetEntityAPI2_Post = Some(crate::GetEntityAPI2_Post);
-            (*meta_functions).pfnGetNewDLLFunctions = Some(crate::GetNewDLLFunctions);
-            (*meta_functions).pfnGetNewDLLFunctions_Post = Some(crate::GetNewDLLFunctions_Post);
-            (*meta_functions).pfnGetEngineFunctions = Some(crate::GetEngineFunctions);
             (*meta_functions).pfnGetEngineFunctions_Post = Some(crate::GetEngineFunctions_Post);
         }
         init_wasm_host();
@@ -250,16 +244,10 @@ pub unsafe extern "C" fn GetNewDLLFunctions_Post(
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEngineFunctions(
-    engfuncs: *mut goldsrc_sys::enginefuncs_t,
+    _engfuncs: *mut goldsrc_sys::enginefuncs_t,
     _interface_version: *mut i32,
 ) -> i32 {
-    catch_ffi_panic("GetEngineFunctions", 0, || {
-        if engfuncs.is_null() {
-            return 0;
-        }
-        backend().server_print("[GoldSrc.rs] GetEngineFunctions called.\n");
-        1
-    })
+    catch_ffi_panic("GetEngineFunctions", 0, || 0)
 }
 
 unsafe extern "C" fn hook_reg_user_msg_post(
