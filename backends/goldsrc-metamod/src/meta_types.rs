@@ -73,21 +73,7 @@ pub struct mutil_funcs_t {
     pub pfnLogMessage: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
     pub pfnLogError: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
     pub pfnLogDeveloper: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
-    pub pfnCenterSay: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
-    pub pfnCenterSayParms:
-        Option<unsafe extern "C" fn(*const plugin_info_t, *const c_void, *const c_char)>,
-    pub pfnCenterSayVarargs: Option<
-        unsafe extern "C" fn(*const plugin_info_t, *const c_void, *const c_char, *mut c_void),
-    >,
-    pub pfnCallGameEntity:
-        Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char, *mut c_void) -> i32>,
-    pub pfnGetUserMsgID:
-        Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char, *mut i32) -> i32>,
-    pub pfnGetUserMsgName:
-        Option<unsafe extern "C" fn(*const plugin_info_t, i32, *mut i32) -> *const c_char>,
-    pub pfnGetPluginPath: Option<unsafe extern "C" fn(*const plugin_info_t) -> *const c_char>,
-    pub pfnGetGameInfo: Option<unsafe extern "C" fn(*const plugin_info_t, i32) -> *const c_char>,
-    pub _padding: [usize; 24], // Reserve space for remaining functions
+    pub _padding: [usize; 32], // Reserve space for remaining functions
 }
 
 /// META_FUNCTIONS struct from Metamod API.
