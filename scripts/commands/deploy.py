@@ -524,13 +524,18 @@ def main(argv=None):
     copy_time = time.perf_counter() - t_copy_start
 
     print(f"\nVerifying {args.backend} deployment...")
-    if verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target):
+    t_verify_start = time.perf_counter()
+    verified = verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target)
+    verify_time = time.perf_counter() - t_verify_start
+
+    if verified:
         total_time = time.perf_counter() - t_deploy_total
         print(f"\n========================================")
         print(f"       Deployment Time Breakdown        ")
         print(f"========================================")
         print(f"  • Build & Optimization : {build_time:.2f}s")
         print(f"  • Copy & Registration  : {copy_time:.2f}s")
+        print(f"  • Post-Deploy Verify   : {verify_time:.2f}s")
         print(f"  --------------------------------------")
         print(f"  • Total Elapsed Time   : {total_time:.2f}s")
         print(f"========================================\n")
