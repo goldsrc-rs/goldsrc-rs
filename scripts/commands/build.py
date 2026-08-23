@@ -86,17 +86,23 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
     plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
 
     import shutil
+    from concurrent.futures import ThreadPoolExecutor
+
     wasm_opt_path = shutil.which("wasm-opt")
     if wasm_opt_path and release:
-        for p in plugins:
+        def optimize_wasm(p: Path) -> None:
             print(f"Optimizing {p.name} with wasm-opt...")
             try:
-                subprocess.run([
-                    wasm_opt_path, "-Oz", "--strip-debug", 
-                    str(p), "-o", str(p)
-                ], check=True)
+                subprocess.run(
+                    [wasm_opt_path, "-Oz", "--strip-debug", str(p), "-o", str(p)],
+                    check=True,
+                    capture_output=True,
+                )
             except Exception as e:
                 print(f"Warning: wasm-opt failed for {p.name}: {e}")
+
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(optimize_wasm, plugins))
     elif release:
         print("\n[INFO] 'wasm-opt' not found in PATH! Install it (e.g. 'npm install -g wasm-opt') to reduce WASM plugin sizes by up to 90%!\n")
 
