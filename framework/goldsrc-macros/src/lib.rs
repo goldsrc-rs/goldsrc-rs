@@ -27,6 +27,15 @@ struct PluginAttr {
     dependencies: Vec<String>,
 }
 
+/// Information about a registered command definition.
+struct CommandDefInfo {
+    name: String,
+    description: String,
+    usage: String,
+    aliases: Vec<String>,
+    capability: Option<String>,
+}
+
 fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> {
     let mut out = PluginAttr {
         name: "Unknown".to_string(),
@@ -188,6 +197,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut command_matchers = Vec::new();
     let mut plugin_commands: Vec<String> = Vec::new();
+    let mut command_defs: Vec<CommandDefInfo> = Vec::new();
 
     // Iterate over the items in the impl block to find our marker attributes
     for item in &mut input_impl.items {
@@ -334,6 +344,13 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 for alias in &cmd_aliases {
                     plugin_commands.push(alias.clone());
                 }
+                command_defs.push(CommandDefInfo {
+                    name: cmd.clone(),
+                    description: cmd_description.unwrap_or_default(),
+                    usage: cmd_usage.unwrap_or_default(),
+                    aliases: cmd_aliases.clone(),
+                    capability: cmd_capability.clone(),
+                });
 
                 let is_raw_signature = match inputs_len {
                     0 => true,
@@ -517,6 +534,32 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         commands_toml = format!("commands = [{}]\n", cmds.join(", "));
     }
 
+    let mut command_defs_toml = String::new();
+    for cmd in &command_defs {
+        command_defs_toml.push_str("\n[[command_defs]]\n");
+        command_defs_toml.push_str(&format!("name = \"{}\"\n", toml_escape(&cmd.name)));
+        if !cmd.description.is_empty() {
+            command_defs_toml.push_str(&format!(
+                "description = \"{}\"\n",
+                toml_escape(&cmd.description)
+            ));
+        }
+        if !cmd.usage.is_empty() {
+            command_defs_toml.push_str(&format!("usage = \"{}\"\n", toml_escape(&cmd.usage)));
+        }
+        if !cmd.aliases.is_empty() {
+            let aliases_fmt: Vec<String> = cmd
+                .aliases
+                .iter()
+                .map(|a| format!("\"{}\"", toml_escape(a)))
+                .collect();
+            command_defs_toml.push_str(&format!("aliases = [{}]\n", aliases_fmt.join(", ")));
+        }
+        if let Some(ref c) = cmd.capability {
+            command_defs_toml.push_str(&format!("capability = \"{}\"\n", toml_escape(c)));
+        }
+    }
+
     let desc_toml = if !attr.description.is_empty() {
         format!("description = \"{}\"\n", toml_escape(&attr.description))
     } else {
@@ -530,14 +573,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}",
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}{}",
         toml_escape(&plugin_name),
         toml_escape(&plugin_version),
         toml_escape(&plugin_author),
         desc_toml,
         url_toml,
         deps_toml,
-        commands_toml
+        commands_toml,
+        command_defs_toml
     );
 
     let expanded = quote! {

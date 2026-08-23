@@ -89,7 +89,11 @@ impl TestSuite {
         }
     }
 
-    #[command(name = "testcmd")]
+    #[command(
+        name = "testcmd",
+        description = "Test echo command for logging arguments",
+        usage = "testcmd [args...]"
+    )]
     fn handle_testcmd(cmd: String, args: String) {
         log_info!(
             "[Test Suite] Command Handler '{}' executed with args: '{}'",
@@ -99,7 +103,11 @@ impl TestSuite {
     }
 
     /// Tests player inspection: origin, angles, health, armor.
-    #[command(name = "test_player")]
+    #[command(
+        name = "test_player",
+        description = "Inspects player origin, angles, health, and armor",
+        usage = "test_player [player_index]"
+    )]
     fn handle_test_player(_cmd: String, args: String) {
         let idx = args.trim().parse::<i32>().unwrap_or(1);
         let player = Player::new(idx);
@@ -130,7 +138,11 @@ impl TestSuite {
     }
 
     /// Tests setting player health, armor, and teleporting.
-    #[command(name = "test_buff")]
+    #[command(
+        name = "test_buff",
+        description = "Buffs target player health (250 HP) and armor (100 AP)",
+        usage = "test_buff [player_index]"
+    )]
     fn handle_test_buff(_cmd: String, args: String) {
         let idx = args.trim().parse::<i32>().unwrap_or(1);
         let mut player = Player::new(idx);
@@ -145,7 +157,11 @@ impl TestSuite {
     }
 
     /// Tests CVar reading and writing.
-    #[command(name = "test_cvar")]
+    #[command(
+        name = "test_cvar",
+        description = "Reads or updates a server console variable (CVar)",
+        usage = "test_cvar <cvar_name> [new_value]"
+    )]
     fn handle_test_cvar(_cmd: String, args: String) {
         let mut parts = args.split_whitespace();
         let cvar_name = parts.next().unwrap_or("sv_gravity");
@@ -167,7 +183,11 @@ impl TestSuite {
     }
 
     /// Tests playing a sound on player 1.
-    #[command(name = "test_sound")]
+    #[command(
+        name = "test_sound",
+        description = "Emits a test audio sample on player 1",
+        usage = "test_sound [sound_path]"
+    )]
     fn handle_test_sound(_cmd: String, args: String) {
         let sample = if args.trim().is_empty() {
             "events/tutor_msg.wav"

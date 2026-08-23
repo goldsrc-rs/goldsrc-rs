@@ -5,6 +5,25 @@ use std::path::PathBuf;
 use wasmtime::Store;
 use wasmtime::component::Component;
 
+/// Detailed command definition exported in plugin metadata.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct CommandMetadata {
+    /// Canonical primary command name.
+    pub name: String,
+    /// Human-readable explanation of command effect.
+    #[serde(default)]
+    pub description: String,
+    /// Command usage syntax (e.g. `vipmenu <player_index>`).
+    #[serde(default)]
+    pub usage: String,
+    /// List of alternative names/aliases (e.g. `["vip", "/vip", "!vip"]`).
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    /// Required capability expression for authorization (e.g. `Some("vip.access")`).
+    #[serde(default)]
+    pub capability: Option<String>,
+}
+
 /// Metadata structure exported by WASM plugins generated via the `#[plugin]` macro.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PluginMetadata {
@@ -28,6 +47,9 @@ pub struct PluginMetadata {
     /// Commands this plugin handles (from `#[command(name = ...)]`).
     #[serde(default)]
     pub commands: Vec<String>,
+    /// Structured command definitions with descriptions, usage, aliases, and permissions.
+    #[serde(default)]
+    pub command_defs: Vec<CommandMetadata>,
     /// Plugin dependencies: name -> version requirement.
     #[serde(default, deserialize_with = "deserialize_deps")]
     pub dependencies: HashMap<String, String>,

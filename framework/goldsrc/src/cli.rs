@@ -231,10 +231,10 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         name: "cmds",
         aliases: &["commands"],
         category: "Inspection & Debugging",
-        summary: "List all commands registered by active plugins",
-        usage: "grs cmds",
+        summary: "List registered plugin commands or inspect a specific command",
+        usage: "grs cmds [COMMAND_NAME]",
         options: &[],
-        examples: &["grs cmds"],
+        examples: &["grs cmds", "grs cmds vip", "grs cmds admin_slay"],
     },
     CommandSpec {
         name: "cmd",
@@ -782,10 +782,17 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             ));
         }
         "cmds" => {
+            let mut positional = Vec::new();
             while let Ok(Some(arg)) = parser.next() {
-                if let Arg::Short('h') | Arg::Long("help") = arg {
-                    print_command_help(spec, out);
-                    return;
+                match arg {
+                    Arg::Short('h') | Arg::Long("help") => {
+                        print_command_help(spec, out);
+                        return;
+                    }
+                    Arg::Value(v) => {
+                        positional.push(v.to_string_lossy().to_string());
+                    }
+                    _ => {}
                 }
             }
             let Some(manager) = manager else {
@@ -793,9 +800,94 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 return;
             };
             let plugins = manager.get_plugins_info();
+
+            if let Some(query) = positional.first() {
+                let query_clean = query.trim().to_ascii_lowercase();
+                let mut found_count = 0;
+
+                for p in &plugins {
+                    if let Some(meta) = &p.metadata {
+                        if !meta.command_defs.is_empty() {
+                            for cmd in &meta.command_defs {
+                                let name_matches = cmd.name.eq_ignore_ascii_case(&query_clean)
+                                    || cmd
+                                        .name
+                                        .trim_start_matches(['/', '!'])
+                                        .eq_ignore_ascii_case(
+                                            query_clean.trim_start_matches(['/', '!']),
+                                        );
+                                let alias_matches = cmd.aliases.iter().any(|a| {
+                                    a.eq_ignore_ascii_case(&query_clean)
+                                        || a.trim_start_matches(['/', '!']).eq_ignore_ascii_case(
+                                            query_clean.trim_start_matches(['/', '!']),
+                                        )
+                                });
+
+                                if name_matches || alias_matches {
+                                    found_count += 1;
+                                    out(&format!("--- Command: {} ---\n", cmd.name));
+                                    out(&format!(
+                                        "  Plugin:      {} v{}\n",
+                                        meta.name, meta.version
+                                    ));
+                                    if !cmd.description.is_empty() {
+                                        out(&format!("  Description: {}\n", cmd.description));
+                                    }
+                                    let usage = if !cmd.usage.is_empty() {
+                                        cmd.usage.as_str()
+                                    } else {
+                                        cmd.name.as_str()
+                                    };
+                                    out(&format!("  Usage:       {}\n", usage));
+                                    if !cmd.aliases.is_empty() {
+                                        out(&format!(
+                                            "  Aliases:     {}\n",
+                                            cmd.aliases.join(", ")
+                                        ));
+                                    }
+                                    let access =
+                                        cmd.capability.as_deref().unwrap_or("Public (None)");
+                                    out(&format!("  Access:      {}\n", access));
+                                    out("\n");
+                                }
+                            }
+                        } else if meta
+                            .commands
+                            .iter()
+                            .any(|c| c.eq_ignore_ascii_case(&query_clean))
+                        {
+                            found_count += 1;
+                            out(&format!("--- Command: {} ---\n", query));
+                            out(&format!("  Plugin:      {} v{}\n", meta.name, meta.version));
+                            if !meta.description.is_empty() {
+                                out(&format!("  Description: {}\n", meta.description));
+                            }
+                            out(&format!("  Usage:       {}\n", query));
+                            out("  Access:      Public (None)\n\n");
+                        }
+                    }
+                }
+
+                if found_count == 0 {
+                    out(&format!(
+                        "[GoldSrc.rs] Command '{}' not found in any active plugin.\nType 'grs cmds' to list all registered commands.\n",
+                        query
+                    ));
+                }
+                return;
+            }
+
             let total_cmds: usize = plugins
                 .iter()
-                .filter_map(|p| p.metadata.as_ref().map(|m| m.commands.len()))
+                .filter_map(|p| {
+                    p.metadata.as_ref().map(|m| {
+                        if !m.command_defs.is_empty() {
+                            m.command_defs.len()
+                        } else {
+                            m.commands.len()
+                        }
+                    })
+                })
                 .sum();
             out(&format!(
                 "--- Registered Plugin Commands ({}) ---\n",
@@ -805,21 +897,53 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 out("  (No commands registered)\n");
             } else {
                 for p in plugins {
-                    if let Some(meta) = &p.metadata
-                        && !meta.commands.is_empty()
-                    {
-                        let desc = if !meta.description.is_empty() {
-                            format!(" - {}", meta.description)
-                        } else {
-                            String::new()
-                        };
-                        out(&format!(
-                            "\n[{name} v{ver}]{desc}\n",
-                            name = meta.name,
-                            ver = meta.version
-                        ));
-                        for cmd in &meta.commands {
-                            out(&format!("  * {}\n", cmd));
+                    if let Some(meta) = &p.metadata {
+                        if !meta.command_defs.is_empty() {
+                            let desc = if !meta.description.is_empty() {
+                                format!(" - {}", meta.description)
+                            } else {
+                                String::new()
+                            };
+                            out(&format!(
+                                "\n[{name} v{ver}]{desc}\n",
+                                name = meta.name,
+                                ver = meta.version
+                            ));
+                            for cmd in &meta.command_defs {
+                                let usage_or_name = if !cmd.usage.is_empty() {
+                                    &cmd.usage
+                                } else {
+                                    &cmd.name
+                                };
+                                let aliases_str = if !cmd.aliases.is_empty() {
+                                    format!(" (aliases: {})", cmd.aliases.join(", "))
+                                } else {
+                                    String::new()
+                                };
+                                out(&format!("  * {}{}\n", usage_or_name, aliases_str));
+                                if !cmd.description.is_empty() || cmd.capability.is_some() {
+                                    let cap_str = if let Some(ref cap) = cmd.capability {
+                                        format!(" [requires: {}]", cap)
+                                    } else {
+                                        String::new()
+                                    };
+                                    out(&format!("    {}{}\n", cmd.description, cap_str));
+                                }
+                            }
+                        } else if !meta.commands.is_empty() {
+                            let desc = if !meta.description.is_empty() {
+                                format!(" - {}", meta.description)
+                            } else {
+                                String::new()
+                            };
+                            out(&format!(
+                                "\n[{name} v{ver}]{desc}\n",
+                                name = meta.name,
+                                ver = meta.version
+                            ));
+                            for cmd in &meta.commands {
+                                out(&format!("  * {}\n", cmd));
+                            }
                         }
                     }
                 }
