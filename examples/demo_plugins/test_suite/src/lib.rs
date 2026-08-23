@@ -53,11 +53,29 @@ impl TestSuite {
 
     #[event]
     fn handle_event(name: String, data: Vec<u8>) {
-        if let Ok(str_data) = String::from_utf8(data) {
-            log_warn!(
-                "[Test Suite] Event Handler received: '{}' => {}",
+        if data.is_empty() {
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' (no payload)",
+                name
+            );
+        } else if data.len() == 4 {
+            let idx = i32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' => player #{}",
+                name,
+                idx
+            );
+        } else if let Ok(str_data) = String::from_utf8(data.clone()) {
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' => '{}'",
                 name,
                 str_data
+            );
+        } else {
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' => (raw bytes: {:?})",
+                name,
+                data
             );
         }
     }
