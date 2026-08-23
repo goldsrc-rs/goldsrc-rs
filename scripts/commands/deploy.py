@@ -157,6 +157,9 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
     if backend == "standalone":
         update_liblist_gam(game_path, dest_name, target)
     else:
+        # Ensure liblist.gam points to metamod when deploying metamod backend
+        restore_liblist_gam_for_metamod(game_path)
+
         # Update plugins.ini for Metamod
         addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
         if not addons_dir.exists():
@@ -197,11 +200,49 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
             else:
                 lines.append(line)
 
-        if not updated:
-            lines.append(expected_line)
-
         plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"Updated plugins.ini with new path: {plugins_ini}")
+
+        # Ensure liblist.gam does not point to goldsrc_standalone when deploying metamod
+        restore_liblist_gam_for_metamod(game_path)
+
+
+def restore_liblist_gam_for_metamod(game_path: Path) -> None:
+    """Restore liblist.gam to Metamod if it was previously modified by standalone backend."""
+    liblist_path = game_path / DEFAULT_MOD / "liblist.gam"
+    if not liblist_path.exists():
+        liblist_path = game_path / "liblist.gam"
+
+    if not liblist_path.exists():
+        return
+
+    content = liblist_path.read_text(encoding="utf-8")
+    if "goldsrc_standalone" not in content:
+        return
+
+    lines = []
+    has_metamod = False
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if "goldsrc_standalone" in stripped:
+            continue
+        elif "addons" in stripped and "metamod" in stripped:
+            # Uncomment metamod gamedll if commented out by deploy
+            clean_line = stripped.lstrip("/; \t")
+            if clean_line.endswith("// Replaced by GoldSrc.rs deploy"):
+                clean_line = clean_line[: -len("// Replaced by GoldSrc.rs deploy")].strip()
+            lines.append(clean_line)
+            has_metamod = True
+        else:
+            lines.append(line)
+
+    if not has_metamod:
+        lines.append('gamedll "addons\\metamod\\metamod.dll"')
+
+    new_content = "\n".join(lines).strip() + "\n"
+    if new_content != content:
+        liblist_path.write_text(new_content, encoding="utf-8")
+        print(f"Restored Metamod entry in {liblist_path}")
 
 
 def verify_deploy(
