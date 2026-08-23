@@ -250,15 +250,64 @@ impl goldsrc_api::EnginePrecache for EngineBackend {
     }
 }
 
+static USER_MSG_REGISTRY: std::sync::LazyLock<
+    std::sync::RwLock<std::collections::HashMap<String, i32>>,
+> = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+
+pub type UserMsgResolverFn = fn(&str) -> i32;
+
+static USER_MSG_RESOLVER_FN: std::sync::OnceLock<UserMsgResolverFn> = std::sync::OnceLock::new();
+
+/// Sets a backend-specific resolver for finding user message IDs (e.g. via Metamod `pfnGetUserMsgID`).
+pub fn set_user_msg_resolver(resolver: UserMsgResolverFn) {
+    let _ = USER_MSG_RESOLVER_FN.set(resolver);
+}
+
+/// Registers a known user message ID into the runtime registry.
+pub fn register_user_msg_id(name: &str, id: i32) {
+    if id > 0
+        && id != 255
+        && let Ok(mut map) = USER_MSG_REGISTRY.write()
+    {
+        map.insert(name.to_string(), id);
+    }
+}
+
 impl goldsrc_api::EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
-        unsafe {
+        // 1. Check cached registry
+        if let Ok(map) = USER_MSG_REGISTRY.read()
+            && let Some(&id) = map.get(name)
+            && id > 0
+            && id != 255
+        {
+            return id;
+        }
+
+        // 2. Check resolver callback if registered by backend (e.g. Metamod)
+        if let Some(resolver) = USER_MSG_RESOLVER_FN.get() {
+            let id = resolver(name);
+            if id > 0 && id != 255 {
+                register_user_msg_id(name, id);
+                return id;
+            }
+        }
+
+        // 3. Fallback to engine pfnRegUserMsg
+        let engine_id = unsafe {
             if let Ok(cname) = std::ffi::CString::new(name) {
                 call_engfunc_ret!((self.engfuncs)().pfnRegUserMsg, cname.as_ptr(), size)
             } else {
                 0
             }
+        };
+
+        if engine_id > 0 && engine_id != 255 {
+            register_user_msg_id(name, engine_id);
+            return engine_id;
         }
+
+        0
     }
 
     fn message_begin(

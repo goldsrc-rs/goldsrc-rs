@@ -37,6 +37,28 @@ pub static PRINT_QUEUE: goldsrc::backend::PrintQueue = goldsrc::backend::PrintQu
 
 /// Initialize WASM plugin subsystem and the unified logger.
 pub fn init_wasm_host() {
+    goldsrc::backend::set_user_msg_resolver(|name| {
+        let ptr = G_META_UTIL.load(std::sync::atomic::Ordering::Relaxed);
+        if !ptr.is_null() {
+            let util = unsafe { &*ptr };
+            if let Some(get_id) = util.pfnGetUserMsgID
+                && let Ok(cname) = std::ffi::CString::new(name)
+            {
+                let id = unsafe {
+                    get_id(
+                        &crate::entrypoints::PLUGIN_INFO,
+                        cname.as_ptr(),
+                        std::ptr::null_mut(),
+                    )
+                };
+                if id > 0 && id != 255 {
+                    return id;
+                }
+            }
+        }
+        0
+    });
+
     let engine: std::sync::Arc<dyn goldsrc_api::Engine> =
         std::sync::Arc::new(goldsrc::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE));
     if let Err(e) = goldsrc::host::HostRuntime::init(

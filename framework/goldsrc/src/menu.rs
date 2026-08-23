@@ -296,12 +296,18 @@ impl MenuSessionManager {
         text: &str,
     ) {
         let show_menu_id = engine.reg_user_msg("ShowMenu", -1);
-        let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
+        if show_menu_id <= 0 || show_menu_id == 255 {
+            log::warn!(
+                target: "menu",
+                "Cannot send ShowMenu: invalid user message ID '{show_menu_id}' for player #{player_idx}"
+            );
+            return;
+        }
 
         if text.is_empty() {
             engine.message_begin(
                 goldsrc_api::MessageDest::One as i32,
-                msg_id,
+                show_menu_id,
                 None,
                 Some(player_idx),
             );
@@ -340,7 +346,7 @@ impl MenuSessionManager {
 
             engine.message_begin(
                 goldsrc_api::MessageDest::One as i32,
-                msg_id,
+                show_menu_id,
                 None,
                 Some(player_idx),
             );
@@ -354,11 +360,13 @@ impl MenuSessionManager {
 
     fn clear_client_menu(player_idx: i32, engine: &dyn Engine) {
         let show_menu_id = engine.reg_user_msg("ShowMenu", -1);
-        let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
+        if show_menu_id <= 0 || show_menu_id == 255 {
+            return;
+        }
 
         engine.message_begin(
             goldsrc_api::MessageDest::One as i32,
-            msg_id,
+            show_menu_id,
             None,
             Some(player_idx),
         );

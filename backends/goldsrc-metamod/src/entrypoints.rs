@@ -105,7 +105,7 @@ pub unsafe extern "C" fn Meta_Detach(
 }
 
 #[allow(non_upper_case_globals)]
-static PLUGIN_INFO: plugin_info_t = plugin_info_t {
+pub static PLUGIN_INFO: plugin_info_t = plugin_info_t {
     ifvers: META_INTERFACE_VERSION.as_ptr(),
     name: c"GoldSrc.rs Metamod Backend".as_ptr(),
     version: concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const i8,

@@ -191,12 +191,14 @@ impl api::Host for HostState {
             return;
         }
         let show_menu_id = self.engine.reg_user_msg("ShowMenu", -1);
-        let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
+        if show_menu_id <= 0 || show_menu_id == 255 {
+            return;
+        }
 
         if text.is_empty() {
             self.engine.message_begin(
                 goldsrc_api::MessageDest::One as i32,
-                msg_id,
+                show_menu_id,
                 None,
                 Some(player_index),
             );
@@ -232,7 +234,7 @@ impl api::Host for HostState {
 
             self.engine.message_begin(
                 goldsrc_api::MessageDest::One as i32,
-                msg_id,
+                show_menu_id,
                 None,
                 Some(player_index),
             );
