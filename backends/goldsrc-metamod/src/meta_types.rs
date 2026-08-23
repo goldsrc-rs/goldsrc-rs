@@ -7,7 +7,7 @@
 use core::ffi::c_void;
 use std::ffi::c_char;
 
-pub const META_INTERFACE_VERSION: &str = "5:13";
+pub const META_INTERFACE_VERSION: &std::ffi::CStr = c"5:13";
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

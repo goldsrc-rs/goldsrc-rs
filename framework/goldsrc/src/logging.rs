@@ -164,7 +164,7 @@ type ConsoleCb = Box<dyn Fn(&str) + Send + Sync + 'static>;
 struct GoldSrcLogger {
     config: LogConfig,
     log_path: PathBuf,
-    file_handle: Option<std::fs::File>,
+    file_handle: Option<std::io::BufWriter<std::fs::File>>,
     /// Optional callback forwarding messages to the server console.
     console_cb: Option<ConsoleCb>,
 }
@@ -186,7 +186,8 @@ impl GoldSrcLogger {
             .create(true)
             .append(true)
             .open(&log_path)
-            .ok();
+            .ok()
+            .map(std::io::BufWriter::new);
         Self {
             config,
             log_path,
@@ -215,15 +216,16 @@ impl GoldSrcLogger {
 
         // File output (re-uses open file handle if available, falls back to open on demand).
         if self.config.file_output {
-            if let Some(ref mut file) = self.file_handle {
-                let _ = file.write_all(plain_line.as_bytes());
-            } else if let Ok(mut file) = OpenOptions::new()
+            if let Some(ref mut writer) = self.file_handle {
+                let _ = writer.write_all(plain_line.as_bytes());
+            } else if let Ok(file) = OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(&self.log_path)
             {
-                let _ = file.write_all(plain_line.as_bytes());
-                self.file_handle = Some(file);
+                let mut writer = std::io::BufWriter::new(file);
+                let _ = writer.write_all(plain_line.as_bytes());
+                self.file_handle = Some(writer);
             }
         }
 
@@ -279,7 +281,15 @@ impl log::Log for LoggerImpl {
         guard.emit(level, target, &message);
     }
 
-    fn flush(&self) {}
+    fn flush(&self) {
+        let mut guard = match self.inner.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
+        if let Some(ref mut writer) = guard.file_handle {
+            let _ = writer.flush();
+        }
+    }
 }
 
 static LOGGER_INSTANCE: std::sync::OnceLock<LoggerImpl> = std::sync::OnceLock::new();

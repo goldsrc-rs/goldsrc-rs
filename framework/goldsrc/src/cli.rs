@@ -834,7 +834,9 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             } else {
                 let cmd_name = &positional[0];
                 let cmd_args = positional[1..].join(" ");
-                let handled = crate::hooks::dispatch_command(cmd_name, &cmd_args);
+                let handled = manager
+                    .map(|m| m.dispatch_command(cmd_name, 0, &cmd_args))
+                    .unwrap_or(false);
                 if !handled {
                     out(&format!(
                         "[GoldSrc.rs] Command '{}' was not handled by any plugin.\n",

@@ -8,11 +8,9 @@ use crate::{PRINT_QUEUE, call_engfunc, call_engfunc_ret, engfuncs};
 ///
 /// # Safety
 /// `edict` must be a valid pointer to an edict_t.
+#[allow(dead_code)]
 pub unsafe extern "C" fn hook_spawn(_edict: *mut goldsrc_sys::edict_t) -> i32 {
-    catch_ffi_panic("hook_spawn", 0, || {
-        crate::backend().precache_pending_resources();
-        0
-    })
+    catch_ffi_panic("hook_spawn", 0, || 0)
 }
 
 /// Post-hook for DispatchSpawn.
@@ -134,6 +132,7 @@ pub unsafe extern "C" fn hook_server_activate(
     _client_max: i32,
 ) {
     catch_ffi_panic("hook_server_activate", (), || {
+        crate::backend().precache_pending_resources();
         goldsrc::hooks::on_server_activate();
     });
 }

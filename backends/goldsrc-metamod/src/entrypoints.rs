@@ -36,11 +36,13 @@ pub unsafe extern "C" fn Meta_Query(
     // SAFETY: plugin_info and meta_util_functions are Metamod-provided; valid at call time.
     catch_ffi_panic("Meta_Query", 0, || {
         unsafe {
-            if plugin_info.is_null() || meta_util_functions.is_null() {
+            if plugin_info.is_null() {
                 return 0;
             }
             *plugin_info = &PLUGIN_INFO;
-            *meta_util_functions = get_meta_util_funcs();
+            if !meta_util_functions.is_null() {
+                crate::set_meta_util_funcs(meta_util_functions);
+            }
         }
         backend().server_print("[GoldSrc.rs] Meta_Query called.\n");
         1
@@ -104,7 +106,7 @@ pub unsafe extern "C" fn Meta_Detach(
 
 #[allow(non_upper_case_globals)]
 static PLUGIN_INFO: plugin_info_t = plugin_info_t {
-    ifvers: META_INTERFACE_VERSION.as_ptr() as *const i8,
+    ifvers: META_INTERFACE_VERSION.as_ptr(),
     name: c"GoldSrc.rs Metamod Backend".as_ptr(),
     version: concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const i8,
     date: concat!(env!("GIT_HASH"), "\0").as_ptr() as *const i8,
@@ -114,16 +116,6 @@ static PLUGIN_INFO: plugin_info_t = plugin_info_t {
     loadable: PLUG_LOADTIME::PT_ANYTIME,
     unloadable: PLUG_LOADTIME::PT_ANYTIME,
 };
-
-fn get_meta_util_funcs() -> mutil_funcs_t {
-    mutil_funcs_t {
-        pfnLogConsole: None,
-        pfnLogMessage: None,
-        pfnLogError: None,
-        pfnLogDeveloper: None,
-        _padding: [0; 12],
-    }
-}
 
 // ============================================================================
 // Entity API entry points

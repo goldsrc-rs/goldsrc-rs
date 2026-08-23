@@ -116,7 +116,7 @@ fn main() {
         .allowlist_function(".*")
         .allowlist_type(".*")
         .allowlist_var(".*")
-        .layout_tests(false)
+        .layout_tests(true)
         .generate()
         .expect("Unable to generate bindings");
 

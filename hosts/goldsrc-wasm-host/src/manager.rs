@@ -17,6 +17,8 @@ use std::time::{Duration, Instant};
 pub struct HostState {
     /// Engine bridge for real game-state access.
     pub engine: Arc<dyn GoldsrcEngine>,
+    /// Per-store memory and table limit enforcement.
+    pub limits: wasmtime::StoreLimits,
 }
 
 /// Read-only snapshot of a loaded plugin, used for CLI listing/info.
@@ -71,16 +73,6 @@ impl api::Host for HostState {
         self.engine
             .entity_set_velocity(index, [vel.x, vel.y, vel.z]);
     }
-    fn host_player_name(&mut self, index: i32) -> Option<String> {
-        self.engine.player_name(index)
-    }
-    fn host_player_armorvalue(&mut self, index: i32) -> f32 {
-        self.engine.player_armorvalue(index)
-    }
-    fn host_player_set_armorvalue(&mut self, index: i32, armor: f32) {
-        self.engine.player_set_armorvalue(index, armor);
-    }
-
     fn host_entity_angles(&mut self, index: i32) -> api::Vector3 {
         let [x, y, z] = self.engine.entity_angles(index);
         api::Vector3 { x, y, z }
@@ -97,6 +89,16 @@ impl api::Host for HostState {
     }
     fn host_drop_to_floor(&mut self, index: i32) -> i32 {
         self.engine.drop_to_floor(index)
+    }
+
+    fn host_player_name(&mut self, index: i32) -> Option<String> {
+        self.engine.player_name(index)
+    }
+    fn host_player_armorvalue(&mut self, index: i32) -> f32 {
+        self.engine.player_armorvalue(index)
+    }
+    fn host_player_set_armorvalue(&mut self, index: i32, armor: f32) {
+        self.engine.player_set_armorvalue(index, armor);
     }
 
     fn host_cvar_get_float(&mut self, name: String) -> f32 {
@@ -121,6 +123,7 @@ impl api::Host for HostState {
     fn host_precache_generic(&mut self, path: String) -> i32 {
         self.engine.precache_generic(&path)
     }
+
     fn host_emit_sound(
         &mut self,
         entity: i32,
@@ -143,23 +146,38 @@ impl api::Host for HostState {
     }
 
     fn host_print_chat(&mut self, player_index: i32, message: String) {
-        if !self.engine.entity_is_valid(player_index) {
+        if !(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index) {
             self.engine
                 .server_print(&format!("[Chat to #{player_index}] {message}\n"));
             return;
         }
+        let say_text_id = self.engine.reg_user_msg("SayText", -1);
+        let msg_id = if say_text_id <= 0 { 76 } else { say_text_id };
         self.engine.message_begin(
             goldsrc_api::MessageDest::One as i32,
-            76, // Standard SayText user message id
+            msg_id,
             None,
             Some(player_index),
         );
-        self.engine.write_byte(player_index);
-        self.engine.write_string(&message);
+        self.engine.write_byte(0); // 0 = server/console sender
+        // Truncate message if oversized to prevent buffer overflow (SayText payload max 192 bytes)
+        let safe_msg = if message.len() > 175 {
+            let mut end = 175;
+            while end > 0 && !message.is_char_boundary(end) {
+                end -= 1;
+            }
+            &message[..end]
+        } else {
+            &message
+        };
+        self.engine.write_string(safe_msg);
         self.engine.message_end();
     }
 
     fn host_register_capability(&mut self, name: String, description: String) -> bool {
+        if name.is_empty() || name.len() > 256 || description.len() > 4096 {
+            return false;
+        }
         goldsrc_api::auth::Auth::register_capability(&name, &description)
     }
 
@@ -195,7 +213,7 @@ pub struct PluginManager {
 
 /// Minimum gap between two hot-reloads of the same file. Compilers write in
 /// several passes, so a rebuild would otherwise reload a half-written file.
-const RELOAD_DEBOUNCE: Duration = Duration::from_millis(150);
+const RELOAD_DEBOUNCE: Duration = Duration::from_millis(1000);
 
 impl PluginManager {
     /// Creates an empty plugin manager backed by a fresh wasmtime engine
@@ -207,6 +225,21 @@ impl PluginManager {
         // config.target("pulley32").unwrap();
         let engine = Engine::new(&config)?;
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
+
+        // Spawn background epoch timer thread to advance epochs every 2ms.
+        // This ensures epoch interruption deadlines (e.g. 5 epochs) are enforced
+        // as real wall-clock slices even if a plugin enters an infinite loop.
+        let engine_clone = engine.clone();
+        std::thread::Builder::new()
+            .name("goldsrc-epoch-timer".into())
+            .spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_millis(2));
+                    engine_clone.increment_epoch();
+                }
+            })
+            .ok();
+
         Ok(Self {
             plugins: Vec::new(),
             engine,
@@ -223,6 +256,16 @@ impl PluginManager {
     /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
     pub fn instantiate_plugin<P: AsRef<Path>>(&self, path: P) -> Result<LoadedPlugin, LoadError> {
         let path = path.as_ref();
+        let metadata = fs::metadata(path).map_err(|source| LoadError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        if metadata.len() > 32 * 1024 * 1024 {
+            return Err(LoadError::Compile(format!(
+                "Plugin size ({} bytes) exceeds maximum allowed size (32MB)",
+                metadata.len()
+            )));
+        }
         let bytes = fs::read(path).map_err(|source| LoadError::Io {
             path: path.to_path_buf(),
             source,
@@ -253,10 +296,9 @@ impl PluginManager {
             .map_err(|e| LoadError::Embed(e.to_string()))?;
 
             let mut encoder = wit_component::ComponentEncoder::default()
+                .validate(true)
                 .module(&wasm_bytes)
-                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
-                .validate(true);
-
+                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?;
             encoder
                 .encode()
                 .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
@@ -272,10 +314,19 @@ impl PluginManager {
         )
         .map_err(|e| LoadError::Link(e.to_string()))?;
 
+        let limits = wasmtime::StoreLimitsBuilder::new()
+            .memory_size(64 * 1024 * 1024) // 64MB per memory
+            .table_elements(10_000)
+            .memories(4)
+            .tables(16)
+            .instances(16)
+            .build();
         let state = HostState {
             engine: self.engine_ops.clone(),
+            limits,
         };
         let mut store = wasmtime::Store::new(&self.engine, state);
+        store.limiter(|s| &mut s.limits);
         store.set_epoch_deadline(100);
         let bindings = GoldsrcPlugin::instantiate(&mut store, &component, &linker)
             .map_err(|e| LoadError::Instantiate(e.to_string()))?;
@@ -643,6 +694,10 @@ mod tests {
     }
 
     impl goldsrc_api::EngineMessages for NoopEngineOps {
+        fn reg_user_msg(&self, _name: &str, _size: i32) -> i32 {
+            0
+        }
+
         fn message_begin(
             &self,
             _msg_dest: i32,

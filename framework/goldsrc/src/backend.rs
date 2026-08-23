@@ -251,6 +251,16 @@ impl goldsrc_api::EnginePrecache for EngineBackend {
 }
 
 impl goldsrc_api::EngineMessages for EngineBackend {
+    fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
+        unsafe {
+            if let Ok(cname) = std::ffi::CString::new(name) {
+                call_engfunc_ret!((self.engfuncs)().pfnRegUserMsg, cname.as_ptr(), size)
+            } else {
+                0
+            }
+        }
+    }
+
     fn message_begin(
         &self,
         msg_dest: i32,
@@ -324,8 +334,19 @@ impl goldsrc_api::EngineMessages for EngineBackend {
 
     fn write_string(&self, val: &str) {
         unsafe {
-            let cstr = std::ffi::CString::new(val).unwrap_or_default();
-            call_engfunc!((self.engfuncs)().pfnWriteString, cstr.as_ptr());
+            let clean = val.replace('\0', "");
+            let safe = if clean.len() > 500 {
+                let mut end = 500;
+                while end > 0 && !clean.is_char_boundary(end) {
+                    end -= 1;
+                }
+                &clean[..end]
+            } else {
+                &clean
+            };
+            if let Ok(cstr) = std::ffi::CString::new(safe) {
+                call_engfunc!((self.engfuncs)().pfnWriteString, cstr.as_ptr());
+            }
         }
     }
 

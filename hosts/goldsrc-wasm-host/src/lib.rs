@@ -27,18 +27,27 @@ pub fn set_print_callback(f: fn(&str)) {
 
 /// Print log message via host callback (engine server_print and unified logger).
 pub fn host_log(msg: &str) {
-    let (level, clean_msg) = if let Some(rest) = msg.strip_prefix("[ERROR] ") {
+    let bounded = if msg.len() > 4096 {
+        let mut end = 4096;
+        while end > 0 && !msg.is_char_boundary(end) {
+            end -= 1;
+        }
+        &msg[..end]
+    } else {
+        msg
+    };
+    let (level, clean_msg) = if let Some(rest) = bounded.strip_prefix("[ERROR] ") {
         (log::Level::Error, rest)
-    } else if let Some(rest) = msg.strip_prefix("[WARN] ") {
+    } else if let Some(rest) = bounded.strip_prefix("[WARN] ") {
         (log::Level::Warn, rest)
-    } else if let Some(rest) = msg.strip_prefix("[DEBUG] ") {
+    } else if let Some(rest) = bounded.strip_prefix("[DEBUG] ") {
         (log::Level::Debug, rest)
-    } else if let Some(rest) = msg.strip_prefix("[TRACE] ") {
+    } else if let Some(rest) = bounded.strip_prefix("[TRACE] ") {
         (log::Level::Trace, rest)
-    } else if let Some(rest) = msg.strip_prefix("[INFO] ") {
+    } else if let Some(rest) = bounded.strip_prefix("[INFO] ") {
         (log::Level::Info, rest)
     } else {
-        (log::Level::Info, msg)
+        (log::Level::Info, bounded)
     };
 
     match level {

@@ -15,6 +15,9 @@ pub struct Auth;
 impl Auth {
     /// Registers a new capability in the global system.
     pub fn register_capability(name: &str, description: &str) -> bool {
+        if name.is_empty() || name.len() > 256 || description.len() > 4096 {
+            return false;
+        }
         #[cfg(target_arch = "wasm32")]
         {
             api::host_register_capability(name, description)
@@ -22,6 +25,9 @@ impl Auth {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
+            if caps.registered.len() >= 1024 {
+                return false;
+            }
             if let std::collections::hash_map::Entry::Vacant(e) =
                 caps.registered.entry(name.to_string())
             {
