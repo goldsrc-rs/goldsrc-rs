@@ -31,6 +31,8 @@ pub struct PluginInfo {
     pub index: usize,
     /// Whether the plugin is paused.
     pub is_paused: bool,
+    /// Whether the plugin is poisoned due to trap/timeout.
+    pub is_poisoned: bool,
     /// Parsed metadata, if any.
     pub metadata: Option<PluginMetadata>,
     /// Whether the plugin exports `on_load`.
@@ -190,17 +192,56 @@ impl api::Host for HostState {
         }
         let show_menu_id = self.engine.reg_user_msg("ShowMenu", -1);
         let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
-        self.engine.message_begin(
-            goldsrc_api::MessageDest::One as i32,
-            msg_id,
-            None,
-            Some(player_index),
-        );
-        self.engine.write_short(keys_mask);
-        self.engine.write_char(timeout);
-        self.engine.write_byte(0);
-        self.engine.write_string(&text);
-        self.engine.message_end();
+
+        if text.is_empty() {
+            self.engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                msg_id,
+                None,
+                Some(player_index),
+            );
+            self.engine.write_short(keys_mask);
+            self.engine.write_char(timeout);
+            self.engine.write_byte(0);
+            self.engine.write_string("");
+            self.engine.message_end();
+            return;
+        }
+
+        let max_chunk = 150;
+        let mut remaining = &text[..];
+
+        while !remaining.is_empty() {
+            let chunk_len = if remaining.len() <= max_chunk {
+                remaining.len()
+            } else {
+                let mut end = max_chunk;
+                while end > 0 && !remaining.is_char_boundary(end) {
+                    end -= 1;
+                }
+                if end == 0 {
+                    remaining.chars().next().map(|c| c.len_utf8()).unwrap_or(1)
+                } else {
+                    end
+                }
+            };
+
+            let chunk = &remaining[..chunk_len];
+            remaining = &remaining[chunk_len..];
+            let has_more = !remaining.is_empty();
+
+            self.engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                msg_id,
+                None,
+                Some(player_index),
+            );
+            self.engine.write_short(keys_mask);
+            self.engine.write_char(timeout);
+            self.engine.write_byte(if has_more { 1 } else { 0 });
+            self.engine.write_string(chunk);
+            self.engine.message_end();
+        }
     }
 
     fn host_send_hud_message(
@@ -610,6 +651,7 @@ impl PluginManager {
                 path: p.path.clone(),
                 index,
                 is_paused: p.is_paused,
+                is_poisoned: p.is_poisoned,
                 metadata: p.metadata.clone(),
                 has_on_load: p.has_export("on-load"),
                 has_on_unload: p.has_export("on-unload"),
@@ -789,11 +831,38 @@ impl PluginManager {
         self.call_on_frame();
     }
 
-    /// Loads a plugin by filesystem path (string form of [`load_plugin`]).
+    /// Loads a plugin by filesystem path or plugin name (e.g. `test_suite` or `test_suite.wasm`).
     ///
     /// [`load_plugin`]: PluginManager::load_plugin
     pub fn load_plugin_by_name(&mut self, query: &str) -> Result<String, LoadError> {
-        let path = PathBuf::from(query);
+        let mut path = PathBuf::from(query);
+        if !path.exists() {
+            let with_ext = if !query.ends_with(".wasm") {
+                PathBuf::from(format!("{query}.wasm"))
+            } else {
+                path.clone()
+            };
+
+            if with_ext.exists() {
+                path = with_ext;
+            } else {
+                let candidates = [
+                    PathBuf::from("cstrike/addons/goldsrc/plugins").join(query),
+                    PathBuf::from("cstrike/addons/goldsrc/plugins").join(format!("{query}.wasm")),
+                    PathBuf::from("addons/goldsrc/plugins").join(query),
+                    PathBuf::from("addons/goldsrc/plugins").join(format!("{query}.wasm")),
+                    PathBuf::from("goldsrc/plugins").join(query),
+                    PathBuf::from("goldsrc/plugins").join(format!("{query}.wasm")),
+                    PathBuf::from("plugins").join(query),
+                    PathBuf::from("plugins").join(format!("{query}.wasm")),
+                ];
+                if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
+                    path = found;
+                } else if !query.ends_with(".wasm") {
+                    path = with_ext;
+                }
+            }
+        }
         self.load_plugin(path)
     }
 

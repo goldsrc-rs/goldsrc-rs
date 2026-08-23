@@ -247,21 +247,14 @@ impl MenuSessionManager {
         if let Some(rendered) = session.menu.render_page(&ctx, session.current_page) {
             match &rendered.renderer {
                 MenuRendererKind::Text => {
-                    // Send ShowMenu user message
-                    let show_menu_id = engine.reg_user_msg("ShowMenu", -1);
-                    let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
-
-                    engine.message_begin(
-                        goldsrc_api::MessageDest::One as i32,
-                        msg_id,
-                        None,
-                        Some(player_idx),
+                    // Send ShowMenu user message with multipart chunking (192 byte limit)
+                    Self::send_show_menu_chunked(
+                        engine,
+                        player_idx,
+                        rendered.keys_mask as i32,
+                        rendered.timeout,
+                        &rendered.text,
                     );
-                    engine.write_short(rendered.keys_mask as i32);
-                    engine.write_char(rendered.timeout);
-                    engine.write_byte(0); // multipart = 0
-                    engine.write_string(&rendered.text);
-                    engine.message_end();
                 }
                 MenuRendererKind::Dhud {
                     position,
@@ -280,23 +273,82 @@ impl MenuSessionManager {
                     crate::hud::send_hud_message(engine, Some(player_idx), &hud_msg);
 
                     // 2. Send invisible ShowMenu with active keys mask to enable slot keypresses (1..0)
-                    let show_menu_id = engine.reg_user_msg("ShowMenu", -1);
-                    let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
-
-                    engine.message_begin(
-                        goldsrc_api::MessageDest::One as i32,
-                        msg_id,
-                        None,
-                        Some(player_idx),
+                    Self::send_show_menu_chunked(
+                        engine,
+                        player_idx,
+                        rendered.keys_mask as i32,
+                        rendered.timeout,
+                        "",
                     );
-                    engine.write_short(rendered.keys_mask as i32);
-                    engine.write_char(rendered.timeout);
-                    engine.write_byte(0);
-                    engine.write_string(""); // Invisible text
-                    engine.message_end();
                 }
             }
             session.rendered_page = Some(rendered);
+        }
+    }
+
+    /// Sends a `ShowMenu` message chunked across multiple packets using the GoldSrc `multipart` flag
+    /// to avoid exceeding the engine's 192-byte UserMessage buffer limit.
+    pub fn send_show_menu_chunked(
+        engine: &dyn Engine,
+        player_idx: i32,
+        keys_mask: i32,
+        timeout: i32,
+        text: &str,
+    ) {
+        let show_menu_id = engine.reg_user_msg("ShowMenu", -1);
+        let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
+
+        if text.is_empty() {
+            engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                msg_id,
+                None,
+                Some(player_idx),
+            );
+            engine.write_short(keys_mask);
+            engine.write_char(timeout);
+            engine.write_byte(0); // multipart = 0
+            engine.write_string("");
+            engine.message_end();
+            return;
+        }
+
+        // GoldSrc user message buffer limit is 192 bytes.
+        // Overhead: 2 (short keys) + 1 (char time) + 1 (byte multipart) + 1 (null terminator) = 5 bytes.
+        // Safe payload margin: 150 bytes per chunk.
+        let max_chunk = 150;
+        let mut remaining = text;
+
+        while !remaining.is_empty() {
+            let chunk_len = if remaining.len() <= max_chunk {
+                remaining.len()
+            } else {
+                let mut end = max_chunk;
+                while end > 0 && !remaining.is_char_boundary(end) {
+                    end -= 1;
+                }
+                if end == 0 {
+                    remaining.chars().next().map(|c| c.len_utf8()).unwrap_or(1)
+                } else {
+                    end
+                }
+            };
+
+            let chunk = &remaining[..chunk_len];
+            remaining = &remaining[chunk_len..];
+            let has_more = !remaining.is_empty();
+
+            engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                msg_id,
+                None,
+                Some(player_idx),
+            );
+            engine.write_short(keys_mask);
+            engine.write_char(timeout);
+            engine.write_byte(if has_more { 1 } else { 0 }); // 1 = append, 0 = finish
+            engine.write_string(chunk);
+            engine.message_end();
         }
     }
 

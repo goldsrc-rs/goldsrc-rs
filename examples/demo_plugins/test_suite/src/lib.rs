@@ -53,6 +53,15 @@ impl TestSuite {
 
     #[event]
     fn handle_event(name: String, data: Vec<u8>) {
+        // Filter out high-frequency per-frame events to avoid console spam
+        if name == "player_post_think"
+            || name == "player_pre_think"
+            || name == "entity_touch"
+            || name == "on_frame"
+        {
+            return;
+        }
+
         if data.is_empty() {
             log_info!(
                 "[Test Suite] Event Handler received: '{}' (no payload)",

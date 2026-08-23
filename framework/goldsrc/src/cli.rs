@@ -501,7 +501,13 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             let end = (start + page_size).min(total_plugins);
 
             for p in &plugins[start..end] {
-                let status = if p.is_paused { "PAUSED" } else { "RUNNING" };
+                let status = if p.is_poisoned {
+                    "POISONED"
+                } else if p.is_paused {
+                    "PAUSED"
+                } else {
+                    "RUNNING"
+                };
                 let mut exports = Vec::new();
                 if p.has_on_load {
                     exports.push("on_load");
@@ -707,10 +713,14 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     out(&format!("--- Plugin Info: {} ---\n", info.name));
                     out(&format!("  Index:        #{}\n", info.index));
                     out(&format!("  Path:         \"{}\"\n", clean_path));
-                    out(&format!(
-                        "  Status:       {}\n",
-                        if info.is_paused { "Paused" } else { "Running" }
-                    ));
+                    let status_str = if info.is_poisoned {
+                        "Poisoned (Trapped / Timeout)"
+                    } else if info.is_paused {
+                        "Paused"
+                    } else {
+                        "Running"
+                    };
+                    out(&format!("  Status:       {}\n", status_str));
                     if let Some(meta) = &info.metadata {
                         out(&format!("  Meta Name:    {}\n", meta.name));
                         out(&format!("  Version:      {}\n", meta.version));
