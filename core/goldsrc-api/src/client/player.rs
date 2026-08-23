@@ -259,6 +259,137 @@ impl Player {
         }
     }
 
+    /// Prints a center notification message to the player.
+    pub fn print_center(&self, msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_print_center(self.index, msg);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (self.index, msg);
+        }
+    }
+
+    /// Displays a raw `ShowMenu` dialog to the player.
+    pub fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_show_menu(
+                self.index, keys_mask, timeout, text,
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (self.index, keys_mask, timeout, text);
+        }
+    }
+
+    /// Sends a screen HUD / DHUD message to the player.
+    pub fn send_hud(&self, msg: &crate::hud::HudMessage) {
+        let (effect_val, fade_in, fade_out, hold_time) = match msg.effect {
+            crate::hud::HudEffect::FadeInOut {
+                fade_in,
+                fade_out,
+                hold_time,
+            } => (0, fade_in, fade_out, hold_time),
+            crate::hud::HudEffect::Flicker {
+                fx_time: _,
+                hold_time,
+            } => (1, 0.0, 0.0, hold_time),
+            crate::hud::HudEffect::Typewriter {
+                char_time: _,
+                fade_out,
+                hold_time,
+            } => (2, 0.05, fade_out, hold_time),
+        };
+
+        match msg.kind {
+            crate::hud::HudKind::Classic { channel } => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    crate::bindings::goldsrc::engine::api::host_send_hud_message(
+                        self.index,
+                        channel as i32,
+                        msg.position.x,
+                        msg.position.y,
+                        msg.color.r as i32,
+                        msg.color.g as i32,
+                        msg.color.b as i32,
+                        msg.color.a as i32,
+                        effect_val,
+                        fade_in,
+                        fade_out,
+                        hold_time,
+                        &msg.text,
+                    );
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let _ = (channel, effect_val, fade_in, fade_out, hold_time);
+                }
+            }
+            crate::hud::HudKind::Dhud => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    crate::bindings::goldsrc::engine::api::host_send_dhud_message(
+                        self.index,
+                        msg.position.x,
+                        msg.position.y,
+                        msg.color.r as i32,
+                        msg.color.g as i32,
+                        msg.color.b as i32,
+                        msg.color.a as i32,
+                        effect_val,
+                        fade_in,
+                        fade_out,
+                        hold_time,
+                        &msg.text,
+                    );
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let _ = (effect_val, fade_in, fade_out, hold_time);
+                }
+            }
+        }
+    }
+
+    /// Renders and opens a declarative `Menu` for this player.
+    pub fn open_menu(&self, menu: &crate::menu::Menu) {
+        let ctx = crate::menu::MenuContext {
+            player_index: self.index,
+            round_number: 1,
+            round_time_elapsed: 0.0,
+            is_alive: self.health() > 0.0,
+            players_count: 1,
+        };
+
+        if let Some(page) = menu.render_page(&ctx, 0) {
+            match page.renderer {
+                crate::menu::MenuRendererKind::Text => {
+                    self.show_raw_menu(page.keys_mask as i32, page.timeout, &page.text);
+                }
+                crate::menu::MenuRendererKind::Dhud {
+                    position,
+                    color,
+                    effect,
+                } => {
+                    let hud_msg = crate::hud::HudMessage {
+                        text: page.text,
+                        kind: crate::hud::HudKind::Dhud,
+                        color,
+                        color2: color,
+                        position,
+                        effect,
+                    };
+                    self.send_hud(&hud_msg);
+                    self.show_raw_menu(page.keys_mask as i32, page.timeout, "");
+                }
+            }
+        }
+    }
+
     /// Checks if the player has the specified capability.
     pub fn has_capability(&self, name: &str) -> bool {
         crate::auth::Auth::has_capability(self.index, name)

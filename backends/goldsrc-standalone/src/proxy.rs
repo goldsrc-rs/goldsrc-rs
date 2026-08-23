@@ -408,6 +408,53 @@ pub fn forward_start_frame() {
     }
 }
 
+/// Forward a player post think call to the real game DLL if loaded.
+pub fn forward_player_post_think(edict: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnPlayerPostThink
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
+/// Forward a client kill call to the real game DLL if loaded.
+pub fn forward_client_kill(edict: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnClientKill
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
+/// Forward a touch call to the real game DLL if loaded.
+pub fn forward_touch(
+    pent_touched: *mut goldsrc_sys::edict_t,
+    pent_other: *mut goldsrc_sys::edict_t,
+) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnTouch
+    });
+    if let Some(f) = func {
+        unsafe { f(pent_touched, pent_other) };
+    }
+}
+
+/// Forward a use call to the real game DLL if loaded.
+pub fn forward_use(pent_used: *mut goldsrc_sys::edict_t, pent_other: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnUse
+    });
+    if let Some(f) = func {
+        unsafe { f(pent_used, pent_other) };
+    }
+}
+
 /// Forward Server_GetBlendingInterface call to the real game DLL.
 ///
 /// # Safety

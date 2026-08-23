@@ -204,6 +204,74 @@ unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
 // GameDLL Entry Points (loaded via liblist.gam `gamedll` key)
 // ============================================================================
 
+unsafe extern "C" fn hook_player_post_think(edict: *mut goldsrc_sys::edict_t) {
+    catch_ffi_panic("hook_player_post_think", (), || {
+        let funcs = engine_api::engfuncs();
+        let index = funcs
+            .pfnIndexOfEdict
+            .map(|f| unsafe { f(edict) })
+            .unwrap_or(0);
+        proxy::forward_player_post_think(edict);
+        goldsrc::hooks::emit_player_event("player_post_think", index);
+    });
+}
+
+unsafe extern "C" fn hook_client_kill(edict: *mut goldsrc_sys::edict_t) {
+    catch_ffi_panic("hook_client_kill", (), || {
+        let funcs = engine_api::engfuncs();
+        let index = funcs
+            .pfnIndexOfEdict
+            .map(|f| unsafe { f(edict) })
+            .unwrap_or(0);
+        proxy::forward_client_kill(edict);
+        goldsrc::hooks::emit_player_event("client_kill", index);
+    });
+}
+
+unsafe extern "C" fn hook_touch(
+    pent_touched: *mut goldsrc_sys::edict_t,
+    pent_other: *mut goldsrc_sys::edict_t,
+) {
+    catch_ffi_panic("hook_touch", (), || {
+        let funcs = engine_api::engfuncs();
+        let touched_idx = funcs
+            .pfnIndexOfEdict
+            .map(|f| unsafe { f(pent_touched) })
+            .unwrap_or(0);
+        let other_idx = funcs
+            .pfnIndexOfEdict
+            .map(|f| unsafe { f(pent_other) })
+            .unwrap_or(0);
+        let mut payload = [0u8; 8];
+        payload[0..4].copy_from_slice(&touched_idx.to_le_bytes());
+        payload[4..8].copy_from_slice(&other_idx.to_le_bytes());
+        proxy::forward_touch(pent_touched, pent_other);
+        goldsrc::hooks::emit_event("entity_touch", &payload);
+    });
+}
+
+unsafe extern "C" fn hook_use(
+    pent_used: *mut goldsrc_sys::edict_t,
+    pent_other: *mut goldsrc_sys::edict_t,
+) {
+    catch_ffi_panic("hook_use", (), || {
+        let funcs = engine_api::engfuncs();
+        let used_idx = funcs
+            .pfnIndexOfEdict
+            .map(|f| unsafe { f(pent_used) })
+            .unwrap_or(0);
+        let other_idx = funcs
+            .pfnIndexOfEdict
+            .map(|f| unsafe { f(pent_other) })
+            .unwrap_or(0);
+        let mut payload = [0u8; 8];
+        payload[0..4].copy_from_slice(&used_idx.to_le_bytes());
+        payload[4..8].copy_from_slice(&other_idx.to_le_bytes());
+        proxy::forward_use(pent_used, pent_other);
+        goldsrc::hooks::emit_event("entity_use", &payload);
+    });
+}
+
 /// Called by the engine immediately after loading the DLL.
 /// Provides engine function pointers and global variables.
 ///
@@ -217,13 +285,9 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
     globals: *mut globalvars_t,
 ) {
     // SAFETY: engfuncs and globals are engine-provided; valid for the server lifetime.
-    catch_ffi_panic("GiveFnptrsToDll", (), || {
-        unsafe {
-            // 1. Initialize our engine API layer.
-            engine_api::init(engfuncs, globals);
-            // 2. Forward engine funcs to the real game DLL.
-            proxy::forward_give_fnptrs_to_dll(engfuncs, globals);
-        }
+    catch_ffi_panic("GiveFnptrsToDll", (), || unsafe {
+        engine_api::init(engfuncs, globals);
+        proxy::forward_give_fnptrs_to_dll(engfuncs, globals);
     });
 }
 
@@ -260,6 +324,10 @@ pub unsafe extern "C" fn GetEntityAPI2(
             table.pfnClientDisconnect = Some(hook_client_disconnect);
             table.pfnClientCommand = Some(hook_client_command);
             table.pfnStartFrame = Some(hook_start_frame);
+            table.pfnPlayerPostThink = Some(hook_player_post_think);
+            table.pfnClientKill = Some(hook_client_kill);
+            table.pfnTouch = Some(hook_touch);
+            table.pfnUse = Some(hook_use);
         }
         1
     })

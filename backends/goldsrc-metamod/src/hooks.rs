@@ -151,3 +151,49 @@ pub unsafe extern "C" fn hook_start_frame() {
         goldsrc::hooks::on_server_frame();
     });
 }
+
+/// Hook for PlayerPostThink - called after player physics and movement are updated.
+pub unsafe extern "C" fn hook_player_post_think(entity: *mut goldsrc_sys::edict_t) {
+    catch_ffi_panic("hook_player_post_think", (), || {
+        let index = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity) };
+        goldsrc::hooks::emit_player_event("player_post_think", index);
+    });
+}
+
+/// Hook for ClientKill - called when a player runs the `kill` suicide command.
+pub unsafe extern "C" fn hook_client_kill(entity: *mut goldsrc_sys::edict_t) {
+    catch_ffi_panic("hook_client_kill", (), || {
+        let index = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity) };
+        goldsrc::hooks::emit_player_event("client_kill", index);
+    });
+}
+
+/// Hook for Touch - called when two entities collide.
+pub unsafe extern "C" fn hook_touch(
+    pent_touched: *mut goldsrc_sys::edict_t,
+    pent_other: *mut goldsrc_sys::edict_t,
+) {
+    catch_ffi_panic("hook_touch", (), || {
+        let touched_idx = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, pent_touched) };
+        let other_idx = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, pent_other) };
+        let mut payload = [0u8; 8];
+        payload[0..4].copy_from_slice(&touched_idx.to_le_bytes());
+        payload[4..8].copy_from_slice(&other_idx.to_le_bytes());
+        goldsrc::hooks::emit_event("entity_touch", &payload);
+    });
+}
+
+/// Hook for Use - called when an entity is activated or triggered.
+pub unsafe extern "C" fn hook_use(
+    pent_used: *mut goldsrc_sys::edict_t,
+    pent_other: *mut goldsrc_sys::edict_t,
+) {
+    catch_ffi_panic("hook_use", (), || {
+        let used_idx = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, pent_used) };
+        let other_idx = unsafe { call_engfunc_ret!(engfuncs().pfnIndexOfEdict, pent_other) };
+        let mut payload = [0u8; 8];
+        payload[0..4].copy_from_slice(&used_idx.to_le_bytes());
+        payload[4..8].copy_from_slice(&other_idx.to_le_bytes());
+        goldsrc::hooks::emit_event("entity_use", &payload);
+    });
+}

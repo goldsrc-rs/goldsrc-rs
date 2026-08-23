@@ -5,6 +5,7 @@ use goldsrc_wasm_host::error::HostError;
 
 pub struct HostRuntime {
     manager: PluginManager,
+    engine: std::sync::Arc<dyn goldsrc_api::Engine>,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -27,7 +28,7 @@ impl HostRuntime {
         };
         goldsrc_wasm_host::set_print_callback(print_cb);
 
-        let mut manager = PluginManager::new(engine)
+        let mut manager = PluginManager::new(engine.clone())
             .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
 
         let sys_config = GoldSrcConfig::load_or_create(backend);
@@ -106,9 +107,16 @@ impl HostRuntime {
             }
         }
 
-        let runtime = Self { manager };
+        let runtime = Self { manager, engine };
         let _ = RUNTIME.set(Mutex::new(runtime));
         Ok(())
+    }
+
+    /// Returns a clone of the Engine reference if initialized.
+    pub fn engine() -> Option<std::sync::Arc<dyn goldsrc_api::Engine>> {
+        RUNTIME
+            .get()
+            .and_then(|lock| lock.lock().ok().map(|g| g.engine.clone()))
     }
 
     /// Run `f` with exclusive access to the `PluginManager`, if initialized.

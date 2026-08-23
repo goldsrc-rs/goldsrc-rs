@@ -57,17 +57,28 @@ macro_rules! log_debug {
     };
 }
 
+/// Screen HUD and DHUD message serialization and formatting.
+#[cfg(feature = "host")]
+pub mod hud;
+/// Runtime menu session manager and pagination.
+#[cfg(feature = "host")]
+pub mod menu;
+
 pub use ::log;
 pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
 pub use goldsrc_api::engine_api as engine;
+pub use goldsrc_api::hud as hud_api;
+pub use goldsrc_api::menu as menu_api;
 pub use goldsrc_api::{
     Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
-    CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead, Engine,
-    Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Spectator, Team, Terrorist,
-    Vector3,
+    CommandError, CommandResult, CommandTarget, Condition, ConnectionState, CounterTerrorist, Dead,
+    DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, FromArg, HLTV, HudColor, HudCoord,
+    HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu,
+    MenuBuilder, MenuContext, MenuItem, MenuRendererKind, MenuStyle, Player, PlayerStateFilter,
+    RenderedMenuPage, SlotAction, Spectator, Team, Terrorist, Vector3, VisualDeny,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{command, event, on_load, plugin};
@@ -76,11 +87,16 @@ pub use goldsrc_macros::{command, event, on_load, plugin};
 pub mod prelude {
     pub use crate::ecs::*;
     pub use crate::engine;
+    pub use crate::hud_api as hud;
+    pub use crate::menu_api;
     pub use crate::{
         Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
-        CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead,
-        Engine, Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Spectator, Team,
-        Terrorist, Vector3,
+        CommandError, CommandResult, CommandTarget, Condition, ConnectionState, CounterTerrorist,
+        Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, FromArg, HLTV, HudColor,
+        HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle,
+        LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuRendererKind, MenuStyle, Player,
+        PlayerStateFilter, RenderedMenuPage, SlotAction, Spectator, Team, Terrorist, Vector3,
+        VisualDeny,
     };
     pub use crate::{command, event, on_load, plugin};
     pub use crate::{log_debug, log_err, log_info, log_warn};

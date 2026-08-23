@@ -377,6 +377,21 @@ impl goldsrc_api::EngineConsole for EngineBackend {
         }
     }
 
+    fn client_print(&self, client_index: i32, print_type: i32, message: &str) {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            if let Some(pfn_p_entity_of_ent_index) = funcs.pfnPEntityOfEntIndex {
+                let pedict = pfn_p_entity_of_ent_index(client_index);
+                if !pedict.is_null() {
+                    let safe = escape_server_print(message);
+                    if let Ok(cstr) = std::ffi::CString::new(safe) {
+                        call_engfunc!(funcs.pfnClientPrintf, pedict, print_type, cstr.as_ptr());
+                    }
+                }
+            }
+        }
+    }
+
     fn server_command(&self, command: &str) {
         unsafe {
             let cmd = std::ffi::CString::new(command).unwrap_or_default();

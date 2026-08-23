@@ -22,6 +22,9 @@ pub fn emit_event(name: &str, payload: &[u8]) -> bool {
 pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
         goldsrc_api::auth::Auth::remove_player(index);
+        if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+            mgr.on_disconnect(index);
+        }
     }
     emit_event(name, &index.to_le_bytes())
 }
@@ -41,6 +44,19 @@ pub fn dispatch_command(cmd: &str, args: &str) -> bool {
 /// Dispatches a client command (including chat commands e.g. `say /vip` or console `vipmenu`).
 /// Returns `true` if a plugin intercepted and handled the command (requesting suppression from GameDLL).
 pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bool {
+    // 1. Check for `menuselect <slot>` client command (slot 1..=10)
+    if cmd.eq_ignore_ascii_case("menuselect")
+        && let Ok(slot) = raw_args.trim().parse::<u8>()
+    {
+        let slot = if slot == 0 { 10 } else { slot };
+        if let Some(engine) = HostRuntime::engine()
+            && let Ok(mut mgr) = crate::menu::menu_manager().lock()
+            && mgr.handle_menuselect(player_idx, slot, engine.as_ref(), 0.0)
+        {
+            return true;
+        }
+    }
+
     HostRuntime::with_manager(|m| {
         let Some(manager) = m else {
             return false;
@@ -79,10 +95,13 @@ pub fn on_server_activate() {
 }
 
 /// Invoked when the current server map is ending or server shutting down (ServerDeactivate).
-/// Advances map generation to invalidate cached EDicts and clears player capabilities.
+/// Advances map generation to invalidate cached EDicts and clears player capabilities and menu sessions.
 pub fn on_server_deactivate() {
     goldsrc_api::edict::bump_map_generation();
     goldsrc_api::auth::Auth::clear_all_players();
+    if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+        mgr.on_map_change();
+    }
     emit_event("server_deactivate", &[]);
 }
 

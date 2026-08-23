@@ -174,6 +174,157 @@ impl api::Host for HostState {
         self.engine.message_end();
     }
 
+    fn host_print_center(&mut self, player_index: i32, message: String) {
+        if player_index <= 0 {
+            self.engine.server_print(&format!("[Center] {message}\n"));
+            return;
+        }
+        // 1 = PRINT_CENTER in GoldSrc client_printf
+        self.engine
+            .client_print(player_index, 1, &format!("{message}\n"));
+    }
+
+    fn host_show_menu(&mut self, player_index: i32, keys_mask: i32, timeout: i32, text: String) {
+        if player_index <= 0 {
+            return;
+        }
+        let show_menu_id = self.engine.reg_user_msg("ShowMenu", -1);
+        let msg_id = if show_menu_id <= 0 { 9 } else { show_menu_id };
+        self.engine.message_begin(
+            goldsrc_api::MessageDest::One as i32,
+            msg_id,
+            None,
+            Some(player_index),
+        );
+        self.engine.write_short(keys_mask);
+        self.engine.write_char(timeout);
+        self.engine.write_byte(0);
+        self.engine.write_string(&text);
+        self.engine.message_end();
+    }
+
+    fn host_send_hud_message(
+        &mut self,
+        player_index: i32,
+        channel: i32,
+        x: f32,
+        y: f32,
+        r: i32,
+        g: i32,
+        b: i32,
+        a: i32,
+        effect: i32,
+        fade_in: f32,
+        fade_out: f32,
+        hold_time: f32,
+        text: String,
+    ) {
+        let dest = if player_index <= 0 {
+            goldsrc_api::MessageDest::All as i32
+        } else {
+            goldsrc_api::MessageDest::One as i32
+        };
+        let target = if player_index <= 0 {
+            None
+        } else {
+            Some(player_index)
+        };
+        let x_val = (if x < 0.0 { -1.0 } else { x } * 8192.0) as i32;
+        let y_val = (if y < 0.0 { -1.0 } else { y } * 8192.0) as i32;
+
+        self.engine.message_begin(dest, 23, None, target); // 23 = SVC_TEMPENTITY
+        self.engine.write_byte(29); // TE_TEXTMESSAGE
+        self.engine.write_byte(channel.clamp(1, 4));
+        self.engine.write_short(x_val);
+        self.engine.write_short(y_val);
+        self.engine.write_byte(effect.clamp(0, 2));
+        self.engine.write_byte(r.clamp(0, 255));
+        self.engine.write_byte(g.clamp(0, 255));
+        self.engine.write_byte(b.clamp(0, 255));
+        self.engine.write_byte(a.clamp(0, 255));
+        self.engine.write_byte(r.clamp(0, 255)); // 2nd color fallback
+        self.engine.write_byte(g.clamp(0, 255));
+        self.engine.write_byte(b.clamp(0, 255));
+        self.engine.write_byte(a.clamp(0, 255));
+        self.engine.write_short((fade_in * 256.0) as i32);
+        self.engine.write_short((fade_out * 256.0) as i32);
+        self.engine.write_short((hold_time * 256.0) as i32);
+        self.engine.write_short(0);
+        self.engine.write_string(&text);
+        self.engine.message_end();
+    }
+
+    fn host_send_dhud_message(
+        &mut self,
+        player_index: i32,
+        x: f32,
+        y: f32,
+        r: i32,
+        g: i32,
+        b: i32,
+        a: i32,
+        effect: i32,
+        fade_in: f32,
+        fade_out: f32,
+        hold_time: f32,
+        text: String,
+    ) {
+        let dest = if player_index <= 0 {
+            goldsrc_api::MessageDest::All as i32
+        } else {
+            goldsrc_api::MessageDest::One as i32
+        };
+        let target = if player_index <= 0 {
+            None
+        } else {
+            Some(player_index)
+        };
+        let x_val = (if x < 0.0 { -1.0 } else { x } * 8192.0) as i32;
+        let y_val = (if y < 0.0 { -1.0 } else { y } * 8192.0) as i32;
+
+        let text_bytes = text.as_bytes();
+        let total_len = 1 + 1 + 2 + 2 + 1 + 4 + 4 + 2 + 2 + 2 + 2 + text_bytes.len() + 1;
+
+        if total_len <= 500 {
+            self.engine.message_begin(dest, 10, None, target); // SVC_DIRECTOR = 10
+            self.engine.write_byte(total_len as i32);
+            self.engine.write_byte(2); // DRC_CMD_MESSAGE
+            self.engine.write_byte(effect.clamp(0, 2));
+            self.engine.write_short(x_val);
+            self.engine.write_short(y_val);
+            self.engine.write_byte(r.clamp(0, 255));
+            self.engine.write_byte(g.clamp(0, 255));
+            self.engine.write_byte(b.clamp(0, 255));
+            self.engine.write_byte(a.clamp(0, 255));
+            self.engine.write_byte(r.clamp(0, 255));
+            self.engine.write_byte(g.clamp(0, 255));
+            self.engine.write_byte(b.clamp(0, 255));
+            self.engine.write_byte(a.clamp(0, 255));
+            self.engine.write_short((fade_in * 256.0) as i32);
+            self.engine.write_short((fade_out * 256.0) as i32);
+            self.engine.write_short((hold_time * 256.0) as i32);
+            self.engine.write_short(0);
+            self.engine.write_string(&text);
+            self.engine.message_end();
+        } else {
+            self.host_send_hud_message(
+                player_index,
+                4,
+                x,
+                y,
+                r,
+                g,
+                b,
+                a,
+                effect,
+                fade_in,
+                fade_out,
+                hold_time,
+                text,
+            );
+        }
+    }
+
     fn host_register_capability(&mut self, name: String, description: String) -> bool {
         if name.is_empty() || name.len() > 256 || description.len() > 4096 {
             return false;
@@ -719,6 +870,7 @@ mod tests {
 
     impl goldsrc_api::EngineConsole for NoopEngineOps {
         fn server_print(&self, _message: &str) {}
+        fn client_print(&self, _client_index: i32, _print_type: i32, _message: &str) {}
         fn server_command(&self, _command: &str) {}
     }
 

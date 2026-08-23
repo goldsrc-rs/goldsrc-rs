@@ -17,6 +17,10 @@ pub mod consts;
 pub mod edict;
 /// Modular engine sub-system traits, unified engine bridge, and API facade.
 pub mod engine;
+/// Screen HUD and DHUD message builders and styling.
+pub mod hud;
+/// Declarative multi-page menu system.
+pub mod menu;
 
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use client::{
@@ -31,6 +35,11 @@ pub use edict::EDict;
 pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
     EnginePrecache, EngineSound, MessageDest, TraceResult, engine_api,
+};
+pub use hud::{HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder};
+pub use menu::{
+    Condition, DenyAction, DenyPolicy, ExitBehavior, ItemKind, ItemTitle, Menu, MenuBuilder,
+    MenuContext, MenuItem, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,
 };
 
 /// Safe wrapper around `edict_t` (entity dictionary).

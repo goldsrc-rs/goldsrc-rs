@@ -151,6 +151,10 @@ pub unsafe extern "C" fn GetEntityAPI2(
             table.pfnClientDisconnect = Some(crate::hooks::hook_client_disconnect);
             table.pfnClientCommand = Some(crate::hooks::hook_client_command);
             table.pfnStartFrame = Some(crate::hooks::hook_start_frame);
+            table.pfnPlayerPostThink = Some(crate::hooks::hook_player_post_think);
+            table.pfnClientKill = Some(crate::hooks::hook_client_kill);
+            table.pfnTouch = Some(crate::hooks::hook_touch);
+            table.pfnUse = Some(crate::hooks::hook_use);
         }
         1
     })

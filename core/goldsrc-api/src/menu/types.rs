@@ -1,0 +1,496 @@
+//! Core domain types for the interactive GoldSrc.rs Menu System.
+
+use std::sync::Arc;
+
+/// Context passed to dynamic menu item formatters and conditions during page evaluation.
+#[derive(Debug, Clone)]
+pub struct MenuContext {
+    pub player_index: i32,
+    pub round_number: u32,
+    pub round_time_elapsed: f32,
+    pub is_alive: bool,
+    pub players_count: u32,
+}
+
+impl MenuContext {
+    pub fn new(player_index: i32) -> Self {
+        Self {
+            player_index,
+            round_number: 1,
+            round_time_elapsed: 0.0,
+            is_alive: true,
+            players_count: 1,
+        }
+    }
+}
+
+/// Type alias for dynamic deny format functions.
+pub type DenyFormatFn = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
+/// Type alias for custom deny action callbacks.
+pub type DenyActionFn = Arc<dyn Fn(i32) + Send + Sync>;
+/// Type alias for dynamic condition predicates.
+pub type ConditionFn = Arc<dyn Fn(&MenuContext) -> Result<(), String> + Send + Sync>;
+/// Type alias for dynamic item title resolvers.
+pub type DynamicTitleFn = Arc<dyn Fn(&MenuContext) -> String + Send + Sync>;
+/// Type alias for header format functions.
+pub type HeaderFormatFn = Arc<dyn Fn(&str, usize, usize) -> String + Send + Sync>;
+/// Type alias for item format functions.
+pub type ItemFormatFn = Arc<dyn Fn(usize, &str) -> String + Send + Sync>;
+
+/// Visual presentation policy when a menu item's condition fails.
+#[derive(Clone)]
+pub enum VisualDeny {
+    /// Item is formatted with dim/grey color `\d` (e.g. `\d1. Buy AWP`).
+    Dimmed,
+    /// Item title is completely replaced (e.g. `\d1. [Unavailable until Round 3]`).
+    Replace(String),
+    /// Dynamic formatting function receiving original title and failure reason.
+    Format(DenyFormatFn),
+    /// Item is completely omitted from the page, shifting subsequent items up.
+    Hide,
+}
+
+impl std::fmt::Debug for VisualDeny {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Dimmed => write!(f, "VisualDeny::Dimmed"),
+            Self::Replace(s) => write!(f, "VisualDeny::Replace({s:?})"),
+            Self::Format(_) => write!(f, "VisualDeny::Format(<fn>)"),
+            Self::Hide => write!(f, "VisualDeny::Hide"),
+        }
+    }
+}
+
+/// Behavioral response when an unauthorized/denied menu slot is pressed.
+#[derive(Clone)]
+pub enum DenyAction {
+    /// Slot is excluded from `ShowMenu` keys mask; pressing key is ignored by engine.
+    Disabled,
+    /// Slot is included in keys mask; pressing key triggers no-op and keeps menu open.
+    Noop,
+    /// Slot is included in keys mask; pressing key dispatches custom feedback message/sound.
+    Feedback {
+        message: Option<String>,
+        sound: Option<String>,
+    },
+    /// Custom callback function executed when player presses the denied slot.
+    Custom(DenyActionFn),
+}
+
+impl std::fmt::Debug for DenyAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disabled => write!(f, "DenyAction::Disabled"),
+            Self::Noop => write!(f, "DenyAction::Noop"),
+            Self::Feedback { message, sound } => {
+                write!(
+                    f,
+                    "DenyAction::Feedback {{ message: {message:?}, sound: {sound:?} }}"
+                )
+            }
+            Self::Custom(_) => write!(f, "DenyAction::Custom(<fn>)"),
+        }
+    }
+}
+
+/// Composite deny policy governing visual rendering and interaction on condition failure.
+#[derive(Debug, Clone)]
+pub struct DenyPolicy {
+    pub visual: VisualDeny,
+    pub action: DenyAction,
+}
+
+impl DenyPolicy {
+    /// Default disabled policy: Dimmed grey text, non-clickable slot.
+    pub const fn disabled() -> Self {
+        Self {
+            visual: VisualDeny::Dimmed,
+            action: DenyAction::Disabled,
+        }
+    }
+
+    /// Hidden policy: Completely omitted from the rendered page.
+    pub const fn hide() -> Self {
+        Self {
+            visual: VisualDeny::Hide,
+            action: DenyAction::Disabled,
+        }
+    }
+
+    /// Replace policy: Replaces title with alternative text, non-clickable slot.
+    pub fn replace<S: Into<String>>(new_title: S) -> Self {
+        Self {
+            visual: VisualDeny::Replace(new_title.into()),
+            action: DenyAction::Disabled,
+        }
+    }
+
+    /// Interactive feedback policy: Shows replaced title and emits sound/message on click.
+    pub fn feedback<S: Into<String>>(title: S, feedback_msg: S, sound: Option<String>) -> Self {
+        Self {
+            visual: VisualDeny::Replace(title.into()),
+            action: DenyAction::Feedback {
+                message: Some(feedback_msg.into()),
+                sound,
+            },
+        }
+    }
+}
+
+impl Default for DenyPolicy {
+    fn default() -> Self {
+        Self::disabled()
+    }
+}
+
+/// Dynamic condition predicate evaluated before displaying or selecting a menu item.
+#[derive(Clone)]
+pub enum Condition {
+    /// Requires a specific capability via `Auth::has_capability`.
+    Capability(String),
+    /// Accessible only starting from a minimum round number.
+    MinRound(u32),
+    /// Accessible only if within elapsed seconds of round start.
+    TimeLimit(f32),
+    /// Accessible only if server has at least `N` players.
+    MinPlayers(u32),
+    /// Accessible only to alive players.
+    AliveOnly,
+    /// Accessible only to dead players / spectators.
+    DeadOnly,
+    /// Custom predicate returning `Ok(())` or `Err(Reason)`.
+    Custom(ConditionFn),
+}
+
+impl Condition {
+    pub fn check(&self, ctx: &MenuContext) -> Result<(), String> {
+        match self {
+            Self::Capability(cap) => {
+                if crate::auth::Auth::has_capability(ctx.player_index, cap) {
+                    Ok(())
+                } else {
+                    Err(format!("Requires capability '{cap}'"))
+                }
+            }
+            Self::MinRound(r) => {
+                if ctx.round_number >= *r {
+                    Ok(())
+                } else {
+                    Err(format!("Available from round {r}"))
+                }
+            }
+            Self::TimeLimit(t) => {
+                if ctx.round_time_elapsed <= *t {
+                    Ok(())
+                } else {
+                    Err(format!("Expired (limit: {t:.0}s)"))
+                }
+            }
+            Self::MinPlayers(p) => {
+                if ctx.players_count >= *p {
+                    Ok(())
+                } else {
+                    Err(format!("Requires at least {p} players"))
+                }
+            }
+            Self::AliveOnly => {
+                if ctx.is_alive {
+                    Ok(())
+                } else {
+                    Err("Alive players only".into())
+                }
+            }
+            Self::DeadOnly => {
+                if !ctx.is_alive {
+                    Ok(())
+                } else {
+                    Err("Dead players only".into())
+                }
+            }
+            Self::Custom(cb) => cb(ctx),
+        }
+    }
+}
+
+impl std::fmt::Debug for Condition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Capability(c) => write!(f, "Condition::Capability({c:?})"),
+            Self::MinRound(r) => write!(f, "Condition::MinRound({r})"),
+            Self::TimeLimit(t) => write!(f, "Condition::TimeLimit({t})"),
+            Self::MinPlayers(p) => write!(f, "Condition::MinPlayers({p})"),
+            Self::AliveOnly => write!(f, "Condition::AliveOnly"),
+            Self::DeadOnly => write!(f, "Condition::DeadOnly"),
+            Self::Custom(_) => write!(f, "Condition::Custom(<fn>)"),
+        }
+    }
+}
+
+/// Item title representation (static string or dynamic closure).
+#[derive(Clone)]
+pub enum ItemTitle {
+    Static(String),
+    Dynamic(DynamicTitleFn),
+}
+
+impl ItemTitle {
+    pub fn resolve(&self, ctx: &MenuContext) -> String {
+        match self {
+            Self::Static(s) => s.clone(),
+            Self::Dynamic(cb) => cb(ctx),
+        }
+    }
+}
+
+impl std::fmt::Debug for ItemTitle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Static(s) => write!(f, "ItemTitle::Static({s:?})"),
+            Self::Dynamic(_) => write!(f, "ItemTitle::Dynamic(<fn>)"),
+        }
+    }
+}
+
+impl<S: Into<String>> From<S> for ItemTitle {
+    fn from(s: S) -> Self {
+        Self::Static(s.into())
+    }
+}
+
+/// Structural kind of a menu element.
+#[derive(Clone)]
+pub enum ItemKind {
+    /// Interactive action item assigned a numbered slot (1..8).
+    Action { id: u32, action_name: String },
+    /// Static informational text line without slot assignment.
+    Text,
+    /// Empty line spacer for visual grouping.
+    Spacer,
+    /// Horizontal divider (e.g. `\d-----------------------`).
+    Divider(String),
+}
+
+impl std::fmt::Debug for ItemKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Action { id, action_name } => {
+                write!(
+                    f,
+                    "ItemKind::Action {{ id: {id}, action_name: {action_name:?} }}"
+                )
+            }
+            Self::Text => write!(f, "ItemKind::Text"),
+            Self::Spacer => write!(f, "ItemKind::Spacer"),
+            Self::Divider(d) => write!(f, "ItemKind::Divider({d:?})"),
+        }
+    }
+}
+
+/// A fully configured item within a `Menu`.
+#[derive(Debug, Clone)]
+pub struct MenuItem {
+    pub title: ItemTitle,
+    pub kind: ItemKind,
+    pub conditions: Vec<Condition>,
+    pub deny_policy: DenyPolicy,
+}
+
+impl MenuItem {
+    /// Creates a standard interactive action item.
+    pub fn new<T: Into<ItemTitle>>(title: T, id: u32) -> Self {
+        Self {
+            title: title.into(),
+            kind: ItemKind::Action {
+                id,
+                action_name: String::new(),
+            },
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+        }
+    }
+
+    /// Creates an action item with an explicit action name.
+    pub fn with_action<T: Into<ItemTitle>, S: Into<String>>(title: T, id: u32, action: S) -> Self {
+        Self {
+            title: title.into(),
+            kind: ItemKind::Action {
+                id,
+                action_name: action.into(),
+            },
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+        }
+    }
+
+    /// Creates a static text element.
+    pub fn text<T: Into<ItemTitle>>(title: T) -> Self {
+        Self {
+            title: title.into(),
+            kind: ItemKind::Text,
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+        }
+    }
+
+    /// Creates an empty line spacer.
+    pub fn spacer() -> Self {
+        Self {
+            title: ItemTitle::Static(String::new()),
+            kind: ItemKind::Spacer,
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+        }
+    }
+
+    /// Creates a horizontal divider.
+    pub fn divider<S: Into<String>>(divider_str: S) -> Self {
+        Self {
+            title: ItemTitle::Static(String::new()),
+            kind: ItemKind::Divider(divider_str.into()),
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+        }
+    }
+
+    /// Attaches an access condition.
+    pub fn require(mut self, condition: Condition) -> Self {
+        self.conditions.push(condition);
+        self
+    }
+
+    /// Configures the deny policy on condition failure.
+    pub fn on_deny(mut self, policy: DenyPolicy) -> Self {
+        self.deny_policy = policy;
+        self
+    }
+
+    /// Shortcut: Replace title when denied.
+    pub fn on_deny_replace<S: Into<String>>(self, new_title: S) -> Self {
+        self.on_deny(DenyPolicy::replace(new_title))
+    }
+}
+
+impl<S: Into<String>> From<(S, u32)> for MenuItem {
+    fn from((title, id): (S, u32)) -> Self {
+        Self::new(title, id)
+    }
+}
+
+/// Navigation and exit behavior when player leaves or navigates submenus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExitBehavior {
+    /// Closing menu closes all active and parent menu sessions.
+    CloseAll,
+    /// Closing submenu automatically pops and reopens the parent menu from history stack.
+    #[default]
+    PopParent,
+}
+
+/// Visual formatting style configuration for rendered menus.
+#[derive(Clone)]
+pub struct MenuStyle {
+    /// Header template: receives (title, current_page, max_pages).
+    pub header_format: HeaderFormatFn,
+    /// Active item template: receives (slot_number, item_title).
+    pub item_format: ItemFormatFn,
+    /// Disabled item template: receives (slot_number, item_title).
+    pub disabled_item_format: ItemFormatFn,
+    /// Number of action items per page (default: 7).
+    pub items_per_page: usize,
+    /// Back button label.
+    pub back_text: String,
+    /// Next button label.
+    pub next_text: String,
+    /// Exit button label.
+    pub exit_text: String,
+}
+
+impl MenuStyle {
+    /// Classic GoldSrc style: `\y1.\w Title`, `\y8. Back`, `\y9. Next`, `\r0. Exit`.
+    pub fn classic() -> Self {
+        Self {
+            header_format: Arc::new(|title, page, max_pages| {
+                if max_pages > 1 {
+                    format!("\\y{title}\\R\\d{page}/{max_pages}\\n\\n")
+                } else {
+                    format!("\\y{title}\\n\\n")
+                }
+            }),
+            item_format: Arc::new(|slot, text| format!("\\y{slot}.\\w {text}\\n")),
+            disabled_item_format: Arc::new(|slot, text| format!("\\d{slot}. {text}\\n")),
+            items_per_page: 7,
+            back_text: "\\y8. Назад\\n".into(),
+            next_text: "\\y9. Вперед\\n".into(),
+            exit_text: "\\r0. Выход\\n".into(),
+        }
+    }
+
+    /// Modern brackets style: `\r[1]\w Title`.
+    pub fn brackets() -> Self {
+        Self {
+            header_format: Arc::new(|title, page, max_pages| {
+                if max_pages > 1 {
+                    format!("\\y=== {title} ===\\R\\d[{page}/{max_pages}]\\n\\n")
+                } else {
+                    format!("\\y=== {title} ===\\n\\n")
+                }
+            }),
+            item_format: Arc::new(|slot, text| format!("\\r[{slot}]\\w {text}\\n")),
+            disabled_item_format: Arc::new(|slot, text| format!("\\d[{slot}] {text}\\n")),
+            items_per_page: 7,
+            back_text: "\\y[8] Назад\\n".into(),
+            next_text: "\\y[9] Вперед\\n".into(),
+            exit_text: "\\r[0] Выход\\n".into(),
+        }
+    }
+
+    /// Raw uncolored style (developer provides all color tags explicitly).
+    pub fn raw() -> Self {
+        Self {
+            header_format: Arc::new(|title, page, max_pages| {
+                if max_pages > 1 {
+                    format!("{title} ({page}/{max_pages})\n\n")
+                } else {
+                    format!("{title}\n\n")
+                }
+            }),
+            item_format: Arc::new(|slot, text| format!("{slot}. {text}\n")),
+            disabled_item_format: Arc::new(|slot, text| format!("{slot}. {text}\n")),
+            items_per_page: 7,
+            back_text: "8. Back\n".into(),
+            next_text: "9. Next\n".into(),
+            exit_text: "0. Exit\n".into(),
+        }
+    }
+}
+
+impl Default for MenuStyle {
+    fn default() -> Self {
+        Self::classic()
+    }
+}
+
+impl std::fmt::Debug for MenuStyle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MenuStyle")
+            .field("items_per_page", &self.items_per_page)
+            .field("back_text", &self.back_text)
+            .field("next_text", &self.next_text)
+            .field("exit_text", &self.exit_text)
+            .finish()
+    }
+}
+
+/// Rendering target backend for displaying the menu.
+#[derive(Debug, Clone, Default)]
+pub enum MenuRendererKind {
+    /// Classic GoldSrc `ShowMenu` user message (`\w\y\r\d`).
+    #[default]
+    Text,
+    /// Director HUD message (`SVC_DIRECTOR`) + invisible `ShowMenu` key interceptor.
+    Dhud {
+        position: crate::hud::HudCoord,
+        color: crate::hud::HudColor,
+        effect: crate::hud::HudEffect,
+    },
+}

@@ -132,13 +132,14 @@ mod tests {
 
     #[test]
     fn capability_lifecycle() {
-        Auth::register_capability("admin", "test capability");
-        assert!(!Auth::has_capability(1, "admin"));
-        assert!(Auth::grant_capability(1, "admin"));
-        assert!(Auth::has_capability(1, "admin"));
-        assert!(!Auth::grant_capability(1, "missing"));
-        assert!(Auth::revoke_capability(1, "admin"));
-        assert!(!Auth::has_capability(1, "admin"));
+        Auth::register_capability("test_admin_cap", "test capability");
+        Auth::remove_player(10);
+        assert!(!Auth::has_capability(10, "test_admin_cap"));
+        assert!(Auth::grant_capability(10, "test_admin_cap"));
+        assert!(Auth::has_capability(10, "test_admin_cap"));
+        assert!(!Auth::grant_capability(10, "nonexistent_cap"));
+        assert!(Auth::revoke_capability(10, "test_admin_cap"));
+        assert!(!Auth::has_capability(10, "test_admin_cap"));
     }
 
     #[test]
