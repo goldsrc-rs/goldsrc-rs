@@ -92,7 +92,7 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
                     lines.append(expected_line)
                     found_and_enabled = True
             # If this is another active gamedll entry, comment it out
-            elif (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//") and not stripped.startswith(";"):
+            elif (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//"):
                 lines.append(f"// {line}  // Replaced by GoldSrc.rs deploy")
             else:
                 lines.append(line)
@@ -100,7 +100,7 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
         # Target not present in file yet: comment out existing active gamedll and prepend ours
         for line in file_lines:
             stripped = line.strip()
-            if (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//") and not stripped.startswith(";"):
+            if (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//"):
                 if not found_and_enabled:
                     lines.append(expected_line)
                     found_and_enabled = True
@@ -228,7 +228,7 @@ def restore_liblist_gam_for_metamod(game_path: Path) -> None:
             continue
         elif "addons" in stripped and "metamod" in stripped:
             # Uncomment metamod gamedll if commented out by deploy
-            clean_line = stripped.lstrip("/; \t")
+            clean_line = stripped.lstrip("/ \t")
             if clean_line.endswith("// Replaced by GoldSrc.rs deploy"):
                 clean_line = clean_line[: -len("// Replaced by GoldSrc.rs deploy")].strip()
             lines.append(clean_line)

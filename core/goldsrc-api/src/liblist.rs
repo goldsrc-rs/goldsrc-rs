@@ -63,11 +63,9 @@ impl LibList {
                 continue;
             }
 
-            // Check for commented out gamedll (e.g. `; gamedll "dlls/mp.dll"` or `// gamedll "dlls/mp.dll"`)
-            if (trimmed.starts_with(';') || trimmed.starts_with("//"))
-                && let Some(uncommented) = trimmed
-                    .strip_prefix(';')
-                    .or_else(|| trimmed.strip_prefix("//"))
+            // Check for commented out gamedll (e.g. `// gamedll "dlls/mp.dll"`)
+            if trimmed.starts_with("//")
+                && let Some(uncommented) = trimmed.strip_prefix("//")
             {
                 let clean = uncommented.trim();
                 if let Some((k, v)) = Self::parse_key_value(clean)
@@ -252,7 +250,7 @@ secure "1"
     fn test_parse_commented_proxy_gamedll() {
         let content = r#"
 game "Counter-Strike"
-; gamedll "dlls/mp.dll"
+// gamedll "dlls/mp.dll"
 gamedll "cstrike/goldsrc/bin/goldsrc_standalone.dll"
 edicts "2048"
 "#;
