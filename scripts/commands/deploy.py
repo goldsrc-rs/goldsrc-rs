@@ -487,6 +487,8 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
+    import time
+    t_deploy_total = time.perf_counter()
     repo_root = Path(__file__).resolve().parent.parent.parent
     game_path = resolve_game_path(args.path, repo_root)
     dest_name = get_dest_name(args.backend, args.target)
@@ -504,21 +506,35 @@ def main(argv=None):
             sys.exit(1)
         return
 
+    t_build_start = time.perf_counter()
     if args.no_build:
         if not dll_path.exists():
             print(f"Error: Library not found at {dll_path}", file=sys.stderr)
             sys.exit(1)
         print(f"Using existing library: {dll_path}")
+        build_time = 0.0
     else:
         dll_path = build_plugin(backend=args.backend, target=args.target, release=True)
         wasm_plugins = build_wasm_plugins(release=True)
+        build_time = time.perf_counter() - t_build_start
 
+    t_copy_start = time.perf_counter()
     deploy_plugin(dll_path, game_path, backend=args.backend, target=args.target)
     deploy_wasm_plugins(wasm_plugins, game_path, backend=args.backend)
+    copy_time = time.perf_counter() - t_copy_start
 
     print(f"\nVerifying {args.backend} deployment...")
     if verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target):
-        print("\nDeployment verified successfully!")
+        total_time = time.perf_counter() - t_deploy_total
+        print(f"\n========================================")
+        print(f"       Deployment Time Breakdown        ")
+        print(f"========================================")
+        print(f"  • Build & Optimization : {build_time:.2f}s")
+        print(f"  • Copy & Registration  : {copy_time:.2f}s")
+        print(f"  --------------------------------------")
+        print(f"  • Total Elapsed Time   : {total_time:.2f}s")
+        print(f"========================================\n")
+        print("Deployment verified successfully!")
     else:
         print("\nDeployment verification failed!")
         sys.exit(1)
