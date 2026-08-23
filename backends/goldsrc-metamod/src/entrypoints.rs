@@ -58,7 +58,7 @@ pub unsafe extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
     meta_functions: *mut meta_function_t,
     meta_globals: *mut meta_globals_t,
-    _gamedll_funcs: *mut c_void,
+    meta_util_functions: *mut mutil_funcs_t,
 ) -> std::os::raw::c_int {
     // SAFETY: meta_functions and meta_globals are Metamod-provided; valid at call time.
     catch_ffi_panic("Meta_Attach", 0, || {
@@ -67,6 +67,9 @@ pub unsafe extern "C" fn Meta_Attach(
                 return 0;
             }
             crate::set_meta_globals(meta_globals);
+            if !meta_util_functions.is_null() {
+                crate::set_meta_util_funcs(meta_util_functions);
+            }
 
             // Fill the META_FUNCTIONS table with our hook functions.
             (*meta_functions).pfnGetEntityAPI = Some(crate::GetEntityAPI);
@@ -84,7 +87,6 @@ pub unsafe extern "C" fn Meta_Attach(
         backend().server_print("[GoldSrc.rs] WASM Host Engine initialized.\n");
         backend()
             .server_print("[GoldSrc.rs] Host Management CLI registered (`meta-rs` / `goldsrc`).\n");
-        backend().server_print("[GoldSrc.rs] Hello from Rust!\n");
         1
     })
 }
@@ -99,7 +101,7 @@ pub unsafe extern "C" fn Meta_Detach(
     _reason: PL_UNLOAD_REASON,
 ) -> std::os::raw::c_int {
     catch_ffi_panic("Meta_Detach", 1, || {
-        backend().server_print("[GoldSrc.rs] Meta_Detach called. Goodbye!\n");
+        backend().server_print("[GoldSrc.rs] Meta_Detach called.\n");
         1
     })
 }
@@ -259,13 +261,38 @@ pub unsafe extern "C" fn GetEngineFunctions(
     })
 }
 
+unsafe extern "C" fn hook_reg_user_msg_post(
+    psz_name: *const std::os::raw::c_char,
+    _i_size: std::os::raw::c_int,
+) -> std::os::raw::c_int {
+    catch_ffi_panic("hook_reg_user_msg_post", 0, || {
+        let msg_id = crate::meta_globals().orig_ret as usize as i32;
+        if !psz_name.is_null()
+            && msg_id > 0
+            && msg_id != 255
+            && let Ok(c_str) = unsafe { std::ffi::CStr::from_ptr(psz_name) }.to_str()
+        {
+            goldsrc::backend::register_user_msg_id(c_str, msg_id);
+        }
+        msg_id
+    })
+}
+
 /// # Safety
 /// Called by Metamod to get post-engine functions.
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub unsafe extern "C" fn GetEngineFunctions_Post(
-    _engfuncs: *mut goldsrc_sys::enginefuncs_t,
+    engfuncs: *mut goldsrc_sys::enginefuncs_t,
     _interface_version: *mut i32,
 ) -> i32 {
-    catch_ffi_panic("GetEngineFunctions_Post", 0, || 0)
+    catch_ffi_panic("GetEngineFunctions_Post", 0, || {
+        if engfuncs.is_null() {
+            return 0;
+        }
+        unsafe {
+            (*engfuncs).pfnRegUserMsg = Some(hook_reg_user_msg_post);
+        }
+        1
+    })
 }

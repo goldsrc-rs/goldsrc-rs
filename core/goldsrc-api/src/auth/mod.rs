@@ -130,8 +130,11 @@ impl Auth {
 mod tests {
     use super::Auth;
 
+    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn capability_lifecycle() {
+        let _guard = TEST_LOCK.lock().unwrap();
         Auth::register_capability("test_admin_cap", "test capability");
         Auth::remove_player(10);
         assert!(!Auth::has_capability(10, "test_admin_cap"));
@@ -144,6 +147,7 @@ mod tests {
 
     #[test]
     fn test_wildcard_and_eviction_lifecycle() {
+        let _guard = TEST_LOCK.lock().unwrap();
         Auth::register_capability("vip.heal", "heal ability");
         Auth::grant_capability(2, "vip.*");
 

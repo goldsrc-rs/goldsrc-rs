@@ -44,13 +44,13 @@ pub fn init_wasm_host() {
             if let Some(get_id) = util.pfnGetUserMsgID
                 && let Ok(cname) = std::ffi::CString::new(name)
             {
-                let id = unsafe {
+                let id = goldsrc_sys::ffi::catch_ffi_panic("pfnGetUserMsgID", 0, || unsafe {
                     get_id(
                         &crate::entrypoints::PLUGIN_INFO,
                         cname.as_ptr(),
                         std::ptr::null_mut(),
                     )
-                };
+                });
                 if id > 0 && id != 255 {
                     return id;
                 }
