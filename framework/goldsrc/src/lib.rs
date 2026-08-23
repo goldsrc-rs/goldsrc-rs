@@ -32,28 +32,28 @@ pub mod paths;
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("\x1b[1;32m[INFO]\x1b[0m {}", format_args!($($arg)*)))
+        $crate::wasm_log::log_info(&format!($($arg)*))
     };
 }
 
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("\x1b[1;33m[WARN]\x1b[0m {}", format_args!($($arg)*)))
+        $crate::wasm_log::log_warn(&format!($($arg)*))
     };
 }
 
 #[macro_export]
 macro_rules! log_err {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("\x1b[1;31m[ERROR]\x1b[0m {}", format_args!($($arg)*)))
+        $crate::wasm_log::log_err(&format!($($arg)*))
     };
 }
 
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
-        $crate::wasm_log::print(&format!("\x1b[1;36m[DEBUG]\x1b[0m {}", format_args!($($arg)*)))
+        $crate::wasm_log::log_debug(&format!($($arg)*))
     };
 }
 
@@ -62,26 +62,93 @@ pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
-#[cfg(target_arch = "wasm32")]
 pub use goldsrc_api::engine_api as engine;
-pub use goldsrc_api::{Engine, Entity, Player, Plugin, Vector3, auth::Auth};
+pub use goldsrc_api::{
+    Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
+    CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead, Engine,
+    Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Spectator, Team, Terrorist,
+    Vector3,
+};
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{command, event, on_load, plugin};
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
-    pub use crate::Auth;
     pub use crate::ecs::*;
-    #[cfg(target_arch = "wasm32")]
     pub use crate::engine;
-    pub use crate::{Engine, Entity, Player, Plugin, Vector3};
+    pub use crate::{
+        Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
+        CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead,
+        Engine, Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Spectator, Team,
+        Terrorist, Vector3,
+    };
     pub use crate::{command, event, on_load, plugin};
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }
 
-/// Direct console print helper for WASM plugins.
+/// Direct logging helper for WASM plugins.
 pub mod wasm_log {
-    /// Forwards `msg` to the host logger (WASM) or `println!` (native).
+    /// Logs an info message.
+    pub fn log_info(msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
+                "[INFO] {}",
+                msg
+            ));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ::log::info!(target: "plugin", "{}", msg);
+        }
+    }
+
+    /// Logs a warning message.
+    pub fn log_warn(msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
+                "[WARN] {}",
+                msg
+            ));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ::log::warn!(target: "plugin", "{}", msg);
+        }
+    }
+
+    /// Logs an error message.
+    pub fn log_err(msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
+                "[ERROR] {}",
+                msg
+            ));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ::log::error!(target: "plugin", "{}", msg);
+        }
+    }
+
+    /// Logs a debug message.
+    pub fn log_debug(msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
+                "[DEBUG] {}",
+                msg
+            ));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ::log::debug!(target: "plugin", "{}", msg);
+        }
+    }
+
+    /// Forwards raw `msg` to the host logger (WASM) or `println!` (native).
     pub fn print(msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {

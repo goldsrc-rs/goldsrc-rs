@@ -14,12 +14,12 @@ static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration and hot reload watchers.
     ///
-    /// `engine` is the backend's [`goldsrc_api::EngineOps`] bridge — it gives
+    /// `engine` is the backend's [`goldsrc_api::Engine`] bridge — it gives
     /// WASM plugins access to the real game state. Call once at backend init.
     pub fn init(
         backend: BackendType,
         print_cb: fn(&str),
-        engine: std::sync::Arc<dyn goldsrc_api::EngineOps>,
+        engine: std::sync::Arc<dyn goldsrc_api::Engine>,
     ) -> Result<(), HostError> {
         let backend_name = match backend {
             BackendType::Metamod => "Metamod",
@@ -33,7 +33,13 @@ impl HostRuntime {
         let sys_config = GoldSrcConfig::load_or_create(backend);
 
         // Initialise unified logger
-        crate::logging::init(sys_config.logging.clone(), backend, Some(print_cb));
+        let logs_dir = std::path::PathBuf::from(&sys_config.core.logs_dir);
+        crate::logging::init_with_dir(
+            sys_config.logging.clone(),
+            Some(logs_dir),
+            backend,
+            Some(print_cb),
+        );
 
         // Initial startup banner stating active backend and version
         log::info!(
@@ -64,11 +70,15 @@ impl HostRuntime {
             PathResolver::normalize(&config_dir)
         );
 
-        if sys_config.wasm.hot_reload {
-            let _ = manager.enable_hot_reload(&plugin_dir);
+        if sys_config.wasm.hot_reload
+            && let Err(e) = manager.enable_hot_reload(&plugin_dir)
+        {
+            log::warn!(target: "wasm", "Failed to enable hot reload on {:?}: {e}", plugin_dir);
         }
-        if sys_config.wasm.config_watcher {
-            let _ = manager.enable_config_watcher(&config_dir);
+        if sys_config.wasm.config_watcher
+            && let Err(e) = manager.enable_config_watcher(&config_dir)
+        {
+            log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
 
         // Auto-load all .wasm plugins in plugin_dir

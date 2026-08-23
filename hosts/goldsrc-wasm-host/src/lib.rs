@@ -25,13 +25,36 @@ pub fn set_print_callback(f: fn(&str)) {
     }
 }
 
-/// Print log message via host callback (engine server_print).
+/// Print log message via host callback (engine server_print and unified logger).
 pub fn host_log(msg: &str) {
-    if let Ok(lock) = PRINT_CALLBACK.read() {
-        if let Some(print_fn) = *lock {
-            print_fn(msg);
-            return;
+    let bounded = if msg.len() > 4096 {
+        let mut end = 4096;
+        while end > 0 && !msg.is_char_boundary(end) {
+            end -= 1;
         }
+        &msg[..end]
+    } else {
+        msg
+    };
+    let (level, clean_msg) = if let Some(rest) = bounded.strip_prefix("[ERROR] ") {
+        (log::Level::Error, rest)
+    } else if let Some(rest) = bounded.strip_prefix("[WARN] ") {
+        (log::Level::Warn, rest)
+    } else if let Some(rest) = bounded.strip_prefix("[DEBUG] ") {
+        (log::Level::Debug, rest)
+    } else if let Some(rest) = bounded.strip_prefix("[TRACE] ") {
+        (log::Level::Trace, rest)
+    } else if let Some(rest) = bounded.strip_prefix("[INFO] ") {
+        (log::Level::Info, rest)
+    } else {
+        (log::Level::Info, bounded)
+    };
+
+    match level {
+        log::Level::Error => log::error!(target: "plugin", "{clean_msg}"),
+        log::Level::Warn => log::warn!(target: "plugin", "{clean_msg}"),
+        log::Level::Debug => log::debug!(target: "plugin", "{clean_msg}"),
+        log::Level::Trace => log::trace!(target: "plugin", "{clean_msg}"),
+        log::Level::Info => log::info!(target: "plugin", "{clean_msg}"),
     }
-    println!("{}", msg);
 }

@@ -7,7 +7,7 @@
 use core::ffi::c_void;
 use std::ffi::c_char;
 
-pub const META_INTERFACE_VERSION: &str = "5:13";
+pub const META_INTERFACE_VERSION: &std::ffi::CStr = c"5:13";
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +47,16 @@ pub struct plugin_info_t {
 }
 
 unsafe impl Sync for plugin_info_t {}
+
+#[allow(dead_code)]
+pub const MRES_UNSET: i32 = 0;
+#[allow(dead_code)]
+pub const MRES_IGNORED: i32 = 1;
+#[allow(dead_code)]
+pub const MRES_HANDLED: i32 = 2;
+#[allow(dead_code)]
+pub const MRES_OVERRIDE: i32 = 3;
+pub const MRES_SUPERCEDE: i32 = 4;
 
 #[repr(C)]
 pub struct meta_globals_t {

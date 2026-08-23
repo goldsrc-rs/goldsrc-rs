@@ -20,6 +20,9 @@ pub fn emit_event(name: &str, payload: &[u8]) -> bool {
 /// Dispatches a player-indexed event (payload is player index as 4-byte LE).
 /// Returns `true` if the host runtime is active and processed the event.
 pub fn emit_player_event(name: &str, index: i32) -> bool {
+    if name == "client_disconnect" {
+        goldsrc_api::auth::Auth::remove_player(index);
+    }
     emit_event(name, &index.to_le_bytes())
 }
 
@@ -27,15 +30,60 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
 /// Returns `true` if the host runtime is active and processed the command.
 pub fn dispatch_command(cmd: &str, args: &str) -> bool {
     HostRuntime::with_manager(|m| match m {
-        Some(manager) => {
-            manager.dispatch_command(cmd, args);
-            true
-        }
+        Some(manager) => manager.dispatch_command(cmd, 0, args),
         None => {
             log::trace!(target: "core", "dispatch_command('{cmd}') skipped: WASM host not initialized");
             false
         }
     })
+}
+
+/// Dispatches a client command (including chat commands e.g. `say /vip` or console `vipmenu`).
+/// Returns `true` if a plugin intercepted and handled the command (requesting suppression from GameDLL).
+pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bool {
+    HostRuntime::with_manager(|m| {
+        let Some(manager) = m else {
+            return false;
+        };
+
+        if cmd.eq_ignore_ascii_case("say") || cmd.eq_ignore_ascii_case("say_team") {
+            let mut text = raw_args.trim();
+            if text.starts_with('"') && text.ends_with('"') && text.len() >= 2 {
+                text = &text[1..text.len() - 1];
+            }
+            let mut parts = text.split_whitespace();
+            if let Some(trigger) = parts.next() {
+                let clean_trigger = trigger.trim_start_matches(['/', '!']);
+                let rest_args = parts.collect::<Vec<_>>().join(" ");
+
+                // 1. Try exact clean trigger (e.g. "vip" or "vipmenu")
+                if manager.dispatch_command(clean_trigger, player_idx, &rest_args) {
+                    return true;
+                }
+                // 2. Try raw trigger (e.g. "/vip")
+                if manager.dispatch_command(trigger, player_idx, &rest_args) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Direct client console command
+        manager.dispatch_command(cmd, player_idx, raw_args)
+    })
+}
+
+/// Invoked when a new server map is activated (ServerActivate).
+pub fn on_server_activate() {
+    emit_event("server_activate", &[]);
+}
+
+/// Invoked when the current server map is ending or server shutting down (ServerDeactivate).
+/// Advances map generation to invalidate cached EDicts and clears player capabilities.
+pub fn on_server_deactivate() {
+    goldsrc_api::edict::bump_map_generation();
+    goldsrc_api::auth::Auth::clear_all_players();
+    emit_event("server_deactivate", &[]);
 }
 
 /// Ticks the frame event in the WASM host.

@@ -12,3 +12,4 @@ proc-macro = true
 syn = { version = "3.0.3", features = ["full", "extra-traits"] }
 quote = "1.0"
 proc-macro2 = "1.0"
+goldsrc-api = { path = "../../core/goldsrc-api", default-features = false }

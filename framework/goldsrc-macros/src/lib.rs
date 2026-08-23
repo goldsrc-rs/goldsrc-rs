@@ -6,7 +6,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{Expr, ExprArray, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token, parse_macro_input};
+use syn::{
+    Expr, ExprArray, ExprLit, ImplItem, ImplItemFn, ItemImpl, Lit, Meta, Token, parse_macro_input,
+};
 
 /// Escapes a string for embedding inside a TOML double-quoted literal.
 fn toml_escape(s: &str) -> String {
@@ -21,6 +23,7 @@ struct PluginAttr {
     version: String,
     author: String,
     description: String,
+    url: String,
     dependencies: Vec<String>,
 }
 
@@ -30,6 +33,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
         version: "1.0.0".to_string(),
         author: "Unknown".to_string(),
         description: String::new(),
+        url: String::new(),
         dependencies: Vec::new(),
     };
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -101,11 +105,13 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                     out.author = value;
                 } else if ident == "description" {
                     out.description = value;
+                } else if ident == "url" {
+                    out.url = value;
                 } else {
                     return Err(syn::Error::new_spanned(
                         nv.path,
                         format!(
-                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, dependencies"
+                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url, dependencies"
                         ),
                     ));
                 }
@@ -113,7 +119,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "unsupported #[plugin] attribute; supported: name, version, author, description, dependencies",
+                    "unsupported #[plugin] attribute; supported: name, version, author, description, url, dependencies",
                 ));
             }
         }
@@ -175,8 +181,10 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut on_load_fn = quote! {};
     let mut on_unload_fn = quote! {};
     let mut on_frame_fn = quote! {};
-    let mut on_event_fn = quote! {};
     let mut on_command_fn = quote! {};
+    let mut event_handlers: Vec<(Option<String>, syn::Ident, usize)> = Vec::new();
+    let mut registered_events: std::collections::HashSet<Option<String>> =
+        std::collections::HashSet::new();
 
     let mut command_matchers = Vec::new();
     let mut plugin_commands: Vec<String> = Vec::new();
@@ -188,7 +196,13 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut is_on_unload = false;
             let mut is_on_frame = false;
             let mut is_on_event = false;
+            let mut event_name: Option<String> = None;
             let mut cmd_name = None;
+            let mut cmd_aliases = Vec::new();
+            let mut cmd_capability: Option<String> = None;
+            let mut cmd_description: Option<String> = None;
+            let mut cmd_usage: Option<String> = None;
+            let mut macro_error: Option<syn::Error> = None;
 
             // Retain attributes that are NOT our custom ones
             method.attrs.retain(|attr| {
@@ -203,23 +217,82 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                     false
                 } else if attr.path().is_ident("event") {
                     is_on_event = true;
-                    false
-                } else if attr.path().is_ident("command") {
-                    if let Ok(meta_list) = attr.meta.require_list() {
+                    if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                        event_name = Some(s.value());
+                    } else if let Ok(meta_list) = attr.meta.require_list() {
                         let _ = meta_list.parse_nested_meta(|meta| {
                             if meta.path.is_ident("name") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
-                                    cmd_name = Some(s.value());
+                                    event_name = Some(s.value());
                                 }
                             }
                             Ok(())
                         });
                     }
                     false
+                } else if attr.path().is_ident("command") {
+                    if let Ok(meta_list) = attr.meta.require_list() {
+                        let res = meta_list.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("name") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_name = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("capability") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    let cap_val = s.value();
+                                    if let Err(err) = ::goldsrc_api::auth::CapExpr::parse(&cap_val)
+                                    {
+                                        return Err(meta.error(format!(
+                                            "invalid capability expression '{cap_val}': {err}"
+                                        )));
+                                    }
+                                    cmd_capability = Some(cap_val);
+                                }
+                            } else if meta.path.is_ident("description") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_description = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("usage") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_usage = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("aliases") {
+                                if let Ok(ExprArray { elems, .. }) =
+                                    meta.value()?.parse::<ExprArray>()
+                                {
+                                    for elem in elems {
+                                        if let Expr::Lit(ExprLit {
+                                            lit: Lit::Str(s), ..
+                                        }) = elem
+                                        {
+                                            cmd_aliases.push(s.value());
+                                        }
+                                    }
+                                }
+                            } else {
+                                return Err(meta.error(format!(
+                                    "unknown #[command] key '{}'",
+                                    meta.path
+                                        .get_ident()
+                                        .map(|i| i.to_string())
+                                        .unwrap_or_default()
+                                )));
+                            }
+                            Ok(())
+                        });
+                        if let Err(e) = res {
+                            macro_error = Some(e);
+                        }
+                    }
+                    false
                 } else {
                     true
                 }
             });
+
+            if let Some(err) = macro_error {
+                return err.to_compile_error().into();
+            }
 
             let fn_name = &method.sig.ident;
             let inputs_len = method.sig.inputs.len();
@@ -246,29 +319,181 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 if let Err(e) = check_handler_args(method, "event", &[0, 1, 2]) {
                     return e.to_compile_error().into();
                 }
-                let call_expr = match inputs_len {
-                    0 => quote! { #struct_name::#fn_name() },
-                    1 => quote! { #struct_name::#fn_name(name) },
-                    _ => quote! { #struct_name::#fn_name(name, payload) },
-                };
-                on_event_fn = quote! { #call_expr; };
+                if !registered_events.insert(event_name.clone()) {
+                    return syn::Error::new_spanned(
+                        method,
+                        format!("duplicate handler for event {:?}", event_name),
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+                event_handlers.push((event_name, fn_name.clone(), inputs_len));
             }
             if let Some(cmd) = cmd_name {
-                if let Err(e) = check_handler_args(method, "command", &[0, 1, 2]) {
-                    return e.to_compile_error().into();
-                }
                 plugin_commands.push(cmd.clone());
-                let call_expr = match inputs_len {
-                    0 => quote! { #struct_name::#fn_name() },
-                    1 => quote! { #struct_name::#fn_name(args) },
-                    _ => quote! { #struct_name::#fn_name(name, args) },
+                for alias in &cmd_aliases {
+                    plugin_commands.push(alias.clone());
+                }
+
+                let is_raw_signature = match inputs_len {
+                    0 => true,
+                    1 => {
+                        if let Some(syn::FnArg::Typed(pat_type)) = method.sig.inputs.first() {
+                            if let syn::Type::Path(type_path) = &*pat_type.ty {
+                                type_path.path.is_ident("String") || type_path.path.is_ident("str")
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    2 => {
+                        let mut all_string = true;
+                        for input in &method.sig.inputs {
+                            if let syn::FnArg::Typed(pat_type) = input {
+                                if let syn::Type::Path(type_path) = &*pat_type.ty {
+                                    if !type_path.path.is_ident("String")
+                                        && !type_path.path.is_ident("str")
+                                    {
+                                        all_string = false;
+                                    }
+                                } else {
+                                    all_string = false;
+                                }
+                            } else {
+                                all_string = false;
+                            }
+                        }
+                        all_string
+                    }
+                    _ => false,
                 };
-                command_matchers.push(quote! {
-                    #cmd => { #call_expr; },
-                });
+
+                let call_expr = if is_raw_signature {
+                    match inputs_len {
+                        0 => quote! { #struct_name::#fn_name(); },
+                        1 => quote! { #struct_name::#fn_name(args); },
+                        _ => quote! { #struct_name::#fn_name(name, args); },
+                    }
+                } else {
+                    let mut param_bindings = Vec::new();
+                    let mut param_idents = Vec::new();
+
+                    for input in &method.sig.inputs {
+                        if let syn::FnArg::Typed(pat_type) = input {
+                            let ident = match &*pat_type.pat {
+                                syn::Pat::Ident(p) => &p.ident,
+                                _ => {
+                                    return syn::Error::new_spanned(
+                                        pat_type,
+                                        "unsupported parameter pattern",
+                                    )
+                                    .to_compile_error()
+                                    .into();
+                                }
+                            };
+                            let ty = &pat_type.ty;
+                            param_idents.push(ident.clone());
+                            if ident == "caller" || ident == "caller_idx" {
+                                param_bindings.push(quote! {
+                                    let mut #ident: #ty = caller;
+                                });
+                            } else {
+                                param_bindings.push(quote! {
+                                    let __next_tok = __iter.next();
+                                    let __tok_str = match __next_tok {
+                                        Some(t) if !t.is_empty() => t.to_string(),
+                                        _ if caller > 0 => caller.to_string(),
+                                        _ => String::new(),
+                                    };
+                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&__tok_str) {
+                                        Ok(val) => val,
+                                        Err(err) => {
+                                            ::goldsrc::log_warn!("[Command '{}'] Parameter '{}' invalid: {}", name, stringify!(#ident), err);
+                                            return true;
+                                        }
+                                    };
+                                });
+                            }
+                        }
+                    }
+
+                    let is_result = match &method.sig.output {
+                        syn::ReturnType::Default => false,
+                        syn::ReturnType::Type(_, _) => true,
+                    };
+
+                    if is_result {
+                        quote! {
+                            let mut __iter = args.split_whitespace();
+                            #(#param_bindings)*
+                            if let Err(err) = #struct_name::#fn_name(#(#param_idents),*) {
+                                ::goldsrc::log_warn!("[Command '{}'] Error: {}", name, err);
+                            }
+                        }
+                    } else {
+                        quote! {
+                            let mut __iter = args.split_whitespace();
+                            #(#param_bindings)*
+                            #struct_name::#fn_name(#(#param_idents),*);
+                        }
+                    }
+                };
+
+                let handler_body = if let Some(ref cap_str) = cmd_capability {
+                    quote! {
+                        if caller > 0 {
+                            let allowed = if let Ok(ast) = ::goldsrc::CapExpr::parse(#cap_str) {
+                                ast.evaluate(&|c| ::goldsrc::Auth::has_capability(caller, c))
+                            } else {
+                                false
+                            };
+                            if !allowed {
+                                ::goldsrc::log_warn!("[Auth] Access denied for player #{}: requires '{}'", caller, #cap_str);
+                                return true;
+                            }
+                        }
+                        #call_expr
+                    }
+                } else {
+                    quote! { #call_expr }
+                };
+
+                let mut all_match_names = vec![cmd.clone()];
+                all_match_names.extend(cmd_aliases);
+
+                for match_name in all_match_names {
+                    command_matchers.push(quote! {
+                        #match_name => { #handler_body },
+                    });
+                }
             }
         }
     }
+
+    let mut event_arms = Vec::new();
+    let mut fallback_event = quote! {};
+    for (evt_name, f_name, in_len) in event_handlers {
+        let call_expr = match in_len {
+            0 => quote! { #struct_name::#f_name() },
+            1 => quote! { #struct_name::#f_name(name.clone()) },
+            _ => quote! { #struct_name::#f_name(name.clone(), payload.clone()) },
+        };
+        if let Some(n) = evt_name {
+            event_arms.push(quote! {
+                #n => { #call_expr; }
+            });
+        } else {
+            fallback_event = quote! { #call_expr; };
+        }
+    }
+    let on_event_fn = quote! {
+        match name.as_str() {
+            #(#event_arms)*
+            _ => { #fallback_event }
+        }
+    };
 
     if !command_matchers.is_empty() {
         on_command_fn = quote! {
@@ -298,12 +523,19 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         String::new()
     };
 
+    let url_toml = if !attr.url.is_empty() {
+        format!("url = \"{}\"\n", toml_escape(&attr.url))
+    } else {
+        String::new()
+    };
+
     let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}",
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}",
         toml_escape(&plugin_name),
         toml_escape(&plugin_version),
         toml_escape(&plugin_author),
         desc_toml,
+        url_toml,
         deps_toml,
         commands_toml
     );
@@ -332,7 +564,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #on_event_fn
             }
 
-            fn on_command(name: String, args: String) -> bool {
+            fn on_command(name: String, caller: i32, args: String) -> bool {
                 #on_command_fn
             }
         }
@@ -404,13 +636,14 @@ mod tests {
     #[test]
     fn parses_all_attrs() {
         let a = parse(
-            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", dependencies = ["b@>=1", "c@1.0"]"#,
+            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", url = "https://github.com", dependencies = ["b@>=1", "c@1.0"]"#,
         )
         .unwrap();
         assert_eq!(a.name, "x");
         assert_eq!(a.version, "2.0");
         assert_eq!(a.author, "A");
         assert_eq!(a.description, "Test Desc");
+        assert_eq!(a.url, "https://github.com");
         assert_eq!(a.dependencies, vec!["b@>=1", "c@1.0"]);
     }
 

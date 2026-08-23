@@ -12,18 +12,12 @@
 // The `.drectve` section is the standard COFF mechanism for embedding linker
 // directives directly inside an object file — exactly what the C pragma did.
 // ============================================================================
-#[cfg(all(target_arch = "x86", target_env = "msvc"))]
-#[unsafe(link_section = ".drectve")]
-#[used]
-static MSVC_EXPORTS: [u8; 270] = *b"/EXPORT:GiveFnptrsToDll=_GiveFnptrsToDll@8 /EXPORT:Meta_Query=_Meta_Query /EXPORT:Meta_Attach=_Meta_Attach /EXPORT:Meta_Detach=_Meta_Detach /EXPORT:GetEntityAPI2=_GetEntityAPI2 /EXPORT:GetEntityAPI2_Post=_GetEntityAPI2_Post /EXPORT:GetNewDLLFunctions=_GetNewDLLFunctions";
-
 mod commands;
 mod entrypoints;
 mod hooks;
 mod meta_types;
 
 use goldsrc::log;
-use goldsrc_api::Engine;
 
 use meta_types::*;
 
@@ -35,13 +29,15 @@ static G_GLOBALS: std::sync::OnceLock<
 > = std::sync::OnceLock::new();
 static G_META_GLOBALS: std::sync::atomic::AtomicPtr<meta_globals_t> =
     std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+static G_META_UTIL: std::sync::atomic::AtomicPtr<mutil_funcs_t> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 /// Deferred server-print queue shared with the standalone backend.
 pub static PRINT_QUEUE: goldsrc::backend::PrintQueue = goldsrc::backend::PrintQueue::new();
 
 /// Initialize WASM plugin subsystem and the unified logger.
 pub fn init_wasm_host() {
-    let engine: std::sync::Arc<dyn goldsrc_api::EngineOps> =
+    let engine: std::sync::Arc<dyn goldsrc_api::Engine> =
         std::sync::Arc::new(goldsrc::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE));
     if let Err(e) = goldsrc::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Metamod,
@@ -88,6 +84,10 @@ pub fn meta_globals() -> &'static mut meta_globals_t {
 
 pub fn set_meta_globals(ptr: *mut meta_globals_t) {
     G_META_GLOBALS.store(ptr, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn set_meta_util_funcs(ptr: *mut mutil_funcs_t) {
+    G_META_UTIL.store(ptr, std::sync::atomic::Ordering::Relaxed);
 }
 
 use goldsrc::backend::EngineBackend;
