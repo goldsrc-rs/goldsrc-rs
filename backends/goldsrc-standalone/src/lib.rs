@@ -21,7 +21,6 @@ mod proxy;
 
 use goldsrc::backend::EngineBackend;
 use goldsrc::log;
-use goldsrc_api::Engine;
 use goldsrc_sys::ffi::catch_ffi_panic;
 use goldsrc_sys::{DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
 use std::ffi::{CStr, CString};
@@ -50,7 +49,7 @@ pub use goldsrc::call_engfunc_ret;
 // ============================================================================
 
 fn init_wasm_host() {
-    let engine: std::sync::Arc<dyn goldsrc_api::EngineOps> = std::sync::Arc::new(*backend());
+    let engine: std::sync::Arc<dyn goldsrc_api::Engine> = std::sync::Arc::new(*backend());
     if let Err(e) = goldsrc::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Standalone,
         |msg| {
@@ -67,7 +66,6 @@ fn init_wasm_host() {
 // ============================================================================
 
 unsafe extern "C" fn hook_game_init() {
-    proxy::dbg_log("hook_game_init called by engine");
     catch_ffi_panic("hook_game_init", (), || {
         // 1. Forward GameDLLInit to real GameDLL
         proxy::forward_game_init();
@@ -75,7 +73,7 @@ unsafe extern "C" fn hook_game_init() {
         init_wasm_host();
         // 3. Register CLI commands after engine command system is initialized
         commands::register_cli_commands();
-        proxy::dbg_log("hook_game_init: WASM host & commands initialized successfully");
+        log::info!(target: "core", "hook_game_init: WASM host & commands initialized successfully");
     });
 }
 
@@ -109,7 +107,6 @@ unsafe extern "C" fn hook_client_connect(
     address: *const std::os::raw::c_char,
     reject_reason: *mut std::os::raw::c_char,
 ) -> goldsrc_sys::qboolean {
-    proxy::dbg_log("hook_client_connect called");
     catch_ffi_panic("hook_client_connect", 1 as goldsrc_sys::qboolean, || {
         let result = proxy::forward_client_connect(edict, name, address, reject_reason);
         if result != 0 {
@@ -125,7 +122,6 @@ unsafe extern "C" fn hook_client_connect(
 }
 
 unsafe extern "C" fn hook_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
-    proxy::dbg_log("hook_client_disconnect called");
     catch_ffi_panic("hook_client_disconnect", (), || {
         let funcs = engine_api::engfuncs();
         let index = funcs
@@ -139,7 +135,17 @@ unsafe extern "C" fn hook_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
 
 unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
     catch_ffi_panic("hook_client_command", (), || {
-        proxy::forward_client_command(edict);
+        let index = if !edict.is_null() {
+            unsafe {
+                crate::engine_api::engfuncs()
+                    .pfnIndexOfEdict
+                    .map(|f| f(edict))
+                    .unwrap_or(0)
+            }
+        } else {
+            0
+        };
+
         let cmd_str;
         let name_str;
         {
@@ -161,12 +167,33 @@ unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
                 String::new()
             };
         }
-        goldsrc::hooks::dispatch_command(&name_str, &cmd_str);
+
+        let handled = goldsrc::hooks::dispatch_client_command(index, &name_str, &cmd_str);
+        if !handled {
+            proxy::forward_client_command(edict);
+        }
+    });
+}
+
+unsafe extern "C" fn hook_server_activate(
+    edict_list: *mut goldsrc_sys::edict_t,
+    edict_count: i32,
+    client_max: i32,
+) {
+    catch_ffi_panic("hook_server_activate", (), || {
+        proxy::forward_server_activate(edict_list, edict_count, client_max);
+        goldsrc::hooks::on_server_activate();
+    });
+}
+
+unsafe extern "C" fn hook_server_deactivate() {
+    catch_ffi_panic("hook_server_deactivate", (), || {
+        proxy::forward_server_deactivate();
+        goldsrc::hooks::on_server_deactivate();
     });
 }
 
 unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
-    proxy::dbg_log("hook_spawn called");
     catch_ffi_panic("hook_spawn", 0, || {
         crate::backend().precache_pending_resources();
         proxy::forward_spawn(edict)
@@ -189,7 +216,6 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
     engfuncs: *mut enginefuncs_t,
     globals: *mut globalvars_t,
 ) {
-    proxy::dbg_log("GiveFnptrsToDll called by engine");
     // SAFETY: engfuncs and globals are engine-provided; valid for the server lifetime.
     catch_ffi_panic("GiveFnptrsToDll", (), || {
         unsafe {
@@ -212,7 +238,6 @@ pub unsafe extern "C" fn GetEntityAPI2(
     dll_table: *mut DLL_FUNCTIONS,
     interface_version: *mut i32,
 ) -> i32 {
-    proxy::dbg_log("GetEntityAPI2 called by engine");
     // SAFETY: dll_table and interface_version are engine-provided; valid at call time.
     catch_ffi_panic("GetEntityAPI2", 0, || {
         if dll_table.is_null() {
@@ -229,6 +254,8 @@ pub unsafe extern "C" fn GetEntityAPI2(
             let table = &mut *dll_table;
             table.pfnGameInit = Some(hook_game_init);
             table.pfnSpawn = Some(hook_spawn);
+            table.pfnServerActivate = Some(hook_server_activate);
+            table.pfnServerDeactivate = Some(hook_server_deactivate);
             table.pfnClientConnect = Some(hook_client_connect);
             table.pfnClientDisconnect = Some(hook_client_disconnect);
             table.pfnClientCommand = Some(hook_client_command);
@@ -249,9 +276,6 @@ pub unsafe extern "C" fn GetEntityAPI(
     dll_table: *mut DLL_FUNCTIONS,
     interface_version: i32,
 ) -> i32 {
-    proxy::dbg_log(&format!(
-        "GetEntityAPI called by engine (ver={interface_version})"
-    ));
     catch_ffi_panic("GetEntityAPI", 0, || {
         if dll_table.is_null() {
             return 0;
@@ -273,7 +297,6 @@ pub unsafe extern "C" fn GetNewDLLFunctions(
     new_dll_table: *mut std::ffi::c_void,
     interface_version: *mut i32,
 ) -> i32 {
-    proxy::dbg_log("GetNewDLLFunctions called by engine");
     catch_ffi_panic("GetNewDLLFunctions", 0, || {
         if new_dll_table.is_null() {
             return 0;
@@ -304,9 +327,6 @@ pub unsafe extern "C" fn Server_GetBlendingInterface(
     rotationmatrix: *mut std::ffi::c_void,
     bonetransform: *mut std::ffi::c_void,
 ) -> i32 {
-    proxy::dbg_log(&format!(
-        "Server_GetBlendingInterface called by engine (ver={version})"
-    ));
     catch_ffi_panic("Server_GetBlendingInterface", 0, || unsafe {
         proxy::forward_server_get_blending_interface(
             version,
@@ -328,14 +348,6 @@ pub unsafe extern "C" fn CreateInterface(
     name: *const std::os::raw::c_char,
     return_code: *mut i32,
 ) -> *mut std::ffi::c_void {
-    let name_str = if !name.is_null() {
-        unsafe { CStr::from_ptr(name) }
-            .to_string_lossy()
-            .into_owned()
-    } else {
-        String::new()
-    };
-    proxy::dbg_log(&format!("CreateInterface called by engine ('{name_str}')"));
     catch_ffi_panic("CreateInterface", std::ptr::null_mut(), || unsafe {
         proxy::forward_create_interface(name, return_code)
     })

@@ -108,6 +108,11 @@ fn main() {
         }
     }
 
+    let target = env::var("TARGET").unwrap_or_default();
+    if !target.is_empty() {
+        includes.push(format!("--target={target}"));
+    }
+
     let includes_ref: Vec<&str> = includes.iter().map(|s| s.as_str()).collect();
 
     let bindings = bindgen::Builder::default()
@@ -116,7 +121,8 @@ fn main() {
         .allowlist_function(".*")
         .allowlist_type(".*")
         .allowlist_var(".*")
-        .layout_tests(false)
+        .blocklist_type("max_align_t")
+        .layout_tests(true)
         .generate()
         .expect("Unable to generate bindings");
 

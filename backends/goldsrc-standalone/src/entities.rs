@@ -1,15 +1,19 @@
 //! Exported entity factory functions forwarded to the real GameDLL.
 
+use goldsrc_sys::ffi::catch_ffi_panic;
+
 macro_rules! declare_entities {
     ($($name:ident),* $(,)?) => {
         $(
             #[unsafe(no_mangle)]
             #[inline(never)]
             pub unsafe extern "C" fn $name(pev: *mut goldsrc_sys::entvars_t) {
-                // SAFETY: Forward entity instantiation to real GameDLL
-                unsafe {
-                    crate::proxy::forward_entity(stringify!($name), pev);
-                }
+                // SAFETY: catch_ffi_panic protects the C ABI boundary.
+                catch_ffi_panic(stringify!($name), (), || {
+                    unsafe {
+                        crate::proxy::forward_entity(stringify!($name), pev);
+                    }
+                });
             }
         )*
     };

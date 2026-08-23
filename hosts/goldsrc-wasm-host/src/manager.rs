@@ -1,7 +1,7 @@
 use crate::bindings::{GoldsrcPlugin, goldsrc::engine::api};
 use crate::error::{CommandError, LoadError};
 use crate::plugin::{LoadedPlugin, PluginMetadata};
-use goldsrc_api::EngineOps;
+use goldsrc_api::Engine as GoldsrcEngine;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wasmtime::component::{Component, Linker};
@@ -16,7 +16,9 @@ use std::time::{Duration, Instant};
 /// Wasmtime store state exposed to WASM plugins via host functions.
 pub struct HostState {
     /// Engine bridge for real game-state access.
-    pub engine: Arc<dyn EngineOps>,
+    pub engine: Arc<dyn GoldsrcEngine>,
+    /// Per-store memory and table limit enforcement.
+    pub limits: wasmtime::StoreLimits,
 }
 
 /// Read-only snapshot of a loaded plugin, used for CLI listing/info.
@@ -71,16 +73,6 @@ impl api::Host for HostState {
         self.engine
             .entity_set_velocity(index, [vel.x, vel.y, vel.z]);
     }
-    fn host_player_name(&mut self, index: i32) -> Option<String> {
-        self.engine.player_name(index)
-    }
-    fn host_player_armorvalue(&mut self, index: i32) -> f32 {
-        self.engine.player_armorvalue(index)
-    }
-    fn host_player_set_armorvalue(&mut self, index: i32, armor: f32) {
-        self.engine.player_set_armorvalue(index, armor);
-    }
-
     fn host_entity_angles(&mut self, index: i32) -> api::Vector3 {
         let [x, y, z] = self.engine.entity_angles(index);
         api::Vector3 { x, y, z }
@@ -97,6 +89,16 @@ impl api::Host for HostState {
     }
     fn host_drop_to_floor(&mut self, index: i32) -> i32 {
         self.engine.drop_to_floor(index)
+    }
+
+    fn host_player_name(&mut self, index: i32) -> Option<String> {
+        self.engine.player_name(index)
+    }
+    fn host_player_armorvalue(&mut self, index: i32) -> f32 {
+        self.engine.player_armorvalue(index)
+    }
+    fn host_player_set_armorvalue(&mut self, index: i32, armor: f32) {
+        self.engine.player_set_armorvalue(index, armor);
     }
 
     fn host_cvar_get_float(&mut self, name: String) -> f32 {
@@ -121,6 +123,7 @@ impl api::Host for HostState {
     fn host_precache_generic(&mut self, path: String) -> i32 {
         self.engine.precache_generic(&path)
     }
+
     fn host_emit_sound(
         &mut self,
         entity: i32,
@@ -142,50 +145,52 @@ impl api::Host for HostState {
         );
     }
 
-    fn host_register_capability(&mut self, name: String, description: String) -> bool {
-        let mut caps = goldsrc_api::caps::CAPS
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        if let std::collections::hash_map::Entry::Vacant(e) = caps.registered.entry(name) {
-            e.insert(description);
-            true
-        } else {
-            false
+    fn host_print_chat(&mut self, player_index: i32, message: String) {
+        if !(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index) {
+            self.engine
+                .server_print(&format!("[Chat to #{player_index}] {message}\n"));
+            return;
         }
+        let say_text_id = self.engine.reg_user_msg("SayText", -1);
+        let msg_id = if say_text_id <= 0 { 76 } else { say_text_id };
+        self.engine.message_begin(
+            goldsrc_api::MessageDest::One as i32,
+            msg_id,
+            None,
+            Some(player_index),
+        );
+        self.engine.write_byte(0); // 0 = server/console sender
+        // Truncate message if oversized to prevent buffer overflow (SayText payload max 192 bytes)
+        let safe_msg = if message.len() > 175 {
+            let mut end = 175;
+            while end > 0 && !message.is_char_boundary(end) {
+                end -= 1;
+            }
+            &message[..end]
+        } else {
+            &message
+        };
+        self.engine.write_string(safe_msg);
+        self.engine.message_end();
+    }
+
+    fn host_register_capability(&mut self, name: String, description: String) -> bool {
+        if name.is_empty() || name.len() > 256 || description.len() > 4096 {
+            return false;
+        }
+        goldsrc_api::auth::Auth::register_capability(&name, &description)
     }
 
     fn host_has_capability(&mut self, player_index: i32, name: String) -> bool {
-        let caps = goldsrc_api::caps::CAPS
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
-        caps.player_capabilities
-            .get(&player_index)
-            .is_some_and(|player_caps| player_caps.contains(&name))
+        goldsrc_api::auth::Auth::has_capability(player_index, &name)
     }
 
     fn host_grant_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = goldsrc_api::caps::CAPS
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        // Check if capability exists in the registry
-        if !caps.registered.contains_key(&name) {
-            return false;
-        }
-        caps.player_capabilities
-            .entry(player_index)
-            .or_default()
-            .insert(name)
+        goldsrc_api::auth::Auth::grant_capability(player_index, &name)
     }
 
     fn host_revoke_capability(&mut self, player_index: i32, name: String) -> bool {
-        let mut caps = goldsrc_api::caps::CAPS
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some(player_caps) = caps.player_capabilities.get_mut(&player_index) {
-            player_caps.remove(&name)
-        } else {
-            false
-        }
+        goldsrc_api::auth::Auth::revoke_capability(player_index, &name)
     }
 }
 
@@ -196,7 +201,7 @@ impl api::Host for HostState {
 pub struct PluginManager {
     plugins: Vec<LoadedPlugin>,
     engine: Engine,
-    engine_ops: Arc<dyn EngineOps>,
+    engine_ops: Arc<dyn GoldsrcEngine>,
     event_rx: Receiver<PathBuf>,
     event_tx: Sender<PathBuf>,
     watchers: Vec<notify::RecommendedWatcher>,
@@ -208,17 +213,33 @@ pub struct PluginManager {
 
 /// Minimum gap between two hot-reloads of the same file. Compilers write in
 /// several passes, so a rebuild would otherwise reload a half-written file.
-const RELOAD_DEBOUNCE: Duration = Duration::from_millis(150);
+const RELOAD_DEBOUNCE: Duration = Duration::from_millis(1000);
 
 impl PluginManager {
     /// Creates an empty plugin manager backed by a fresh wasmtime engine
-    /// with the Component Model enabled.
-    pub fn new(engine_ops: Arc<dyn EngineOps>) -> wasmtime::Result<Self> {
+    /// with the Component Model and epoch interruption enabled.
+    pub fn new(engine_ops: Arc<dyn GoldsrcEngine>) -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
+        config.epoch_interruption(true);
         // config.target("pulley32").unwrap();
         let engine = Engine::new(&config)?;
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
+
+        // Spawn background epoch timer thread to advance epochs every 2ms.
+        // This ensures epoch interruption deadlines (e.g. 5 epochs) are enforced
+        // as real wall-clock slices even if a plugin enters an infinite loop.
+        let engine_clone = engine.clone();
+        std::thread::Builder::new()
+            .name("goldsrc-epoch-timer".into())
+            .spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_millis(2));
+                    engine_clone.increment_epoch();
+                }
+            })
+            .ok();
+
         Ok(Self {
             plugins: Vec::new(),
             engine,
@@ -232,11 +253,19 @@ impl PluginManager {
         })
     }
 
-    /// Loads a WASM plugin from `path`. Accepts either a pre-compiled
-    /// component (magic `\0asm`) or a plain core module, which is embedded
-    /// with component metadata first. Calls the plugin's `on_load`.
-    pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, LoadError> {
+    /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
+    pub fn instantiate_plugin<P: AsRef<Path>>(&self, path: P) -> Result<LoadedPlugin, LoadError> {
         let path = path.as_ref();
+        let metadata = fs::metadata(path).map_err(|source| LoadError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        if metadata.len() > 32 * 1024 * 1024 {
+            return Err(LoadError::Compile(format!(
+                "Plugin size ({} bytes) exceeds maximum allowed size (32MB)",
+                metadata.len()
+            )));
+        }
         let bytes = fs::read(path).map_err(|source| LoadError::Io {
             path: path.to_path_buf(),
             source,
@@ -267,10 +296,9 @@ impl PluginManager {
             .map_err(|e| LoadError::Embed(e.to_string()))?;
 
             let mut encoder = wit_component::ComponentEncoder::default()
+                .validate(true)
                 .module(&wasm_bytes)
-                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
-                .validate(true);
-
+                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?;
             encoder
                 .encode()
                 .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
@@ -286,20 +314,45 @@ impl PluginManager {
         )
         .map_err(|e| LoadError::Link(e.to_string()))?;
 
+        let limits = wasmtime::StoreLimitsBuilder::new()
+            .memory_size(64 * 1024 * 1024) // 64MB per memory
+            .table_elements(10_000)
+            .memories(4)
+            .tables(16)
+            .instances(16)
+            .build();
         let state = HostState {
             engine: self.engine_ops.clone(),
+            limits,
         };
         let mut store = wasmtime::Store::new(&self.engine, state);
+        store.limiter(|s| &mut s.limits);
+        store.set_epoch_deadline(100);
         let bindings = GoldsrcPlugin::instantiate(&mut store, &component, &linker)
             .map_err(|e| LoadError::Instantiate(e.to_string()))?;
 
-        let metadata = bindings
-            .call_get_metadata(&mut store)
-            .ok()
-            .and_then(|meta_str| toml::from_str::<PluginMetadata>(&meta_str).ok());
+        let metadata = match bindings.call_get_metadata(&mut store) {
+            Ok(meta_str) => match toml::from_str::<PluginMetadata>(&meta_str) {
+                Ok(meta) => Some(meta),
+                Err(err) => {
+                    crate::host_log(&format!(
+                        "Warning: Failed to parse metadata for plugin at {:?}: {}",
+                        path, err
+                    ));
+                    None
+                }
+            },
+            Err(_) => None,
+        };
 
-        let mut plugin = LoadedPlugin {
-            name: path.file_stem().unwrap().to_string_lossy().to_string(),
+        let name = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        Ok(LoadedPlugin {
+            name,
             path: path.to_path_buf(),
             is_paused: false,
             is_poisoned: false,
@@ -307,8 +360,15 @@ impl PluginManager {
             store,
             bindings,
             component,
-        };
+        })
+    }
 
+    /// Loads a WASM plugin from `path`. Accepts either a pre-compiled
+    /// component (magic `\0asm`) or a plain core module, which is embedded
+    /// with component metadata first. Calls the plugin's `on_load`.
+    pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, LoadError> {
+        let path = path.as_ref();
+        let mut plugin = self.instantiate_plugin(path)?;
         plugin
             .call_on_load()
             .map_err(|e| LoadError::LoadPanic(e.to_string()))?;
@@ -322,8 +382,9 @@ impl PluginManager {
                     .push(idx);
             }
         }
+        let name = plugin.name.clone();
         self.plugins.push(plugin);
-        Ok("Loaded successfully".to_string())
+        Ok(name)
     }
 
     /// Resolves a plugin query (either numeric index or name) to a plugin index.
@@ -446,11 +507,33 @@ impl PluginManager {
             .position(|p| p.path == path || p.path.canonicalize().is_ok_and(|c| c == canonical))
         {
             let name = self.plugins[idx].name.clone();
-            let path = self.plugins[idx].path.clone();
-            self.unload_plugin_at(idx);
-            match self.load_plugin(&path) {
-                Ok(_) => crate::host_log(&format!("Hot-reloaded plugin '{}'", name)),
-                Err(e) => crate::host_log(&format!("Hot-reload of '{}' failed: {}", name, e)),
+            let old_path = self.plugins[idx].path.clone();
+
+            match self.instantiate_plugin(&old_path) {
+                Ok(mut new_plugin) => {
+                    if let Err(e) = new_plugin.call_on_load() {
+                        crate::host_log(&format!("Hot-reload on_load of '{}' failed: {e}", name));
+                        return;
+                    }
+                    self.unload_plugin_at(idx);
+                    let new_idx = self.plugins.len();
+                    if let Some(meta) = &new_plugin.metadata {
+                        for cmd in &meta.commands {
+                            self.command_registry
+                                .entry(cmd.clone())
+                                .or_default()
+                                .push(new_idx);
+                        }
+                    }
+                    self.plugins.push(new_plugin);
+                    crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
+                }
+                Err(e) => {
+                    crate::host_log(&format!(
+                        "Hot-reload of '{}' failed (previous version kept active): {e}",
+                        name
+                    ));
+                }
             }
         }
     }
@@ -523,13 +606,13 @@ impl PluginManager {
 
     /// Dispatches a server command to the plugins that registered it.
     /// Stops at the first plugin that reports handling it (consume).
-    pub fn dispatch_command(&mut self, cmd: &str, args: &str) -> bool {
+    pub fn dispatch_command(&mut self, cmd: &str, caller: i32, args: &str) -> bool {
         let Some(owners) = self.command_registry.get(cmd).cloned() else {
             return false;
         };
         for idx in owners {
             if let Some(plugin) = self.plugins.get_mut(idx) {
-                if plugin.call_on_command(cmd, args).unwrap_or(false) {
+                if plugin.call_on_command(cmd, caller, args).unwrap_or(false) {
                     return true;
                 }
             }
@@ -541,6 +624,7 @@ impl PluginManager {
     /// then ticks every plugin's `on_frame`. `.toml` events are forwarded to
     /// plugins as `on_event("config_changed", <path>)`. Call once per frame.
     pub fn on_server_frame(&mut self) {
+        self.engine.increment_epoch();
         while let Ok(path) = self.event_rx.try_recv() {
             match path.extension().and_then(|s| s.to_str()) {
                 Some("wasm") => self.reload_plugin_path_debounced(&path),
@@ -610,6 +694,10 @@ mod tests {
     }
 
     impl goldsrc_api::EngineMessages for NoopEngineOps {
+        fn reg_user_msg(&self, _name: &str, _size: i32) -> i32 {
+            0
+        }
+
         fn message_begin(
             &self,
             _msg_dest: i32,
@@ -627,6 +715,11 @@ mod tests {
         fn write_coord(&self, _val: f32) {}
         fn write_string(&self, _val: &str) {}
         fn write_entity(&self, _val: i32) {}
+    }
+
+    impl goldsrc_api::EngineConsole for NoopEngineOps {
+        fn server_print(&self, _message: &str) {}
+        fn server_command(&self, _command: &str) {}
     }
 
     impl goldsrc_api::EngineEntities for NoopEngineOps {
@@ -756,8 +849,8 @@ mod tests {
         );
 
         // Dispatch finds the plugin via the registry and consumes the command.
-        assert!(manager.dispatch_command("testcmd", "hello"));
+        assert!(manager.dispatch_command("testcmd", 0, "hello"));
         // Unknown commands are not dispatched at all.
-        assert!(!manager.dispatch_command("nonexistent", ""));
+        assert!(!manager.dispatch_command("nonexistent", 0, ""));
     }
 }

@@ -12,7 +12,8 @@ pub struct TestSuite;
     name = "test_suite",
     version = "0.10.0",
     author = "GoldSrc.rs Team",
-    description = "ECS, entity inspection, sound playback, and CVar test suite"
+    description = "ECS, entity inspection, sound playback, and CVar test suite",
+    url = "https://github.com/goldsrc-rs/goldsrc-rs"
 )]
 impl TestSuite {
     #[on_load]
@@ -52,11 +53,29 @@ impl TestSuite {
 
     #[event]
     fn handle_event(name: String, data: Vec<u8>) {
-        if let Ok(str_data) = String::from_utf8(data) {
-            log_warn!(
-                "[Test Suite] Event Handler received: '{}' => {}",
+        if data.is_empty() {
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' (no payload)",
+                name
+            );
+        } else if data.len() == 4 {
+            let idx = i32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' => player #{}",
+                name,
+                idx
+            );
+        } else if let Ok(str_data) = String::from_utf8(data.clone()) {
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' => '{}'",
                 name,
                 str_data
+            );
+        } else {
+            log_info!(
+                "[Test Suite] Event Handler received: '{}' => (raw bytes: {:?})",
+                name,
+                data
             );
         }
     }
@@ -119,48 +138,34 @@ impl TestSuite {
     /// Tests CVar reading and writing.
     #[command(name = "test_cvar")]
     fn handle_test_cvar(_cmd: String, args: String) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let mut parts = args.split_whitespace();
-            let cvar_name = parts.next().unwrap_or("sv_gravity");
-            let new_val = parts.next();
+        let mut parts = args.split_whitespace();
+        let cvar_name = parts.next().unwrap_or("sv_gravity");
+        let new_val = parts.next();
 
-            let old_val = engine::cvar_get_float(cvar_name);
-            log_info!(
-                "[Test Suite] CVar '{}' current value: {:.1}",
-                cvar_name,
-                old_val
-            );
+        let old_val = engine::cvar_get_float(cvar_name);
+        log_info!(
+            "[Test Suite] CVar '{}' current value: {:.1}",
+            cvar_name,
+            old_val
+        );
 
-            if let Some(val_str) = new_val {
-                if let Ok(v) = val_str.parse::<f32>() {
-                    engine::cvar_set_float(cvar_name, v);
-                    log_info!("[Test Suite] CVar '{}' updated to: {:.1}", cvar_name, v);
-                }
-            }
-        }
-        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(val_str) = new_val
+            && let Ok(v) = val_str.parse::<f32>()
         {
-            log_info!("[Test Suite] test_cvar executed with: {}", args);
+            engine::cvar_set_float(cvar_name, v);
+            log_info!("[Test Suite] CVar '{}' updated to: {:.1}", cvar_name, v);
         }
     }
 
     /// Tests playing a sound on player 1.
     #[command(name = "test_sound")]
     fn handle_test_sound(_cmd: String, args: String) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let sample = if args.trim().is_empty() {
-                "events/tutor_msg.wav"
-            } else {
-                args.trim()
-            };
-            engine::emit_sound(1, 0, sample, 1.0, 0.8, 0, 100);
-            log_info!("[Test Suite] Emitted sound '{}' on entity #1", sample);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            log_info!("[Test Suite] test_sound executed with: {}", args);
-        }
+        let sample = if args.trim().is_empty() {
+            "events/tutor_msg.wav"
+        } else {
+            args.trim()
+        };
+        engine::emit_sound(1, 0, sample, 1.0, 0.8, 0, 100);
+        log_info!("[Test Suite] Emitted sound '{}' on entity #1", sample);
     }
 }

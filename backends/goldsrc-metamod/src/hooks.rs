@@ -10,7 +10,6 @@ use crate::{PRINT_QUEUE, call_engfunc, call_engfunc_ret, engfuncs};
 /// `edict` must be a valid pointer to an edict_t.
 #[allow(dead_code)]
 pub unsafe extern "C" fn hook_spawn(_edict: *mut goldsrc_sys::edict_t) -> i32 {
-    // SAFETY: trivial hook; no Rust state touched. catch_unwind guards the ABI boundary.
     catch_ffi_panic("hook_spawn", 0, || 0)
 }
 
@@ -92,10 +91,15 @@ pub unsafe extern "C" fn hook_client_disconnect_post(entity: *mut goldsrc_sys::e
 ///
 /// # Safety
 /// `_entity` must be a valid pointer to an edict_t.
-#[allow(dead_code)]
-pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t) {
+pub unsafe extern "C" fn hook_client_command(entity: *mut goldsrc_sys::edict_t) {
     // SAFETY: catch_unwind guards the ABI boundary; engine calls are safe at this point.
     catch_ffi_panic("hook_client_command", (), || {
+        let index = if !entity.is_null() {
+            call_engfunc_ret!(engfuncs().pfnIndexOfEdict, entity)
+        } else {
+            0
+        };
+
         let argc = call_engfunc_ret!(engfuncs().pfnCmd_Argc);
         if argc == 0 {
             return;
@@ -112,8 +116,31 @@ pub unsafe extern "C" fn hook_client_command(_entity: *mut goldsrc_sys::edict_t)
             } else {
                 ""
             };
-            goldsrc::hooks::dispatch_command(cmd_str, args_str);
+            let handled = goldsrc::hooks::dispatch_client_command(index, cmd_str, args_str);
+            if handled {
+                let mg = crate::meta_globals();
+                mg.mres = crate::meta_types::MRES_SUPERCEDE;
+            }
         }
+    });
+}
+
+/// Hook for ServerActivate - called when a new map is loaded and activated.
+pub unsafe extern "C" fn hook_server_activate(
+    _pedict_list: *mut goldsrc_sys::edict_t,
+    _edict_count: i32,
+    _client_max: i32,
+) {
+    catch_ffi_panic("hook_server_activate", (), || {
+        crate::backend().precache_pending_resources();
+        goldsrc::hooks::on_server_activate();
+    });
+}
+
+/// Hook for ServerDeactivate - called when the current map ends.
+pub unsafe extern "C" fn hook_server_deactivate() {
+    catch_ffi_panic("hook_server_deactivate", (), || {
+        goldsrc::hooks::on_server_deactivate();
     });
 }
 

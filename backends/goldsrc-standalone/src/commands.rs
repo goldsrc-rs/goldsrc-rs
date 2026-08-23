@@ -1,7 +1,3 @@
-//! Server console command handling for `meta-rs` / `mrs`.
-
-use goldsrc_api::Engine;
-
 use crate::{backend, call_engfunc, call_engfunc_ret, engine_api};
 
 pub fn register_cli_commands() {
@@ -16,23 +12,25 @@ pub fn register_cli_commands() {
         ),
     });
     goldsrc::cli::register_host_commands_with_names(&["goldsrc-rs", "grs"], |name, handler| {
-        let cname = std::ffi::CString::new(name).unwrap().into_raw();
-        unsafe {
-            call_engfunc!(
-                engine_api::engfuncs().pfnAddServerCommand,
-                cname,
-                Some(handler)
-            );
+        if let Ok(cname) = std::ffi::CString::new(name) {
+            unsafe {
+                call_engfunc!(
+                    engine_api::engfuncs().pfnAddServerCommand,
+                    cname.into_raw(),
+                    Some(handler)
+                );
+            }
         }
     });
     goldsrc::cli::register_plugin_server_commands(|name, handler| {
-        let cname = std::ffi::CString::new(name).unwrap().into_raw();
-        unsafe {
-            call_engfunc!(
-                engine_api::engfuncs().pfnAddServerCommand,
-                cname,
-                Some(handler)
-            );
+        if let Ok(cname) = std::ffi::CString::new(name) {
+            unsafe {
+                call_engfunc!(
+                    engine_api::engfuncs().pfnAddServerCommand,
+                    cname.into_raw(),
+                    Some(handler)
+                );
+            }
         }
     });
 }

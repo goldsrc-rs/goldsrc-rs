@@ -90,8 +90,6 @@ directly via `liblist.gam`, proving the architecture works without any third-par
 - [x] Remove hardcoded developer paths; route all logging through `PathResolver`.
 - [x] Universal GameDLL auto-detection (`mp.dll` / `cs.so`) with `GetEntityAPI2` / `GetEntityAPI` fallbacks.
 
----
-
 ## v0.9.0 — Core Refactoring, Panic Isolation & Host Separation ✅
 
 **Goal:** Eliminate code duplication between backends, harden the FFI safety boundary so no Rust
@@ -121,8 +119,6 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Centralized Project Toolchain**: Modular Python CLI (`__main__.py` with `setup`, `build`, `deploy`, `verify`, `pre-commit`, `analyze`, `logo`).
 - [x] **Purge legacy C artifacts**: Remove `exports.def`, `metamod.def`, `wrapper.c` from `goldsrc-metamod`.
 
----
-
 ## v0.10.0 — Rust 2024 Migration, Engine Bridge & WASM Plugin Ecosystem ✅
 
 **Goal:** Modernize codebase to Rust 2024 Edition, implement pure-Rust WASM runtime with Pulley32, unify Standalone & Metamod backends with direct engine FFI, implement automatic precaching lifecycle, and demonstrate a full suite of functional in-game plugins.
@@ -137,8 +133,6 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - `vip_core`: Dynamic capability authorization (`vip.access`), player buffing and healing.
   - `vip_menu`: Interactive VIP kit deployment with sound and visual feedback.
   - `admin_system`: Administration utilities (granting capabilities, slaying players, teleportation, gravity manipulation).
-
----
 
 ## v0.11.0 — Advanced Command Engine & Capability DSL 📝 Planned
 
@@ -158,8 +152,6 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [ ] **Runtime Command Builder API**:
   - Programmatic `Command::builder(...)` for dynamic runtime command registration (configs, scripting hosts, unit testing).
 
----
-
 ## v0.12.0 — Game Events, HUD/Menus & Combat Hooks 📝 Planned
 
 **Goal:** Expand GameDLL hook coverage, provide declarative UI builders for HUD/Menus, and implement native combat and damage callbacks.
@@ -175,8 +167,6 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Round state events (`RoundStart`, `RoundEnd`, `BombPlanted`, `BombDefused`).
   - CS 1.6 specific entities, buy zones, and weapon inventory management.
 
----
-
 ## v0.13.0 — Multi-Host Ecosystem (Lua, Python, Dynamic DLLs) 📝 Planned
 
 **Goal:** Support polyglot plugin development by dynamically loading external language runtimes from `hosts/` with strict ABI versioning.
@@ -186,7 +176,5 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - C-ABI `PluginHostFactory` handshake with version validation.
 - [ ] **Python Plugin Host (`goldsrc-python-host`)**:
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
-- [ ] **Lua Plugin Host (`goldsrc-lua-host`)**:
-  - Lightweight Lua 5.1/LuaJIT runtime integration via `mlua`.
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.

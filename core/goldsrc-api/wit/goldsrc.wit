@@ -94,6 +94,9 @@ interface api {
         pitch: s32
     );
 
+    /// Sends a chat message to a specific player.
+    host-print-chat: func(player-index: s32, message: string);
+
     /// --- Capability & Auth API ---
 
     /// Registers a new capability in the global system.
@@ -125,9 +128,10 @@ world goldsrc-plugin {
     export on-event: func(name: string, payload: list<u8>);
 
     /// Invoked when a registered command is executed.
+    /// `caller` is the 1-based player index, or 0 for server console.
     /// Returns `true` if the command was handled (consumed).
-    export on-command: func(name: string, args: string) -> bool;
+    export on-command: func(name: string, caller: s32, args: string) -> bool;
 
-    /// Retrieves a JSON string containing the plugin's metadata.
+    /// Retrieves a TOML string containing the plugin's metadata.
     export get-metadata: func() -> string;
 }
