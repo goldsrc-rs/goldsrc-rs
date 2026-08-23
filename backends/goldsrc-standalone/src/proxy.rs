@@ -126,24 +126,27 @@ fn resolve_game_dll_path() -> PathBuf {
         );
 
         if let Some(target) = manifest.target_gamedll() {
-            let target_path = PathBuf::from(target);
-            if target_path.exists() {
-                log::info!(
-                    target: "proxy",
-                    "Resolved GameDLL from manifest: \"{}\"",
-                    goldsrc::paths::PathResolver::normalize(&target_path)
-                );
-                return target_path;
-            }
-            if let Some(parent) = manifest_path.parent() {
-                let rel_path = parent.join(target);
-                if rel_path.exists() {
+            let target_lower = target.to_ascii_lowercase();
+            if !target_lower.contains("metamod") && !target_lower.contains("goldsrc") {
+                let target_path = PathBuf::from(target);
+                if target_path.exists() {
                     log::info!(
                         target: "proxy",
-                        "Resolved GameDLL relative to manifest: \"{}\"",
-                        goldsrc::paths::PathResolver::normalize(&rel_path)
+                        "Resolved GameDLL from manifest: \"{}\"",
+                        goldsrc::paths::PathResolver::normalize(&target_path)
                     );
-                    return rel_path;
+                    return target_path;
+                }
+                if let Some(parent) = manifest_path.parent() {
+                    let rel_path = parent.join(target);
+                    if rel_path.exists() {
+                        log::info!(
+                            target: "proxy",
+                            "Resolved GameDLL relative to manifest: \"{}\"",
+                            goldsrc::paths::PathResolver::normalize(&rel_path)
+                        );
+                        return rel_path;
+                    }
                 }
             }
         }
