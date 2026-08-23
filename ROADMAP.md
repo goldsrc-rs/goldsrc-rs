@@ -134,23 +134,30 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - `vip_menu`: Interactive VIP kit deployment with sound and visual feedback.
   - `admin_system`: Administration utilities (granting capabilities, slaying players, teleportation, gravity manipulation).
 
-## v0.11.0 — Advanced Command Engine & Capability DSL 📝 Planned
+## v0.11.0 — Advanced Command Engine, Sandbox Hardening & Capability DSL ✅
 
-**Goal:** Provide an ergonomic, declarative command system and a hierarchical capability DSL, eliminating manual string parsing and boilerplate permission checks.
+**Goal:** Provide an ergonomic, declarative command system, a hierarchical capability DSL, resilient WASM sandbox interruption, and complete Metamod/AMX Mod X co-existence safety.
 
-- [ ] **Command Targets & Channels**:
+- [x] **Command Targets & Channels**:
   - Declarative routing for `Server`, `ClientConsole`, `Chat` (`say`, `say_team`), and `MessageMode` dialogs.
-  - Silent chat triggers (e.g. executing `/vip` without polluting public game chat).
-- [ ] **Typestate Guards & Extractors**:
-  - Type-driven precondition checks (`Alive<Player>`, `Dead<Player>`, `Terrorist(Player)`, `CounterTerrorist(Player)`, `Bot`, `HLTV`).
-- [ ] **Command Error Pipeline (`CommandResult`)**:
+  - Silent chat triggers (e.g. executing `/vip` or `!vip` with engine message suppression via `MRES_SUPERCEDE`).
+- [x] **Typestate Guards & Extractors**:
+  - Type-driven precondition checks and typed extraction (`Player`, `Alive<Player>`, `FromArg` trait).
+  - Auto-binding caller player index to target parameters when executing chat commands without positional args.
+- [x] **Command Error Pipeline (`CommandResult`)**:
   - Typed error taxonomy (`AccessDenied`, `InvalidArguments`, `InvalidState`, `TargetNotFound`, `Cooldown`, `Custom`).
-  - Extensible `ErrorHandler` with plugin-level overrides (`Plugin::on_command_error`).
-- [ ] **Hierarchical Capability DSL**:
-  - Rich grammar: namespaces (`admin.*`), wildcards, negation (`!admin.rcon`), logical combinators (`&`, `|`, `all_of!`, `any_of!`), and parametric claims (`teleport(target=self)`).
-  - High-performance prefix-tree (Trie) / bitset evaluation cache.
-- [ ] **Runtime Command Builder API**:
-  - Programmatic `Command::builder(...)` for dynamic runtime command registration (configs, scripting hosts, unit testing).
+  - Declarative CLI specs (`CommandSpec`) with specialized per-command help (`grs <cmd> --help`, `grs help <cmd>`).
+- [x] **Hierarchical Capability DSL**:
+  - Rich Boolean grammar: namespaces (`admin.*`), wildcards, negation (`!admin.rcon`), logical combinators (`&`, `|`, `all_of!`, `any_of!`).
+  - Fail-closed capability evaluation and eviction lifecycle.
+- [x] **Runtime Command Builder API**:
+  - Programmatic `Command::builder(...)` for dynamic runtime command registration.
+- [x] **Adversarial Sandbox & ABI Hardening**:
+  - Background daemon epoch timer (`increment_epoch` every 2ms) ensuring real wall-clock timeouts on infinite loops.
+  - Wasmtime `StoreLimits` (64MB memory limit, 10k table elements).
+  - Preserved Metamod shared memory (`mutil_funcs_t`) ensuring 100% stable co-existence with AMX Mod X.
+  - Correct `MessageDest` discriminants and dynamic `SayText` user message lookup via `reg_user_msg`.
+  - Panic barrier encapsulation (`catch_ffi_panic`) on entity factories.
 
 ## v0.12.0 — Game Events, HUD/Menus & Combat Hooks 📝 Planned
 
