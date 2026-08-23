@@ -313,10 +313,10 @@ impl MenuSessionManager {
             return;
         }
 
-        // GoldSrc user message buffer limit is 192 bytes.
+        // GoldSrc user message buffer limit is MAX_USER_MSG_DATA_LEN (192 bytes).
         // Overhead: 2 (short keys) + 1 (char time) + 1 (byte multipart) + 1 (null terminator) = 5 bytes.
-        // Safe payload margin: 150 bytes per chunk.
-        let max_chunk = 150;
+        // Safe payload margin: MAX_SHOW_MENU_CHUNK_SIZE (150 bytes) per chunk.
+        let max_chunk = goldsrc_api::consts::MAX_SHOW_MENU_CHUNK_SIZE;
         let mut remaining = text;
 
         while !remaining.is_empty() {

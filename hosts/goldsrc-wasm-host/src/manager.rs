@@ -208,7 +208,7 @@ impl api::Host for HostState {
             return;
         }
 
-        let max_chunk = 150;
+        let max_chunk = goldsrc_api::consts::MAX_SHOW_MENU_CHUNK_SIZE;
         let mut remaining = &text[..];
 
         while !remaining.is_empty() {
@@ -401,6 +401,8 @@ pub struct PluginManager {
     last_reload: HashMap<PathBuf, Instant>,
     /// command name -> plugin indices that registered it.
     command_registry: HashMap<String, Vec<usize>>,
+    /// Configured search directories for plugin path resolution.
+    plugin_dirs: Vec<PathBuf>,
 }
 
 /// Minimum gap between two hot-reloads of the same file. Compilers write in
@@ -442,7 +444,24 @@ impl PluginManager {
             watcher_count: 0,
             last_reload: HashMap::new(),
             command_registry: HashMap::new(),
+            plugin_dirs: Vec::new(),
         })
+    }
+
+    /// Sets the list of base search directories for resolving plugin paths.
+    pub fn set_plugin_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.plugin_dirs = dirs;
+    }
+
+    /// Sets the list of base search directories (builder style).
+    pub fn with_plugin_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
+        self.plugin_dirs = dirs;
+        self
+    }
+
+    /// Appends a plugin search directory.
+    pub fn add_plugin_dir(&mut self, dir: PathBuf) {
+        self.plugin_dirs.push(dir);
     }
 
     /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
@@ -837,8 +856,9 @@ impl PluginManager {
     pub fn load_plugin_by_name(&mut self, query: &str) -> Result<String, LoadError> {
         let mut path = PathBuf::from(query);
         if !path.exists() {
-            let with_ext = if !query.ends_with(".wasm") {
-                PathBuf::from(format!("{query}.wasm"))
+            let wasm_ext = goldsrc_api::consts::WASM_EXT;
+            let with_ext = if !query.ends_with(wasm_ext) {
+                PathBuf::from(format!("{query}{wasm_ext}"))
             } else {
                 path.clone()
             };
@@ -846,19 +866,23 @@ impl PluginManager {
             if with_ext.exists() {
                 path = with_ext;
             } else {
-                let candidates = [
-                    PathBuf::from("cstrike/addons/goldsrc/plugins").join(query),
-                    PathBuf::from("cstrike/addons/goldsrc/plugins").join(format!("{query}.wasm")),
-                    PathBuf::from("addons/goldsrc/plugins").join(query),
-                    PathBuf::from("addons/goldsrc/plugins").join(format!("{query}.wasm")),
-                    PathBuf::from("goldsrc/plugins").join(query),
-                    PathBuf::from("goldsrc/plugins").join(format!("{query}.wasm")),
-                    PathBuf::from("plugins").join(query),
-                    PathBuf::from("plugins").join(format!("{query}.wasm")),
-                ];
-                if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
+                let mut found_path = None;
+                for base_dir in &self.plugin_dirs {
+                    let candidate = base_dir.join(query);
+                    if candidate.exists() {
+                        found_path = Some(candidate);
+                        break;
+                    }
+                    let candidate_wasm = base_dir.join(format!("{query}{wasm_ext}"));
+                    if candidate_wasm.exists() {
+                        found_path = Some(candidate_wasm);
+                        break;
+                    }
+                }
+
+                if let Some(found) = found_path {
                     path = found;
-                } else if !query.ends_with(".wasm") {
+                } else if !query.ends_with(wasm_ext) {
                     path = with_ext;
                 }
             }

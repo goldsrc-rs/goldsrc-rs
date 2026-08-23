@@ -139,8 +139,8 @@ pub unsafe extern "C" fn GetEntityAPI2(
             return 0;
         }
         unsafe {
-            if *interface_version != 140 {
-                *interface_version = 140;
+            if *interface_version != goldsrc_api::consts::ENGINE_INTERFACE_VERSION {
+                *interface_version = goldsrc_api::consts::ENGINE_INTERFACE_VERSION;
                 return 0;
             }
             let table = &mut *dll_table;
@@ -175,8 +175,8 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
             return 0;
         }
         unsafe {
-            if *interface_version != 140 {
-                *interface_version = 140;
+            if *interface_version != goldsrc_api::consts::ENGINE_INTERFACE_VERSION {
+                *interface_version = goldsrc_api::consts::ENGINE_INTERFACE_VERSION;
                 return 0;
             }
             let table = &mut *dll_table;
@@ -199,7 +199,8 @@ pub unsafe extern "C" fn GetEntityAPI(
     interface_version: i32,
 ) -> i32 {
     catch_ffi_panic("GetEntityAPI", 0, || {
-        if dll_table.is_null() || interface_version != 140 {
+        if dll_table.is_null() || interface_version != goldsrc_api::consts::ENGINE_INTERFACE_VERSION
+        {
             return 0;
         }
         backend().server_print("[GoldSrc.rs] GetEntityAPI called.\n");

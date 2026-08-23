@@ -30,6 +30,7 @@ impl HostRuntime {
 
         let mut manager = PluginManager::new(engine.clone())
             .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
+        manager.set_plugin_dirs(crate::paths::PathResolver::plugin_dirs(backend));
 
         let sys_config = GoldSrcConfig::load_or_create(backend);
 

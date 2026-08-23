@@ -46,10 +46,9 @@ pub fn send_hud_message(engine: &dyn Engine, player_idx: Option<i32>, msg: &HudM
 
     match msg.kind {
         HudKind::Classic { channel } => {
-            // SVC_TEMPENTITY (23) -> TE_TEXTMESSAGE (29)
-            // 23 = SVC_TEMPENTITY in GoldSrc
-            engine.message_begin(dest, 23, None, player_idx);
-            engine.write_byte(29); // TE_TEXTMESSAGE
+            // SVC_TEMPENTITY -> TE_TEXTMESSAGE
+            engine.message_begin(dest, goldsrc_api::consts::SVC_TEMPENTITY, None, player_idx);
+            engine.write_byte(goldsrc_api::consts::TE_TEXTMESSAGE as i32);
             engine.write_byte(channel as i32);
             engine.write_short(x_val);
             engine.write_short(y_val);
@@ -70,16 +69,15 @@ pub fn send_hud_message(engine: &dyn Engine, player_idx: Option<i32>, msg: &HudM
             engine.message_end();
         }
         HudKind::Dhud => {
-            // Director Message (SVC_DIRECTOR = 10 / DRC_CMD_MESSAGE = 2)
-            // Format for DHUD: length byte, cmd byte, effect args, text
+            // Director Message (SVC_DIRECTOR / DRC_CMD_MESSAGE)
             let full_text = &msg.text;
             let text_bytes = full_text.as_bytes();
             let total_len = 1 + 1 + 2 + 2 + 1 + 4 + 4 + 2 + 2 + 2 + 2 + text_bytes.len() + 1;
 
             if total_len <= 500 {
-                engine.message_begin(dest, 10, None, player_idx); // SVC_DIRECTOR = 10
+                engine.message_begin(dest, goldsrc_api::consts::SVC_DIRECTOR, None, player_idx);
                 engine.write_byte(total_len as i32);
-                engine.write_byte(2); // DRC_CMD_MESSAGE
+                engine.write_byte(goldsrc_api::consts::DRC_CMD_MESSAGE as i32);
                 engine.write_byte(effect_val);
                 engine.write_short(x_val);
                 engine.write_short(y_val);
@@ -99,8 +97,8 @@ pub fn send_hud_message(engine: &dyn Engine, player_idx: Option<i32>, msg: &HudM
                 engine.message_end();
             } else {
                 // Fallback to TE_TEXTMESSAGE if oversized
-                engine.message_begin(dest, 23, None, player_idx);
-                engine.write_byte(29);
+                engine.message_begin(dest, goldsrc_api::consts::SVC_TEMPENTITY, None, player_idx);
+                engine.write_byte(goldsrc_api::consts::TE_TEXTMESSAGE as i32);
                 engine.write_byte(4); // channel 4
                 engine.write_short(x_val);
                 engine.write_short(y_val);

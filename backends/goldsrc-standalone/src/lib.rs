@@ -309,7 +309,7 @@ pub unsafe extern "C" fn GetEntityAPI2(
         }
         unsafe {
             if !interface_version.is_null() {
-                *interface_version = 140;
+                *interface_version = goldsrc_api::consts::ENGINE_INTERFACE_VERSION;
             }
             // 1. Populate with real GameDLL (mp.dll / cs.so) callbacks.
             proxy::populate_dll_table(dll_table);
@@ -371,7 +371,7 @@ pub unsafe extern "C" fn GetNewDLLFunctions(
         }
         unsafe {
             if !interface_version.is_null() {
-                *interface_version = 1;
+                *interface_version = goldsrc_api::consts::NEW_DLL_INTERFACE_VERSION;
             }
         }
         if proxy::populate_new_dll_table(new_dll_table) {
