@@ -30,9 +30,6 @@ pub enum BackendType {
 /// Default name of the framework configuration file.
 pub const DEFAULT_CONFIG_FILE_NAME: &str = "goldsrc.toml";
 
-/// Default name of the framework log file (fallback).
-pub const DEFAULT_LOG_FILE_NAME: &str = "goldsrc.log";
-
 /// Default mod directory (e.g., "cstrike", "valve").
 pub const DEFAULT_MOD_DIR: &str = "cstrike";
 
