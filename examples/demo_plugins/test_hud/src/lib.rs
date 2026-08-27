@@ -5,6 +5,7 @@ pub struct TestHud;
 #[plugin(
     name = "test_hud",
     version = "0.13.0",
+    bundle = "test_suite",
     author = "GoldSrc.rs Team",
     description = "HUD, DHUD, and Screen Effects verification suite",
     url = "https://github.com/goldsrc-rs/goldsrc-rs"

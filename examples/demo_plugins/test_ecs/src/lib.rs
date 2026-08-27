@@ -27,6 +27,7 @@ pub struct TestEcs;
 #[plugin(
     name = "test_ecs",
     version = "0.13.0",
+    bundle = "test_suite",
     author = "GoldSrc.rs Team",
     description = "Flat ECS state storage and system stages verification suite",
     url = "https://github.com/goldsrc-rs/goldsrc-rs"

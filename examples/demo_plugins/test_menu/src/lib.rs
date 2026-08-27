@@ -5,6 +5,7 @@ pub struct TestMenu;
 #[plugin(
     name = "test_menu",
     version = "0.13.0",
+    bundle = "test_suite",
     author = "GoldSrc.rs Team",
     description = "Declarative multi-page and DHUD menu verification suite",
     url = "https://github.com/goldsrc-rs/goldsrc-rs"

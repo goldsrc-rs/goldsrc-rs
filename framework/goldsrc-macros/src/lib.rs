@@ -25,6 +25,7 @@ struct PluginAttr {
     description: String,
     url: String,
     license: String,
+    bundle: Option<String>,
     require: Vec<String>,
 }
 
@@ -80,6 +81,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
         description: cargo_desc,
         url: cargo_url,
         license: cargo_license,
+        bundle: None,
         require: Vec::new(),
     };
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -155,11 +157,13 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                     out.url = value;
                 } else if ident == "license" {
                     out.license = value;
+                } else if ident == "bundle" {
+                    out.bundle = Some(value);
                 } else {
                     return Err(syn::Error::new_spanned(
                         nv.path,
                         format!(
-                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url/repository, license, require"
+                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url/repository, license, bundle, require"
                         ),
                     ));
                 }
@@ -167,7 +171,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "unsupported #[plugin] attribute; supported: name, version, author, description, url/repository, license, require",
+                    "unsupported #[plugin] attribute; supported: name, version, author, description, url/repository, license, bundle, require",
                 ));
             }
         }
@@ -948,6 +952,12 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         String::new()
     };
 
+    let bundle_toml = if let Some(ref b) = attr.bundle {
+        format!("bundle = \"{}\"\n", toml_escape(b))
+    } else {
+        String::new()
+    };
+
     let mut systems_toml = String::new();
     if !system_handlers.is_empty() {
         let sys_names: Vec<String> = system_handlers
@@ -958,13 +968,14 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}{}{}{}",
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}{}{}{}{}",
         toml_escape(&plugin_name),
         toml_escape(&plugin_version),
         toml_escape(&plugin_author),
         desc_toml,
         url_toml,
         license_toml,
+        bundle_toml,
         require_toml,
         systems_toml,
         commands_toml,
