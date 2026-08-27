@@ -377,9 +377,13 @@ def verify_deploy(
 
     # Check 4: WASM plugins hashes
     for wasm_src in wasm_paths:
-        wasm_dst = wasm_target_dir / wasm_src.name
+        if wasm_src.name.startswith("test_"):
+            wasm_dst = wasm_target_dir / "test_suite" / wasm_src.name
+        else:
+            wasm_dst = wasm_target_dir / wasm_src.name
+
         if not wasm_dst.exists():
-            print(f"  [FAIL] WASM plugin not found: {wasm_dst.name}")
+            print(f"  [FAIL] WASM plugin not found: {wasm_dst}")
             all_ok = False
         else:
             src_hash = hashlib.md5(wasm_src.read_bytes()).hexdigest()
@@ -410,7 +414,13 @@ def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path, backend: str = 
 
     for wasm_file in wasm_paths:
         if wasm_file.exists():
-            dest = wasm_target_dir / wasm_file.name
+            if wasm_file.name.startswith("test_"):
+                # Deploy test suite micro-plugins into test_suite/ subfolder
+                target_sub = wasm_target_dir / "test_suite"
+                target_sub.mkdir(parents=True, exist_ok=True)
+                dest = target_sub / wasm_file.name
+            else:
+                dest = wasm_target_dir / wasm_file.name
             shutil.copy2(wasm_file, dest)
             print(f"Copied WASM plugin: {dest}")
 

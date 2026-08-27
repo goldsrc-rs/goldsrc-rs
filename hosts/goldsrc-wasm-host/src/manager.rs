@@ -952,7 +952,7 @@ impl PluginManager {
         })
         .map_err(|e| CommandError::Watcher(e.to_string()))?;
         watcher
-            .watch(&dir, notify::RecursiveMode::NonRecursive)
+            .watch(&dir, notify::RecursiveMode::Recursive)
             .map_err(|e| CommandError::Watcher(e.to_string()))?;
 
         self.watchers.push(watcher);

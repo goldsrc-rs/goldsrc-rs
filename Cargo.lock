@@ -519,6 +519,7 @@ name = "goldsrc-api"
 version = "0.10.0"
 dependencies = [
  "goldsrc-sys",
+ "toml",
  "wit-bindgen",
 ]
 
@@ -1135,7 +1136,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "test_suite"
+name = "test_ecs"
+version = "0.10.0"
+dependencies = [
+ "goldsrc",
+]
+
+[[package]]
+name = "test_hud"
+version = "0.10.0"
+dependencies = [
+ "goldsrc",
+]
+
+[[package]]
+name = "test_menu"
 version = "0.10.0"
 dependencies = [
  "goldsrc",

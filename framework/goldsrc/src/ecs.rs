@@ -89,7 +89,7 @@ impl<T> ComponentStorage<T> {
 /// Flat World for WASM plugin ECS.
 #[derive(Default)]
 pub struct World {
-    storages: HashMap<TypeId, Box<dyn Any>>,
+    storages: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
 impl World {
@@ -99,7 +99,7 @@ impl World {
     }
 
     /// Inserts `component` for `entity` into the per-type storage.
-    pub fn insert<T: 'static>(&mut self, entity: EntityId, component: T) {
+    pub fn insert<T: Send + Sync + 'static>(&mut self, entity: EntityId, component: T) {
         let type_id = TypeId::of::<T>();
         let storage = self
             .storages

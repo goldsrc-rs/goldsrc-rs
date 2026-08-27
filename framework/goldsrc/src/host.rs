@@ -84,28 +84,85 @@ impl HostRuntime {
             log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
 
-        // Auto-load all .wasm plugins in plugin_dir
-        if let Ok(entries) = std::fs::read_dir(&plugin_dir) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
-                    let file_name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy())
-                        .unwrap_or_default();
-                    match manager.load_plugin(&path) {
-                        Ok(_) => log::info!(
-                            target: "wasm",
-                            "Loaded plugin: \"{}\"",
-                            file_name
-                        ),
-                        Err(e) => log::error!(
-                            target: "wasm",
-                            "Failed to load \"{}\": {e}",
-                            file_name
-                        ),
+        // Load plugins.toml configuration if present
+        let plugins_config_path = config_dir.join("plugins.toml");
+        let plugins_config = if plugins_config_path.is_file() {
+            match std::fs::read_to_string(&plugins_config_path) {
+                Ok(content) => match crate::plugins_config::PluginsConfig::parse(&content) {
+                    Ok(cfg) => {
+                        log::info!(target: "wasm", "Loaded plugin orchestration config from {:?}", plugins_config_path);
+                        cfg
+                    }
+                    Err(e) => {
+                        log::warn!(target: "wasm", "Failed to parse {:?}: {e}, using default discovery", plugins_config_path);
+                        crate::plugins_config::PluginsConfig::default()
+                    }
+                },
+                Err(e) => {
+                    log::warn!(target: "wasm", "Failed to read {:?}: {e}", plugins_config_path);
+                    crate::plugins_config::PluginsConfig::default()
+                }
+            }
+        } else {
+            crate::plugins_config::PluginsConfig::default()
+        };
+
+        // Recursive helper to discover all .wasm plugins in directory tree
+        fn discover_wasm_plugins(
+            dir: &std::path::Path,
+            base_dir: &std::path::Path,
+            out: &mut Vec<(String, std::path::PathBuf)>,
+        ) {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        discover_wasm_plugins(&path, base_dir, out);
+                    } else if path.is_file()
+                        && path.extension().and_then(|s| s.to_str()) == Some("wasm")
+                    {
+                        let rel_path = path.strip_prefix(base_dir).unwrap_or(&path);
+                        let rel_name = rel_path
+                            .with_extension("")
+                            .to_string_lossy()
+                            .replace('\\', "/");
+                        out.push((rel_name, path));
                     }
                 }
+            }
+        }
+
+        let mut discovered = Vec::new();
+        discover_wasm_plugins(&plugin_dir, &plugin_dir, &mut discovered);
+
+        // Sort by priority from plugins_config (higher priority loads earlier)
+        discovered.sort_by_key(|(name, _)| {
+            let priority = plugins_config
+                .plugins
+                .iter()
+                .find(|p| p.name == *name)
+                .map(|p| p.priority)
+                .unwrap_or(100);
+            std::cmp::Reverse(priority)
+        });
+
+        for (name, path) in discovered {
+            if !plugins_config.is_plugin_enabled(&name) {
+                log::info!(target: "wasm", "Plugin \"{}\" disabled by configuration, skipping", name);
+                continue;
+            }
+
+            match manager.load_plugin(&path) {
+                Ok(_) => log::info!(
+                    target: "wasm",
+                    "Loaded plugin: \"{}\"",
+                    name
+                ),
+                Err(e) => log::error!(
+                    target: "wasm",
+                    "Failed to load \"{}\": {e}",
+                    name
+                ),
             }
         }
 

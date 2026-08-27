@@ -1,0 +1,450 @@
+use crate::plugins_config::PluginsConfig;
+use goldsrc_api::Engine;
+use goldsrc_api::rules::{RuleAction, RuleCondition};
+use std::collections::HashMap;
+
+/// Server context provided during rule evaluation.
+pub struct ServerRuleContext<'a> {
+    pub map_name: &'a str,
+    pub player_count: usize,
+    pub engine: &'a dyn Engine,
+    pub plugins_config: &'a mut PluginsConfig,
+    pub paused_plugins: &'a mut HashMap<String, bool>,
+    pub execution_log: Vec<String>,
+}
+
+// ----------------------------------------------------------------------------
+// Built-in Conditions
+// ----------------------------------------------------------------------------
+
+/// Evaluates map name against strings, prefixes (`de_*`, `fy_*`), or exclusions (`!aim_*`).
+pub struct MapCondition;
+
+impl<'a> RuleCondition<ServerRuleContext<'a>> for MapCondition {
+    fn name(&self) -> &str {
+        "map"
+    }
+
+    fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
+        let current_map = ctx.map_name;
+
+        let check_single = |pattern: &str| -> bool {
+            if let Some(stripped) = pattern.strip_prefix('!') {
+                // Inverted match
+                if let Some(prefix) = stripped.strip_suffix('*') {
+                    !current_map.starts_with(prefix)
+                } else {
+                    current_map != stripped
+                }
+            } else if let Some(prefix) = pattern.strip_suffix('*') {
+                current_map.starts_with(prefix)
+            } else {
+                current_map.eq_ignore_ascii_case(pattern)
+            }
+        };
+
+        match value {
+            toml::Value::String(s) => check_single(s),
+            toml::Value::Array(arr) => {
+                // If any inclusion pattern matches (or exclusions pass)
+                arr.iter().any(|v| match v {
+                    toml::Value::String(s) => check_single(s),
+                    _ => false,
+                })
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Evaluates player count against comparison strings (`>= 10`, `< 5`, `== 0`, `5..15`).
+pub struct PlayersCondition;
+
+impl<'a> RuleCondition<ServerRuleContext<'a>> for PlayersCondition {
+    fn name(&self) -> &str {
+        "players"
+    }
+
+    fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
+        let count = ctx.player_count;
+
+        match value {
+            toml::Value::Integer(n) => count >= *n as usize,
+            toml::Value::String(expr) => {
+                let expr = expr.trim();
+                if let Some(val_str) = expr.strip_prefix(">=") {
+                    val_str.trim().parse::<usize>().is_ok_and(|v| count >= v)
+                } else if let Some(val_str) = expr.strip_prefix("<=") {
+                    val_str.trim().parse::<usize>().is_ok_and(|v| count <= v)
+                } else if let Some(val_str) = expr.strip_prefix('>') {
+                    val_str.trim().parse::<usize>().is_ok_and(|v| count > v)
+                } else if let Some(val_str) = expr.strip_prefix('<') {
+                    val_str.trim().parse::<usize>().is_ok_and(|v| count < v)
+                } else if let Some(val_str) = expr.strip_prefix("==") {
+                    val_str.trim().parse::<usize>().is_ok_and(|v| count == v)
+                } else if let Some((start, end)) = expr.split_once("..") {
+                    let s = start.trim().parse::<usize>().unwrap_or(0);
+                    let e = end.trim().parse::<usize>().unwrap_or(usize::MAX);
+                    count >= s && count <= e
+                } else {
+                    expr.parse::<usize>().is_ok_and(|v| count == v)
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Evaluates server CVar expressions (e.g. `mp_friendlyfire == 1`, `sv_gravity < 800`).
+pub struct CvarCondition;
+
+impl<'a> RuleCondition<ServerRuleContext<'a>> for CvarCondition {
+    fn name(&self) -> &str {
+        "cvar"
+    }
+
+    fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
+        let expr = match value {
+            toml::Value::String(s) => s.as_str(),
+            _ => return false,
+        };
+
+        // Parse operator
+        let (cvar_name, op, expected_str) = if let Some((c, v)) = expr.split_once("==") {
+            (c.trim(), "==", v.trim())
+        } else if let Some((c, v)) = expr.split_once("!=") {
+            (c.trim(), "!=", v.trim())
+        } else if let Some((c, v)) = expr.split_once(">=") {
+            (c.trim(), ">=", v.trim())
+        } else if let Some((c, v)) = expr.split_once("<=") {
+            (c.trim(), "<=", v.trim())
+        } else if let Some((c, v)) = expr.split_once('>') {
+            (c.trim(), ">", v.trim())
+        } else if let Some((c, v)) = expr.split_once('<') {
+            (c.trim(), "<", v.trim())
+        } else {
+            return false;
+        };
+
+        let current_val = ctx.engine.cvar_get_float(cvar_name);
+        let expected_val = expected_str.parse::<f32>().unwrap_or(0.0);
+
+        match op {
+            "==" => (current_val - expected_val).abs() < 0.001,
+            "!=" => (current_val - expected_val).abs() >= 0.001,
+            ">=" => current_val >= expected_val,
+            "<=" => current_val <= expected_val,
+            ">" => current_val > expected_val,
+            "<" => current_val < expected_val,
+            _ => false,
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Built-in Actions
+// ----------------------------------------------------------------------------
+
+/// Action to pause one or more plugins (`pause = ["vip_menu", "vip_core"]`).
+pub struct PauseAction;
+
+impl<'a> RuleAction<ServerRuleContext<'a>> for PauseAction {
+    fn name(&self) -> &str {
+        "pause"
+    }
+
+    fn execute(&self, ctx: &mut ServerRuleContext<'a>, value: &toml::Value) -> Result<(), String> {
+        let plugins_to_pause = match value {
+            toml::Value::String(s) => vec![s.clone()],
+            toml::Value::Array(arr) => arr
+                .iter()
+                .filter_map(|v| match v {
+                    toml::Value::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect(),
+            _ => return Err("Expected string or list of plugin names".to_string()),
+        };
+
+        for p in plugins_to_pause {
+            ctx.paused_plugins.insert(p.clone(), true);
+            ctx.execution_log.push(format!("Paused plugin '{}'", p));
+        }
+
+        Ok(())
+    }
+}
+
+/// Action to unpause one or more plugins (`unpause = ["vip_menu"]`).
+pub struct UnpauseAction;
+
+impl<'a> RuleAction<ServerRuleContext<'a>> for UnpauseAction {
+    fn name(&self) -> &str {
+        "unpause"
+    }
+
+    fn execute(&self, ctx: &mut ServerRuleContext<'a>, value: &toml::Value) -> Result<(), String> {
+        let plugins_to_unpause = match value {
+            toml::Value::String(s) => vec![s.clone()],
+            toml::Value::Array(arr) => arr
+                .iter()
+                .filter_map(|v| match v {
+                    toml::Value::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect(),
+            _ => return Err("Expected string or list of plugin names".to_string()),
+        };
+
+        for p in plugins_to_unpause {
+            ctx.paused_plugins.insert(p.clone(), false);
+            ctx.execution_log.push(format!("Unpaused plugin '{}'", p));
+        }
+
+        Ok(())
+    }
+}
+
+/// Action to set one or more server CVars (`set_cvar = { "sv_gravity" = 700 }`).
+pub struct SetCvarAction;
+
+impl<'a> RuleAction<ServerRuleContext<'a>> for SetCvarAction {
+    fn name(&self) -> &str {
+        "set_cvar"
+    }
+
+    fn execute(&self, ctx: &mut ServerRuleContext<'a>, value: &toml::Value) -> Result<(), String> {
+        if let toml::Value::Table(table) = value {
+            for (cvar_name, val) in table {
+                let val_str = match val {
+                    toml::Value::String(s) => s.clone(),
+                    toml::Value::Integer(i) => i.to_string(),
+                    toml::Value::Float(f) => f.to_string(),
+                    toml::Value::Boolean(b) => if *b { "1" } else { "0" }.to_string(),
+                    _ => continue,
+                };
+                ctx.engine.cvar_set_string(cvar_name, &val_str);
+                ctx.execution_log
+                    .push(format!("Set CVar '{}' to '{}'", cvar_name, val_str));
+            }
+            Ok(())
+        } else {
+            Err("Expected table of cvar_name = value".to_string())
+        }
+    }
+}
+
+/// Action to execute server console commands (`exec = "server_night.cfg"`).
+pub struct ExecAction;
+
+impl<'a> RuleAction<ServerRuleContext<'a>> for ExecAction {
+    fn name(&self) -> &str {
+        "exec"
+    }
+
+    fn execute(&self, ctx: &mut ServerRuleContext<'a>, value: &toml::Value) -> Result<(), String> {
+        match value {
+            toml::Value::String(cmd) => {
+                ctx.engine.server_command(cmd);
+                ctx.execution_log
+                    .push(format!("Executed command '{}'", cmd));
+                Ok(())
+            }
+            _ => Err("Expected string command".to_string()),
+        }
+    }
+}
+
+/// Creates a default `RuleRegistry` populated with all built-in server conditions and actions.
+pub fn create_default_server_rule_registry<'a>()
+-> goldsrc_api::rules::RuleRegistry<ServerRuleContext<'a>> {
+    let mut registry = goldsrc_api::rules::RuleRegistry::new();
+    registry.register_condition(MapCondition);
+    registry.register_condition(PlayersCondition);
+    registry.register_condition(CvarCondition);
+    registry.register_action(PauseAction);
+    registry.register_action(UnpauseAction);
+    registry.register_action(SetCvarAction);
+    registry.register_action(ExecAction);
+    registry
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use goldsrc_api::rules::Rule;
+    use goldsrc_api::{
+        EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
+        EngineSound, TraceResult,
+    };
+
+    struct MockEngine;
+    impl EnginePrecache for MockEngine {
+        fn precache_model(&self, _s: &str) -> i32 {
+            0
+        }
+        fn precache_sound(&self, _s: &str) -> i32 {
+            0
+        }
+        fn precache_generic(&self, _s: &str) -> i32 {
+            0
+        }
+    }
+    impl EngineMessages for MockEngine {
+        fn message_begin(&self, _d: i32, _t: i32, _o: Option<[f32; 3]>, _e: Option<i32>) {}
+        fn message_end(&self) {}
+        fn write_byte(&self, _b: i32) {}
+        fn write_char(&self, _c: i32) {}
+        fn write_short(&self, _s: i32) {}
+        fn write_long(&self, _l: i32) {}
+        fn write_angle(&self, _a: f32) {}
+        fn write_coord(&self, _c: f32) {}
+        fn write_string(&self, _s: &str) {}
+        fn write_entity(&self, _e: i32) {}
+        fn reg_user_msg(&self, _n: &str, _s: i32) -> i32 {
+            0
+        }
+    }
+    impl EngineEntities for MockEngine {
+        fn entity_is_valid(&self, _index: i32) -> bool {
+            false
+        }
+        fn entity_classname(&self, _index: i32) -> Option<String> {
+            None
+        }
+        fn entity_health(&self, _index: i32) -> f32 {
+            0.0
+        }
+        fn entity_set_health(&self, _index: i32, _health: f32) {}
+        fn entity_origin(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
+        fn entity_velocity(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_velocity(&self, _index: i32, _vel: [f32; 3]) {}
+        fn entity_angles(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
+        fn player_name(&self, _index: i32) -> Option<String> {
+            None
+        }
+        fn player_armorvalue(&self, _index: i32) -> f32 {
+            0.0
+        }
+        fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
+        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
+            None
+        }
+        fn remove_entity(&self, _index: i32) {}
+        fn drop_to_floor(&self, _index: i32) -> i32 {
+            0
+        }
+        fn dispatch_spawn(&self, _index: i32) -> i32 {
+            0
+        }
+        fn dispatch_touch(&self, _touched: i32, _other: i32) {}
+    }
+    impl EngineCvars for MockEngine {
+        fn cvar_get_float(&self, _n: &str) -> f32 {
+            0.0
+        }
+        fn cvar_set_float(&self, _n: &str, _v: f32) {}
+        fn cvar_get_string(&self, _n: &str) -> Option<String> {
+            None
+        }
+        fn cvar_set_string(&self, _n: &str, _v: &str) {}
+    }
+    impl EnginePhysics for MockEngine {
+        fn point_contents(&self, _point: [f32; 3]) -> i32 {
+            0
+        }
+        fn trace_line(&self, _s: [f32; 3], _e: [f32; 3], _f: i32, _i: i32) -> TraceResult {
+            TraceResult {
+                all_solid: false,
+                start_solid: false,
+                in_open: true,
+                in_water: false,
+                fraction: 1.0,
+                end_pos: [0.0, 0.0, 0.0],
+                plane_normal: [0.0, 0.0, 0.0],
+                hit_entity: -1,
+            }
+        }
+        fn trace_hull(&self, _s: [f32; 3], _e: [f32; 3], _f: i32, _h: i32, _i: i32) -> TraceResult {
+            TraceResult {
+                all_solid: false,
+                start_solid: false,
+                in_open: true,
+                in_water: false,
+                fraction: 1.0,
+                end_pos: [0.0, 0.0, 0.0],
+                plane_normal: [0.0, 0.0, 0.0],
+                hit_entity: -1,
+            }
+        }
+    }
+    impl EngineSound for MockEngine {
+        fn emit_sound(&self, _e: i32, _c: i32, _s: &str, _v: f32, _a: f32, _f: i32, _p: i32) {}
+        fn emit_ambient_sound(
+            &self,
+            _e: i32,
+            _pos: [f32; 3],
+            _s: &str,
+            _v: f32,
+            _a: f32,
+            _f: i32,
+            _p: i32,
+        ) {
+        }
+    }
+    impl EngineConsole for MockEngine {
+        fn server_print(&self, _m: &str) {}
+        fn client_print(&self, _c: i32, _t: i32, _m: &str) {}
+        fn server_command(&self, _c: &str) {}
+    }
+
+    #[test]
+    fn test_server_rule_execution() {
+        let mut cfg = PluginsConfig::default();
+        let mut paused = HashMap::new();
+        let mock_engine = MockEngine;
+
+        {
+            let registry = create_default_server_rule_registry();
+
+            let mut when = HashMap::new();
+            when.insert("map".to_string(), toml::Value::String("de_*".to_string()));
+            when.insert(
+                "players".to_string(),
+                toml::Value::String(">= 10".to_string()),
+            );
+
+            let mut action = HashMap::new();
+            action.insert(
+                "pause".to_string(),
+                toml::Value::Array(vec![toml::Value::String("warmup_mod".to_string())]),
+            );
+
+            let rule = Rule::new("auto_pause_warmup", when, action);
+            let engine = goldsrc_api::rules::RuleEngine::new(registry, vec![rule]);
+
+            let mut ctx = ServerRuleContext {
+                map_name: "de_dust2",
+                player_count: 12,
+                engine: &mock_engine,
+                plugins_config: &mut cfg,
+                paused_plugins: &mut paused,
+                execution_log: Vec::new(),
+            };
+
+            let res = engine.evaluate_and_execute(&mut ctx);
+            assert_eq!(res.len(), 1);
+            assert!(res[0].1.is_ok());
+        }
+
+        assert_eq!(paused.get("warmup_mod"), Some(&true));
+    }
+}
