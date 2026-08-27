@@ -579,10 +579,21 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                             .name
                             .strip_prefix(&format!("{}/", bundle_name))
                             .unwrap_or(&p.name);
+                        let author_str = p
+                            .metadata
+                            .as_ref()
+                            .map(|m| {
+                                if m.author.trim().is_empty() {
+                                    goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR
+                                } else {
+                                    m.author.as_str()
+                                }
+                            })
+                            .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR);
 
                         out(&format!(
-                            "    {}[#{}] {:<14} {:<8} | {:<7}\n",
-                            branch, p.index, display_name, version_str, status
+                            "    {}[#{}] {:<14} {:<8} {:<18} | {:<7}\n",
+                            branch, p.index, display_name, version_str, author_str, status
                         ));
                     }
                 }
