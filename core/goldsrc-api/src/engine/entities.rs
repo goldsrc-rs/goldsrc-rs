@@ -51,4 +51,12 @@ pub trait EngineEntities: Send + Sync {
     /// Drop an entity to the floor beneath it.
     /// Returns 1 if grounded, 0 if stuck/freefall.
     fn drop_to_floor(&self, index: i32) -> i32;
+
+    /// Runs the real GameDLL's DispatchSpawn for an entity by index.
+    /// Returns the GameDLL result (0 when no GameDLL bridge is available).
+    fn dispatch_spawn(&self, index: i32) -> i32;
+
+    /// Forces the real GameDLL's Touch between two entities
+    /// (`touched` delivered into `other`, e.g. weapon → player).
+    fn dispatch_touch(&self, touched: i32, other: i32);
 }

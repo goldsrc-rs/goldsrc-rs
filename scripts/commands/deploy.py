@@ -92,7 +92,7 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
                     lines.append(expected_line)
                     found_and_enabled = True
             # If this is another active gamedll entry, comment it out
-            elif (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//") and not stripped.startswith(";"):
+            elif (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//"):
                 lines.append(f"// {line}  // Replaced by GoldSrc.rs deploy")
             else:
                 lines.append(line)
@@ -100,7 +100,7 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
         # Target not present in file yet: comment out existing active gamedll and prepend ours
         for line in file_lines:
             stripped = line.strip()
-            if (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//") and not stripped.startswith(";"):
+            if (stripped.startswith(f"{key_name} ") or stripped.startswith(f"{key_name}\t")) and not stripped.startswith("//"):
                 if not found_and_enabled:
                     lines.append(expected_line)
                     found_and_enabled = True
@@ -150,13 +150,33 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
         shutil.copy2(dll_path, dest_path)
         print(f"Copied {backend} backend to: {dest_path}")
     except PermissionError:
-        print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
-        print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
-        sys.exit(1)
+        # DLL is locked by a running hlds.exe — try to terminate it automatically.
+        print(f"\n[WARNING] {dest_path} is locked. Attempting to stop hlds.exe...", file=sys.stderr)
+        import subprocess, time
+        kill_result = subprocess.run(
+            ["taskkill", "/F", "/IM", "hlds.exe"],
+            capture_output=True, text=True
+        )
+        if kill_result.returncode == 0:
+            print("  -> hlds.exe terminated. Retrying copy...", file=sys.stderr)
+            time.sleep(1)  # give the OS a moment to release file handles
+            try:
+                shutil.copy2(dll_path, dest_path)
+                print(f"Copied {backend} backend to: {dest_path}")
+            except PermissionError:
+                print(f"\n[CRITICAL ERROR] Still cannot overwrite {dest_path}!", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
+            print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
+            sys.exit(1)
 
     if backend == "standalone":
         update_liblist_gam(game_path, dest_name, target)
     else:
+        # Ensure liblist.gam points to metamod when deploying metamod backend
+        restore_liblist_gam_for_metamod(game_path)
+
         # Update plugins.ini for Metamod
         addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
         if not addons_dir.exists():
@@ -197,11 +217,49 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
             else:
                 lines.append(line)
 
-        if not updated:
-            lines.append(expected_line)
-
         plugins_ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"Updated plugins.ini with new path: {plugins_ini}")
+
+        # Ensure liblist.gam does not point to goldsrc_standalone when deploying metamod
+        restore_liblist_gam_for_metamod(game_path)
+
+
+def restore_liblist_gam_for_metamod(game_path: Path) -> None:
+    """Restore liblist.gam to Metamod if it was previously modified by standalone backend."""
+    liblist_path = game_path / DEFAULT_MOD / "liblist.gam"
+    if not liblist_path.exists():
+        liblist_path = game_path / "liblist.gam"
+
+    if not liblist_path.exists():
+        return
+
+    content = liblist_path.read_text(encoding="utf-8")
+    if "goldsrc_standalone" not in content:
+        return
+
+    lines = []
+    has_metamod = False
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if "goldsrc_standalone" in stripped:
+            continue
+        elif "addons" in stripped and "metamod" in stripped:
+            # Uncomment metamod gamedll if commented out by deploy
+            clean_line = stripped.lstrip("/ \t")
+            if clean_line.endswith("// Replaced by GoldSrc.rs deploy"):
+                clean_line = clean_line[: -len("// Replaced by GoldSrc.rs deploy")].strip()
+            lines.append(clean_line)
+            has_metamod = True
+        else:
+            lines.append(line)
+
+    if not has_metamod:
+        lines.append('gamedll "addons\\metamod\\metamod.dll"')
+
+    new_content = "\n".join(lines).strip() + "\n"
+    if new_content != content:
+        liblist_path.write_text(new_content, encoding="utf-8")
+        print(f"Restored Metamod entry in {liblist_path}")
 
 
 def verify_deploy(
@@ -446,6 +504,8 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
+    import time
+    t_deploy_total = time.perf_counter()
     repo_root = Path(__file__).resolve().parent.parent.parent
     game_path = resolve_game_path(args.path, repo_root)
     dest_name = get_dest_name(args.backend, args.target)
@@ -463,21 +523,40 @@ def main(argv=None):
             sys.exit(1)
         return
 
+    t_build_start = time.perf_counter()
     if args.no_build:
         if not dll_path.exists():
             print(f"Error: Library not found at {dll_path}", file=sys.stderr)
             sys.exit(1)
         print(f"Using existing library: {dll_path}")
+        build_time = 0.0
     else:
         dll_path = build_plugin(backend=args.backend, target=args.target, release=True)
         wasm_plugins = build_wasm_plugins(release=True)
+        build_time = time.perf_counter() - t_build_start
 
+    t_copy_start = time.perf_counter()
     deploy_plugin(dll_path, game_path, backend=args.backend, target=args.target)
     deploy_wasm_plugins(wasm_plugins, game_path, backend=args.backend)
+    copy_time = time.perf_counter() - t_copy_start
 
     print(f"\nVerifying {args.backend} deployment...")
-    if verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target):
-        print("\nDeployment verified successfully!")
+    t_verify_start = time.perf_counter()
+    verified = verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target)
+    verify_time = time.perf_counter() - t_verify_start
+
+    if verified:
+        total_time = time.perf_counter() - t_deploy_total
+        print(f"\n========================================")
+        print(f"       Deployment Time Breakdown        ")
+        print(f"========================================")
+        print(f"  • Build & Optimization : {build_time:.2f}s")
+        print(f"  • Copy & Registration  : {copy_time:.2f}s")
+        print(f"  • Post-Deploy Verify   : {verify_time:.2f}s")
+        print(f"  --------------------------------------")
+        print(f"  • Total Elapsed Time   : {total_time:.2f}s")
+        print(f"========================================\n")
+        print("Deployment verified successfully!")
     else:
         print("\nDeployment verification failed!")
         sys.exit(1)

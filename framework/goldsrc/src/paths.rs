@@ -1,15 +1,9 @@
-pub use goldsrc_api::consts::BackendType;
-use goldsrc_api::consts::{
-    ADDONS_DIR_NAME, DEBUG_LOG_FILE_NAME, DEFAULT_CONFIG_FILE_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME,
+pub use goldsrc_api::consts::{
+    ADDONS_DIR_NAME, BackendType, CONFIGS_DIR_NAME, DEBUG_LOG_FILE_NAME, DEFAULT_CONFIG_FILE_NAME,
+    DEFAULT_LOG_FILE_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME, HOSTS_DIR_NAME, LOGS_DIR_NAME,
+    PLUGINS_DIR_NAME, WASM_EXT,
 };
 use std::path::{Path, PathBuf};
-
-/// Plugins sub-directory name.
-pub const PLUGINS_DIR_NAME: &str = "plugins";
-/// Configs sub-directory name.
-pub const CONFIGS_DIR_NAME: &str = "configs";
-/// Logs sub-directory name.
-pub const LOGS_DIR_NAME: &str = "logs";
 
 /// Centralized helper for resolving directory paths across HLDS environments.
 pub struct PathResolver;

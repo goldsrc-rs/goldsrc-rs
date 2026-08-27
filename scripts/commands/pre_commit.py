@@ -20,7 +20,11 @@ def main(argv=None):
     print("      GoldSrc.rs Pre-Commit Checks      ")
     print("========================================")
 
+    import time
+    t_start = time.perf_counter()
+
     # 1. Format check / auto-format
+    t_fmt = time.perf_counter()
     print("\n[1/4] Running cargo fmt...")
     fmt_res = subprocess.run(["cargo", "fmt", "--all"], cwd=repo_root, capture_output=True, text=True)
     if fmt_res.returncode != 0:
@@ -28,27 +32,33 @@ def main(argv=None):
         return 1
     # Stage any formatting changes
     subprocess.run(["git", "add", "-u"], cwd=repo_root, capture_output=True)
-    print("  -> Format OK (staged)")
+    fmt_time = time.perf_counter() - t_fmt
+    print(f"  -> Format OK ({fmt_time:.2f}s, staged)")
 
     # 2. Linter check (Clippy)
+    t_clippy = time.perf_counter()
     print("\n[2/4] Running cargo clippy...")
     clippy_cmd = ["cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]
     clippy_res = subprocess.run(clippy_cmd, cwd=repo_root, text=True, env=env)
     if clippy_res.returncode != 0:
         print("cargo clippy reported errors/warnings!", file=sys.stderr)
         return 1
-    print("  -> Clippy OK")
+    clippy_time = time.perf_counter() - t_clippy
+    print(f"  -> Clippy OK ({clippy_time:.2f}s)")
 
     # 3. Unit & Integration Tests
+    t_test = time.perf_counter()
     print("\n[3/4] Running cargo test (workspace)...")
     test_cmd = ["cargo", "test", "--workspace"]
     test_res = subprocess.run(test_cmd, cwd=repo_root, text=True, env=env)
     if test_res.returncode != 0:
         print("cargo test failed!", file=sys.stderr)
         return 1
-    print("  -> Tests OK")
+    test_time = time.perf_counter() - t_test
+    print(f"  -> Tests OK ({test_time:.2f}s)")
 
     # 4. WASM Plugins Build Check
+    t_wasm = time.perf_counter()
     print("\n[4/4] Checking WASM plugins compilation...")
     wasm_cmd = [
         "cargo",
@@ -64,8 +74,20 @@ def main(argv=None):
     if wasm_res.returncode != 0:
         print("WASM plugins check failed!", file=sys.stderr)
         return 1
-    print("  -> WASM plugins OK")
+    wasm_time = time.perf_counter() - t_wasm
+    print(f"  -> WASM plugins OK ({wasm_time:.2f}s)")
 
+    total_time = time.perf_counter() - t_start
+    print(f"\n========================================")
+    print(f"       Pre-Commit Time Breakdown        ")
+    print(f"========================================")
+    print(f"  • Cargo fmt     : {fmt_time:.2f}s")
+    print(f"  • Cargo clippy  : {clippy_time:.2f}s")
+    print(f"  • Cargo test    : {test_time:.2f}s")
+    print(f"  • WASM check    : {wasm_time:.2f}s")
+    print(f"  --------------------------------------")
+    print(f"  • Total Time    : {total_time:.2f}s")
+    print(f"========================================")
     print("\n[SUCCESS] All pre-commit checks passed successfully!\n")
     return 0
 

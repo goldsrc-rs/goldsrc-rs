@@ -276,10 +276,11 @@ mod tests {
         assert_eq!(e.index(), -1);
     }
 
+    #[cfg(feature = "unsafe-sys")]
     #[test]
     fn invalid_edict_returns_none() {
         let e = EDict::invalid();
-        assert!(e.as_ptr().is_none());
+        assert!(e.raw_ptr().is_none());
         assert!(e.classname().is_none());
         assert!(e.health().is_none());
         assert!(e.origin().is_none());
@@ -295,6 +296,7 @@ mod tests {
         assert!(!e.set_armorvalue(0.0));
     }
 
+    #[cfg(feature = "unsafe-sys")]
     #[test]
     fn map_generation_invalidation() {
         let mut raw_edict: goldsrc_sys::edict_t = unsafe { std::mem::zeroed() };
@@ -307,6 +309,6 @@ mod tests {
         bump_map_generation();
 
         assert!(!handle.is_valid());
-        assert!(handle.as_ptr().is_none());
+        assert!(handle.raw_ptr().is_none());
     }
 }

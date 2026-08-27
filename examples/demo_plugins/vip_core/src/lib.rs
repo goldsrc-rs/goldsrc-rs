@@ -92,4 +92,15 @@ impl VipCore {
         player.set_armorvalue(100.0);
         log_info!("[VIP Core] Given 100 armor to player #{}", player.index());
     }
+
+    /// Passive ECS system running during player post-think to regenerate health for VIPs below 100 HP.
+    #[system(stage = "post_think", phase = "modify")]
+    fn vip_passive_regen(player: &mut Player) {
+        if player.is_alive() && player.has_capability("vip.access") {
+            let hp = player.health();
+            if hp > 0.0 && hp < 100.0 {
+                player.set_health((hp + 0.1).min(100.0));
+            }
+        }
+    }
 }

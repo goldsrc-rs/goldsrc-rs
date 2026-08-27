@@ -166,6 +166,21 @@ def cleanup_goldsrcmod_net(goldsrcmod_dir: Path) -> None:
                 pass
 
 
+def cleanup_amxmodx(amxmodx_dir: Path) -> None:
+    """Remove amxmodx files not needed for reference."""
+    if not amxmodx_dir.exists():
+        return
+    dirs_to_remove = [".git", ".github", "doc", "build"]
+    for d in dirs_to_remove:
+        full_path = amxmodx_dir / d
+        if full_path.exists():
+            try:
+                shutil.rmtree(full_path, onexc=remove_readonly)
+                print(f"  [REMOVED] amxmodx/{d}")
+            except Exception:
+                pass
+
+
 REDUNDANT_FILES = {
     ".gitignore", ".gitattributes", ".gitmodules", ".editorconfig",
     ".travis.yml", ".appveyor.yml", ".circleci", ".github",
@@ -531,7 +546,7 @@ def main(argv=None):
         nargs="*",
         default=None,
         metavar="NAME",
-        help="Target specific repositories: hlsdk metamod-r rehlds goldsrcmod-net crash-analyzer",
+        help="Target specific repositories: hlsdk metamod-r rehlds goldsrcmod-net amxmodx crash-analyzer",
     )
     args = parser.parse_args(argv)
 
@@ -545,6 +560,7 @@ def main(argv=None):
         {"name": "metamod-r", "url": "https://github.com/theAsmodai/metamod-r.git", "path": refs_dir / "metamod-r", "is_ref": True},
         {"name": "rehlds", "url": "https://github.com/s1lentq/ReHLDS.git", "path": refs_dir / "rehlds", "is_ref": True},
         {"name": "goldsrcmod-net", "url": "https://github.com/DrAbcOfficial/GoldSrcMod.Net.git", "path": refs_dir / "goldsrcmod-net", "is_ref": True},
+        {"name": "amxmodx", "url": "https://github.com/alliedmodders/amxmodx.git", "path": refs_dir / "amxmodx", "is_ref": True},
         {"name": "crash-analyzer", "url": "https://github.com/ulquiorracode/crash-analyzer.git", "path": scripts_dir / "crash-analyzer", "is_ref": False},
     ]
 
@@ -583,6 +599,7 @@ def main(argv=None):
         cleanup_metamod(refs_dir / "metamod-r")
         cleanup_rehlds(refs_dir / "rehlds")
         cleanup_goldsrcmod_net(refs_dir / "goldsrcmod-net")
+        cleanup_amxmodx(refs_dir / "amxmodx")
         cleanup_redundant_files(refs_dir)
 
     # 3. Python Tool Packages Installation

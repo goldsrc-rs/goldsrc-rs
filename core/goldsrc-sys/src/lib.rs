@@ -9,5 +9,7 @@
 
 /// Hand-written engine function pointer helpers.
 pub mod ffi;
+/// OS-level crash and fault isolation barriers.
+pub mod guard;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

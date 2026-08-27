@@ -6,6 +6,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-08-27
+
+### Added
+
+- **Declarative Menu Engine**:
+  - `Menu::builder` with explicit pagination (`.page(...)`), slot actions, and `ExitBehavior` (`PopParent`, `Close`).
+  - Menu styles (`MenuStyle::brackets()`, `MenuStyle::classic()`) and pluggable renderers (`ShowMenu`, `Dhud`).
+  - Seamless action handling with `#[menu_action(id = ...)]`.
+- **True Director HUD (DHUD) & Screen Effects**:
+  - Full Director HUD wire format (`SVC_DIRECTOR` with `DRC_CMD_MESSAGE`) rendering smooth VGUI typography.
+  - Classic 4-channel HUD (`SVC_TEMPENTITY` / `TE_TEXTMESSAGE`) with typewriter, flicker, and fade effects.
+  - Screen effects: `ScreenFade` (damage flashes, flashbang blindness) and `ScreenShake` (tremors, explosions) with fluent builders.
+- **Unified Requirements DSL (`require = [...]`)**:
+  - Expressive requirement parser supporting `plugin:<name>[@<ver>]`, `plugin:<name>?`, `cvar:<name>[=<v>|!=<v>|>0]`, and `feature:<name>`.
+  - Dynamic runtime recalculation of plugin lifecycle states.
+- **Defensive Server Configuration (`goldsrc.toml`)**:
+  - `HostConfig` model covering `[core]`, `[logging]`, `[watcher]`, and `[runtime]`.
+  - Automatic boundary clamping for memory limits, table limits, debounce intervals, and watchdog timeouts with safe fallbacks.
+- **Typed CVar Abstraction**:
+  - `Cvar<i32>`, `Cvar<f32>`, `Cvar<String>` and flags (`CvarFlags::ARCHIVE`, `NOTIFY`, `SERVER`, `READ_ONLY`).
+
+### Fixed
+
+- **Duplicate Plugin Load**: Added `LoadError::AlreadyLoaded` check preventing multiple active instances of the same plugin in `grs load`.
+- **Watcher Initialization Warning**: Ensured config directories are created before spawning `notify` file system watchers.
+- **CLI Query Simplification**: Cleaned up `grs info` field matching to strictly match canonical metadata fields.
+- **Legacy Dependencies Cleanup**: Removed deprecated `dependencies` attribute across macros, host, and CLI in favor of `require`.
+
+## [0.11.0] - 2026-08-23
+
+### Added
+
+- **Multi-Agent Adversarial Hardening**: Resolved 10+ critical findings across 2 audit rounds:
+  - Background daemon epoch timer (`goldsrc-epoch-timer`) in `PluginManager` for strict wall-clock WASM timeout enforcement.
+  - Wasmtime `StoreLimits` (64MB memory, 10,000 table elements per store).
+  - Preserved Metamod shared memory (`mutil_funcs_t`) ensuring 100% stable co-existence with AMX Mod X.
+  - Aligned `MessageDest` enum discriminants with GoldSrc `const.h` and added dynamic `SayText` discovery via `reg_user_msg`.
+  - Panic barriers (`catch_ffi_panic`) enclosing all entity factory exports in standalone backend.
+- **Typed Command Extraction (`FromArg`)**: Automatic type-safe argument parsing for primitives, strings, and player entities (`Player`, `Alive<Player>`).
+- **Auto Caller Binding**: In-game player commands without positional parameters (e.g. `/vip`) automatically bind caller to target entity arguments.
+- **Hierarchical Capability DSL**: Boolean capability syntax (`and`, `or`, `not`, group wildcards `admin.*`) with fail-closed authorization.
+- **Declarative Command System**: Structured `CommandSpec` with per-command help (`grs <cmd> --help`, `grs help <cmd>`).
+- **Precache Consolidation**: Moved asset precaching to run once per map on post-`ServerActivate`.
+
+### Fixed
+
+- **CLI Self-Deadlock**: Replaced recursive `RUNTIME` mutex acquisition in `grs cmd` with direct borrowed manager execution.
+- **SayText & Network Buffer Overflow**: Bounded chat messages and network strings to prevent GoldSrc buffer overflows.
+- **SayText Sender ID**: Sent `0` (console/server) as first byte of SayText user message payload.
+- **Bindgen Layout Tests**: Blocklisted `max_align_t` and passed `--target` to clang to fix 32-bit cross-compilation assertions.
+- **File Logging**: Buffered file writes via `BufWriter` with proper flush implementation.
+
+## [0.10.0] - 2026-08-22
+
+### Added
+
+- **Rust 2024 Edition Migration**: Modernized entire workspace to Rust 2024 edition across all crates.
+- **WASM Component Model with Pulley32**: Upgraded `goldsrc-wasm-host` to pure-Rust bytecode execution via Wasmtime Pulley32 for full 32-bit HLDS stability.
+- **Engine Bridge & String Pool Resolver**: Safe `Engine` composite trait with native string table resolution (`pfnGetInfoKeyBuffer`/`pfnInfoKeyValue` and `pfnSzFromIndex`).
+- **Automatic Resource Precaching**: Thread-safe precache queue in `EngineBackend` for audio/model precaching.
+- **Real-Time Host CLI Commands**: Integrated `pfnAddServerCommand` with synchronous print flush.
+- **Functional Demo Plugin Suite**:
+  - `admin_system`: Administration utilities (granting capabilities, slaying players, teleportation, gravity manipulation).
+  - `vip_core`: Dynamic capability authorization (`vip.access`), player buffing and healing.
+  - `vip_menu`: Interactive VIP kit deployment with sound and visual feedback.
+  - `test_suite`: ECS verification, player inspection (health, armor, origin, angles), CVar manipulation, sound playback.
+
 ## [0.9.0] - 2026-08-19
 
 ### Added

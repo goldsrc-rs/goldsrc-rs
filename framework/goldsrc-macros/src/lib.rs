@@ -24,17 +24,63 @@ struct PluginAttr {
     author: String,
     description: String,
     url: String,
-    dependencies: Vec<String>,
+    license: String,
+    require: Vec<String>,
+}
+
+/// Information about a registered command definition.
+struct CommandDefInfo {
+    name: String,
+    description: String,
+    usage: String,
+    aliases: Vec<String>,
+    capability: Option<String>,
+}
+
+/// Information about a registered ECS system definition.
+#[derive(Clone)]
+struct SystemDefInfo {
+    stage: String,
+    phase: String,
+    before: Vec<String>,
+    after: Vec<String>,
+    ident: syn::Ident,
+    inputs_len: usize,
 }
 
 fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> {
+    let cargo_name = std::env::var("CARGO_PKG_NAME").unwrap_or_else(|_| "Unknown".to_string());
+    let cargo_version = std::env::var("CARGO_PKG_VERSION")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "1.0.0".to_string());
+    let cargo_authors = std::env::var("CARGO_PKG_AUTHORS")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "Unknown".to_string());
+    let cargo_desc = std::env::var("CARGO_PKG_DESCRIPTION")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "No description provided".to_string());
+    let cargo_license = std::env::var("CARGO_PKG_LICENSE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "Not Stated".to_string());
+    let cargo_url = std::env::var("CARGO_PKG_HOMEPAGE")
+        .or_else(|_| std::env::var("CARGO_PKG_REPOSITORY"))
+        .or_else(|_| std::env::var("CARGO_PKG_DOCUMENTATION"))
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "N/A".to_string());
+
     let mut out = PluginAttr {
-        name: "Unknown".to_string(),
-        version: "1.0.0".to_string(),
-        author: "Unknown".to_string(),
-        description: String::new(),
-        url: String::new(),
-        dependencies: Vec::new(),
+        name: cargo_name,
+        version: cargo_version,
+        author: cargo_authors,
+        description: cargo_desc,
+        url: cargo_url,
+        license: cargo_license,
+        require: Vec::new(),
     };
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     for meta in parser.parse2(attr)? {
@@ -49,31 +95,31 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
         };
         match meta {
             Meta::NameValue(nv) => {
-                if ident == "dependencies" {
+                if ident == "require" {
                     let array: ExprArray = match &nv.value {
                         Expr::Array(arr) => arr.clone(),
                         _ => {
                             return Err(syn::Error::new_spanned(
                                 &nv.value,
-                                "#[plugin(dependencies = ...)] expects an array of string literals",
+                                "#[plugin(require = ...)] expects an array of string literals",
                             ));
                         }
                     };
                     for expr in &array.elems {
                         match expr {
                             Expr::Lit(expr_lit) => match &expr_lit.lit {
-                                Lit::Str(s) => out.dependencies.push(s.value()),
+                                Lit::Str(s) => out.require.push(s.value()),
                                 _ => {
                                     return Err(syn::Error::new_spanned(
                                         expr,
-                                        "dependencies expects a list of string literals like \"name@>=1.0\"",
+                                        "require expects a list of string literals like \"plugin:name@>=1.0\"",
                                     ));
                                 }
                             },
                             _ => {
                                 return Err(syn::Error::new_spanned(
                                     expr,
-                                    "dependencies expects a list of string literals like \"name@>=1.0\"",
+                                    "require expects a list of string literals like \"plugin:name@>=1.0\"",
                                 ));
                             }
                         }
@@ -101,17 +147,19 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                     out.name = value;
                 } else if ident == "version" {
                     out.version = value;
-                } else if ident == "author" {
+                } else if ident == "author" || ident == "authors" {
                     out.author = value;
                 } else if ident == "description" {
                     out.description = value;
-                } else if ident == "url" {
+                } else if ident == "url" || ident == "repository" || ident == "homepage" {
                     out.url = value;
+                } else if ident == "license" {
+                    out.license = value;
                 } else {
                     return Err(syn::Error::new_spanned(
                         nv.path,
                         format!(
-                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url, dependencies"
+                            "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url/repository, license, require"
                         ),
                     ));
                 }
@@ -119,7 +167,7 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "unsupported #[plugin] attribute; supported: name, version, author, description, url, dependencies",
+                    "unsupported #[plugin] attribute; supported: name, version, author, description, url/repository, license, require",
                 ));
             }
         }
@@ -168,14 +216,14 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let plugin_version = attr.version;
     let plugin_author = attr.author;
 
-    let mut deps_toml = String::new();
-    if !attr.dependencies.is_empty() {
-        let deps: Vec<String> = attr
-            .dependencies
+    let mut require_toml = String::new();
+    if !attr.require.is_empty() {
+        let reqs: Vec<String> = attr
+            .require
             .iter()
             .map(|d| format!("\"{}\"", toml_escape(d)))
             .collect();
-        deps_toml = format!("dependencies = [{}]\n", deps.join(", "));
+        require_toml = format!("require = [{}]\n", reqs.join(", "));
     }
 
     let mut on_load_fn = quote! {};
@@ -188,6 +236,10 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut command_matchers = Vec::new();
     let mut plugin_commands: Vec<String> = Vec::new();
+    let mut command_defs: Vec<CommandDefInfo> = Vec::new();
+    let mut menu_action_matchers: Vec<(Option<u32>, Option<String>, syn::Ident, usize)> =
+        Vec::new();
+    let mut system_handlers: Vec<SystemDefInfo> = Vec::new();
 
     // Iterate over the items in the impl block to find our marker attributes
     for item in &mut input_impl.items {
@@ -285,6 +337,130 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     }
                     false
+                } else if attr.path().is_ident("system") {
+                    let mut stage_name = "frame".to_string();
+                    let mut phase_name = "execute".to_string();
+                    let mut before_list: Vec<String> = Vec::new();
+                    let mut after_list: Vec<String> = Vec::new();
+                    if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                        stage_name = s.value();
+                    } else if let Ok(meta_list) = attr.meta.require_list() {
+                        let res = meta_list.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("stage") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    stage_name = s.value();
+                                }
+                            } else if meta.path.is_ident("phase") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    phase_name = s.value();
+                                }
+                            } else if meta.path.is_ident("before") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    before_list.push(s.value());
+                                } else if let Ok(ExprArray { elems, .. }) =
+                                    meta.value()?.parse::<ExprArray>()
+                                {
+                                    for elem in elems {
+                                        if let Expr::Lit(ExprLit {
+                                            lit: Lit::Str(s), ..
+                                        }) = elem
+                                        {
+                                            before_list.push(s.value());
+                                        }
+                                    }
+                                }
+                            } else if meta.path.is_ident("after") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    after_list.push(s.value());
+                                } else if let Ok(ExprArray { elems, .. }) =
+                                    meta.value()?.parse::<ExprArray>()
+                                {
+                                    for elem in elems {
+                                        if let Expr::Lit(ExprLit {
+                                            lit: Lit::Str(s), ..
+                                        }) = elem
+                                        {
+                                            after_list.push(s.value());
+                                        }
+                                    }
+                                }
+                            }
+                            Ok(())
+                        });
+                        if let Err(e) = res {
+                            macro_error = Some(e);
+                        }
+                    }
+                    system_handlers.push(SystemDefInfo {
+                        stage: stage_name,
+                        phase: phase_name,
+                        before: before_list,
+                        after: after_list,
+                        ident: method.sig.ident.clone(),
+                        inputs_len: method.sig.inputs.len(),
+                    });
+                    false
+                } else if attr.path().is_ident("menu_action") {
+                    let mut action_id = None;
+                    let mut action_str = None;
+                    if let Ok(Lit::Int(i)) = attr.parse_args::<Lit>() {
+                        if let Ok(val) = i.base10_parse::<u32>() {
+                            action_id = Some(val);
+                        }
+                    } else if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                        action_str = Some(s.value());
+                    } else if let Ok(meta_list) = attr.meta.require_list() {
+                        let res = meta_list.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("id") {
+                                if let Ok(Lit::Int(i)) = meta.value()?.parse::<Lit>() {
+                                    if let Ok(val) = i.base10_parse::<u32>() {
+                                        action_id = Some(val);
+                                    }
+                                }
+                            } else if meta.path.is_ident("action") || meta.path.is_ident("name") {
+                                if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    action_str = Some(s.value());
+                                }
+                            }
+                            Ok(())
+                        });
+                        if let Err(e) = res {
+                            macro_error = Some(e);
+                        }
+                    }
+                    if let Some(id) = action_id {
+                        menu_action_matchers.push((
+                            Some(id),
+                            None,
+                            method.sig.ident.clone(),
+                            method.sig.inputs.len(),
+                        ));
+                    } else if let Some(act) = action_str {
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        std::hash::Hash::hash(&act, &mut hasher);
+                        let calculated_id =
+                            (std::hash::Hasher::finish(&hasher) & 0x7FFF_FFFF) as u32;
+                        menu_action_matchers.push((
+                            Some(calculated_id),
+                            Some(act),
+                            method.sig.ident.clone(),
+                            method.sig.inputs.len(),
+                        ));
+                    } else {
+                        // Bare #[menu_action] without attributes: default action name is function name!
+                        let method_name = method.sig.ident.to_string();
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        std::hash::Hash::hash(&method_name, &mut hasher);
+                        let calculated_id =
+                            (std::hash::Hasher::finish(&hasher) & 0x7FFF_FFFF) as u32;
+                        menu_action_matchers.push((
+                            Some(calculated_id),
+                            Some(method_name),
+                            method.sig.ident.clone(),
+                            method.sig.inputs.len(),
+                        ));
+                    }
+                    false
                 } else {
                     true
                 }
@@ -334,6 +510,13 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 for alias in &cmd_aliases {
                     plugin_commands.push(alias.clone());
                 }
+                command_defs.push(CommandDefInfo {
+                    name: cmd.clone(),
+                    description: cmd_description.unwrap_or_default(),
+                    usage: cmd_usage.unwrap_or_default(),
+                    aliases: cmd_aliases.clone(),
+                    capability: cmd_capability.clone(),
+                });
 
                 let is_raw_signature = match inputs_len {
                     0 => true,
@@ -488,6 +671,210 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             fallback_event = quote! { #call_expr; };
         }
     }
+
+    // Sort systems by Phase + topological DAG dependencies (before / after)
+    let phase_val = |p: &str| -> i32 {
+        match p.to_ascii_lowercase().as_str() {
+            "validate" => 0,
+            "modify" => 10,
+            "execute" => 20,
+            "react" => 30,
+            "monitor" => 40,
+            _ => 20,
+        }
+    };
+
+    system_handlers.sort_by_key(|s| (s.stage.clone(), phase_val(&s.phase)));
+
+    // Intra-phase topological DAG sort
+    let n = system_handlers.len();
+    if n > 1 {
+        let mut name_to_idx = std::collections::HashMap::new();
+        for (idx, sys) in system_handlers.iter().enumerate() {
+            name_to_idx.insert(sys.ident.to_string(), idx);
+        }
+
+        let mut in_degree = vec![0; n];
+        let mut adj = vec![Vec::new(); n];
+
+        for (u, sys) in system_handlers.iter().enumerate() {
+            for after_name in &sys.after {
+                if let Some(&v) = name_to_idx.get(after_name) {
+                    adj[v].push(u);
+                    in_degree[u] += 1;
+                }
+            }
+            for before_name in &sys.before {
+                if let Some(&v) = name_to_idx.get(before_name) {
+                    adj[u].push(v);
+                    in_degree[v] += 1;
+                }
+            }
+        }
+
+        let mut queue = std::collections::VecDeque::new();
+        for (idx, &deg) in in_degree.iter().enumerate() {
+            if deg == 0 {
+                queue.push_back(idx);
+            }
+        }
+
+        let mut sorted = Vec::with_capacity(n);
+        while let Some(u) = queue.pop_front() {
+            sorted.push(system_handlers[u].clone());
+            for &v in &adj[u] {
+                in_degree[v] -= 1;
+                if in_degree[v] == 0 {
+                    queue.push_back(v);
+                }
+            }
+        }
+
+        if sorted.len() == n {
+            system_handlers = sorted;
+        }
+    }
+
+    let mut system_frame_calls = Vec::new();
+    let mut system_think_calls = Vec::new();
+    let mut system_connect_calls = Vec::new();
+    let mut system_disconnect_calls = Vec::new();
+
+    for sys in &system_handlers {
+        let f_name = &sys.ident;
+        let in_len = sys.inputs_len;
+        match sys.stage.as_str() {
+            "frame" => {
+                let call = match in_len {
+                    0 => quote! { #struct_name::#f_name(); },
+                    _ => quote! { #struct_name::#f_name(&mut __world); },
+                };
+                system_frame_calls.push(call);
+            }
+            "post_think" => {
+                let call = match in_len {
+                    0 => quote! { #struct_name::#f_name(); },
+                    1 => quote! { #struct_name::#f_name(&mut __player); },
+                    _ => quote! { #struct_name::#f_name(&mut __player, &mut __world); },
+                };
+                system_think_calls.push(call);
+            }
+            "player_connect" => {
+                let call = match in_len {
+                    0 => quote! { #struct_name::#f_name(); },
+                    1 => quote! { #struct_name::#f_name(&mut __player); },
+                    _ => quote! { #struct_name::#f_name(&mut __player, &mut __world); },
+                };
+                system_connect_calls.push(call);
+            }
+            "player_disconnect" => {
+                let call = match in_len {
+                    0 => quote! { #struct_name::#f_name(); },
+                    1 => quote! { #struct_name::#f_name(&mut __player); },
+                    _ => quote! { #struct_name::#f_name(&mut __player, &mut __world); },
+                };
+                system_disconnect_calls.push(call);
+            }
+            _ => {}
+        }
+    }
+
+    if !system_frame_calls.is_empty() {
+        let prev_frame = on_frame_fn;
+        on_frame_fn = quote! {
+            #prev_frame
+            let mut __world = ::goldsrc::ecs::World::new();
+            #(#system_frame_calls)*
+        };
+    }
+
+    if !system_think_calls.is_empty() {
+        event_arms.push(quote! {
+            "player_post_think" => {
+                if payload.len() >= 4 {
+                    let __idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
+                    let mut __player = ::goldsrc::Player::new(__idx);
+                    let mut __world = ::goldsrc::ecs::World::new();
+                    #(#system_think_calls)*
+                }
+            }
+        });
+    }
+
+    if !system_connect_calls.is_empty() {
+        event_arms.push(quote! {
+            "client_connect" => {
+                if payload.len() >= 4 {
+                    let __idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
+                    let mut __player = ::goldsrc::Player::new(__idx);
+                    let mut __world = ::goldsrc::ecs::World::new();
+                    #(#system_connect_calls)*
+                }
+            }
+        });
+    }
+
+    if !system_disconnect_calls.is_empty() {
+        event_arms.push(quote! {
+            "client_disconnect" => {
+                if payload.len() >= 4 {
+                    let __idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
+                    let mut __player = ::goldsrc::Player::new(__idx);
+                    let mut __world = ::goldsrc::ecs::World::new();
+                    #(#system_disconnect_calls)*
+                }
+            }
+        });
+    }
+
+    if !menu_action_matchers.is_empty() {
+        let mut id_branches = Vec::new();
+        let mut name_branches = Vec::new();
+
+        for (id_opt, name_opt, f_name, in_len) in menu_action_matchers {
+            let invoker = match in_len {
+                0 => quote! { #struct_name::#f_name(); },
+                1 => quote! { #struct_name::#f_name(&mut __player); },
+                _ => quote! { #struct_name::#f_name(&mut __player, __action_id); },
+            };
+
+            if let Some(id) = id_opt {
+                id_branches.push(quote! {
+                    #id => { #invoker }
+                });
+            }
+            if let Some(name_str) = name_opt {
+                name_branches.push(quote! {
+                    #name_str => { #invoker }
+                });
+            }
+        }
+
+        event_arms.push(quote! {
+            "menu_select" => {
+                if payload.len() >= 8 {
+                    let __player_idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
+                    let __slot_or_id = u32::from_le_bytes(payload[4..8].try_into().unwrap_or_default());
+                    let mut __player = ::goldsrc::Player::new(__player_idx);
+                    if let Some(__action) = ::goldsrc::api::menu::handle_menu_slot(__player_idx, __slot_or_id as u8) {
+                        if let ::goldsrc::api::menu::SlotAction::Execute { id: __action_id, action_name: ref __action_name, .. } = __action {
+                            match __action_id {
+                                #(#id_branches)*
+                                _ => {}
+                            }
+                            if !__action_name.is_empty() {
+                                match __action_name.as_str() {
+                                    #(#name_branches)*
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     let on_event_fn = quote! {
         match name.as_str() {
             #(#event_arms)*
@@ -517,6 +904,32 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         commands_toml = format!("commands = [{}]\n", cmds.join(", "));
     }
 
+    let mut command_defs_toml = String::new();
+    for cmd in &command_defs {
+        command_defs_toml.push_str("\n[[command_defs]]\n");
+        command_defs_toml.push_str(&format!("name = \"{}\"\n", toml_escape(&cmd.name)));
+        if !cmd.description.is_empty() {
+            command_defs_toml.push_str(&format!(
+                "description = \"{}\"\n",
+                toml_escape(&cmd.description)
+            ));
+        }
+        if !cmd.usage.is_empty() {
+            command_defs_toml.push_str(&format!("usage = \"{}\"\n", toml_escape(&cmd.usage)));
+        }
+        if !cmd.aliases.is_empty() {
+            let aliases_fmt: Vec<String> = cmd
+                .aliases
+                .iter()
+                .map(|a| format!("\"{}\"", toml_escape(a)))
+                .collect();
+            command_defs_toml.push_str(&format!("aliases = [{}]\n", aliases_fmt.join(", ")));
+        }
+        if let Some(ref c) = cmd.capability {
+            command_defs_toml.push_str(&format!("capability = \"{}\"\n", toml_escape(c)));
+        }
+    }
+
     let desc_toml = if !attr.description.is_empty() {
         format!("description = \"{}\"\n", toml_escape(&attr.description))
     } else {
@@ -529,15 +942,33 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         String::new()
     };
 
+    let license_toml = if !attr.license.is_empty() {
+        format!("license = \"{}\"\n", toml_escape(&attr.license))
+    } else {
+        String::new()
+    };
+
+    let mut systems_toml = String::new();
+    if !system_handlers.is_empty() {
+        let sys_names: Vec<String> = system_handlers
+            .iter()
+            .map(|s| format!("\"{}\"", toml_escape(&s.ident.to_string())))
+            .collect();
+        systems_toml = format!("systems = [{}]\n", sys_names.join(", "));
+    }
+
     let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}",
+        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}{}{}{}",
         toml_escape(&plugin_name),
         toml_escape(&plugin_version),
         toml_escape(&plugin_author),
         desc_toml,
         url_toml,
-        deps_toml,
-        commands_toml
+        license_toml,
+        require_toml,
+        systems_toml,
+        commands_toml,
+        command_defs_toml
     );
 
     let expanded = quote! {
@@ -624,6 +1055,18 @@ pub fn command(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("command")
 }
 
+/// Marker attribute for menu action handlers (`#[menu_action(id = 1)]` or `#[menu_action(action = "buy_m4")]`).
+#[proc_macro_attribute]
+pub fn menu_action(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("menu_action")
+}
+
+/// Marker attribute for ECS system handlers (`#[system(stage = "frame", order = 10)]`).
+#[proc_macro_attribute]
+pub fn system(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("system")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -636,15 +1079,16 @@ mod tests {
     #[test]
     fn parses_all_attrs() {
         let a = parse(
-            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", url = "https://github.com", dependencies = ["b@>=1", "c@1.0"]"#,
+            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", license = "MIT", url = "https://github.com", require = ["plugin:b@>=1", "plugin:c@1.0"]"#,
         )
         .unwrap();
         assert_eq!(a.name, "x");
         assert_eq!(a.version, "2.0");
         assert_eq!(a.author, "A");
         assert_eq!(a.description, "Test Desc");
+        assert_eq!(a.license, "MIT");
         assert_eq!(a.url, "https://github.com");
-        assert_eq!(a.dependencies, vec!["b@>=1", "c@1.0"]);
+        assert_eq!(a.require, vec!["plugin:b@>=1", "plugin:c@1.0"]);
     }
 
     #[test]

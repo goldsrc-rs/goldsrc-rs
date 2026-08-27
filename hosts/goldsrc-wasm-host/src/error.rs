@@ -23,8 +23,12 @@ pub enum LoadError {
     Instantiate(String),
     #[error("plugin metadata is not valid TOML: {0}")]
     Metadata(String),
+    #[error("unmet dependency requirement: {0}")]
+    DependencyMismatch(String),
     #[error("plugin on_load panicked: {0}")]
     LoadPanic(String),
+    #[error("plugin '{0}' is already loaded")]
+    AlreadyLoaded(String),
 }
 
 /// Errors raised by plugin management commands (load/unload/reload/pause).

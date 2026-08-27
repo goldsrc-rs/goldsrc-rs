@@ -68,12 +68,46 @@ pub struct meta_globals_t {
 }
 
 #[repr(C)]
+pub struct gamedll_funcs_t {
+    pub dllapi_table: *mut goldsrc_sys::DLL_FUNCTIONS,
+    pub newapi_table: *mut c_void,
+}
+
+pub type CallGameEntityFn = unsafe extern "C" fn(
+    plid: *const plugin_info_t,
+    type_: *const c_char,
+    pev: *mut goldsrc_sys::entvars_t,
+) -> i32;
+
+pub type GetHookTablesFn = unsafe extern "C" fn(
+    plid: *const plugin_info_t,
+    peng: *mut *mut goldsrc_sys::enginefuncs_t,
+    pdll: *mut *mut goldsrc_sys::DLL_FUNCTIONS,
+    pnewdll: *mut *mut c_void,
+);
+
+#[repr(C)]
 pub struct mutil_funcs_t {
-    pub pfnLogConsole: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
-    pub pfnLogMessage: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
-    pub pfnLogError: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
-    pub pfnLogDeveloper: Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char)>,
-    pub _padding: [usize; 12], // Reserve space for remaining functions we don't use
+    pub pfnLogConsole: usize,
+    pub pfnLogMessage: usize,
+    pub pfnLogError: usize,
+    pub pfnLogDeveloper: usize,
+    pub pfnCenterSay: usize,
+    pub pfnCenterSayParms: usize,
+    pub pfnCenterSayVarargs: usize,
+    pub pfnCallGameEntity: Option<CallGameEntityFn>,
+    pub pfnGetUserMsgID:
+        Option<unsafe extern "C" fn(*const plugin_info_t, *const c_char, *mut i32) -> i32>,
+    pub pfnGetUserMsgName:
+        Option<unsafe extern "C" fn(*const plugin_info_t, i32, *mut i32) -> *const c_char>,
+    pub pfnGetPluginPath: Option<unsafe extern "C" fn(*const plugin_info_t) -> *const c_char>,
+    pub pfnGetGameInfo: Option<unsafe extern "C" fn(*const plugin_info_t, i32) -> *const c_char>,
+    pub pfnLoadPlugin: usize,
+    pub pfnUnloadPlugin: usize,
+    pub pfnUnloadPluginByHandle: usize,
+    pub pfnIsQueryingClientCvar: usize,
+    pub pfnMakeRequestId: usize,
+    pub pfnGetHookTables: Option<GetHookTablesFn>,
 }
 
 /// META_FUNCTIONS struct from Metamod API.

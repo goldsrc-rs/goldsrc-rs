@@ -247,16 +247,171 @@ impl Player {
         }
     }
 
-    /// Prints a chat message to the player.
-    pub fn print_chat(&self, msg: &str) {
+    /// Prints a message to the specified target (console / center / chat).
+    ///
+    /// This is the single dispatch point; the `print_*` helpers below are
+    /// convenience wrappers. On native hosts printing is currently a no-op
+    /// (the engine bridge surface is WASM-first).
+    pub fn print(&self, target: crate::client::PrintTarget, msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_print_chat(self.index, msg);
+            use crate::bindings::goldsrc::engine::api as host;
+            match target {
+                crate::client::PrintTarget::Console => host::host_print_console(self.index, msg),
+                crate::client::PrintTarget::Center => host::host_print_center(self.index, msg),
+                // Chat and ColoredChat share the SayText transport; the colored
+                // variant only documents that ^1/^3/^4 escapes are meaningful.
+                crate::client::PrintTarget::Chat | crate::client::PrintTarget::ColoredChat => {
+                    host::host_print_chat(self.index, msg)
+                }
+            }
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (self.index, msg);
+            let _ = (self.index, target, msg);
         }
+    }
+
+    /// Prints a message to the player's game console.
+    pub fn print_console(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Console, msg);
+    }
+
+    /// Prints a chat message to the player.
+    pub fn print_chat(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Chat, msg);
+    }
+
+    /// Prints a center notification message to the player.
+    pub fn print_center(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Center, msg);
+    }
+
+    /// Prints a colorized chat message (`^1` default, `^3` team, `^4` green).
+    /// Color escapes render in CS 1.6 / CZ clients only.
+    pub fn print_color(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::ColoredChat, msg);
+    }
+
+    /// Spawns an item/weapon entity by classname (e.g. `"weapon_m4a1"`) and
+    /// delivers it to this player via the real GameDLL's spawn + touch flow,
+    /// mirroring AMX Mod X's `give_item`: create → position at player →
+    /// DispatchSpawn → force Touch.
+    ///
+    /// Returns the new entity index. Requires a backend with GameDLL access
+    /// (standalone proxy); on backends without it the entity is not created.
+    pub fn give_item(&self, item: &str) -> Option<i32> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use crate::bindings::goldsrc::engine::api as host;
+            let ent = host::host_create_named_entity(item)?;
+            let o = host::host_entity_origin(self.index);
+            host::host_entity_set_origin(
+                ent,
+                crate::bindings::goldsrc::engine::api::Vector3 {
+                    x: o.x,
+                    y: o.y,
+                    z: o.z,
+                },
+            );
+            host::host_dispatch_spawn(ent);
+            host::host_dispatch_touch(ent, self.index);
+            Some(ent)
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = item;
+            None
+        }
+    }
+
+    /// Displays a raw `ShowMenu` dialog to the player.
+    pub fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_show_menu(
+                self.index, keys_mask, timeout, text,
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (self.index, keys_mask, timeout, text);
+        }
+    }
+
+    /// Sends a screen HUD / DHUD message to the player.
+    pub fn send_hud(&self, msg: &crate::hud::HudMessage) {
+        let (effect_val, fade_in, fade_out, hold_time) = match msg.effect {
+            crate::hud::HudEffect::FadeInOut {
+                fade_in,
+                fade_out,
+                hold_time,
+            } => (0, fade_in, fade_out, hold_time),
+            crate::hud::HudEffect::Flicker {
+                fx_time: _,
+                hold_time,
+            } => (1, 0.0, 0.0, hold_time),
+            crate::hud::HudEffect::Typewriter {
+                char_time: _,
+                fade_out,
+                hold_time,
+            } => (2, 0.05, fade_out, hold_time),
+        };
+
+        match msg.kind {
+            crate::hud::HudKind::Classic { channel } => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    crate::bindings::goldsrc::engine::api::host_send_hud_message(
+                        self.index,
+                        channel as i32,
+                        msg.position.x,
+                        msg.position.y,
+                        msg.color.r as i32,
+                        msg.color.g as i32,
+                        msg.color.b as i32,
+                        msg.color.a as i32,
+                        effect_val,
+                        fade_in,
+                        fade_out,
+                        hold_time,
+                        &msg.text,
+                    );
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let _ = (channel, effect_val, fade_in, fade_out, hold_time);
+                }
+            }
+            crate::hud::HudKind::Dhud => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    crate::bindings::goldsrc::engine::api::host_send_dhud_message(
+                        self.index,
+                        msg.position.x,
+                        msg.position.y,
+                        msg.color.r as i32,
+                        msg.color.g as i32,
+                        msg.color.b as i32,
+                        msg.color.a as i32,
+                        effect_val,
+                        fade_in,
+                        fade_out,
+                        hold_time,
+                        &msg.text,
+                    );
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let _ = (effect_val, fade_in, fade_out, hold_time);
+                }
+            }
+        }
+    }
+
+    /// Renders and opens a declarative `Menu` for this player.
+    pub fn open_menu(&self, menu: &crate::menu::Menu) {
+        crate::menu::session::open_menu(self.index, menu.clone());
     }
 
     /// Checks if the player has the specified capability.
