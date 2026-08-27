@@ -214,3 +214,16 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
+
+## Future Milestones & Ecosystem Tools 🔮
+
+### Ecosystem Plugins & Developer Tooling
+
+- [ ] **`goldsrc-coreutils` (POSIX Shell & Diagnostic Tools for ReHLDS)**:
+  - Integration of modular `uutils/coreutils` Rust crates (`uu_ls`, `uu_cat`, `uu_head`, `uu_tail`, `uu_wc`, `uu_grep`, `uu_sort`).
+  - Sandboxed execution within the `cstrike/` root directory (Path Traversal protection & capability checks `admin.shell`).
+  - Native console I/O streaming directly into server console, RCON, and client admin chat.
+- [ ] **`grs` Dedicated CLI Tool (`cargo-goldsrc`)**:
+  - Scaffolding commands: `grs new <plugin> [--bundle <bundle>] [--multi-bin]`.
+  - Packaging & verification: `grs build`, `grs pack` (`.gsp` bundle format), and `grs lint`.
+  - Plugin registry integration: `grs install <plugin>`, `grs update`.
