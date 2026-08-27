@@ -1,5 +1,5 @@
 pub use goldsrc_api::consts::{
-    ADDONS_DIR_NAME, BackendType, CONFIGS_DIR_NAME, DEBUG_LOG_FILE_NAME, DEFAULT_CONFIG_FILE_NAME,
+    ADDONS_DIR_NAME, BackendType, CONFIGS_DIR_NAME, DEFAULT_CONFIG_FILE_NAME,
     DEFAULT_LOG_FILE_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME, HOSTS_DIR_NAME, LOGS_DIR_NAME,
     PLUGINS_DIR_NAME, WASM_EXT,
 };
@@ -103,11 +103,6 @@ impl PathResolver {
         }
 
         rel_path
-    }
-
-    /// Returns the path to debug.log.
-    pub fn debug_log_path(backend: BackendType) -> PathBuf {
-        Self::framework_dir(backend).join(DEBUG_LOG_FILE_NAME)
     }
 
     /// Normalizes a path to a consistent, human-readable string with forward
