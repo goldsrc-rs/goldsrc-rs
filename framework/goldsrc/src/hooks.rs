@@ -26,7 +26,14 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
             mgr.on_disconnect(index);
         }
     }
-    emit_event(name, &index.to_le_bytes())
+    let res = emit_event(name, &index.to_le_bytes());
+
+    if name == "client_connect" || name == "client_disconnect" {
+        let player_count = goldsrc_api::auth::Auth::total_players();
+        HostRuntime::evaluate_rules("", player_count);
+    }
+
+    res
 }
 
 /// Dispatches a console / client command to the WASM host.
@@ -93,6 +100,11 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
 /// Invoked when a new server map is activated (ServerActivate).
 pub fn on_server_activate() {
     emit_event("server_activate", &[]);
+    if let Some(engine) = HostRuntime::engine() {
+        let map_name = engine.cvar_get_string("mapname").unwrap_or_default();
+        let player_count = goldsrc_api::auth::Auth::total_players();
+        HostRuntime::evaluate_rules(&map_name, player_count);
+    }
 }
 
 /// Invoked when the current server map is ending or server shutting down (ServerDeactivate).

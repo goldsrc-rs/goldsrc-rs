@@ -141,6 +141,27 @@ impl<'a> RuleCondition<ServerRuleContext<'a>> for CvarCondition {
     }
 }
 
+/// Evaluates if a plugin group is currently enabled (`group_enabled = "vip_pack"`).
+pub struct GroupEnabledCondition;
+
+impl<'a> RuleCondition<ServerRuleContext<'a>> for GroupEnabledCondition {
+    fn name(&self) -> &str {
+        "group_enabled"
+    }
+
+    fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
+        match value {
+            toml::Value::String(group_name) => ctx
+                .plugins_config
+                .groups
+                .get(group_name)
+                .map(|g| g.enabled)
+                .unwrap_or(false),
+            _ => false,
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Built-in Actions
 // ----------------------------------------------------------------------------
@@ -205,6 +226,62 @@ impl<'a> RuleAction<ServerRuleContext<'a>> for UnpauseAction {
     }
 }
 
+/// Action to enable a plugin group (`enable_group = "vip_pack"`).
+pub struct EnableGroupAction;
+
+impl<'a> RuleAction<ServerRuleContext<'a>> for EnableGroupAction {
+    fn name(&self) -> &str {
+        "enable_group"
+    }
+
+    fn execute(&self, ctx: &mut ServerRuleContext<'a>, value: &toml::Value) -> Result<(), String> {
+        match value {
+            toml::Value::String(group_name) => {
+                if let Some(g) = ctx.plugins_config.groups.get_mut(group_name) {
+                    g.enabled = true;
+                    ctx.execution_log
+                        .push(format!("Enabled plugin group '{}'", group_name));
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Group '{}' not found in plugins_config",
+                        group_name
+                    ))
+                }
+            }
+            _ => Err("Expected string group name".to_string()),
+        }
+    }
+}
+
+/// Action to disable a plugin group (`disable_group = "vip_pack"`).
+pub struct DisableGroupAction;
+
+impl<'a> RuleAction<ServerRuleContext<'a>> for DisableGroupAction {
+    fn name(&self) -> &str {
+        "disable_group"
+    }
+
+    fn execute(&self, ctx: &mut ServerRuleContext<'a>, value: &toml::Value) -> Result<(), String> {
+        match value {
+            toml::Value::String(group_name) => {
+                if let Some(g) = ctx.plugins_config.groups.get_mut(group_name) {
+                    g.enabled = false;
+                    ctx.execution_log
+                        .push(format!("Disabled plugin group '{}'", group_name));
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Group '{}' not found in plugins_config",
+                        group_name
+                    ))
+                }
+            }
+            _ => Err("Expected string group name".to_string()),
+        }
+    }
+}
+
 /// Action to set one or more server CVars (`set_cvar = { "sv_gravity" = 700 }`).
 pub struct SetCvarAction;
 
@@ -262,8 +339,11 @@ pub fn create_default_server_rule_registry<'a>()
     registry.register_condition(MapCondition);
     registry.register_condition(PlayersCondition);
     registry.register_condition(CvarCondition);
+    registry.register_condition(GroupEnabledCondition);
     registry.register_action(PauseAction);
     registry.register_action(UnpauseAction);
+    registry.register_action(EnableGroupAction);
+    registry.register_action(DisableGroupAction);
     registry.register_action(SetCvarAction);
     registry.register_action(ExecAction);
     registry

@@ -215,7 +215,7 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
 
-## Future Milestones & Ecosystem Tools 🔮
+## Future Milestones & Ecosystem Tools
 
 ### Ecosystem Plugins & Developer Tooling
 

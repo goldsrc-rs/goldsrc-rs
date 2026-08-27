@@ -80,6 +80,19 @@ impl Auth {
         }
     }
 
+    /// Returns total active tracked players.
+    pub fn total_players() -> usize {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let caps = CAPS.read().unwrap_or_else(|e| e.into_inner());
+            caps.player_capabilities.len()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            0
+        }
+    }
+
     /// Clears all player capability grants (e.g. on map change / server deactivate).
     pub fn clear_all_players() {
         #[cfg(not(target_arch = "wasm32"))]

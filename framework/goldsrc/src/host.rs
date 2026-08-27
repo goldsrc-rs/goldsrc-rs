@@ -6,6 +6,8 @@ use goldsrc_wasm_host::error::HostError;
 pub struct HostRuntime {
     manager: PluginManager,
     engine: std::sync::Arc<dyn goldsrc_api::Engine>,
+    pub plugins_config: crate::plugins_config::PluginsConfig,
+    pub paused_plugins: std::collections::HashMap<String, bool>,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -86,7 +88,7 @@ impl HostRuntime {
 
         // Load plugins.toml configuration if present
         let plugins_config_path = config_dir.join("plugins.toml");
-        let plugins_config = if plugins_config_path.is_file() {
+        let mut plugins_config = if plugins_config_path.is_file() {
             match std::fs::read_to_string(&plugins_config_path) {
                 Ok(content) => match crate::plugins_config::PluginsConfig::parse(&content) {
                     Ok(cfg) => {
@@ -166,6 +168,46 @@ impl HostRuntime {
             }
         }
 
+        let mut paused_plugins = std::collections::HashMap::new();
+
+        // Evaluate startup reactive rules from plugins.toml
+        if !plugins_config.rules.is_empty() {
+            let registry = crate::rules::create_default_server_rule_registry();
+            let rules: Vec<goldsrc_api::rules::Rule> = plugins_config
+                .rules
+                .iter()
+                .map(|r| goldsrc_api::rules::Rule::new(&r.name, r.when.clone(), r.action.clone()))
+                .collect();
+            let rule_engine = goldsrc_api::rules::RuleEngine::new(registry, rules);
+
+            let mut ctx = crate::rules::ServerRuleContext {
+                map_name: "",
+                player_count: 0,
+                engine: engine.as_ref(),
+                plugins_config: &mut plugins_config,
+                paused_plugins: &mut paused_plugins,
+                execution_log: Vec::new(),
+            };
+
+            let results = rule_engine.evaluate_and_execute(&mut ctx);
+            for (rule_name, res) in results {
+                match res {
+                    Ok(_) => log::info!(target: "rules", "Executed reactive rule '{}'", rule_name),
+                    Err(errors) => log::warn!(
+                        target: "rules",
+                        "Failed to execute rule '{}': {:?}",
+                        rule_name,
+                        errors
+                    ),
+                }
+            }
+        }
+
+        // Sync paused states to manager
+        for (plugin_name, is_paused) in &paused_plugins {
+            let _ = manager.pause_plugin(plugin_name, *is_paused);
+        }
+
         manager.recalculate_dependency_states();
         for info in manager.get_plugins_info() {
             if let goldsrc_wasm_host::PluginStatus::Blocked { reason } = &info.status {
@@ -178,7 +220,12 @@ impl HostRuntime {
             }
         }
 
-        let runtime = Self { manager, engine };
+        let runtime = Self {
+            manager,
+            engine,
+            plugins_config,
+            paused_plugins,
+        };
         let _ = RUNTIME.set(Mutex::new(runtime));
         Ok(())
     }
@@ -197,6 +244,65 @@ impl HostRuntime {
             f(Some(&mut guard.manager))
         } else {
             f(None)
+        }
+    }
+
+    /// Triggers reactive rule engine re-evaluation for current game state.
+    pub fn evaluate_rules(map_name: &str, player_count: usize) {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.plugins_config.rules.is_empty() {
+                return;
+            }
+
+            let HostRuntime {
+                ref mut manager,
+                ref engine,
+                ref mut plugins_config,
+                ref mut paused_plugins,
+            } = *guard;
+
+            {
+                let registry = crate::rules::create_default_server_rule_registry();
+                let rules: Vec<goldsrc_api::rules::Rule> = plugins_config
+                    .rules
+                    .iter()
+                    .map(|r| {
+                        goldsrc_api::rules::Rule::new(&r.name, r.when.clone(), r.action.clone())
+                    })
+                    .collect();
+                let rule_engine = goldsrc_api::rules::RuleEngine::new(registry, rules);
+
+                let mut ctx = crate::rules::ServerRuleContext {
+                    map_name,
+                    player_count,
+                    engine: engine.as_ref(),
+                    plugins_config,
+                    paused_plugins,
+                    execution_log: Vec::new(),
+                };
+
+                let results = rule_engine.evaluate_and_execute(&mut ctx);
+                for (rule_name, res) in results {
+                    match res {
+                        Ok(_) => {
+                            log::info!(target: "rules", "Executed reactive rule '{}'", rule_name)
+                        }
+                        Err(errors) => log::warn!(
+                            target: "rules",
+                            "Failed to execute rule '{}': {:?}",
+                            rule_name,
+                            errors
+                        ),
+                    }
+                }
+            }
+
+            // Sync paused states to manager
+            for (plugin_name, is_paused) in &*paused_plugins {
+                let _ = manager.pause_plugin(plugin_name, *is_paused);
+            }
+            manager.recalculate_dependency_states();
         }
     }
 
