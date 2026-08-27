@@ -314,18 +314,16 @@ pub fn install_crash_guard() {
 
 /// Uninstalls the global crash guard upon shutdown.
 pub fn uninstall_crash_guard() {
-    if !GUARD_INSTALLED.swap(false, Ordering::SeqCst) {
-        return;
-    }
-
-    #[cfg(windows)]
-    {
-        let handle = VEH_HANDLE.swap(std::ptr::null_mut(), Ordering::SeqCst);
-        if !handle.is_null() {
-            unsafe {
-                win32::RemoveVectoredExceptionHandler(handle);
+    if GUARD_INSTALLED.swap(false, Ordering::SeqCst) {
+        #[cfg(windows)]
+        {
+            let handle = VEH_HANDLE.swap(std::ptr::null_mut(), Ordering::SeqCst);
+            if !handle.is_null() {
+                unsafe {
+                    win32::RemoveVectoredExceptionHandler(handle);
+                }
             }
+            win32::restore_error_mode();
         }
-        win32::restore_error_mode();
     }
 }
