@@ -39,7 +39,7 @@ goldsrc-standalone = { path = "backends/goldsrc-standalone", version = "0.10.0" 
 goldsrc-wasm-host = { path = "hosts/goldsrc-wasm-host", version = "0.10.0" }
 goldsrc = { path = "framework/goldsrc", version = "0.10.0" }
 goldsrc-macros = { path = "framework/goldsrc-macros", version = "0.10.0" }
-wasmtime = { version = "47.0", default-features = false, features = [
+wasmtime = { version = "48.0", default-features = false, features = [
     "cranelift",
     "pulley",
     "component-model",
