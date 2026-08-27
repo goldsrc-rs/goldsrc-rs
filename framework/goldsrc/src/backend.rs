@@ -502,7 +502,7 @@ impl goldsrc_api::EngineConsole for EngineBackend {
                     call_engfunc!(
                         funcs.pfnClientPrintf,
                         pedict,
-                        print_type,
+                        print_type as _,
                         safe_bytes.as_ptr() as *const std::ffi::c_char
                     );
                 }

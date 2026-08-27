@@ -258,10 +258,10 @@ pub unsafe extern "C" fn api_client_connect(
     psz_address: *const c_char,
     sz_reject_reason: *mut c_char,
 ) -> qboolean {
-    catch_ffi_panic("client_connect", 0, || {
+    catch_ffi_panic("client_connect", 0 as qboolean, || {
         let index = unsafe { edict_index(p_entity) };
-        hooks().map_or(0, |h| {
-            h.client_connect(p_entity, index, psz_name, psz_address, sz_reject_reason)
+        hooks().map_or(0 as qboolean, |h| {
+            h.client_connect(p_entity, index, psz_name, psz_address, sz_reject_reason) as qboolean
         })
     })
 }
