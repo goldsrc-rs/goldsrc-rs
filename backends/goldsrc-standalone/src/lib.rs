@@ -111,7 +111,7 @@ impl goldsrc::api_registry::EntityHooks for StandaloneHooks {
         if result != 0 {
             goldsrc::hooks::emit_player_event("client_connect", index);
         }
-        result
+        result as i32
     }
 
     fn client_disconnect(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
