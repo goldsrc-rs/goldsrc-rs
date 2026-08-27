@@ -6,6 +6,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-08-27
+
+### Added
+
+- **Declarative Menu Engine**:
+  - `Menu::builder` with explicit pagination (`.page(...)`), slot actions, and `ExitBehavior` (`PopParent`, `Close`).
+  - Menu styles (`MenuStyle::brackets()`, `MenuStyle::classic()`) and pluggable renderers (`ShowMenu`, `Dhud`).
+  - Seamless action handling with `#[menu_action(id = ...)]`.
+- **True Director HUD (DHUD) & Screen Effects**:
+  - Full Director HUD wire format (`SVC_DIRECTOR` with `DRC_CMD_MESSAGE`) rendering smooth VGUI typography.
+  - Classic 4-channel HUD (`SVC_TEMPENTITY` / `TE_TEXTMESSAGE`) with typewriter, flicker, and fade effects.
+  - Screen effects: `ScreenFade` (damage flashes, flashbang blindness) and `ScreenShake` (tremors, explosions) with fluent builders.
+- **Unified Requirements DSL (`require = [...]`)**:
+  - Expressive requirement parser supporting `plugin:<name>[@<ver>]`, `plugin:<name>?`, `cvar:<name>[=<v>|!=<v>|>0]`, and `feature:<name>`.
+  - Dynamic runtime recalculation of plugin lifecycle states.
+- **Defensive Server Configuration (`goldsrc.toml`)**:
+  - `HostConfig` model covering `[core]`, `[logging]`, `[watcher]`, and `[runtime]`.
+  - Automatic boundary clamping for memory limits, table limits, debounce intervals, and watchdog timeouts with safe fallbacks.
+- **Typed CVar Abstraction**:
+  - `Cvar<i32>`, `Cvar<f32>`, `Cvar<String>` and flags (`CvarFlags::ARCHIVE`, `NOTIFY`, `SERVER`, `READ_ONLY`).
+
+### Fixed
+
+- **Duplicate Plugin Load**: Added `LoadError::AlreadyLoaded` check preventing multiple active instances of the same plugin in `grs load`.
+- **Watcher Initialization Warning**: Ensured config directories are created before spawning `notify` file system watchers.
+- **CLI Query Simplification**: Cleaned up `grs info` field matching to strictly match canonical metadata fields.
+- **Legacy Dependencies Cleanup**: Removed deprecated `dependencies` attribute across macros, host, and CLI in favor of `require`.
+
 ## [0.11.0] - 2026-08-23
 
 ### Added

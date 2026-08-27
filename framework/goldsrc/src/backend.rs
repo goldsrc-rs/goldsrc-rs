@@ -65,6 +65,39 @@ pub fn escape_server_print(message: &str) -> String {
     format!("{}\n", safe[..end].trim_end())
 }
 
+/// Helper to sanitize console/center/chat prints with CP1251 encoding for Cyrillic GoldSrc client support.
+pub fn sanitize_client_print(message: &str) -> Vec<u8> {
+    let cp1251_bytes = goldsrc_api::utf8_to_cp1251(message);
+    let mut out = Vec::with_capacity(cp1251_bytes.len() + 1);
+    for &b in &cp1251_bytes {
+        if b == 0 {
+            continue;
+        }
+        if b == b'%' {
+            out.push(b'%');
+            out.push(b'%');
+        } else {
+            out.push(b);
+        }
+    }
+    out.push(0); // NUL terminator
+    out
+}
+
+/// Converts an engine-provided C string pointer to an owned `String`
+/// (empty on null). Lossy UTF-8, matching engine console semantics.
+///
+/// # Safety
+/// `ptr` must be null or point to a valid NUL-terminated UTF-8 C string.
+pub unsafe fn cstr_to_string(ptr: *const std::ffi::c_char) -> String {
+    if ptr.is_null() {
+        String::new()
+    } else {
+        // SAFETY: caller guarantees validity.
+        unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+    }
+}
+
 impl Default for PrintQueue {
     fn default() -> Self {
         Self::new()
@@ -150,7 +183,7 @@ impl EngineBackend {
             if let Some(alloc_string) = funcs.pfnAllocString {
                 (*edict).v.classname = alloc_string(cname.as_ptr()) as u32;
             }
-            let index = (funcs.pfnIndexOfEdict)?(edict);
+            let index = crate::api_registry::edict_index(edict);
             Some(goldsrc_api::Entity::from_raw(index, edict))
         }
     }
@@ -163,6 +196,18 @@ impl EngineBackend {
     /// Executes a server command string.
     pub fn server_command(&self, command: &str) {
         <Self as goldsrc_api::EngineConsole>::server_command(self, command);
+    }
+
+    /// Drains the deferred server-print queue to the engine console with
+    /// fmtlib-safe escaping (ReHLDS routes `ServerPrint` through fmtlib).
+    pub fn drain_prints(&self) {
+        for message in self.print_queue.drain() {
+            if let Ok(cstr) = std::ffi::CString::new(message) {
+                unsafe {
+                    call_engfunc!((self.engfuncs)().pfnServerPrint, cstr.as_ptr());
+                }
+            }
+        }
     }
 }
 
@@ -257,6 +302,27 @@ static USER_MSG_REGISTRY: std::sync::LazyLock<
 pub type UserMsgResolverFn = fn(&str) -> i32;
 
 static USER_MSG_RESOLVER_FN: std::sync::OnceLock<UserMsgResolverFn> = std::sync::OnceLock::new();
+
+/// Raw real-GameDLL entry points for direct calls (DispatchSpawn / Touch).
+///
+/// Only backends that own the GameDLL function table can register these
+/// (the standalone proxy); metamod chains through its own tables instead.
+pub type GamedllSpawnFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> i32;
+pub type GamedllTouchFn =
+    unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::edict_t);
+
+static GAME_DLL_SPAWN: std::sync::OnceLock<GamedllSpawnFn> = std::sync::OnceLock::new();
+static GAME_DLL_TOUCH: std::sync::OnceLock<GamedllTouchFn> = std::sync::OnceLock::new();
+
+/// Registers the real GameDLL `DispatchSpawn` (call once after DLL load).
+pub fn set_game_dll_spawn(f: GamedllSpawnFn) {
+    let _ = GAME_DLL_SPAWN.set(f);
+}
+
+/// Registers the real GameDLL `Touch` (call once after DLL load).
+pub fn set_game_dll_touch(f: GamedllTouchFn) {
+    let _ = GAME_DLL_TOUCH.set(f);
+}
 
 /// Sets a backend-specific resolver for finding user message IDs (e.g. via Metamod `pfnGetUserMsgID`).
 pub fn set_user_msg_resolver(resolver: UserMsgResolverFn) {
@@ -432,10 +498,13 @@ impl goldsrc_api::EngineConsole for EngineBackend {
             if let Some(pfn_p_entity_of_ent_index) = funcs.pfnPEntityOfEntIndex {
                 let pedict = pfn_p_entity_of_ent_index(client_index);
                 if !pedict.is_null() {
-                    let safe = escape_server_print(message);
-                    if let Ok(cstr) = std::ffi::CString::new(safe) {
-                        call_engfunc!(funcs.pfnClientPrintf, pedict, print_type, cstr.as_ptr());
-                    }
+                    let safe_bytes = sanitize_client_print(message);
+                    call_engfunc!(
+                        funcs.pfnClientPrintf,
+                        pedict,
+                        print_type,
+                        safe_bytes.as_ptr() as *const std::ffi::c_char
+                    );
                 }
             }
         }
@@ -575,13 +644,21 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     fn create_named_entity(&self, classname: &str) -> Option<i32> {
         unsafe {
             let funcs = (self.engfuncs)();
-            let cstr = std::ffi::CString::new(classname).unwrap_or_default();
+            let cstr = std::ffi::CString::new(classname).ok()?;
             let str_id = funcs.pfnAllocString.map(|f| f(cstr.as_ptr())).unwrap_or(0);
+            if str_id == 0 {
+                return None;
+            }
             let pent = funcs.pfnCreateNamedEntity.map(|f| f(str_id))?;
             if pent.is_null() {
                 return None;
             }
-            funcs.pfnIndexOfEdict.map(|f| f(pent))
+            // SF_NORESPAWN (1 << 30): In HLSDK/ReHLDS CItem / CBasePlayerItem, ensures dynamically
+            // spawned items do not respawn after round restart or item respawn timers.
+            (*pent).v.spawnflags |= 1 << 30;
+
+            let idx = crate::api_registry::edict_index(pent);
+            if idx > 0 { Some(idx) } else { None }
         }
     }
 
@@ -609,6 +686,45 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 call_engfunc_ret!(funcs.pfnDropToFloor, p)
             } else {
                 0
+            }
+        }
+    }
+
+    fn dispatch_spawn(&self, index: i32) -> i32 {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pent = funcs.pfnPEntityOfEntIndex.and_then(|f| {
+                let p = f(index);
+                if p.is_null() { None } else { Some(p) }
+            });
+            match (pent, GAME_DLL_SPAWN.get()) {
+                // SAFETY: edict resolved from the engine; fn pointer registered
+                // by the backend from the real GameDLL function table.
+                (Some(p), Some(f)) => f(p),
+                _ => {
+                    log::debug!(target: "core", "dispatch_spawn({index}): no GameDLL bridge");
+                    0
+                }
+            }
+        }
+    }
+
+    fn dispatch_touch(&self, touched: i32, other: i32) {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let resolve = |idx: i32| {
+                funcs.pfnPEntityOfEntIndex.and_then(|f| {
+                    let p = f(idx);
+                    if p.is_null() { None } else { Some(p) }
+                })
+            };
+            match (resolve(touched), resolve(other), GAME_DLL_TOUCH.get()) {
+                // SAFETY: edicts resolved from the engine; fn pointer registered
+                // by the backend from the real GameDLL function table.
+                (Some(a), Some(b), Some(f)) => f(a, b),
+                _ => {
+                    log::debug!(target: "core", "dispatch_touch({touched},{other}): no GameDLL bridge");
+                }
             }
         }
     }
@@ -686,10 +802,7 @@ impl goldsrc_api::EnginePhysics for EngineBackend {
             let hit_id = if raw_trace.pHit.is_null() {
                 -1
             } else {
-                funcs
-                    .pfnIndexOfEdict
-                    .map(|f| f(raw_trace.pHit))
-                    .unwrap_or(-1)
+                crate::api_registry::edict_index(raw_trace.pHit)
             };
 
             goldsrc_api::TraceResult {
@@ -734,10 +847,7 @@ impl goldsrc_api::EnginePhysics for EngineBackend {
             let hit_id = if raw_trace.pHit.is_null() {
                 -1
             } else {
-                funcs
-                    .pfnIndexOfEdict
-                    .map(|f| f(raw_trace.pHit))
-                    .unwrap_or(-1)
+                crate::api_registry::edict_index(raw_trace.pHit)
             };
 
             goldsrc_api::TraceResult {

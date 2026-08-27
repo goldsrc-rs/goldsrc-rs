@@ -107,12 +107,18 @@ impl MenuSessionManager {
         };
 
         match action {
-            SlotAction::Execute { id, action_name } => {
+            SlotAction::Execute {
+                id,
+                action_name,
+                keep_open: _,
+            } => {
                 // Close menu
                 Self::clear_client_menu(player_idx, engine);
 
-                // Dispatch to WASM hook / event
-                let payload = id.to_le_bytes();
+                // Dispatch to WASM hook / event: 8 bytes payload: [player_idx: i32 (4 bytes), id: u32 (4 bytes)]
+                let mut payload = Vec::with_capacity(8);
+                payload.extend_from_slice(&player_idx.to_le_bytes());
+                payload.extend_from_slice(&id.to_le_bytes());
                 crate::hooks::emit_event("menu_select", &payload);
 
                 // Also trigger client command if action name is non-empty
@@ -184,6 +190,52 @@ impl MenuSessionManager {
                 true
             }
         }
+    }
+
+    /// Records raw ShowMenu keys mask sent directly from WASM plugins.
+    pub fn on_raw_show_menu(&mut self, player_idx: i32, keys_mask: u16, timeout: i32) {
+        if keys_mask == 0 {
+            self.sessions.remove(&player_idx);
+            return;
+        }
+
+        let mut slots_map = HashMap::new();
+        for slot in 1..=10 {
+            if (keys_mask & (1 << (slot - 1))) != 0 {
+                slots_map.insert(
+                    slot,
+                    SlotAction::Execute {
+                        id: slot as u32,
+                        action_name: String::new(),
+                        keep_open: false,
+                    },
+                );
+            }
+        }
+
+        let rendered = RenderedMenuPage {
+            text: String::new(),
+            keys_mask,
+            page_number: 1,
+            total_pages: 1,
+            slots: slots_map,
+            timeout,
+            renderer: MenuRendererKind::Text,
+        };
+
+        let session = PlayerMenuSession {
+            menu: Menu::builder("").build(),
+            current_page: 0,
+            history_stack: Vec::new(),
+            rendered_page: Some(rendered),
+            expiry_time: if timeout > 0 {
+                Some(timeout as f32)
+            } else {
+                None
+            },
+        };
+
+        self.sessions.insert(player_idx, session);
     }
 
     /// Clears the active menu for a player.
@@ -359,22 +411,36 @@ impl MenuSessionManager {
     }
 
     fn clear_client_menu(player_idx: i32, engine: &dyn Engine) {
+        // 1. Clear ShowMenu (keys = 0)
         let show_menu_id = engine.reg_user_msg("ShowMenu", -1);
-        if show_menu_id <= 0 || show_menu_id == 255 {
-            return;
+        if show_menu_id > 0 && show_menu_id != 255 {
+            engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                show_menu_id,
+                None,
+                Some(player_idx),
+            );
+            engine.write_short(0); // keys = 0 closes the menu
+            engine.write_char(0);
+            engine.write_byte(0);
+            engine.write_string("");
+            engine.message_end();
         }
 
-        engine.message_begin(
-            goldsrc_api::MessageDest::One as i32,
-            show_menu_id,
-            None,
-            Some(player_idx),
-        );
-        engine.write_short(0); // keys = 0 closes the menu
-        engine.write_char(0);
-        engine.write_byte(0);
-        engine.write_string("");
-        engine.message_end();
+        // 2. Clear any active DHUD message immediately (send empty text with 0 duration)
+        let clear_dhud = goldsrc_api::hud::HudMessage {
+            text: String::new(),
+            kind: goldsrc_api::hud::HudKind::Dhud,
+            color: goldsrc_api::hud::HudColor::WHITE,
+            color2: goldsrc_api::hud::HudColor::WHITE,
+            position: goldsrc_api::hud::HudCoord::CENTER,
+            effect: goldsrc_api::hud::HudEffect::FadeInOut {
+                fade_in: 0.0,
+                fade_out: 0.0,
+                hold_time: 0.0,
+            },
+        };
+        crate::hud::send_hud_message(engine, Some(player_idx), &clear_dhud);
     }
 }
 

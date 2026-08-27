@@ -13,6 +13,8 @@ pub mod client;
 pub mod command;
 /// Global constants for the engine and framework.
 pub mod consts;
+/// Typed CVar bindings and flags.
+pub mod cvar;
 /// Validated `edict_t` handle.
 pub mod edict;
 /// Modular engine sub-system traits, unified engine bridge, and API facade.
@@ -23,27 +25,37 @@ pub mod hud;
 pub mod liblist;
 /// Declarative multi-page menu system.
 pub mod menu;
+/// Unified requirements DSL.
+pub mod requirements;
 
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use client::{
     Alive, Bot, ClientKind, ConnectionState, CounterTerrorist, Dead, HLTV, LifeState, Player,
-    Spectator, Team, Terrorist,
+    PrintTarget, Spectator, Team, Terrorist,
 };
 pub use command::{
     ChatScope, Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget,
     FromArg, PlayerStateFilter,
 };
+pub use cvar::{Cvar, CvarFlags};
 pub use edict::EDict;
 pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
-    EnginePrecache, EngineSound, MessageDest, TraceResult, engine_api,
+    EnginePrecache, EngineSound, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
+    HUD_PRINTRADIO, MessageBuilder, MessageDest, PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE,
+    PRINT_NOTIFY, TraceResult, engine_api, format_center_text, format_say_text, utf8_to_cp1251,
 };
-pub use hud::{HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder};
+pub use hud::{
+    FadeFlags, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ScreenFade,
+    ScreenFadeBuilder, ScreenShake, ScreenShakeBuilder,
+};
 pub use liblist::{LIBLIST_FILENAME, LibList};
 pub use menu::{
     Condition, DenyAction, DenyPolicy, ExitBehavior, ItemKind, ItemTitle, Menu, MenuBuilder,
-    MenuContext, MenuItem, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,
+    MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, RenderedMenuPage,
+    SlotAction, VisualDeny,
 };
+pub use requirements::{CvarOp, Requirement};
 
 /// Safe wrapper around `edict_t` (entity dictionary).
 ///

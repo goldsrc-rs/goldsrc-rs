@@ -361,6 +361,31 @@ pub fn forward_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
     }
 }
 
+/// Returns the real GameDLL `DispatchSpawn` pointer, if the DLL is loaded.
+pub fn real_dispatch_spawn() -> Option<unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> i32> {
+    PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.loaded {
+            guard.dll_funcs.pfnSpawn
+        } else {
+            None
+        }
+    })
+}
+
+/// Returns the real GameDLL `Touch` pointer, if the DLL is loaded.
+pub fn real_touch()
+-> Option<unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::edict_t)> {
+    PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.loaded {
+            guard.dll_funcs.pfnTouch
+        } else {
+            None
+        }
+    })
+}
+
 /// Forward a client connect call to the real game DLL if loaded.
 pub fn forward_client_connect(
     edict: *mut goldsrc_sys::edict_t,

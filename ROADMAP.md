@@ -159,28 +159,52 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Correct `MessageDest` discriminants and dynamic `SayText` user message lookup via `reg_user_msg`.
   - Panic barrier encapsulation (`catch_ffi_panic`) on entity factories.
 
-## v0.12.0 — Game Events, HUD/Menus & Combat Hooks 📝 Planned
+## v0.12.0 — Declarative UI, Requirements DSL & Server Engine ✅
 
-**Goal:** Expand GameDLL hook coverage, provide declarative UI builders for HUD/Menus, and implement native combat and damage callbacks.
+**Goal:** Expand declarative UI builders for HUD/Menus/Effects, unify plugin lifecycle state machine, introduce a unified Requirements DSL, and provide defensive server configuration.
 
-- [ ] **Gameplay Hooks & Engine Events**:
-  - Combat hooks: `TakeDamage`, `TraceAttack`, `WeaponFire`, `Killed`.
-  - World interaction hooks: `Touch`, `Use`, `Think`, `PlayerPostThink`.
-  - Proper native player death sequence (`Player::kill` via `pfnClientKill` / `pfnTakeDamage`).
-- [ ] **VGUI / Text Menus & HUD Builders**:
-  - Declarative `Menu::builder` with pagination, dynamic callbacks, and item disabling.
-  - Screen messaging: `HudMessage` with color, fade, coordinates, and channel management.
-- [ ] **Game Rules & CS 1.6 Extensions**:
-  - Round state events (`RoundStart`, `RoundEnd`, `BombPlanted`, `BombDefused`).
-  - CS 1.6 specific entities, buy zones, and weapon inventory management.
+- [x] **Declarative Multi-Page Menus & Renderers**:
+  - Declarative `Menu::builder` with explicit page breaks, `ExitBehavior` (`PopParent`, `Close`), and dynamic action handlers (`#[menu_action]`).
+  - Pluggable renderers (`ShowMenu` and `Dhud`).
+- [x] **True Director HUD (DHUD) & Screen Effects**:
+  - Full Director HUD wire format (`SVC_DIRECTOR` opcode 51 with `DRC_CMD_MESSAGE`) rendering smooth VGUI typography.
+  - Classic 4-channel HUD (`SVC_TEMPENTITY` / `TE_TEXTMESSAGE`).
+  - Screen effects: `ScreenFade` (damage flashes, flashbang blindness) and `ScreenShake` (tremors, explosions) with fluent builders.
+- [x] **Unified Plugin Lifecycle FSM (`PluginStatus`)**:
+  - State machine (`Loaded`, `Running`, `Paused`, `Blocked`, `Degraded`, `Poisoned`, `Unloaded`) replacing scattered boolean flags.
+  - Automatic isolation and safe recovery on panics.
+- [x] **Unified Requirements DSL (`require = [...]`)**:
+  - Replaced legacy `dependencies` with a rich DSL: `plugin:<name>[@<ver>]`, `cvar:<name>[=<v>|!=<v>|>0]`, `feature:<name>`.
+  - Dynamic runtime status recalculation (`Blocked` if missing, `Degraded` if paused).
+- [x] **Defensive Server Configuration (`goldsrc.toml`)**:
+  - Unified configuration with `[core]`, `[logging]`, `[watcher]`, and `[runtime]`.
+  - Automated bounds clamping (`debounce_ms: [50, 5000]`, `memory: [16, 512] MB`, `tables: [100, 100k]`) with resilient fallbacks.
+- [x] **Typed CVar Abstraction**:
+  - Type-safe `Cvar<i32>`, `Cvar<f32>`, `Cvar<String>` and flags (`CvarFlags::ARCHIVE`, `NOTIFY`, `SERVER`, `READ_ONLY`).
 
-## v0.13.0 — Multi-Host Ecosystem (Lua, Python, Dynamic DLLs) 📝 Planned
+## v0.13.0 — Modular Plugin Ecosystem, Lifecycle Orchestration & Profiles 📝 Planned
 
-**Goal:** Support polyglot plugin development by dynamically loading external language runtimes from `hosts/` with strict ABI versioning.
+**Goal:** Deliver directory tree bundle discovery, profile groups (`plugins.toml`), and conditional lifecycle orchestration inspired by AmxxModularEcosystem & MultiMod.
+
+- [ ] **Recursive Directory Bundles (`plugins/<bundle>/*.wasm`)**:
+  - Recursive directory tree walking for plugin packs (e.g. `plugins/test_suite/test_hud.wasm`).
+  - Recursive file system watching for hot-reloading nested bundles.
+- [ ] **Declarative Plugin Orchestration (`plugins.toml`)**:
+  - Fine-grained plugin controls: `enabled`, `debug`, `priority`.
+  - Profile groups (`[groups.vip_pack]`, `[groups.match_mode]`) for instant multi-plugin toggling.
+  - Dynamic rule engine (`[[rules]]` based on map names, player count, or CVars).
+- [ ] **Decomposed Micro-Plugins**:
+  - Split monolithic test plugins into lightweight, focused demonstration modules (`test_hud`, `test_menu`, `test_ecs`).
+
+## v0.14.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
+
+**Goal:** Support polyglot plugin development by dynamically loading external language runtimes (C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 
 - [ ] **Dynamic Host Runtime Architecture**:
   - Modular `cstrike/goldsrc/hosts/` discovery directory with configurable resolution policy (`prefer_builtin` vs `prefer_external`).
   - C-ABI `PluginHostFactory` handshake with version validation.
+- [ ] **C# Plugin Host (`goldsrc-csharp-host`)**:
+  - Native AOT / .NET runtime embedding for high-performance C# GoldSrc plugins.
 - [ ] **Python Plugin Host (`goldsrc-python-host`)**:
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:

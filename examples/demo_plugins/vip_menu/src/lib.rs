@@ -8,7 +8,7 @@ pub struct VipMenu;
     author = "GoldSrc.rs Team",
     description = "Interactive VIP multi-page equipment menu and weapon dispensary",
     url = "https://github.com/goldsrc-rs/goldsrc-rs",
-    dependencies = ["vip_core@>=0.10.0"]
+    require = ["plugin:vip_core@>=0.10.0"]
 )]
 impl VipMenu {
     #[on_load]
@@ -25,8 +25,8 @@ impl VipMenu {
         usage = "vipmenu <player_index>"
     )]
     fn handle_menu(player: Alive<Player>) {
-        // Send a welcoming DHUD notice
-        let notice = HudMessage::builder("\\y[VIP CLUB]\\w Добро пожаловать в VIP Меню!")
+        // Send a welcoming DHUD notice (HUD messages do not support menu \y/\w escape codes)
+        let notice = HudMessage::builder("[VIP CLUB] Добро пожаловать в VIP Меню!")
             .dhud()
             .rgb(0, 255, 200)
             .position(-1.0, 0.2)
@@ -62,13 +62,44 @@ impl VipMenu {
         );
     }
 
-    /// Handles menu slot selections dispatched by the engine.
-    #[event(name = "menu_select")]
-    fn on_menu_select(_name: String, payload: Vec<u8>) {
-        if payload.len() < 4 {
-            return;
+    #[menu_action(id = 1)]
+    fn on_select_m4a1(player: &mut Player) {
+        player.give_item("weapon_m4a1");
+        player.give_item("weapon_deagle");
+        player.print_center("[VIP] Вы получили: M4A1 + Deagle");
+        player.print_color("^4[VIP]^1 Вы взяли комплект: ^3M4A1 + Deagle");
+    }
+
+    #[menu_action(id = 2)]
+    fn on_select_ak47(player: &mut Player) {
+        player.give_item("weapon_ak47");
+        player.give_item("weapon_deagle");
+        player.print_center("[VIP] Вы получили: AK-47 + Deagle");
+        player.print_color("^4[VIP]^1 Вы взяли комплект: ^3AK-47 + Deagle");
+    }
+
+    #[menu_action(id = 3)]
+    fn on_select_awp(player: &mut Player) {
+        player.give_item("weapon_awp");
+        player.give_item("weapon_deagle");
+        player.print_center("[VIP Gold] Вы получили: AWP + Deagle");
+        player.print_color("^4[VIP Gold]^1 Вы взяли снайперский комплект: ^3AWP + Deagle");
+    }
+
+    #[menu_action(id = 4)]
+    fn on_select_armor(player: &mut Player) {
+        player.set_armorvalue(100.0);
+        player.print_center("[VIP] Броня пополнена: 100 AP + Шлем");
+        player.print_color("^4[VIP]^1 Вам выдана броня: ^3100 AP");
+    }
+
+    #[menu_action(id = 5)]
+    fn on_select_medkit(player: &mut Player) {
+        let current_hp = player.health();
+        if current_hp > 0.0 {
+            player.set_health((current_hp + 50.0).min(100.0));
+            player.print_center("[VIP] Здоровье восстановлено (+50 HP)");
+            player.print_color("^4[VIP]^1 Вы восстановили здоровье!");
         }
-        let action_id = u32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
-        log_info!("[VIP Menu] Player executed menu action #{action_id}");
     }
 }

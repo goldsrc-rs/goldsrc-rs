@@ -25,6 +25,11 @@ mod win32 {
     pub const EXCEPTION_STACK_OVERFLOW: u32 = 0xC00000FD;
     pub const EXCEPTION_GUARD_PAGE: u32 = 0x80000001;
 
+    /// Suppresses the modal Windows Error Reporting dialog so a headless
+    /// HLDS dies immediately instead of blocking on Win11 UI.
+    pub const SEM_NOGPFAULTERRORBOX: u32 = 0x0002;
+    const STD_ERROR_HANDLE: i32 = -12;
+
     #[repr(C)]
     pub struct EXCEPTION_RECORD {
         pub ExceptionCode: u32,
@@ -50,9 +55,79 @@ mod win32 {
             Handler: PVECTORED_EXCEPTION_HANDLER,
         ) -> *mut c_void;
         pub fn RemoveVectoredExceptionHandler(Handle: *mut c_void) -> u32;
+        pub fn GetStdHandle(n_std_handle: i32) -> *mut c_void;
+        pub fn WriteFile(
+            h_file: *mut c_void,
+            lp_buffer: *const u8,
+            n_number_of_bytes_to_write: u32,
+            lp_number_of_bytes_written: *mut u32,
+            lp_overlapped: *mut c_void,
+        ) -> i32;
+        pub fn SetErrorMode(u_mode: u32) -> u32;
+    }
+
+    /// Fixed-capacity stack buffer for allocation-free fault reporting.
+    ///
+    /// A crash handler must not allocate or take locks: after a heap fault or
+    /// stack exhaustion those operations themselves fault again and kill the
+    /// process before anything is printed.
+    struct FixedBuf {
+        buf: [u8; 256],
+        pos: usize,
+    }
+
+    impl FixedBuf {
+        const fn new() -> Self {
+            Self {
+                buf: [0; 256],
+                pos: 0,
+            }
+        }
+
+        fn as_slice(&self) -> &[u8] {
+            &self.buf[..self.pos]
+        }
+    }
+
+    impl core::fmt::Write for FixedBuf {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            let bytes = s.as_bytes();
+            let remaining = self.buf.len() - self.pos;
+            let n = bytes.len().min(remaining);
+            self.buf[self.pos..self.pos + n].copy_from_slice(&bytes[..n]);
+            self.pos += n;
+            Ok(())
+        }
+    }
+
+    /// Writes a pre-formatted buffer to stderr via a raw `WriteFile` call.
+    ///
+    /// Deliberately avoids `eprintln!`: its stderr lock can be poisoned/held
+    /// by the very thread that crashed, and formatting machinery may allocate.
+    fn write_stderr(buf: &[u8]) {
+        unsafe {
+            let handle = GetStdHandle(STD_ERROR_HANDLE);
+            if handle.is_null() || handle == usize::MAX as *mut c_void {
+                return;
+            }
+            let mut written: u32 = 0;
+            WriteFile(
+                handle,
+                buf.as_ptr(),
+                buf.len() as u32,
+                &mut written,
+                std::ptr::null_mut(),
+            );
+        }
     }
 
     /// Global Vectored Exception Handler.
+    ///
+    /// This is a flight recorder, not an airbag: it logs the fault and returns
+    /// `EXCEPTION_CONTINUE_SEARCH`. Resuming after a hardware fault would
+    /// require repairing the CPU context (`EXCEPTION_CONTINUE_EXECUTION`),
+    /// which is impossible for arbitrary access violations — the process will
+    /// still terminate afterwards, just with a reliable diagnostic on console.
     pub unsafe extern "system" fn veh_exception_filter(info: *mut EXCEPTION_POINTERS) -> i32 {
         if info.is_null() {
             return EXCEPTION_CONTINUE_SEARCH;
@@ -73,25 +148,49 @@ mod win32 {
                 | EXCEPTION_ILLEGAL_INSTRUCTION
                 | EXCEPTION_INT_DIVIDE_BY_ZERO
                 | EXCEPTION_DATATYPE_MISALIGNMENT
+                | EXCEPTION_STACK_OVERFLOW
         );
 
         if is_fault {
+            use core::fmt::Write as _;
             let code_str = match code {
-                EXCEPTION_ACCESS_VIOLATION => "STATUS_ACCESS_VIOLATION (0xC0000005)",
-                EXCEPTION_ILLEGAL_INSTRUCTION => "STATUS_ILLEGAL_INSTRUCTION (0xC000001D)",
-                EXCEPTION_INT_DIVIDE_BY_ZERO => "STATUS_INTEGER_DIVIDE_BY_ZERO (0xC0000094)",
-                EXCEPTION_DATATYPE_MISALIGNMENT => "STATUS_DATATYPE_MISALIGNMENT (0x80000002)",
+                EXCEPTION_ACCESS_VIOLATION => "ACCESS_VIOLATION (0xC0000005)",
+                EXCEPTION_ILLEGAL_INSTRUCTION => "ILLEGAL_INSTRUCTION (0xC000001D)",
+                EXCEPTION_INT_DIVIDE_BY_ZERO => "INT_DIVIDE_BY_ZERO (0xC0000094)",
+                EXCEPTION_DATATYPE_MISALIGNMENT => "DATATYPE_MISALIGNMENT (0x80000002)",
+                EXCEPTION_STACK_OVERFLOW => "STACK_OVERFLOW (0xC00000FD)",
                 _ => "HARDWARE_FAULT",
             };
 
-            eprintln!(
-                "[GoldSrc.rs CRASH GUARD] Intercepted {code_str} at address {:p}!",
-                addr
+            let mut out = FixedBuf::new();
+            // Ignoring fmt errors is fine: the buffer is simply truncated.
+            let _ = core::write!(
+                out,
+                "[GoldSrc.rs CRASH GUARD] Intercepted {code_str} at address {addr:p}!\r\n"
             );
+            write_stderr(out.as_slice());
         }
 
         // Return EXCEPTION_CONTINUE_SEARCH to allow any higher-level/debugger or minidump filter to see it
         EXCEPTION_CONTINUE_SEARCH
+    }
+
+    static PREV_ERROR_MODE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+    pub fn install_error_mode() {
+        // SAFETY: process-wide error mode swap, restored on uninstall.
+        unsafe {
+            let prev = SetErrorMode(SEM_NOGPFAULTERRORBOX);
+            PREV_ERROR_MODE.store(prev, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    pub fn restore_error_mode() {
+        let prev = PREV_ERROR_MODE.load(std::sync::atomic::Ordering::Relaxed);
+        // SAFETY: restoring the value captured at install time.
+        unsafe {
+            SetErrorMode(prev);
+        }
     }
 }
 
@@ -199,9 +298,12 @@ pub fn install_crash_guard() {
             let handle = win32::AddVectoredExceptionHandler(1, win32::veh_exception_filter);
             if !handle.is_null() {
                 VEH_HANDLE.store(handle, Ordering::SeqCst);
-                eprintln!("[GoldSrc.rs] OS Crash Guard (Windows VEH) installed successfully.");
             }
+            // Kill the modal WER crash dialog: headless HLDS must not block
+            // on Win11 UI when a fault slips through.
+            win32::install_error_mode();
         }
+        eprintln!("[GoldSrc.rs] OS Crash Guard (Windows VEH) installed successfully.");
     }
 
     #[cfg(not(windows))]
@@ -224,5 +326,6 @@ pub fn uninstall_crash_guard() {
                 win32::RemoveVectoredExceptionHandler(handle);
             }
         }
+        win32::restore_error_mode();
     }
 }

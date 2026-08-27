@@ -23,7 +23,6 @@ use goldsrc::backend::EngineBackend;
 use goldsrc::log;
 use goldsrc_sys::ffi::catch_ffi_panic;
 use goldsrc_sys::{DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
-use std::ffi::{CStr, CString};
 
 // ============================================================================
 // Backend (Engine trait implementation)
@@ -62,11 +61,15 @@ fn init_wasm_host() {
 }
 
 // ============================================================================
-// Hook implementations
+// Hook strategy (backend behavior for each DLL_FUNCTIONS slot)
 // ============================================================================
 
-unsafe extern "C" fn hook_game_init() {
-    catch_ffi_panic("hook_game_init", (), || {
+/// Standalone strategy: forward every call to the real GameDLL via
+/// [`proxy`], then run framework business logic around it.
+pub struct StandaloneHooks;
+
+impl goldsrc::api_registry::EntityHooks for StandaloneHooks {
+    fn game_init(&self) {
         // 1. Forward GameDLLInit to real GameDLL
         proxy::forward_game_init();
         // 2. Initialize WASM host and plugins
@@ -74,203 +77,113 @@ unsafe extern "C" fn hook_game_init() {
         // 3. Register CLI commands after engine command system is initialized
         commands::register_cli_commands();
         log::info!(target: "core", "hook_game_init: WASM host & commands initialized successfully");
-    });
-}
-
-unsafe extern "C" fn hook_start_frame() {
-    // SAFETY: forward_start_frame does not unwind; catch_unwind guards the ABI boundary.
-    catch_ffi_panic("hook_start_frame", (), || {
-        proxy::forward_start_frame();
-        goldsrc::hooks::on_server_frame();
-        drain_print_queue();
-    });
-}
-
-/// Drain deferred server prints with fmtlib-safe escaping.
-///
-/// ReHLDS routes `ServerPrint` output through fmtlib: `%` and `{}` from plugin
-/// text would throw and crash the server, so they are escaped before printing.
-fn drain_print_queue() {
-    for message in PRINT_QUEUE.drain() {
-        let funcs = engine_api::engfuncs();
-        if let Some(f) = funcs.pfnServerPrint
-            && let Ok(cstr) = CString::new(message)
-        {
-            unsafe { f(cstr.as_ptr()) };
-        }
     }
-}
 
-unsafe extern "C" fn hook_client_connect(
-    edict: *mut goldsrc_sys::edict_t,
-    name: *const std::os::raw::c_char,
-    address: *const std::os::raw::c_char,
-    reject_reason: *mut std::os::raw::c_char,
-) -> goldsrc_sys::qboolean {
-    catch_ffi_panic("hook_client_connect", 1 as goldsrc_sys::qboolean, || {
+    fn spawn(&self, edict: *mut goldsrc_sys::edict_t) -> i32 {
+        crate::backend().precache_pending_resources();
+        proxy::forward_spawn(edict)
+    }
+
+    fn server_activate(
+        &self,
+        edict_list: *mut goldsrc_sys::edict_t,
+        edict_count: i32,
+        client_max: i32,
+    ) {
+        proxy::forward_server_activate(edict_list, edict_count, client_max);
+        goldsrc::hooks::on_server_activate();
+    }
+
+    fn server_deactivate(&self) {
+        proxy::forward_server_deactivate();
+        goldsrc::hooks::on_server_deactivate();
+    }
+
+    fn client_connect(
+        &self,
+        edict: *mut goldsrc_sys::edict_t,
+        index: i32,
+        name: *const std::ffi::c_char,
+        address: *const std::ffi::c_char,
+        reject_reason: *mut std::ffi::c_char,
+    ) -> i32 {
         let result = proxy::forward_client_connect(edict, name, address, reject_reason);
         if result != 0 {
-            let funcs = engine_api::engfuncs();
-            let index = funcs
-                .pfnIndexOfEdict
-                .map(|f| unsafe { f(edict) })
-                .unwrap_or(0);
             goldsrc::hooks::emit_player_event("client_connect", index);
         }
         result
-    })
-}
+    }
 
-unsafe extern "C" fn hook_client_disconnect(edict: *mut goldsrc_sys::edict_t) {
-    catch_ffi_panic("hook_client_disconnect", (), || {
-        let funcs = engine_api::engfuncs();
-        let index = funcs
-            .pfnIndexOfEdict
-            .map(|f| unsafe { f(edict) })
-            .unwrap_or(0);
+    fn client_disconnect(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_client_disconnect(edict);
         goldsrc::hooks::emit_player_event("client_disconnect", index);
-    });
-}
+    }
 
-unsafe extern "C" fn hook_client_command(edict: *mut goldsrc_sys::edict_t) {
-    catch_ffi_panic("hook_client_command", (), || {
-        let index = if !edict.is_null() {
-            unsafe {
-                crate::engine_api::engfuncs()
-                    .pfnIndexOfEdict
-                    .map(|f| f(edict))
-                    .unwrap_or(0)
-            }
-        } else {
-            0
-        };
-
-        let cmd_str;
-        let name_str;
-        {
-            let funcs = engine_api::engfuncs();
-            let cmd_ptr = unsafe { funcs.pfnCmd_Args.map(|f| f()).unwrap_or(std::ptr::null()) };
-            cmd_str = if !cmd_ptr.is_null() {
-                unsafe { CStr::from_ptr(cmd_ptr) }
-                    .to_string_lossy()
-                    .into_owned()
-            } else {
-                String::new()
-            };
-            let name_ptr = unsafe { funcs.pfnCmd_Argv.map(|f| f(0)).unwrap_or(std::ptr::null()) };
-            name_str = if !name_ptr.is_null() {
-                unsafe { CStr::from_ptr(name_ptr) }
-                    .to_string_lossy()
-                    .into_owned()
-            } else {
-                String::new()
-            };
-        }
-
-        let handled = goldsrc::hooks::dispatch_client_command(index, &name_str, &cmd_str);
+    fn client_command(
+        &self,
+        edict: *mut goldsrc_sys::edict_t,
+        index: i32,
+        cmd: &str,
+        args: &str,
+    ) -> bool {
+        let handled = goldsrc::hooks::dispatch_client_command(index, cmd, args);
         if !handled {
             proxy::forward_client_command(edict);
         }
-    });
+        handled
+    }
+
+    fn start_frame(&self) {
+        proxy::forward_start_frame();
+        goldsrc::hooks::on_server_frame();
+        crate::backend().drain_prints();
+    }
+
+    fn player_post_think(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
+        proxy::forward_player_post_think(edict);
+        goldsrc::hooks::emit_player_event("player_post_think", index);
+    }
+
+    fn client_kill(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
+        proxy::forward_client_kill(edict);
+        goldsrc::hooks::emit_player_event("client_kill", index);
+    }
+
+    fn touch(
+        &self,
+        touched: *mut goldsrc_sys::edict_t,
+        touched_idx: i32,
+        other: *mut goldsrc_sys::edict_t,
+        other_idx: i32,
+    ) {
+        proxy::forward_touch(touched, other);
+        goldsrc::hooks::emit_event(
+            "entity_touch",
+            &goldsrc::api_registry::pack_two_i32(touched_idx, other_idx),
+        );
+    }
+
+    fn entity_use(
+        &self,
+        used: *mut goldsrc_sys::edict_t,
+        used_idx: i32,
+        other: *mut goldsrc_sys::edict_t,
+        other_idx: i32,
+    ) {
+        proxy::forward_use(used, other);
+        goldsrc::hooks::emit_event(
+            "entity_use",
+            &goldsrc::api_registry::pack_two_i32(used_idx, other_idx),
+        );
+    }
 }
 
-unsafe extern "C" fn hook_server_activate(
-    edict_list: *mut goldsrc_sys::edict_t,
-    edict_count: i32,
-    client_max: i32,
-) {
-    catch_ffi_panic("hook_server_activate", (), || {
-        proxy::forward_server_activate(edict_list, edict_count, client_max);
-        goldsrc::hooks::on_server_activate();
-    });
-}
-
-unsafe extern "C" fn hook_server_deactivate() {
-    catch_ffi_panic("hook_server_deactivate", (), || {
-        proxy::forward_server_deactivate();
-        goldsrc::hooks::on_server_deactivate();
-    });
-}
-
-unsafe extern "C" fn hook_spawn(edict: *mut goldsrc_sys::edict_t) -> i32 {
-    catch_ffi_panic("hook_spawn", 0, || {
-        crate::backend().precache_pending_resources();
-        proxy::forward_spawn(edict)
-    })
-}
+/// Static hook instance handed to the registry in `GiveFnptrsToDll`.
+pub static HOOKS: StandaloneHooks = StandaloneHooks;
 
 // ============================================================================
 // GameDLL Entry Points (loaded via liblist.gam `gamedll` key)
 // ============================================================================
-
-unsafe extern "C" fn hook_player_post_think(edict: *mut goldsrc_sys::edict_t) {
-    catch_ffi_panic("hook_player_post_think", (), || {
-        let funcs = engine_api::engfuncs();
-        let index = funcs
-            .pfnIndexOfEdict
-            .map(|f| unsafe { f(edict) })
-            .unwrap_or(0);
-        proxy::forward_player_post_think(edict);
-        goldsrc::hooks::emit_player_event("player_post_think", index);
-    });
-}
-
-unsafe extern "C" fn hook_client_kill(edict: *mut goldsrc_sys::edict_t) {
-    catch_ffi_panic("hook_client_kill", (), || {
-        let funcs = engine_api::engfuncs();
-        let index = funcs
-            .pfnIndexOfEdict
-            .map(|f| unsafe { f(edict) })
-            .unwrap_or(0);
-        proxy::forward_client_kill(edict);
-        goldsrc::hooks::emit_player_event("client_kill", index);
-    });
-}
-
-unsafe extern "C" fn hook_touch(
-    pent_touched: *mut goldsrc_sys::edict_t,
-    pent_other: *mut goldsrc_sys::edict_t,
-) {
-    catch_ffi_panic("hook_touch", (), || {
-        let funcs = engine_api::engfuncs();
-        let touched_idx = funcs
-            .pfnIndexOfEdict
-            .map(|f| unsafe { f(pent_touched) })
-            .unwrap_or(0);
-        let other_idx = funcs
-            .pfnIndexOfEdict
-            .map(|f| unsafe { f(pent_other) })
-            .unwrap_or(0);
-        let mut payload = [0u8; 8];
-        payload[0..4].copy_from_slice(&touched_idx.to_le_bytes());
-        payload[4..8].copy_from_slice(&other_idx.to_le_bytes());
-        proxy::forward_touch(pent_touched, pent_other);
-        goldsrc::hooks::emit_event("entity_touch", &payload);
-    });
-}
-
-unsafe extern "C" fn hook_use(
-    pent_used: *mut goldsrc_sys::edict_t,
-    pent_other: *mut goldsrc_sys::edict_t,
-) {
-    catch_ffi_panic("hook_use", (), || {
-        let funcs = engine_api::engfuncs();
-        let used_idx = funcs
-            .pfnIndexOfEdict
-            .map(|f| unsafe { f(pent_used) })
-            .unwrap_or(0);
-        let other_idx = funcs
-            .pfnIndexOfEdict
-            .map(|f| unsafe { f(pent_other) })
-            .unwrap_or(0);
-        let mut payload = [0u8; 8];
-        payload[0..4].copy_from_slice(&used_idx.to_le_bytes());
-        payload[4..8].copy_from_slice(&other_idx.to_le_bytes());
-        proxy::forward_use(pent_used, pent_other);
-        goldsrc::hooks::emit_event("entity_use", &payload);
-    });
-}
 
 /// Called by the engine immediately after loading the DLL.
 /// Provides engine function pointers and global variables.
@@ -288,7 +201,19 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
     catch_ffi_panic("GiveFnptrsToDll", (), || unsafe {
         goldsrc_sys::guard::install_crash_guard();
         engine_api::init(engfuncs, globals);
+        // Register the unified hook strategy before the engine queries our tables.
+        goldsrc::api_registry::register(goldsrc::api_registry::Registry {
+            hooks: &HOOKS,
+            engfuncs: engine_api::engfuncs,
+        });
         proxy::forward_give_fnptrs_to_dll(engfuncs, globals);
+        // Expose real GameDLL entry points for direct calls (give_item etc.).
+        if let Some(f) = proxy::real_dispatch_spawn() {
+            goldsrc::backend::set_game_dll_spawn(f);
+        }
+        if let Some(f) = proxy::real_touch() {
+            goldsrc::backend::set_game_dll_touch(f);
+        }
     });
 }
 
@@ -308,27 +233,25 @@ pub unsafe extern "C" fn GetEntityAPI2(
         if dll_table.is_null() {
             return 0;
         }
+        // Standalone overlays its own hook table on top of the real GameDLL's,
+        // so a version mismatch is reported but does not abort registration.
+        // SAFETY: interface_version is a valid engine-provided pointer.
+        if !(unsafe {
+            goldsrc::api_registry::negotiate_interface_version(interface_version, false)
+        }) {
+            return 0;
+        }
         unsafe {
-            if !interface_version.is_null() {
-                *interface_version = goldsrc_api::consts::ENGINE_INTERFACE_VERSION;
-            }
             // 1. Populate with real GameDLL (mp.dll / cs.so) callbacks.
             proxy::populate_dll_table(dll_table);
 
-            // 2. Overlay our hooks.
-            let table = &mut *dll_table;
-            table.pfnGameInit = Some(hook_game_init);
-            table.pfnSpawn = Some(hook_spawn);
-            table.pfnServerActivate = Some(hook_server_activate);
-            table.pfnServerDeactivate = Some(hook_server_deactivate);
-            table.pfnClientConnect = Some(hook_client_connect);
-            table.pfnClientDisconnect = Some(hook_client_disconnect);
-            table.pfnClientCommand = Some(hook_client_command);
-            table.pfnStartFrame = Some(hook_start_frame);
-            table.pfnPlayerPostThink = Some(hook_player_post_think);
-            table.pfnClientKill = Some(hook_client_kill);
-            table.pfnTouch = Some(hook_touch);
-            table.pfnUse = Some(hook_use);
+            // 2. Overlay our hooks — single registration point.
+            goldsrc::api_registry::install_dll_api2(dll_table);
+            (*dll_table).pfnGameInit = Some(goldsrc::api_registry::api_game_init);
+            (*dll_table).pfnServerActivate = Some(goldsrc::api_registry::api_server_activate);
+            (*dll_table).pfnClientConnect = Some(goldsrc::api_registry::api_client_connect);
+            (*dll_table).pfnClientDisconnect = Some(goldsrc::api_registry::api_client_disconnect);
+            (*dll_table).pfnSpawn = Some(goldsrc::api_registry::api_spawn);
         }
         1
     })

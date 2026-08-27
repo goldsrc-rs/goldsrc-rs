@@ -51,44 +51,6 @@ impl TestSuite {
         log_info!("[Test Suite] ECS initialized successfully.");
     }
 
-    #[event]
-    fn handle_event(name: String, data: Vec<u8>) {
-        // Filter out high-frequency per-frame events to avoid console spam
-        if name == "player_post_think"
-            || name == "player_pre_think"
-            || name == "entity_touch"
-            || name == "on_frame"
-        {
-            return;
-        }
-
-        if data.is_empty() {
-            log_info!(
-                "[Test Suite] Event Handler received: '{}' (no payload)",
-                name
-            );
-        } else if data.len() == 4 {
-            let idx = i32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-            log_info!(
-                "[Test Suite] Event Handler received: '{}' => player #{}",
-                name,
-                idx
-            );
-        } else if let Ok(str_data) = String::from_utf8(data.clone()) {
-            log_info!(
-                "[Test Suite] Event Handler received: '{}' => '{}'",
-                name,
-                str_data
-            );
-        } else {
-            log_info!(
-                "[Test Suite] Event Handler received: '{}' => (raw bytes: {:?})",
-                name,
-                data
-            );
-        }
-    }
-
     #[command(
         name = "testcmd",
         description = "Test echo command for logging arguments",
@@ -182,19 +144,205 @@ impl TestSuite {
         }
     }
 
-    /// Tests playing a sound on player 1.
+    /// Tests nested and paginated menus with page breaks, ExitBehavior, and actions.
     #[command(
-        name = "test_sound",
-        description = "Emits a test audio sample on player 1",
-        usage = "test_sound [sound_path]"
+        name = "test_menu",
+        description = "Opens interactive multi-page and nested test menu",
+        usage = "test_menu [player_index]"
     )]
-    fn handle_test_sound(_cmd: String, args: String) {
-        let sample = if args.trim().is_empty() {
-            "events/tutor_msg.wav"
-        } else {
-            args.trim()
-        };
-        engine::emit_sound(1, 0, sample, 1.0, 0.8, 0, 100);
-        log_info!("[Test Suite] Emitted sound '{}' on entity #1", sample);
+    fn handle_test_menu(_cmd: String, args: String) {
+        let idx = args.trim().parse::<i32>().unwrap_or(1);
+        let player = Player::new(idx);
+        if !player.is_valid() {
+            log_warn!("[Test Suite] Player {} is not valid!", idx);
+            return;
+        }
+
+        // Build a multi-page test menu with explicit page builder
+        let menu = Menu::builder("Test Suite: Multi-Page Menu")
+            .style(MenuStyle::brackets())
+            .exit_behavior(ExitBehavior::PopParent)
+            .page(|p| {
+                p.text("\\y[Страница 1: Базовые действия]")
+                    .item(MenuItem::new("Пополнить здоровье (+100 HP)", 101).keep_open())
+                    .item(MenuItem::new("Пополнить броню (+100 AP)", 102).keep_open())
+                    .item(("Открыть подменю оружия ->", 103))
+            })
+            .page(|p| {
+                p.text("\\y[Страница 2: Дополнительные тесты]")
+                    .item(("Тестовый звук", 104))
+                    .item(("Телепорт на +100 Z юнитов", 105))
+            })
+            .build();
+
+        player.open_menu(&menu);
+        log_info!(
+            "[Test Suite] Opened multi-page test menu for player #{}",
+            idx
+        );
+    }
+
+    #[menu_action(id = 101)]
+    fn on_menu_heal(player: &mut Player) {
+        player.set_health(100.0);
+        player.print_center("[Test Suite] Здоровье восстановлено (100 HP)");
+        player.print_color("^4[Test Suite]^1 Здоровье установлено на ^3100 HP");
+    }
+
+    #[menu_action(id = 102)]
+    fn on_menu_armor(player: &mut Player) {
+        player.set_armorvalue(100.0);
+        player.print_center("[Test Suite] Броня выдана (100 AP)");
+        player.print_color("^4[Test Suite]^1 Броня установлена на ^3100 AP");
+    }
+
+    #[menu_action(id = 103)]
+    fn on_open_nested_weapons(player: &mut Player) {
+        let submenu = Menu::builder("Оружейное подменю")
+            .style(MenuStyle::classic())
+            .exit_behavior(ExitBehavior::PopParent)
+            .item(("M4A1 Carbine", 106))
+            .item(("AK-47 Kalashnikov", 107))
+            .item(("AWP Magnum", 108))
+            .item(("Desert Eagle", 109))
+            .build();
+
+        player.open_menu(&submenu);
+        log_info!(
+            "[Test Suite] Opened nested submenu for player #{}",
+            player.index()
+        );
+    }
+
+    #[menu_action(id = 104)]
+    fn on_menu_sound(player: &mut Player) {
+        engine::emit_sound(player.index(), 0, "events/tutor_msg.wav", 1.0, 0.8, 0, 100);
+        player.print_center("[Test Suite] Проигран тестовый звук");
+    }
+
+    #[menu_action(id = 105)]
+    fn on_menu_teleport(player: &mut Player) {
+        let mut origin = player.origin();
+        origin.z += 100.0; // Boost player upwards
+        player.set_origin(origin);
+        player.print_center("[Test Suite] Телепорт выполнен (+100 Z)");
+        player.print_color("^4[Test Suite]^1 Вы телепортированы на ^3+100 Z^1 единиц!");
+    }
+
+    #[menu_action(id = 106)]
+    fn on_menu_give_m4(player: &mut Player) {
+        player.give_item("weapon_m4a1");
+        player.print_center("[Test Suite] Выдана M4A1");
+    }
+
+    #[menu_action(id = 107)]
+    fn on_menu_give_ak(player: &mut Player) {
+        player.give_item("weapon_ak47");
+        player.print_center("[Test Suite] Выдан AK-47");
+    }
+
+    #[menu_action(id = 108)]
+    fn on_menu_give_awp(player: &mut Player) {
+        player.give_item("weapon_awp");
+        player.print_center("[Test Suite] Выдана AWP");
+    }
+
+    #[menu_action(id = 109)]
+    fn on_menu_give_deagle(player: &mut Player) {
+        player.give_item("weapon_deagle");
+        player.print_center("[Test Suite] Выдан Deagle");
+    }
+
+    /// Tests classic HUD screen message.
+    #[command(
+        name = "test_hud",
+        description = "Displays a classic HUD message on screen",
+        usage = "test_hud [player_index]"
+    )]
+    fn handle_test_hud(_cmd: String, args: String) {
+        let idx = args.trim().parse::<i32>().unwrap_or(1);
+        let player = Player::new(idx);
+        if !player.is_valid() {
+            log_warn!("[Test Suite] Player {} is not valid!", idx);
+            return;
+        }
+
+        let hud = HudMessage::builder(
+            "=== GoldSrc.rs Classic HUD ===\nПривет! Это проверка HUD сообщения.",
+        )
+        .classic(1)
+        .position(-1.0, 0.25)
+        .color(HudColor::new(0, 255, 128, 255))
+        .timing(0.5, 0.5, 3.5)
+        .build();
+
+        player.send_hud(&hud);
+        log_info!("[Test Suite] Sent classic HUD message to player #{}", idx);
+    }
+
+    /// Tests modern Director HUD (DHUD) screen message.
+    #[command(
+        name = "test_dhud",
+        description = "Displays a DHUD message on screen",
+        usage = "test_dhud [player_index]"
+    )]
+    fn handle_test_dhud(_cmd: String, args: String) {
+        let idx = args.trim().parse::<i32>().unwrap_or(1);
+        let player = Player::new(idx);
+        if !player.is_valid() {
+            log_warn!("[Test Suite] Player {} is not valid!", idx);
+            return;
+        }
+
+        let dhud = HudMessage::builder(
+            "=== GoldSrc.rs DHUD ===\nТекст с эффектом Typewriter и кириллицей!",
+        )
+        .dhud()
+        .position(-1.0, 0.35)
+        .color(HudColor::new(255, 180, 0, 255))
+        .color2(HudColor::new(255, 50, 0, 255))
+        .effect(HudEffect::Typewriter {
+            char_time: 0.05,
+            fade_out: 0.5,
+            hold_time: 4.0,
+        })
+        .build();
+
+        player.send_hud(&dhud);
+        log_info!("[Test Suite] Sent DHUD message to player #{}", idx);
+    }
+
+    /// Tests menu rendered as DHUD on screen.
+    #[command(
+        name = "test_dhud_menu",
+        description = "Opens a test menu rendered via DHUD",
+        usage = "test_dhud_menu [player_index]"
+    )]
+    fn handle_test_dhud_menu(_cmd: String, args: String) {
+        let idx = args.trim().parse::<i32>().unwrap_or(1);
+        let player = Player::new(idx);
+        if !player.is_valid() {
+            log_warn!("[Test Suite] Player {} is not valid!", idx);
+            return;
+        }
+
+        let menu = Menu::builder("DHUD Рендер Меню")
+            .style(MenuStyle::brackets())
+            .renderer(MenuRendererKind::Dhud {
+                position: HudCoord::new(0.05, 0.25),
+                color: HudColor::new(0, 255, 255, 255),
+                effect: HudEffect::FadeInOut {
+                    fade_in: 0.1,
+                    fade_out: 0.1,
+                    hold_time: 5.0,
+                },
+            })
+            .item(MenuItem::new("Пополнить здоровье (+100 HP)", 101).keep_open())
+            .item(MenuItem::new("Пополнить броню (+100 AP)", 102).keep_open())
+            .item(("Телепорт (+100 Z)", 105))
+            .build();
+
+        player.open_menu(&menu);
+        log_info!("[Test Suite] Opened DHUD-rendered menu for player #{}", idx);
     }
 }

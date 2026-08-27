@@ -1,12 +1,14 @@
 //! Declarative, multi-page Menu System for GoldSrc.rs.
 
 pub mod builder;
+pub mod session;
 pub mod types;
 
-pub use builder::{Menu, MenuBuilder, RenderedMenuPage, SlotAction};
+pub use builder::{MenuBuilder, MenuPageBuilder};
+pub use session::{PlayerMenuSession, close_menu, handle_menu_slot, open_menu};
 pub use types::{
-    Condition, DenyAction, DenyPolicy, ExitBehavior, ItemKind, ItemTitle, MenuContext, MenuItem,
-    MenuRendererKind, MenuStyle, VisualDeny,
+    Condition, DenyAction, DenyPolicy, ExitBehavior, ItemKind, ItemTitle, Menu, MenuContext,
+    MenuItem, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,
 };
 
 /// Standard maximum number of menu slots per page (1..=10).

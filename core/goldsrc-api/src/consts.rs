@@ -1,8 +1,9 @@
 //! Global constants for the GoldSrc engine and framework.
 
 pub use crate::engine::{
-    ENGINE_INTERFACE_VERSION, MAX_EDICTS, MAX_PLAYERS, MAX_USER_MSG_DATA_LEN,
-    NEW_DLL_INTERFACE_VERSION, PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE, PRINT_NOTIFY,
+    ENGINE_INTERFACE_VERSION, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
+    HUD_PRINTRADIO, MAX_EDICTS, MAX_PLAYERS, MAX_USER_MSG_DATA_LEN, NEW_DLL_INTERFACE_VERSION,
+    PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE, PRINT_NOTIFY,
 };
 pub use crate::hud::{
     DRC_CMD_MESSAGE, HUD_COORD_CENTER, MAX_HUD_CHANNELS, SVC_DIRECTOR, SVC_TEMPENTITY,
@@ -58,3 +59,31 @@ pub const HOSTS_DIR_NAME: &str = "hosts";
 
 /// Standard WebAssembly binary file extension.
 pub const WASM_EXT: &str = ".wasm";
+
+// ----------------------------------------------------------------------------
+// Plugin Metadata Fallback Constants
+// ----------------------------------------------------------------------------
+
+/// Fallback plugin display name if not specified.
+pub const DEFAULT_PLUGIN_NAME: &str = "Unknown";
+
+/// Fallback plugin version string if not specified.
+pub const DEFAULT_PLUGIN_VERSION: &str = "0.0.0";
+
+/// Fallback plugin author string if not specified.
+pub const DEFAULT_PLUGIN_AUTHOR: &str = "Unknown";
+
+/// Fallback plugin description string if not specified.
+pub const DEFAULT_PLUGIN_DESCRIPTION: &str = "No description provided";
+
+/// Fallback plugin license string if not specified.
+pub const DEFAULT_PLUGIN_LICENSE: &str = "Not Stated";
+
+/// Fallback plugin website or repository URL if not specified.
+pub const DEFAULT_PLUGIN_URL: &str = "N/A";
+
+/// Fallback plugin registered systems string if none are registered.
+pub const DEFAULT_PLUGIN_SYSTEMS: &str = "none";
+
+/// Fallback plugin require string if none are specified.
+pub const DEFAULT_PLUGIN_REQUIRE: &str = "none";

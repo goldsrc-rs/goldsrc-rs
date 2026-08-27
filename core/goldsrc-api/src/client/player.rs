@@ -247,27 +247,81 @@ impl Player {
         }
     }
 
-    /// Prints a chat message to the player.
-    pub fn print_chat(&self, msg: &str) {
+    /// Prints a message to the specified target (console / center / chat).
+    ///
+    /// This is the single dispatch point; the `print_*` helpers below are
+    /// convenience wrappers. On native hosts printing is currently a no-op
+    /// (the engine bridge surface is WASM-first).
+    pub fn print(&self, target: crate::client::PrintTarget, msg: &str) {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_print_chat(self.index, msg);
+            use crate::bindings::goldsrc::engine::api as host;
+            match target {
+                crate::client::PrintTarget::Console => host::host_print_console(self.index, msg),
+                crate::client::PrintTarget::Center => host::host_print_center(self.index, msg),
+                // Chat and ColoredChat share the SayText transport; the colored
+                // variant only documents that ^1/^3/^4 escapes are meaningful.
+                crate::client::PrintTarget::Chat | crate::client::PrintTarget::ColoredChat => {
+                    host::host_print_chat(self.index, msg)
+                }
+            }
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (self.index, msg);
+            let _ = (self.index, target, msg);
         }
+    }
+
+    /// Prints a message to the player's game console.
+    pub fn print_console(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Console, msg);
+    }
+
+    /// Prints a chat message to the player.
+    pub fn print_chat(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Chat, msg);
     }
 
     /// Prints a center notification message to the player.
     pub fn print_center(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Center, msg);
+    }
+
+    /// Prints a colorized chat message (`^1` default, `^3` team, `^4` green).
+    /// Color escapes render in CS 1.6 / CZ clients only.
+    pub fn print_color(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::ColoredChat, msg);
+    }
+
+    /// Spawns an item/weapon entity by classname (e.g. `"weapon_m4a1"`) and
+    /// delivers it to this player via the real GameDLL's spawn + touch flow,
+    /// mirroring AMX Mod X's `give_item`: create → position at player →
+    /// DispatchSpawn → force Touch.
+    ///
+    /// Returns the new entity index. Requires a backend with GameDLL access
+    /// (standalone proxy); on backends without it the entity is not created.
+    pub fn give_item(&self, item: &str) -> Option<i32> {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_print_center(self.index, msg);
+            use crate::bindings::goldsrc::engine::api as host;
+            let ent = host::host_create_named_entity(item)?;
+            let o = host::host_entity_origin(self.index);
+            host::host_entity_set_origin(
+                ent,
+                crate::bindings::goldsrc::engine::api::Vector3 {
+                    x: o.x,
+                    y: o.y,
+                    z: o.z,
+                },
+            );
+            host::host_dispatch_spawn(ent);
+            host::host_dispatch_touch(ent, self.index);
+            Some(ent)
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (self.index, msg);
+            let _ = item;
+            None
         }
     }
 
@@ -357,37 +411,7 @@ impl Player {
 
     /// Renders and opens a declarative `Menu` for this player.
     pub fn open_menu(&self, menu: &crate::menu::Menu) {
-        let ctx = crate::menu::MenuContext {
-            player_index: self.index,
-            round_number: 1,
-            round_time_elapsed: 0.0,
-            is_alive: self.health() > 0.0,
-            players_count: 1,
-        };
-
-        if let Some(page) = menu.render_page(&ctx, 0) {
-            match page.renderer {
-                crate::menu::MenuRendererKind::Text => {
-                    self.show_raw_menu(page.keys_mask as i32, page.timeout, &page.text);
-                }
-                crate::menu::MenuRendererKind::Dhud {
-                    position,
-                    color,
-                    effect,
-                } => {
-                    let hud_msg = crate::hud::HudMessage {
-                        text: page.text,
-                        kind: crate::hud::HudKind::Dhud,
-                        color,
-                        color2: color,
-                        position,
-                        effect,
-                    };
-                    self.send_hud(&hud_msg);
-                    self.show_raw_menu(page.keys_mask as i32, page.timeout, "");
-                }
-            }
-        }
+        crate::menu::session::open_menu(self.index, menu.clone());
     }
 
     /// Checks if the player has the specified capability.

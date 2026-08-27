@@ -59,7 +59,7 @@ pub unsafe extern "C" fn Meta_Attach(
     _now: PLUG_LOADTIME,
     meta_functions: *mut meta_function_t,
     meta_globals: *mut meta_globals_t,
-    meta_util_functions: *mut mutil_funcs_t,
+    gamedll_funcs: *mut gamedll_funcs_t,
 ) -> std::os::raw::c_int {
     // SAFETY: meta_functions and meta_globals are Metamod-provided; valid at call time.
     catch_ffi_panic("Meta_Attach", 0, || {
@@ -68,13 +68,19 @@ pub unsafe extern "C" fn Meta_Attach(
                 return 0;
             }
             crate::set_meta_globals(meta_globals);
-            if !meta_util_functions.is_null() {
-                crate::set_meta_util_funcs(meta_util_functions);
+            if !gamedll_funcs.is_null() {
+                crate::set_gamedll_funcs(gamedll_funcs);
             }
 
             // Fill the META_FUNCTIONS table with our hook functions.
             (*meta_functions).pfnGetEntityAPI2 = Some(crate::GetEntityAPI2);
-            (*meta_functions).pfnGetEngineFunctions_Post = Some(crate::GetEngineFunctions_Post);
+            (*meta_functions).pfnGetEntityAPI2_Post = Some(crate::GetEntityAPI2_Post);
+
+            // Register the unified hook strategy before any table query.
+            goldsrc::api_registry::register(goldsrc::api_registry::Registry {
+                hooks: &crate::hooks::HOOKS,
+                engfuncs: crate::engfuncs,
+            });
         }
         init_wasm_host();
         crate::commands::register_cli_commands();
@@ -132,28 +138,19 @@ pub unsafe extern "C" fn GetEntityAPI2(
 ) -> i32 {
     // SAFETY: dll_table and interface_version are engine-provided; valid at call time.
     catch_ffi_panic("GetEntityAPI2", 0, || {
-        if dll_table.is_null() || interface_version.is_null() {
-            return 0;
+        // SAFETY: dll_table and interface_version are valid pointers passed by Metamod.
+        if unsafe {
+            goldsrc::api_registry::ApiRegistry::install(
+                dll_table,
+                interface_version,
+                goldsrc::api_registry::HookPhase::Pre,
+                true,
+            )
+        } {
+            1
+        } else {
+            0
         }
-        unsafe {
-            if *interface_version != goldsrc_api::consts::ENGINE_INTERFACE_VERSION {
-                *interface_version = goldsrc_api::consts::ENGINE_INTERFACE_VERSION;
-                return 0;
-            }
-            let table = &mut *dll_table;
-            table.pfnSpawn = Some(crate::hooks::hook_spawn);
-            table.pfnServerActivate = Some(crate::hooks::hook_server_activate);
-            table.pfnServerDeactivate = Some(crate::hooks::hook_server_deactivate);
-            table.pfnClientConnect = Some(crate::hooks::hook_client_connect);
-            table.pfnClientDisconnect = Some(crate::hooks::hook_client_disconnect);
-            table.pfnClientCommand = Some(crate::hooks::hook_client_command);
-            table.pfnStartFrame = Some(crate::hooks::hook_start_frame);
-            table.pfnPlayerPostThink = Some(crate::hooks::hook_player_post_think);
-            table.pfnClientKill = Some(crate::hooks::hook_client_kill);
-            table.pfnTouch = Some(crate::hooks::hook_touch);
-            table.pfnUse = Some(crate::hooks::hook_use);
-        }
-        1
     })
 }
 
@@ -168,21 +165,19 @@ pub unsafe extern "C" fn GetEntityAPI2_Post(
 ) -> i32 {
     // SAFETY: dll_table and interface_version are engine-provided; valid at call time.
     catch_ffi_panic("GetEntityAPI2_Post", 0, || {
-        if dll_table.is_null() || interface_version.is_null() {
-            return 0;
+        // SAFETY: dll_table and interface_version are valid pointers passed by Metamod.
+        if unsafe {
+            goldsrc::api_registry::ApiRegistry::install(
+                dll_table,
+                interface_version,
+                goldsrc::api_registry::HookPhase::Post,
+                true,
+            )
+        } {
+            1
+        } else {
+            0
         }
-        unsafe {
-            if *interface_version != goldsrc_api::consts::ENGINE_INTERFACE_VERSION {
-                *interface_version = goldsrc_api::consts::ENGINE_INTERFACE_VERSION;
-                return 0;
-            }
-            let table = &mut *dll_table;
-            table.pfnSpawn = Some(crate::hooks::hook_spawn_post);
-            table.pfnClientConnect = Some(crate::hooks::hook_client_connect_post);
-            table.pfnClientDisconnect = Some(crate::hooks::hook_client_disconnect_post);
-            table.pfnStartFrame = Some(crate::hooks::hook_start_frame_post);
-        }
-        1
     })
 }
 
@@ -255,12 +250,21 @@ unsafe extern "C" fn hook_reg_user_msg_post(
     _i_size: std::os::raw::c_int,
 ) -> std::os::raw::c_int {
     catch_ffi_panic("hook_reg_user_msg_post", 0, || {
-        let msg_id = crate::meta_globals().orig_ret as usize as i32;
+        let orig_ret_ptr = crate::meta_globals().orig_ret as *const i32;
+        let msg_id = if !orig_ret_ptr.is_null() {
+            unsafe { *orig_ret_ptr }
+        } else {
+            0
+        };
         if !psz_name.is_null()
             && msg_id > 0
             && msg_id != 255
             && let Ok(c_str) = unsafe { std::ffi::CStr::from_ptr(psz_name) }.to_str()
         {
+            crate::backend().server_print(&format!(
+                "[GoldSrc.rs DEBUG] Captured RegUserMsg '{}' => id={}\n",
+                c_str, msg_id
+            ));
             goldsrc::backend::register_user_msg_id(c_str, msg_id);
         }
         msg_id

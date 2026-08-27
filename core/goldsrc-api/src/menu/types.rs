@@ -293,6 +293,7 @@ pub struct MenuItem {
     pub kind: ItemKind,
     pub conditions: Vec<Condition>,
     pub deny_policy: DenyPolicy,
+    pub keep_open: bool,
 }
 
 impl MenuItem {
@@ -306,6 +307,7 @@ impl MenuItem {
             },
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
+            keep_open: false,
         }
     }
 
@@ -319,6 +321,7 @@ impl MenuItem {
             },
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
+            keep_open: false,
         }
     }
 
@@ -329,6 +332,7 @@ impl MenuItem {
             kind: ItemKind::Text,
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
+            keep_open: false,
         }
     }
 
@@ -339,6 +343,7 @@ impl MenuItem {
             kind: ItemKind::Spacer,
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
+            keep_open: false,
         }
     }
 
@@ -349,6 +354,7 @@ impl MenuItem {
             kind: ItemKind::Divider(divider_str.into()),
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
+            keep_open: false,
         }
     }
 
@@ -368,6 +374,17 @@ impl MenuItem {
     pub fn on_deny_replace<S: Into<String>>(self, new_title: S) -> Self {
         self.on_deny(DenyPolicy::replace(new_title))
     }
+    /// Sets the item to keep the menu open after selection (re-rendering the current page).
+    pub fn keep_open(mut self) -> Self {
+        self.keep_open = true;
+        self
+    }
+
+    /// Explicitly configures whether the item keeps the menu open after selection.
+    pub fn with_keep_open(mut self, keep: bool) -> Self {
+        self.keep_open = keep;
+        self
+    }
 }
 
 impl<S: Into<String>> From<(S, u32)> for MenuItem {
@@ -376,14 +393,35 @@ impl<S: Into<String>> From<(S, u32)> for MenuItem {
     }
 }
 
+impl<S: Into<String>> From<(S, &'static str)> for MenuItem {
+    fn from((title, action_name): (S, &'static str)) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(action_name, &mut hasher);
+        let id = (std::hash::Hasher::finish(&hasher) & 0x7FFF_FFFF) as u32;
+        Self::with_action(title, id, action_name)
+    }
+}
+
+impl<S: Into<String>> From<(S, String)> for MenuItem {
+    fn from((title, action_name): (S, String)) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&action_name, &mut hasher);
+        let id = (std::hash::Hasher::finish(&hasher) & 0x7FFF_FFFF) as u32;
+        Self::with_action(title, id, action_name)
+    }
+}
+
 /// Navigation and exit behavior when player leaves or navigates submenus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ExitBehavior {
     /// Closing menu closes all active and parent menu sessions.
     CloseAll,
-    /// Closing submenu automatically pops and reopens the parent menu from history stack.
+    /// Closing submenu automatically pops and reopens the parent menu on the exact page it was called from.
     #[default]
     PopParent,
+    /// Closing submenu returns to parent menu on a specific 1-based page index.
+    /// Supports negative indices from the end (`-1` = last page, `-2` = second to last).
+    PopParentPage(isize),
 }
 
 /// Visual formatting style configuration for rendered menus.
@@ -403,6 +441,8 @@ pub struct MenuStyle {
     pub next_text: String,
     /// Exit button label.
     pub exit_text: String,
+    /// When `true`, shifts the "Back" button from slot 8 to slot 9 on the last page (freeing slot 8 for items).
+    pub dynamic_back_slot: bool,
 }
 
 impl MenuStyle {
@@ -411,17 +451,18 @@ impl MenuStyle {
         Self {
             header_format: Arc::new(|title, page, max_pages| {
                 if max_pages > 1 {
-                    format!("\\y{title}\\R\\d{page}/{max_pages}\\n\\n")
+                    format!("\\y{title}\\R\\d{page}/{max_pages}\n\n")
                 } else {
-                    format!("\\y{title}\\n\\n")
+                    format!("\\y{title}\n\n")
                 }
             }),
-            item_format: Arc::new(|slot, text| format!("\\y{slot}.\\w {text}\\n")),
-            disabled_item_format: Arc::new(|slot, text| format!("\\d{slot}. {text}\\n")),
+            item_format: Arc::new(|slot, text| format!("\\y{slot}.\\w {text}\n")),
+            disabled_item_format: Arc::new(|slot, text| format!("\\d{slot}. {text}\n")),
             items_per_page: 7,
-            back_text: "\\y8. Назад\\n".into(),
-            next_text: "\\y9. Вперед\\n".into(),
-            exit_text: "\\r0. Выход\\n".into(),
+            back_text: "\\y8. Назад\n".into(),
+            next_text: "\\y9. Вперед\n".into(),
+            exit_text: "\\r0. Выход\n".into(),
+            dynamic_back_slot: true,
         }
     }
 
@@ -430,17 +471,18 @@ impl MenuStyle {
         Self {
             header_format: Arc::new(|title, page, max_pages| {
                 if max_pages > 1 {
-                    format!("\\y=== {title} ===\\R\\d[{page}/{max_pages}]\\n\\n")
+                    format!("\\y=== {title} ===\\R\\d[{page}/{max_pages}]\n\n")
                 } else {
-                    format!("\\y=== {title} ===\\n\\n")
+                    format!("\\y=== {title} ===\n\n")
                 }
             }),
-            item_format: Arc::new(|slot, text| format!("\\r[{slot}]\\w {text}\\n")),
-            disabled_item_format: Arc::new(|slot, text| format!("\\d[{slot}] {text}\\n")),
+            item_format: Arc::new(|slot, text| format!("\\r[{slot}]\\w {text}\n")),
+            disabled_item_format: Arc::new(|slot, text| format!("\\d[{slot}] {text}\n")),
             items_per_page: 7,
-            back_text: "\\y[8] Назад\\n".into(),
-            next_text: "\\y[9] Вперед\\n".into(),
-            exit_text: "\\r[0] Выход\\n".into(),
+            back_text: "\\y[8] Назад\n".into(),
+            next_text: "\\y[9] Вперед\n".into(),
+            exit_text: "\\r[0] Выход\n".into(),
+            dynamic_back_slot: true,
         }
     }
 
@@ -460,7 +502,14 @@ impl MenuStyle {
             back_text: "8. Back\n".into(),
             next_text: "9. Next\n".into(),
             exit_text: "0. Exit\n".into(),
+            dynamic_back_slot: true,
         }
+    }
+
+    /// Sets whether the "Back" button should shift to slot 9 on the last page.
+    pub fn with_dynamic_back(mut self, enabled: bool) -> Self {
+        self.dynamic_back_slot = enabled;
+        self
     }
 }
 
@@ -477,6 +526,7 @@ impl std::fmt::Debug for MenuStyle {
             .field("back_text", &self.back_text)
             .field("next_text", &self.next_text)
             .field("exit_text", &self.exit_text)
+            .field("dynamic_back_slot", &self.dynamic_back_slot)
             .finish()
     }
 }
@@ -493,4 +543,297 @@ pub enum MenuRendererKind {
         color: crate::hud::HudColor,
         effect: crate::hud::HudEffect,
     },
+}
+
+/// Resolved interaction assigned to a single key slot (1..=10, where 10 is slot '0').
+#[derive(Debug, Clone)]
+pub enum SlotAction {
+    /// Dispatches action item ID and name to plugin callback.
+    Execute {
+        id: u32,
+        action_name: String,
+        keep_open: bool,
+    },
+    /// Navigates to previous page (slot 8).
+    PrevPage,
+    /// Navigates to next page (slot 9).
+    NextPage,
+    /// Closes menu or pops parent menu (slot 10 / '0').
+    Exit,
+    /// Executes custom deny action feedback (sound/message).
+    DenyFeedback(DenyAction),
+    /// No-op action.
+    Noop,
+}
+
+/// A rendered page ready to be sent over network to client.
+#[derive(Debug, Clone)]
+pub struct RenderedMenuPage {
+    /// Formatted text buffer for `ShowMenu` or `DhudMessage`.
+    pub text: String,
+    /// 10-bit slot bitmask for `ShowMenu` (`(1<<0)` = 1, `(1<<9)` = 0).
+    pub keys_mask: u16,
+    /// Current 1-based page index.
+    pub page_number: usize,
+    /// Total number of pages for this player.
+    pub total_pages: usize,
+    /// Mapping from slot index (1..=10) to resolved action.
+    pub slots: std::collections::HashMap<u8, SlotAction>,
+    /// Auto-close timeout in seconds (-1 for no timeout).
+    pub timeout: i32,
+    /// Rendering target.
+    pub renderer: MenuRendererKind,
+}
+
+/// A declarative menu definition.
+#[derive(Debug, Clone)]
+pub struct Menu {
+    pub title: String,
+    pub items: Vec<MenuItem>,
+    pub manual_page_breaks: Vec<usize>,
+    pub style: MenuStyle,
+    pub renderer: MenuRendererKind,
+    pub exit_behavior: ExitBehavior,
+    pub timeout_seconds: i32,
+    pub required_capability: Option<String>,
+}
+
+impl Menu {
+    /// Starts building a new menu with the given title.
+    pub fn builder<S: Into<String>>(title: S) -> super::builder::MenuBuilder {
+        super::builder::MenuBuilder::new(title)
+    }
+
+    /// Renders a specific 0-based page for the given player context.
+    pub fn render_page(&self, ctx: &MenuContext, page_idx: usize) -> Option<RenderedMenuPage> {
+        // 1. Filter and evaluate all items for this player
+        struct EvaluatedItem {
+            title: String,
+            kind: ItemKind,
+            is_active: bool,
+            deny_action: DenyAction,
+            is_forced_break: bool,
+            keep_open: bool,
+        }
+
+        let mut evaluated_items = Vec::new();
+
+        for (idx, item) in self.items.iter().enumerate() {
+            let is_forced_break = self.manual_page_breaks.contains(&idx);
+
+            // Evaluate conditions
+            let mut failed_reason = None;
+            for cond in &item.conditions {
+                if let Err(reason) = cond.check(ctx) {
+                    failed_reason = Some(reason);
+                    break;
+                }
+            }
+
+            if let Some(reason) = failed_reason {
+                // Denied item
+                match &item.deny_policy.visual {
+                    VisualDeny::Hide => {
+                        // Completely omit item
+                        continue;
+                    }
+                    VisualDeny::Dimmed => {
+                        let original_title = item.title.resolve(ctx);
+                        evaluated_items.push(EvaluatedItem {
+                            title: original_title,
+                            kind: item.kind.clone(),
+                            is_active: false,
+                            deny_action: item.deny_policy.action.clone(),
+                            is_forced_break,
+                            keep_open: item.keep_open,
+                        });
+                    }
+                    VisualDeny::Replace(replacement) => {
+                        evaluated_items.push(EvaluatedItem {
+                            title: replacement.clone(),
+                            kind: item.kind.clone(),
+                            is_active: false,
+                            deny_action: item.deny_policy.action.clone(),
+                            is_forced_break,
+                            keep_open: item.keep_open,
+                        });
+                    }
+                    VisualDeny::Format(formatter) => {
+                        let original_title = item.title.resolve(ctx);
+                        let formatted = formatter(&original_title, &reason);
+                        evaluated_items.push(EvaluatedItem {
+                            title: formatted,
+                            kind: item.kind.clone(),
+                            is_active: false,
+                            deny_action: item.deny_policy.action.clone(),
+                            is_forced_break,
+                            keep_open: item.keep_open,
+                        });
+                    }
+                }
+            } else {
+                // Active item
+                let original_title = item.title.resolve(ctx);
+                evaluated_items.push(EvaluatedItem {
+                    title: original_title,
+                    kind: item.kind.clone(),
+                    is_active: true,
+                    deny_action: DenyAction::Disabled,
+                    is_forced_break,
+                    keep_open: item.keep_open,
+                });
+            }
+        }
+
+        // 2. Partition into pages (considering items_per_page and forced page breaks)
+        let per_page = self.style.items_per_page.clamp(1, 8);
+        let mut pages: Vec<Vec<EvaluatedItem>> = Vec::new();
+        let mut current_page: Vec<EvaluatedItem> = Vec::new();
+        let mut action_count_on_page = 0;
+
+        for item in evaluated_items {
+            let is_action = matches!(item.kind, ItemKind::Action { .. });
+
+            if (item.is_forced_break && !current_page.is_empty())
+                || (is_action && action_count_on_page >= per_page)
+            {
+                pages.push(current_page);
+                current_page = Vec::new();
+                action_count_on_page = 0;
+            }
+
+            if is_action {
+                action_count_on_page += 1;
+            }
+            current_page.push(item);
+        }
+
+        if !current_page.is_empty() || pages.is_empty() {
+            pages.push(current_page);
+        }
+
+        let total_pages = pages.len();
+        let safe_page_idx = page_idx.min(total_pages.saturating_sub(1));
+        let page_items = pages.get(safe_page_idx)?;
+
+        // 3. Format header and items
+        let mut text = (self.style.header_format)(&self.title, safe_page_idx + 1, total_pages);
+        let mut keys_mask: u16 = 0;
+        let mut slots_map: std::collections::HashMap<u8, SlotAction> =
+            std::collections::HashMap::new();
+        let mut slot_counter: u8 = 1;
+
+        for item in page_items {
+            match &item.kind {
+                ItemKind::Action { id, action_name } => {
+                    let slot = slot_counter;
+                    slot_counter += 1;
+
+                    if item.is_active {
+                        text.push_str(&(self.style.item_format)(slot as usize, &item.title));
+                        keys_mask |= 1 << (slot - 1);
+                        slots_map.insert(
+                            slot,
+                            SlotAction::Execute {
+                                id: *id,
+                                action_name: action_name.clone(),
+                                keep_open: item.keep_open,
+                            },
+                        );
+                    } else {
+                        text.push_str(&(self.style.disabled_item_format)(
+                            slot as usize,
+                            &item.title,
+                        ));
+                        match &item.deny_action {
+                            DenyAction::Disabled => {
+                                // Slot excluded from mask
+                            }
+                            DenyAction::Noop => {
+                                keys_mask |= 1 << (slot - 1);
+                                slots_map.insert(slot, SlotAction::Noop);
+                            }
+                            DenyAction::Feedback { .. } | DenyAction::Custom(_) => {
+                                keys_mask |= 1 << (slot - 1);
+                                slots_map.insert(
+                                    slot,
+                                    SlotAction::DenyFeedback(item.deny_action.clone()),
+                                );
+                            }
+                        }
+                    }
+                }
+                ItemKind::Text => {
+                    text.push_str(&format!("{}\n", item.title));
+                }
+                ItemKind::Spacer => {
+                    text.push('\n');
+                }
+                ItemKind::Divider(divider_str) => {
+                    text.push_str(&format!("{divider_str}\n"));
+                }
+            }
+        }
+
+        // Add padding if needed
+        text.push('\n');
+
+        // 4. Navigation Buttons (8, 9, 0)
+        if total_pages > 1 {
+            let has_prev = safe_page_idx > 0;
+            let has_next = safe_page_idx + 1 < total_pages;
+
+            // Slot 8 or 9: Back
+            if has_prev {
+                let back_slot = if self.style.dynamic_back_slot && !has_next {
+                    9
+                } else {
+                    8
+                };
+
+                let back_text = if back_slot == 9 {
+                    self.style.back_text.replace('8', "9")
+                } else {
+                    self.style.back_text.clone()
+                };
+
+                text.push_str(&back_text);
+                keys_mask |= 1 << (back_slot - 1);
+                slots_map.insert(back_slot, SlotAction::PrevPage);
+            }
+
+            // Slot 9: Next
+            if has_next {
+                text.push_str(&self.style.next_text);
+                keys_mask |= 1 << 8; // (1<<8) = slot 9
+                slots_map.insert(9, SlotAction::NextPage);
+            }
+        }
+
+        // Slot 0 (key 10): Exit
+        text.push_str(&self.style.exit_text);
+        keys_mask |= 1 << 9; // (1<<9) = slot 0
+        slots_map.insert(10, SlotAction::Exit);
+
+        // For HUD/DHUD renderers, strip legacy ShowMenu color formatting codes (\w, \y, \r, \d, \R)
+        let final_text = match &self.renderer {
+            MenuRendererKind::Text => text,
+            MenuRendererKind::Dhud { .. } => text
+                .replace("\\y", "")
+                .replace("\\r", "")
+                .replace("\\w", "")
+                .replace("\\d", "")
+                .replace("\\R", ""),
+        };
+
+        Some(RenderedMenuPage {
+            text: final_text,
+            keys_mask,
+            page_number: safe_page_idx + 1,
+            total_pages,
+            slots: slots_map,
+            timeout: self.timeout_seconds,
+            renderer: self.renderer.clone(),
+        })
+    }
 }

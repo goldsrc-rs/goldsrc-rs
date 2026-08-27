@@ -100,6 +100,15 @@ interface api {
     /// Prints a center notification message to a player.
     host-print-center: func(player-index: s32, message: string);
 
+    /// Prints a console message to a player's game console.
+    host-print-console: func(player-index: s32, message: string);
+
+    /// Runs the real GameDLL's DispatchSpawn for an entity by index.
+    host-dispatch-spawn: func(index: s32) -> s32;
+
+    /// Forces the real GameDLL's Touch between two entities (item delivery).
+    host-dispatch-touch: func(touched: s32, other: s32);
+
     /// Displays a raw ShowMenu dialog to a player with given key slot bitmask and timeout.
     host-show-menu: func(player-index: s32, keys-mask: s32, timeout: s32, text: string);
 

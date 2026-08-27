@@ -45,16 +45,17 @@ pub fn dispatch_command(cmd: &str, args: &str) -> bool {
 /// Returns `true` if a plugin intercepted and handled the command (requesting suppression from GameDLL).
 pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bool {
     // 1. Check for `menuselect <slot>` client command (slot 1..=10)
-    if cmd.eq_ignore_ascii_case("menuselect")
-        && let Ok(slot) = raw_args.trim().parse::<u8>()
-    {
+    if cmd.eq_ignore_ascii_case("menuselect") {
+        let slot = raw_args.trim().parse::<u8>().unwrap_or(0);
         let slot = if slot == 0 { 10 } else { slot };
-        if let Some(engine) = HostRuntime::engine()
-            && let Ok(mut mgr) = crate::menu::menu_manager().lock()
-            && mgr.handle_menuselect(player_idx, slot, engine.as_ref(), 0.0)
-        {
-            return true;
-        }
+
+        // Dispatch raw slot to WASM plugins event "menu_select" (8 bytes payload: [player_idx: i32, slot: u32])
+        let mut payload = Vec::with_capacity(8);
+        payload.extend_from_slice(&player_idx.to_le_bytes());
+        payload.extend_from_slice(&(slot as u32).to_le_bytes());
+        emit_event("menu_select", &payload);
+
+        return true;
     }
 
     HostRuntime::with_manager(|m| {

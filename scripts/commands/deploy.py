@@ -150,9 +150,26 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
         shutil.copy2(dll_path, dest_path)
         print(f"Copied {backend} backend to: {dest_path}")
     except PermissionError:
-        print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
-        print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
-        sys.exit(1)
+        # DLL is locked by a running hlds.exe — try to terminate it automatically.
+        print(f"\n[WARNING] {dest_path} is locked. Attempting to stop hlds.exe...", file=sys.stderr)
+        import subprocess, time
+        kill_result = subprocess.run(
+            ["taskkill", "/F", "/IM", "hlds.exe"],
+            capture_output=True, text=True
+        )
+        if kill_result.returncode == 0:
+            print("  -> hlds.exe terminated. Retrying copy...", file=sys.stderr)
+            time.sleep(1)  # give the OS a moment to release file handles
+            try:
+                shutil.copy2(dll_path, dest_path)
+                print(f"Copied {backend} backend to: {dest_path}")
+            except PermissionError:
+                print(f"\n[CRITICAL ERROR] Still cannot overwrite {dest_path}!", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print(f"\n[CRITICAL ERROR] Cannot overwrite {dest_path} because the file is locked!", file=sys.stderr)
+            print(">>> Please STOP/CLOSE the running HLDS server (hlds.exe) first, then run deploy.py again! <<<\n", file=sys.stderr)
+            sys.exit(1)
 
     if backend == "standalone":
         update_liblist_gam(game_path, dest_name, target)

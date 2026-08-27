@@ -219,12 +219,16 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         aliases: &["show"],
         category: "Inspection & Debugging",
         summary: "Show detailed metadata, systems, exports, and path of a plugin",
-        usage: "grs info <name|index...>",
-        options: &[],
+        usage: "grs info <name|index...> [OPTIONS]",
+        options: &[(
+            "-f, --field <FIELD>",
+            "Print only a specific field value (e.g. name, version, author, desc, license, url, path, status, systems, deps)",
+        )],
         examples: &[
             "grs info vip_core",
             "grs info 0",
-            "grs info admin_system test_suite",
+            "grs info test_suite -f version",
+            "grs info vip_menu --field license",
         ],
     },
     CommandSpec {
@@ -473,7 +477,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
 
             let mut plugins = manager.get_plugins_info();
             if only_paused {
-                plugins.retain(|p| p.is_paused);
+                plugins.retain(|p| matches!(p.status, goldsrc_wasm_host::PluginStatus::Paused));
             }
 
             let total_plugins = plugins.len();
@@ -501,31 +505,41 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             let end = (start + page_size).min(total_plugins);
 
             for p in &plugins[start..end] {
-                let status = if p.is_poisoned {
-                    "POISONED"
-                } else if p.is_paused {
-                    "PAUSED"
-                } else {
-                    "RUNNING"
-                };
-                let mut exports = Vec::new();
-                if p.has_on_load {
-                    exports.push("on_load");
-                }
-                if p.has_on_unload {
-                    exports.push("on_unload");
-                }
-                if p.has_on_frame {
-                    exports.push("on_frame");
-                }
-                let exports_str = if exports.is_empty() {
-                    "none".to_string()
-                } else {
-                    exports.join(", ")
-                };
+                let status = p.status.label();
+
+                let version_str = p
+                    .metadata
+                    .as_ref()
+                    .map(|m| format!("v{}", m.version))
+                    .unwrap_or_else(|| "v1.0.0".to_string());
+
+                let author_str = p
+                    .metadata
+                    .as_ref()
+                    .map(|m| {
+                        if m.author.trim().is_empty() {
+                            goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR
+                        } else {
+                            m.author.as_str()
+                        }
+                    })
+                    .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR);
+
+                let desc_str = p
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| {
+                        if m.description.is_empty() {
+                            None
+                        } else {
+                            Some(m.description.as_str())
+                        }
+                    })
+                    .unwrap_or("-");
+
                 out(&format!(
-                    "  [#{}] {:<20} | Status: {:<7} | Exports: {}\n",
-                    p.index, p.name, status, exports_str
+                    "  [#{}] {:<16} {:<8} {:<18} | {:<7} | {}\n",
+                    p.index, p.name, version_str, author_str, status, desc_str
                 ));
             }
         }
@@ -688,11 +702,17 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
         }
         "info" => {
             let mut targets = Vec::new();
+            let mut requested_field: Option<String> = None;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('h') | Arg::Long("help") => {
                         print_command_help(spec, out);
                         return;
+                    }
+                    Arg::Short('f') | Arg::Long("field") => {
+                        if let Ok(val) = parser.value() {
+                            requested_field = Some(val.to_string_lossy().to_lowercase());
+                        }
                     }
                     Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
                     _ => {}
@@ -710,47 +730,115 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 if let Some(idx) = manager.find_plugin(&t) {
                     let info = &manager.get_plugins_info()[idx];
                     let clean_path = crate::paths::PathResolver::normalize(&info.path);
+                    let status_str = match &info.status {
+                        goldsrc_wasm_host::PluginStatus::Loaded => "Loaded".to_string(),
+                        goldsrc_wasm_host::PluginStatus::Running => "Running".to_string(),
+                        goldsrc_wasm_host::PluginStatus::Paused => "Paused".to_string(),
+                        goldsrc_wasm_host::PluginStatus::Blocked { reason } => {
+                            format!("Blocked ({reason})")
+                        }
+                        goldsrc_wasm_host::PluginStatus::Degraded { reason } => {
+                            format!("Degraded ({reason})")
+                        }
+                        goldsrc_wasm_host::PluginStatus::Poisoned { error } => {
+                            format!("Poisoned ({error})")
+                        }
+                        goldsrc_wasm_host::PluginStatus::Unloaded => "Unloaded".to_string(),
+                    };
+
+                    let meta_name = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| m.name.as_str())
+                        .unwrap_or(info.name.as_str());
+                    let meta_version = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| m.version.as_str())
+                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_VERSION);
+                    let meta_author = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| m.author.as_str())
+                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR);
+                    let meta_desc = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| m.description.as_str())
+                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_DESCRIPTION);
+                    let meta_license = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| m.license.as_str())
+                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_LICENSE);
+                    let meta_url = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| m.url.as_str())
+                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_URL);
+                    let meta_systems = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| {
+                            if m.systems.is_empty() {
+                                goldsrc_api::consts::DEFAULT_PLUGIN_SYSTEMS.to_string()
+                            } else {
+                                m.systems.join(", ")
+                            }
+                        })
+                        .unwrap_or_else(|| goldsrc_api::consts::DEFAULT_PLUGIN_SYSTEMS.to_string());
+                    let meta_require = info
+                        .metadata
+                        .as_ref()
+                        .map(|m| {
+                            if m.require.is_empty() {
+                                goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRE.to_string()
+                            } else {
+                                m.require.join(", ")
+                            }
+                        })
+                        .unwrap_or_else(|| goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRE.to_string());
+
+                    if let Some(ref field) = requested_field {
+                        let value = match field.as_str() {
+                            "name" => meta_name,
+                            "version" => meta_version,
+                            "author" => meta_author,
+                            "description" => meta_desc,
+                            "license" => meta_license,
+                            "url" => meta_url,
+                            "path" => &clean_path,
+                            "status" => &status_str,
+                            "systems" => &meta_systems,
+                            "require" => &meta_require,
+                            "index" => {
+                                out(&format!("{}\n", info.index));
+                                continue;
+                            }
+                            other => {
+                                out(&format!(
+                                    "[GoldSrc.rs] Unknown field '{}'. Supported: name, version, author, description, license, url, path, status, systems, require, index.\n",
+                                    other
+                                ));
+                                continue;
+                            }
+                        };
+                        out(&format!("{}\n", value));
+                        continue;
+                    }
+
                     out(&format!("--- Plugin Info: {} ---\n", info.name));
                     out(&format!("  Index:        #{}\n", info.index));
                     out(&format!("  Path:         \"{}\"\n", clean_path));
-                    let status_str = if info.is_poisoned {
-                        "Poisoned (Trapped / Timeout)"
-                    } else if info.is_paused {
-                        "Paused"
-                    } else {
-                        "Running"
-                    };
                     out(&format!("  Status:       {}\n", status_str));
-                    if let Some(meta) = &info.metadata {
-                        out(&format!("  Meta Name:    {}\n", meta.name));
-                        out(&format!("  Version:      {}\n", meta.version));
-                        out(&format!("  Author:       {}\n", meta.author));
-                        if !meta.description.is_empty() {
-                            out(&format!("  Description:  {}\n", meta.description));
-                        }
-                        if !meta.url.is_empty() {
-                            out(&format!("  URL:          {}\n", meta.url));
-                        }
-                        let systems_str = if meta.systems.is_empty() {
-                            "none".to_string()
-                        } else {
-                            meta.systems.join(", ")
-                        };
-                        out(&format!("  Systems:      {}\n", systems_str));
-                        let deps_str = if meta.dependencies.is_empty() {
-                            "none".to_string()
-                        } else {
-                            meta.dependencies
-                                .iter()
-                                .map(|(k, v)| format!("{} ({})", k, v))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        };
-                        out(&format!("  Dependencies: {}\n", deps_str));
-                    }
-                    out(&format!("  on_load:      {}\n", info.has_on_load));
-                    out(&format!("  on_unload:    {}\n", info.has_on_unload));
-                    out(&format!("  on_frame:     {}\n", info.has_on_frame));
+                    out(&format!("  Meta Name:    {}\n", meta_name));
+                    out(&format!("  Version:      {}\n", meta_version));
+                    out(&format!("  Author:       {}\n", meta_author));
+                    out(&format!("  Description:  {}\n", meta_desc));
+                    out(&format!("  License:      {}\n", meta_license));
+                    out(&format!("  URL:          {}\n", meta_url));
+                    out(&format!("  Systems:      {}\n", meta_systems));
+                    out(&format!("  Require:      {}\n", meta_require));
                 } else {
                     out(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", t));
                 }
