@@ -1,10 +1,11 @@
-use crate::{GoldSrcConfig, paths::PathResolver};
+use crate::{HostConfig, paths::PathResolver};
 use goldsrc_api::consts::BackendType;
 use goldsrc_wasm_host::PluginManager;
 use goldsrc_wasm_host::error::HostError;
 
 pub struct HostRuntime {
     manager: PluginManager,
+    engine: std::sync::Arc<dyn goldsrc_api::Engine>,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -26,11 +27,13 @@ impl HostRuntime {
             BackendType::Standalone => "Standalone",
         };
         goldsrc_wasm_host::set_print_callback(print_cb);
+        goldsrc_wasm_host::set_show_menu_callback(|_player_idx, _keys_mask, _timeout, _text| {});
 
-        let mut manager = PluginManager::new(engine)
+        let mut manager = PluginManager::new(engine.clone())
             .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
+        manager.set_plugin_dirs(crate::paths::PathResolver::plugin_dirs(backend));
 
-        let sys_config = GoldSrcConfig::load_or_create(backend);
+        let sys_config = HostConfig::load_or_create(backend);
 
         // Initialise unified logger
         let logs_dir = std::path::PathBuf::from(&sys_config.core.logs_dir);
@@ -70,12 +73,12 @@ impl HostRuntime {
             PathResolver::normalize(&config_dir)
         );
 
-        if sys_config.wasm.hot_reload
+        if sys_config.watcher.enabled
             && let Err(e) = manager.enable_hot_reload(&plugin_dir)
         {
             log::warn!(target: "wasm", "Failed to enable hot reload on {:?}: {e}", plugin_dir);
         }
-        if sys_config.wasm.config_watcher
+        if sys_config.watcher.watch_configs
             && let Err(e) = manager.enable_config_watcher(&config_dir)
         {
             log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
@@ -106,9 +109,28 @@ impl HostRuntime {
             }
         }
 
-        let runtime = Self { manager };
+        manager.recalculate_dependency_states();
+        for info in manager.get_plugins_info() {
+            if let goldsrc_wasm_host::PluginStatus::Blocked { reason } = &info.status {
+                log::warn!(
+                    target: "wasm",
+                    "Plugin '{}' BLOCKED: {}",
+                    info.name,
+                    reason
+                );
+            }
+        }
+
+        let runtime = Self { manager, engine };
         let _ = RUNTIME.set(Mutex::new(runtime));
         Ok(())
+    }
+
+    /// Returns a clone of the Engine reference if initialized.
+    pub fn engine() -> Option<std::sync::Arc<dyn goldsrc_api::Engine>> {
+        RUNTIME
+            .get()
+            .and_then(|lock| lock.lock().ok().map(|g| g.engine.clone()))
     }
 
     /// Run `f` with exclusive access to the `PluginManager`, if initialized.

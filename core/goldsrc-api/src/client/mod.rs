@@ -6,4 +6,4 @@ pub mod types;
 
 pub use guards::{Alive, Bot, CounterTerrorist, Dead, HLTV, Spectator, Terrorist};
 pub use player::Player;
-pub use types::{ClientKind, ConnectionState, LifeState, Team};
+pub use types::{ClientKind, ConnectionState, LifeState, PrintTarget, Team};

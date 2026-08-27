@@ -3,6 +3,11 @@
 //! This is the main entry point for plugin developers. It re-exports
 //! everything you need from the other crates.
 
+/// Unified FFI registration point for engine function tables (single source
+/// of truth for `DLL_FUNCTIONS` hooks). Enabled by the `host` feature.
+#[cfg(feature = "host")]
+pub mod api_registry;
+
 /// Flat ECS for plugin state storage.
 pub mod ecs;
 
@@ -21,6 +26,7 @@ pub mod backend;
 
 /// `goldsrc.toml` configuration types and loader.
 pub mod config;
+pub use config::HostConfig;
 /// Centralized hook dispatching helpers.
 #[cfg(feature = "host")]
 pub mod hooks;
@@ -57,32 +63,51 @@ macro_rules! log_debug {
     };
 }
 
+/// Screen HUD and DHUD message serialization and formatting.
+#[cfg(feature = "host")]
+pub mod hud;
+/// Runtime menu session manager and pagination.
+#[cfg(feature = "host")]
+pub mod menu;
+
 pub use ::log;
 pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
 pub use goldsrc_api::engine_api as engine;
+pub use goldsrc_api::hud as hud_api;
+pub use goldsrc_api::menu as menu_api;
 pub use goldsrc_api::{
     Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
-    CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead, Engine,
-    Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Spectator, Team, Terrorist,
-    Vector3,
+    CommandError, CommandResult, CommandTarget, Condition, ConnectionState, CounterTerrorist, Dead,
+    DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, FromArg, HLTV, HudColor, HudCoord,
+    HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu,
+    MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, Player,
+    PlayerStateFilter, RenderedMenuPage, SlotAction, Spectator, Team, Terrorist, Vector3,
+    VisualDeny,
 };
 pub use goldsrc_macros as macros;
-pub use goldsrc_macros::{command, event, on_load, plugin};
+pub use goldsrc_macros::{
+    command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
+};
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
     pub use crate::ecs::*;
     pub use crate::engine;
+    pub use crate::hud_api as hud;
+    pub use crate::menu_api;
     pub use crate::{
         Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
-        CommandError, CommandResult, CommandTarget, ConnectionState, CounterTerrorist, Dead,
-        Engine, Entity, FromArg, HLTV, LifeState, Player, PlayerStateFilter, Spectator, Team,
-        Terrorist, Vector3,
+        CommandError, CommandResult, CommandTarget, Condition, ConnectionState, CounterTerrorist,
+        Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, FromArg, HLTV, HudColor,
+        HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle,
+        LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind,
+        MenuStyle, Player, PlayerStateFilter, RenderedMenuPage, SlotAction, Spectator, Team,
+        Terrorist, Vector3, VisualDeny,
     };
-    pub use crate::{command, event, on_load, plugin};
+    pub use crate::{command, event, menu_action, on_frame, on_load, on_unload, plugin, system};
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }
 

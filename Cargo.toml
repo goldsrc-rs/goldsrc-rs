@@ -26,6 +26,8 @@ resolver = "3"
 [workspace.package]
 version = "0.10.0"
 edition = "2024"
+authors = ["GoldSrc.rs Team"]
+description = "High-performance modular Rust framework for GoldSrc / Counter-Strike 1.6 engine"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/goldsrc-rs/goldsrc-rs"
 
@@ -56,10 +58,15 @@ libc = "0.2"
 thiserror = "2.0"
 log = "0.4.33"
 
+[profile.dev]
+opt-level = 0
+debug = 1
+split-debuginfo = "unpacked"
+
 # NOTE: `panic` must stay "unwind" — `catch_ffi_panic` (catch_unwind) relies on
 # unwinding to stop Rust panics at the C-ABI boundary before they kill HLDS.
 [profile.release]
-lto = "fat"
+lto = "thin"
 opt-level = "z"
 strip = "debuginfo"
-codegen-units = 1
+codegen-units = 16

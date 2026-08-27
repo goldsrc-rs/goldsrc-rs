@@ -97,6 +97,54 @@ interface api {
     /// Sends a chat message to a specific player.
     host-print-chat: func(player-index: s32, message: string);
 
+    /// Prints a center notification message to a player.
+    host-print-center: func(player-index: s32, message: string);
+
+    /// Prints a console message to a player's game console.
+    host-print-console: func(player-index: s32, message: string);
+
+    /// Runs the real GameDLL's DispatchSpawn for an entity by index.
+    host-dispatch-spawn: func(index: s32) -> s32;
+
+    /// Forces the real GameDLL's Touch between two entities (item delivery).
+    host-dispatch-touch: func(touched: s32, other: s32);
+
+    /// Displays a raw ShowMenu dialog to a player with given key slot bitmask and timeout.
+    host-show-menu: func(player-index: s32, keys-mask: s32, timeout: s32, text: string);
+
+    /// Sends a classic 4-channel HUD message to a player (or -1 for all).
+    host-send-hud-message: func(
+        player-index: s32,
+        channel: s32,
+        x: f32,
+        y: f32,
+        r: s32,
+        g: s32,
+        b: s32,
+        a: s32,
+        effect: s32,
+        fade-in: f32,
+        fade-out: f32,
+        hold-time: f32,
+        text: string
+    );
+
+    /// Sends a Director HUD (DHUD) message to a player (or -1 for all).
+    host-send-dhud-message: func(
+        player-index: s32,
+        x: f32,
+        y: f32,
+        r: s32,
+        g: s32,
+        b: s32,
+        a: s32,
+        effect: s32,
+        fade-in: f32,
+        fade-out: f32,
+        hold-time: f32,
+        text: string
+    );
+
     /// --- Capability & Auth API ---
 
     /// Registers a new capability in the global system.

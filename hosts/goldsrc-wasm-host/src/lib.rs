@@ -14,14 +14,35 @@ pub mod manager;
 /// Loaded plugin instance and metadata types.
 pub mod plugin;
 
-pub use manager::PluginManager;
+pub use manager::{PluginInfo, PluginManager};
+pub use plugin::PluginStatus;
 
-static PRINT_CALLBACK: std::sync::RwLock<Option<fn(&str)>> = std::sync::RwLock::new(None);
+pub type PrintCallback = fn(&str);
+pub type ShowMenuCallback = fn(i32, i32, i32, &str);
+
+static PRINT_CALLBACK: std::sync::RwLock<Option<PrintCallback>> = std::sync::RwLock::new(None);
+static SHOW_MENU_CALLBACK: std::sync::RwLock<Option<ShowMenuCallback>> =
+    std::sync::RwLock::new(None);
 
 /// Set global callback for WASM server_print calls.
-pub fn set_print_callback(f: fn(&str)) {
+pub fn set_print_callback(f: PrintCallback) {
     if let Ok(mut lock) = PRINT_CALLBACK.write() {
         *lock = Some(f);
+    }
+}
+
+/// Set global callback when WASM plugins call `host_show_menu`.
+pub fn set_show_menu_callback(f: ShowMenuCallback) {
+    if let Ok(mut lock) = SHOW_MENU_CALLBACK.write() {
+        *lock = Some(f);
+    }
+}
+
+pub(crate) fn notify_show_menu(player_idx: i32, keys_mask: i32, timeout: i32, text: &str) {
+    if let Ok(lock) = SHOW_MENU_CALLBACK.read() {
+        if let Some(cb) = *lock {
+            cb(player_idx, keys_mask, timeout, text);
+        }
     }
 }
 

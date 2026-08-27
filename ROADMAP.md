@@ -134,46 +134,77 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - `vip_menu`: Interactive VIP kit deployment with sound and visual feedback.
   - `admin_system`: Administration utilities (granting capabilities, slaying players, teleportation, gravity manipulation).
 
-## v0.11.0 — Advanced Command Engine & Capability DSL 📝 Planned
+## v0.11.0 — Advanced Command Engine, Sandbox Hardening & Capability DSL ✅
 
-**Goal:** Provide an ergonomic, declarative command system and a hierarchical capability DSL, eliminating manual string parsing and boilerplate permission checks.
+**Goal:** Provide an ergonomic, declarative command system, a hierarchical capability DSL, resilient WASM sandbox interruption, and complete Metamod/AMX Mod X co-existence safety.
 
-- [ ] **Command Targets & Channels**:
+- [x] **Command Targets & Channels**:
   - Declarative routing for `Server`, `ClientConsole`, `Chat` (`say`, `say_team`), and `MessageMode` dialogs.
-  - Silent chat triggers (e.g. executing `/vip` without polluting public game chat).
-- [ ] **Typestate Guards & Extractors**:
-  - Type-driven precondition checks (`Alive<Player>`, `Dead<Player>`, `Terrorist(Player)`, `CounterTerrorist(Player)`, `Bot`, `HLTV`).
-- [ ] **Command Error Pipeline (`CommandResult`)**:
+  - Silent chat triggers (e.g. executing `/vip` or `!vip` with engine message suppression via `MRES_SUPERCEDE`).
+- [x] **Typestate Guards & Extractors**:
+  - Type-driven precondition checks and typed extraction (`Player`, `Alive<Player>`, `FromArg` trait).
+  - Auto-binding caller player index to target parameters when executing chat commands without positional args.
+- [x] **Command Error Pipeline (`CommandResult`)**:
   - Typed error taxonomy (`AccessDenied`, `InvalidArguments`, `InvalidState`, `TargetNotFound`, `Cooldown`, `Custom`).
-  - Extensible `ErrorHandler` with plugin-level overrides (`Plugin::on_command_error`).
-- [ ] **Hierarchical Capability DSL**:
-  - Rich grammar: namespaces (`admin.*`), wildcards, negation (`!admin.rcon`), logical combinators (`&`, `|`, `all_of!`, `any_of!`), and parametric claims (`teleport(target=self)`).
-  - High-performance prefix-tree (Trie) / bitset evaluation cache.
-- [ ] **Runtime Command Builder API**:
-  - Programmatic `Command::builder(...)` for dynamic runtime command registration (configs, scripting hosts, unit testing).
+  - Declarative CLI specs (`CommandSpec`) with specialized per-command help (`grs <cmd> --help`, `grs help <cmd>`).
+- [x] **Hierarchical Capability DSL**:
+  - Rich Boolean grammar: namespaces (`admin.*`), wildcards, negation (`!admin.rcon`), logical combinators (`&`, `|`, `all_of!`, `any_of!`).
+  - Fail-closed capability evaluation and eviction lifecycle.
+- [x] **Runtime Command Builder API**:
+  - Programmatic `Command::builder(...)` for dynamic runtime command registration.
+- [x] **Adversarial Sandbox & ABI Hardening**:
+  - Background daemon epoch timer (`increment_epoch` every 2ms) ensuring real wall-clock timeouts on infinite loops.
+  - Wasmtime `StoreLimits` (64MB memory limit, 10k table elements).
+  - Preserved Metamod shared memory (`mutil_funcs_t`) ensuring 100% stable co-existence with AMX Mod X.
+  - Correct `MessageDest` discriminants and dynamic `SayText` user message lookup via `reg_user_msg`.
+  - Panic barrier encapsulation (`catch_ffi_panic`) on entity factories.
 
-## v0.12.0 — Game Events, HUD/Menus & Combat Hooks 📝 Planned
+## v0.12.0 — Declarative UI, Requirements DSL & Server Engine ✅
 
-**Goal:** Expand GameDLL hook coverage, provide declarative UI builders for HUD/Menus, and implement native combat and damage callbacks.
+**Goal:** Expand declarative UI builders for HUD/Menus/Effects, unify plugin lifecycle state machine, introduce a unified Requirements DSL, and provide defensive server configuration.
 
-- [ ] **Gameplay Hooks & Engine Events**:
-  - Combat hooks: `TakeDamage`, `TraceAttack`, `WeaponFire`, `Killed`.
-  - World interaction hooks: `Touch`, `Use`, `Think`, `PlayerPostThink`.
-  - Proper native player death sequence (`Player::kill` via `pfnClientKill` / `pfnTakeDamage`).
-- [ ] **VGUI / Text Menus & HUD Builders**:
-  - Declarative `Menu::builder` with pagination, dynamic callbacks, and item disabling.
-  - Screen messaging: `HudMessage` with color, fade, coordinates, and channel management.
-- [ ] **Game Rules & CS 1.6 Extensions**:
-  - Round state events (`RoundStart`, `RoundEnd`, `BombPlanted`, `BombDefused`).
-  - CS 1.6 specific entities, buy zones, and weapon inventory management.
+- [x] **Declarative Multi-Page Menus & Renderers**:
+  - Declarative `Menu::builder` with explicit page breaks, `ExitBehavior` (`PopParent`, `Close`), and dynamic action handlers (`#[menu_action]`).
+  - Pluggable renderers (`ShowMenu` and `Dhud`).
+- [x] **True Director HUD (DHUD) & Screen Effects**:
+  - Full Director HUD wire format (`SVC_DIRECTOR` opcode 51 with `DRC_CMD_MESSAGE`) rendering smooth VGUI typography.
+  - Classic 4-channel HUD (`SVC_TEMPENTITY` / `TE_TEXTMESSAGE`).
+  - Screen effects: `ScreenFade` (damage flashes, flashbang blindness) and `ScreenShake` (tremors, explosions) with fluent builders.
+- [x] **Unified Plugin Lifecycle FSM (`PluginStatus`)**:
+  - State machine (`Loaded`, `Running`, `Paused`, `Blocked`, `Degraded`, `Poisoned`, `Unloaded`) replacing scattered boolean flags.
+  - Automatic isolation and safe recovery on panics.
+- [x] **Unified Requirements DSL (`require = [...]`)**:
+  - Replaced legacy `dependencies` with a rich DSL: `plugin:<name>[@<ver>]`, `cvar:<name>[=<v>|!=<v>|>0]`, `feature:<name>`.
+  - Dynamic runtime status recalculation (`Blocked` if missing, `Degraded` if paused).
+- [x] **Defensive Server Configuration (`goldsrc.toml`)**:
+  - Unified configuration with `[core]`, `[logging]`, `[watcher]`, and `[runtime]`.
+  - Automated bounds clamping (`debounce_ms: [50, 5000]`, `memory: [16, 512] MB`, `tables: [100, 100k]`) with resilient fallbacks.
+- [x] **Typed CVar Abstraction**:
+  - Type-safe `Cvar<i32>`, `Cvar<f32>`, `Cvar<String>` and flags (`CvarFlags::ARCHIVE`, `NOTIFY`, `SERVER`, `READ_ONLY`).
 
-## v0.13.0 — Multi-Host Ecosystem (Lua, Python, Dynamic DLLs) 📝 Planned
+## v0.13.0 — Modular Plugin Ecosystem, Lifecycle Orchestration & Profiles 📝 Planned
 
-**Goal:** Support polyglot plugin development by dynamically loading external language runtimes from `hosts/` with strict ABI versioning.
+**Goal:** Deliver directory tree bundle discovery, profile groups (`plugins.toml`), and conditional lifecycle orchestration inspired by AmxxModularEcosystem & MultiMod.
+
+- [ ] **Recursive Directory Bundles (`plugins/<bundle>/*.wasm`)**:
+  - Recursive directory tree walking for plugin packs (e.g. `plugins/test_suite/test_hud.wasm`).
+  - Recursive file system watching for hot-reloading nested bundles.
+- [ ] **Declarative Plugin Orchestration (`plugins.toml`)**:
+  - Fine-grained plugin controls: `enabled`, `debug`, `priority`.
+  - Profile groups (`[groups.vip_pack]`, `[groups.match_mode]`) for instant multi-plugin toggling.
+  - Dynamic rule engine (`[[rules]]` based on map names, player count, or CVars).
+- [ ] **Decomposed Micro-Plugins**:
+  - Split monolithic test plugins into lightweight, focused demonstration modules (`test_hud`, `test_menu`, `test_ecs`).
+
+## v0.14.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
+
+**Goal:** Support polyglot plugin development by dynamically loading external language runtimes (C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 
 - [ ] **Dynamic Host Runtime Architecture**:
   - Modular `cstrike/goldsrc/hosts/` discovery directory with configurable resolution policy (`prefer_builtin` vs `prefer_external`).
   - C-ABI `PluginHostFactory` handshake with version validation.
+- [ ] **C# Plugin Host (`goldsrc-csharp-host`)**:
+  - Native AOT / .NET runtime embedding for high-performance C# GoldSrc plugins.
 - [ ] **Python Plugin Host (`goldsrc-python-host`)**:
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:

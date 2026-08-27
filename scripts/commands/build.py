@@ -10,8 +10,11 @@ def get_repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
+import time
+
 def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc", release: bool = True) -> Path:
     """Build a backend plugin (metamod or standalone) and return the path to the produced library."""
+    t0 = time.perf_counter()
     crate_name = "goldsrc-standalone" if backend == "standalone" else "goldsrc-metamod"
     lib_basename = "goldsrc_standalone" if backend == "standalone" else "goldsrc_metamod"
 
@@ -48,12 +51,14 @@ def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc",
         print(f"Error: Library not found at {lib_path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Built: {lib_path}")
+    elapsed = time.perf_counter() - t0
+    print(f"Built {backend} DLL: {lib_path.name} in {elapsed:.2f}s")
     return lib_path
 
 
 def build_wasm_plugins(release: bool = False) -> list[Path]:
     """Build all WASM plugins for wasm32-unknown-unknown."""
+    t_start = time.perf_counter()
     print(f"Building WASM plugins ({'release' if release else 'debug'})...")
     repo_root = get_repo_root()
 
@@ -74,7 +79,9 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
     if release:
         cmd.append("--release")
 
+    t_cargo = time.perf_counter()
     result = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
+    cargo_time = time.perf_counter() - t_cargo
 
     if result.returncode != 0:
         print("WASM plugin build failed:", file=sys.stderr)
@@ -86,21 +93,31 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
     plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
 
     import shutil
+    from concurrent.futures import ThreadPoolExecutor
+
     wasm_opt_path = shutil.which("wasm-opt")
+    opt_time = 0.0
     if wasm_opt_path and release:
-        for p in plugins:
-            print(f"Optimizing {p.name} with wasm-opt...")
+        t_opt = time.perf_counter()
+        def optimize_wasm(p: Path) -> None:
             try:
-                subprocess.run([
-                    wasm_opt_path, "-Oz", "--strip-debug", 
-                    str(p), "-o", str(p)
-                ], check=True)
+                subprocess.run(
+                    [wasm_opt_path, "-Oz", "--strip-debug", str(p), "-o", str(p)],
+                    check=True,
+                    capture_output=True,
+                )
             except Exception as e:
                 print(f"Warning: wasm-opt failed for {p.name}: {e}")
+
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(optimize_wasm, plugins))
+        opt_time = time.perf_counter() - t_opt
+        print(f"Optimized {len(plugins)} plugins with wasm-opt in {opt_time:.2f}s")
     elif release:
         print("\n[INFO] 'wasm-opt' not found in PATH! Install it (e.g. 'npm install -g wasm-opt') to reduce WASM plugin sizes by up to 90%!\n")
 
-    print(f"Built {len(plugins)} WASM plugins: {[p.name for p in plugins]}")
+    total_wasm_time = time.perf_counter() - t_start
+    print(f"Built {len(plugins)} WASM plugins in {total_wasm_time:.2f}s (Cargo: {cargo_time:.2f}s, Opt: {opt_time:.2f}s)")
     return plugins
 
 

@@ -2,8 +2,10 @@
 name = "admin_system"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Admin capabilities & permissions manager"
 
 [lib]
 crate-type = ["cdylib"]

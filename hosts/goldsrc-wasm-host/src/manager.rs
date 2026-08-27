@@ -1,6 +1,6 @@
 use crate::bindings::{GoldsrcPlugin, goldsrc::engine::api};
 use crate::error::{CommandError, LoadError};
-use crate::plugin::{LoadedPlugin, PluginMetadata};
+use crate::plugin::{LoadedPlugin, PluginMetadata, PluginStatus};
 use goldsrc_api::Engine as GoldsrcEngine;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,6 +9,7 @@ use wasmtime::{Config, Engine};
 
 use notify::Watcher;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -29,8 +30,8 @@ pub struct PluginInfo {
     pub path: PathBuf,
     /// Index in the plugin list.
     pub index: usize,
-    /// Whether the plugin is paused.
-    pub is_paused: bool,
+    /// Current lifecycle status.
+    pub status: PluginStatus,
     /// Parsed metadata, if any.
     pub metadata: Option<PluginMetadata>,
     /// Whether the plugin exports `on_load`.
@@ -151,6 +152,7 @@ impl api::Host for HostState {
                 .server_print(&format!("[Chat to #{player_index}] {message}\n"));
             return;
         }
+        let formatted = goldsrc_api::format_say_text(&message);
         let say_text_id = self.engine.reg_user_msg("SayText", -1);
         let msg_id = if say_text_id <= 0 { 76 } else { say_text_id };
         self.engine.message_begin(
@@ -159,18 +161,254 @@ impl api::Host for HostState {
             None,
             Some(player_index),
         );
-        self.engine.write_byte(0); // 0 = server/console sender
+        // In GoldSrc CS 1.6 SayText, first byte is the sender entity index (1..32 for player colors, or 0)
+        self.engine.write_byte(player_index);
         // Truncate message if oversized to prevent buffer overflow (SayText payload max 192 bytes)
-        let safe_msg = if message.len() > 175 {
+        let safe_msg = if formatted.len() > 175 {
             let mut end = 175;
-            while end > 0 && !message.is_char_boundary(end) {
+            while end > 0 && !formatted.is_char_boundary(end) {
                 end -= 1;
             }
-            &message[..end]
+            &formatted[..end]
         } else {
-            &message
+            &formatted
         };
+        // SayText string must be sent without extra trailing newline
         self.engine.write_string(safe_msg);
+        self.engine.message_end();
+    }
+
+    fn host_print_center(&mut self, player_index: i32, message: String) {
+        if player_index < 0 {
+            self.engine.server_print(&format!("[Center] {message}\n"));
+            return;
+        }
+
+        let formatted = goldsrc_api::format_center_text(&message);
+        let text_msg_id = self.engine.reg_user_msg("TextMsg", -1);
+        let msg_id = if text_msg_id <= 0 { 75 } else { text_msg_id };
+
+        let dest = if player_index == 0 {
+            goldsrc_api::MessageDest::All as i32
+        } else {
+            if !(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index) {
+                return;
+            }
+            goldsrc_api::MessageDest::One as i32
+        };
+
+        let target_edict = if player_index == 0 {
+            None
+        } else {
+            Some(player_index)
+        };
+
+        self.engine.message_begin(dest, msg_id, None, target_edict);
+
+        // AMX Mod X / HLSDK UTIL_ClientPrint protocol for center messages:
+        // 1. Write destination byte: HUD_PRINTCENTER (4)
+        // 2. Write format string: "%s"
+        // 3. Write formatted message (newlines replaced with '\r', safe truncated to <= 185 bytes)
+        self.engine.write_byte(goldsrc_api::HUD_PRINTCENTER);
+        self.engine.write_string("%s");
+
+        let safe_msg = if formatted.len() > 185 {
+            let mut end = 185;
+            while end > 0 && !formatted.is_char_boundary(end) {
+                end -= 1;
+            }
+            &formatted[..end]
+        } else {
+            &formatted
+        };
+
+        self.engine.write_string(safe_msg);
+        self.engine.message_end();
+    }
+
+    fn host_print_console(&mut self, player_index: i32, message: String) {
+        if player_index <= 0 || !self.engine.entity_is_valid(player_index) {
+            self.engine
+                .server_print(&format!("[Console#{player_index}] {message}\n"));
+            return;
+        }
+        // 0 = PRINT_CONSOLE in GoldSrc client_printf
+        self.engine
+            .client_print(player_index, goldsrc_api::PRINT_CONSOLE, &message);
+    }
+
+    fn host_dispatch_spawn(&mut self, index: i32) -> i32 {
+        self.engine.dispatch_spawn(index)
+    }
+
+    fn host_dispatch_touch(&mut self, touched: i32, other: i32) {
+        self.engine.dispatch_touch(touched, other);
+    }
+
+    fn host_show_menu(&mut self, player_index: i32, keys_mask: i32, timeout: i32, text: String) {
+        if player_index <= 0 {
+            return;
+        }
+        let show_menu_id = self.engine.reg_user_msg("ShowMenu", -1);
+        self.engine.server_print(&format!(
+            "[GoldSrc.rs DEBUG] host_show_menu: player_index={}, show_menu_id={}, keys_mask={}, text_len={}\n",
+            player_index, show_menu_id, keys_mask, text.len()
+        ));
+        if show_menu_id <= 0 || show_menu_id == 255 {
+            self.engine
+                .server_print("[GoldSrc.rs DEBUG] ShowMenu user msg ID is invalid (<=0 or 255)!\n");
+            return;
+        }
+
+        crate::notify_show_menu(player_index, keys_mask, timeout, &text);
+
+        if text.is_empty() {
+            self.engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                show_menu_id,
+                None,
+                Some(player_index),
+            );
+            self.engine.write_short(keys_mask);
+            self.engine.write_char(timeout);
+            self.engine.write_byte(0);
+            self.engine.write_string("");
+            self.engine.message_end();
+            return;
+        }
+
+        let max_chunk = goldsrc_api::consts::MAX_SHOW_MENU_CHUNK_SIZE;
+        let mut remaining = &text[..];
+
+        while !remaining.is_empty() {
+            let chunk_len = if remaining.len() <= max_chunk {
+                remaining.len()
+            } else {
+                let mut end = max_chunk;
+                while end > 0 && !remaining.is_char_boundary(end) {
+                    end -= 1;
+                }
+                if end == 0 {
+                    remaining.chars().next().map(|c| c.len_utf8()).unwrap_or(1)
+                } else {
+                    end
+                }
+            };
+
+            let chunk = &remaining[..chunk_len];
+            remaining = &remaining[chunk_len..];
+            let has_more = !remaining.is_empty();
+
+            self.engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                show_menu_id,
+                None,
+                Some(player_index),
+            );
+            self.engine.write_short(keys_mask);
+            self.engine.write_char(timeout);
+            self.engine.write_byte(if has_more { 1 } else { 0 });
+            self.engine.write_string(chunk);
+            self.engine.message_end();
+        }
+    }
+
+    fn host_send_hud_message(
+        &mut self,
+        _player_index: i32,
+        channel: i32,
+        x: f32,
+        y: f32,
+        r: i32,
+        g: i32,
+        b: i32,
+        a: i32,
+        effect: i32,
+        fade_in: f32,
+        fade_out: f32,
+        hold_time: f32,
+        text: String,
+    ) {
+        let x_val = (if x < 0.0 { -1.0 } else { x } * 8192.0) as i32;
+        let y_val = (if y < 0.0 { -1.0 } else { y } * 8192.0) as i32;
+
+        self.engine.message_begin(
+            goldsrc_api::MessageDest::Broadcast as i32,
+            goldsrc_api::consts::SVC_TEMPENTITY,
+            None,
+            None,
+        );
+        self.engine
+            .write_byte(goldsrc_api::consts::TE_TEXTMESSAGE as i32);
+        self.engine.write_byte(channel.clamp(1, 4));
+        self.engine.write_short(x_val);
+        self.engine.write_short(y_val);
+        self.engine.write_byte(effect.clamp(0, 2));
+        self.engine.write_byte(r.clamp(0, 255));
+        self.engine.write_byte(g.clamp(0, 255));
+        self.engine.write_byte(b.clamp(0, 255));
+        self.engine.write_byte(a.clamp(0, 255));
+        self.engine.write_byte(r.clamp(0, 255)); // 2nd color fallback
+        self.engine.write_byte(g.clamp(0, 255));
+        self.engine.write_byte(b.clamp(0, 255));
+        self.engine.write_byte(a.clamp(0, 255));
+        self.engine.write_short((fade_in * 256.0) as i32);
+        self.engine.write_short((fade_out * 256.0) as i32);
+        self.engine.write_short((hold_time * 256.0) as i32);
+        // fx_time is only present in the TE_TEXTMESSAGE wire format when effect == 2
+        // (typewriter). Writing it unconditionally shifts the stream by 2 bytes and
+        // causes the client to read svc_bad (0).
+        if effect.clamp(0, 2) == 2 {
+            self.engine.write_short(0); // fx_time placeholder
+        }
+        self.engine.write_string(&text);
+        self.engine.message_end();
+    }
+
+    fn host_send_dhud_message(
+        &mut self,
+        player_index: i32,
+        x: f32,
+        y: f32,
+        r: i32,
+        g: i32,
+        b: i32,
+        _a: i32,
+        effect: i32,
+        fade_in: f32,
+        fade_out: f32,
+        hold_time: f32,
+        text: String,
+    ) {
+        const SVC_DIRECTOR: i32 = 51;
+        const DRC_CMD_MESSAGE: i32 = 6;
+
+        let (dest, target_idx) = if player_index <= 0 {
+            (goldsrc_api::MessageDest::Broadcast as i32, None)
+        } else {
+            (goldsrc_api::MessageDest::One as i32, Some(player_index))
+        };
+
+        let text_bytes = text.as_bytes();
+        let len = text_bytes.len().min(128);
+        let safe_text = &text[..len];
+
+        // Pack color into 0x00RRGGBB format expected by client VGUI director parser
+        let packed_color = b.clamp(0, 255) | (g.clamp(0, 255) << 8) | (r.clamp(0, 255) << 16);
+
+        self.engine
+            .message_begin(dest, SVC_DIRECTOR, None, target_idx);
+        self.engine.write_byte((len as i32) + 31);
+        self.engine.write_byte(DRC_CMD_MESSAGE);
+        self.engine.write_byte(effect.clamp(0, 2));
+        self.engine.write_long(packed_color);
+        self.engine.write_long(x.to_bits() as i32);
+        self.engine.write_long(y.to_bits() as i32);
+        self.engine.write_long(fade_in.to_bits() as i32);
+        self.engine.write_long(fade_out.to_bits() as i32);
+        self.engine.write_long(hold_time.to_bits() as i32);
+        self.engine.write_long(0); // fx_time
+        self.engine.write_string(safe_text);
         self.engine.message_end();
     }
 
@@ -209,6 +447,8 @@ pub struct PluginManager {
     last_reload: HashMap<PathBuf, Instant>,
     /// command name -> plugin indices that registered it.
     command_registry: HashMap<String, Vec<usize>>,
+    /// Configured search directories for plugin path resolution.
+    plugin_dirs: Vec<PathBuf>,
 }
 
 /// Minimum gap between two hot-reloads of the same file. Compilers write in
@@ -250,7 +490,24 @@ impl PluginManager {
             watcher_count: 0,
             last_reload: HashMap::new(),
             command_registry: HashMap::new(),
+            plugin_dirs: Vec::new(),
         })
+    }
+
+    /// Sets the list of base search directories for resolving plugin paths.
+    pub fn set_plugin_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.plugin_dirs = dirs;
+    }
+
+    /// Sets the list of base search directories (builder style).
+    pub fn with_plugin_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
+        self.plugin_dirs = dirs;
+        self
+    }
+
+    /// Appends a plugin search directory.
+    pub fn add_plugin_dir(&mut self, dir: PathBuf) {
+        self.plugin_dirs.push(dir);
     }
 
     /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
@@ -354,8 +611,7 @@ impl PluginManager {
         Ok(LoadedPlugin {
             name,
             path: path.to_path_buf(),
-            is_paused: false,
-            is_poisoned: false,
+            status: PluginStatus::Loaded,
             metadata,
             store,
             bindings,
@@ -368,6 +624,23 @@ impl PluginManager {
     /// with component metadata first. Calls the plugin's `on_load`.
     pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<String, LoadError> {
         let path = path.as_ref();
+        let name_stem = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        // Check if plugin is already loaded and active/loaded
+        if let Some(p) = self
+            .plugins
+            .iter()
+            .find(|p| p.path == path || p.name == name_stem)
+        {
+            if p.status != PluginStatus::Unloaded {
+                return Err(LoadError::AlreadyLoaded(p.name.clone()));
+            }
+        }
+
         let mut plugin = self.instantiate_plugin(path)?;
         plugin
             .call_on_load()
@@ -384,6 +657,7 @@ impl PluginManager {
         }
         let name = plugin.name.clone();
         self.plugins.push(plugin);
+        self.recalculate_dependency_states();
         Ok(name)
     }
 
@@ -393,6 +667,93 @@ impl PluginManager {
             return (idx < self.plugins.len()).then_some(idx);
         }
         self.plugins.iter().position(|p| p.name == query)
+    }
+
+    /// Recalculates `status` across all loaded plugins according to dependency states.
+    pub fn recalculate_dependency_states(&mut self) {
+        let n = self.plugins.len();
+        let mut loaded_plugins = HashMap::new();
+        let mut running_plugins = HashMap::new();
+
+        for p in &self.plugins {
+            if matches!(
+                p.status,
+                PluginStatus::Running | PluginStatus::Paused | PluginStatus::Loaded
+            ) {
+                let ver = p
+                    .metadata
+                    .as_ref()
+                    .map(|m| m.version.clone())
+                    .unwrap_or_else(|| "1.0.0".to_string());
+                loaded_plugins.insert(p.name.clone(), ver.clone());
+                if !matches!(p.status, PluginStatus::Paused) {
+                    running_plugins.insert(p.name.clone(), ver);
+                }
+            }
+        }
+
+        for i in 0..n {
+            // Keep Poisoned as is
+            if matches!(self.plugins[i].status, PluginStatus::Poisoned { .. }) {
+                continue;
+            }
+
+            let mut missing_dep = None;
+            let mut paused_dep = None;
+
+            if let Some(meta) = &self.plugins[i].metadata {
+                // 1. Evaluate require DSL entries
+                for req_str in &meta.require {
+                    if let Ok(req) = goldsrc_api::Requirement::from_str(req_str) {
+                        match req {
+                            goldsrc_api::Requirement::Plugin { name, optional, .. } => {
+                                if !loaded_plugins.contains_key(&name) {
+                                    if !optional {
+                                        missing_dep =
+                                            Some(format!("missing plugin dependency '{name}'"));
+                                        break;
+                                    }
+                                } else if !running_plugins.contains_key(&name) && !optional {
+                                    paused_dep =
+                                        Some(format!("waiting for paused plugin '{name}'"));
+                                }
+                            }
+                            goldsrc_api::Requirement::Cvar { name, op } => {
+                                let cvar_val =
+                                    self.engine_ops.cvar_get_string(&name).unwrap_or_default();
+                                let satisfied = match op {
+                                    goldsrc_api::CvarOp::Equal(expected) => cvar_val == expected,
+                                    goldsrc_api::CvarOp::NotEqual(forbidden) => {
+                                        cvar_val != forbidden
+                                    }
+                                    goldsrc_api::CvarOp::GreaterThanZero => {
+                                        cvar_val.parse::<f32>().map(|v| v > 0.0).unwrap_or(false)
+                                    }
+                                };
+                                if !satisfied {
+                                    missing_dep = Some(format!(
+                                        "cvar requirement '{name}' not satisfied (current: '{cvar_val}')"
+                                    ));
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            if let Some(reason) = missing_dep {
+                self.plugins[i].status = PluginStatus::Blocked { reason };
+            } else if let Some(reason) = paused_dep {
+                self.plugins[i].status = PluginStatus::Degraded { reason };
+            } else if matches!(
+                self.plugins[i].status,
+                PluginStatus::Blocked { .. } | PluginStatus::Degraded { .. }
+            ) {
+                self.plugins[i].status = PluginStatus::Running;
+            }
+        }
     }
 
     /// Calls `on_unload` (if exported) and removes the plugin at `idx`.
@@ -419,6 +780,7 @@ impl PluginManager {
                 }
             }
         }
+        self.recalculate_dependency_states();
         plugin
     }
 
@@ -431,21 +793,33 @@ impl PluginManager {
         format!("Unloaded {} plugins.", count)
     }
 
-    /// Sets or clears the pause flag on a plugin by name.
-    pub fn pause_plugin(&mut self, name: &str, pause: bool) -> Result<String, CommandError> {
-        if let Some(plugin) = self.plugins.iter_mut().find(|p| p.name == name) {
-            plugin.is_paused = pause;
-            Ok(format!("Plugin '{}' pause state set to {}", name, pause))
-        } else {
-            Err(CommandError::NotFound(name.to_string()))
+    /// Sets or clears the pause flag on a plugin by name or index query.
+    pub fn pause_plugin(&mut self, query: &str, pause: bool) -> Result<String, CommandError> {
+        let idx = self
+            .find_plugin(query)
+            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
+        if pause {
+            self.plugins[idx].status = PluginStatus::Paused;
+        } else if matches!(self.plugins[idx].status, PluginStatus::Paused) {
+            self.plugins[idx].status = PluginStatus::Running;
         }
+        self.recalculate_dependency_states();
+        Ok(format!(
+            "Plugin '{}' pause state set to {}",
+            self.plugins[idx].name, pause
+        ))
     }
 
     /// Sets or clears the pause flag on every loaded plugin.
     pub fn pause_all_plugins(&mut self, pause: bool) -> String {
         for p in &mut self.plugins {
-            p.is_paused = pause;
+            if pause {
+                p.status = PluginStatus::Paused;
+            } else if matches!(p.status, PluginStatus::Paused) {
+                p.status = PluginStatus::Running;
+            }
         }
+        self.recalculate_dependency_states();
         format!("All plugins pause state set to {}", pause)
     }
 
@@ -458,7 +832,7 @@ impl PluginManager {
                 name: p.name.clone(),
                 path: p.path.clone(),
                 index,
-                is_paused: p.is_paused,
+                status: p.status.clone(),
                 metadata: p.metadata.clone(),
                 has_on_load: p.has_export("on-load"),
                 has_on_unload: p.has_export("on-unload"),
@@ -561,6 +935,7 @@ impl PluginManager {
         ext: &'static str,
     ) -> Result<(), CommandError> {
         let dir = dir.as_ref().to_path_buf();
+        let _ = std::fs::create_dir_all(&dir);
         let tx = self.event_tx.clone();
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
             if let Ok(event) = res {
@@ -638,11 +1013,43 @@ impl PluginManager {
         self.call_on_frame();
     }
 
-    /// Loads a plugin by filesystem path (string form of [`load_plugin`]).
+    /// Loads a plugin by filesystem path or plugin name (e.g. `test_suite` or `test_suite.wasm`).
     ///
     /// [`load_plugin`]: PluginManager::load_plugin
     pub fn load_plugin_by_name(&mut self, query: &str) -> Result<String, LoadError> {
-        let path = PathBuf::from(query);
+        let mut path = PathBuf::from(query);
+        if !path.exists() {
+            let wasm_ext = goldsrc_api::consts::WASM_EXT;
+            let with_ext = if !query.ends_with(wasm_ext) {
+                PathBuf::from(format!("{query}{wasm_ext}"))
+            } else {
+                path.clone()
+            };
+
+            if with_ext.exists() {
+                path = with_ext;
+            } else {
+                let mut found_path = None;
+                for base_dir in &self.plugin_dirs {
+                    let candidate = base_dir.join(query);
+                    if candidate.exists() {
+                        found_path = Some(candidate);
+                        break;
+                    }
+                    let candidate_wasm = base_dir.join(format!("{query}{wasm_ext}"));
+                    if candidate_wasm.exists() {
+                        found_path = Some(candidate_wasm);
+                        break;
+                    }
+                }
+
+                if let Some(found) = found_path {
+                    path = found;
+                } else if !query.ends_with(wasm_ext) {
+                    path = with_ext;
+                }
+            }
+        }
         self.load_plugin(path)
     }
 
@@ -678,6 +1085,7 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bindings::goldsrc::engine::api::Host;
 
     struct NoopEngineOps;
 
@@ -719,6 +1127,7 @@ mod tests {
 
     impl goldsrc_api::EngineConsole for NoopEngineOps {
         fn server_print(&self, _message: &str) {}
+        fn client_print(&self, _client_index: i32, _print_type: i32, _message: &str) {}
         fn server_command(&self, _command: &str) {}
     }
 
@@ -759,6 +1168,10 @@ mod tests {
         fn drop_to_floor(&self, _index: i32) -> i32 {
             0
         }
+        fn dispatch_spawn(&self, _index: i32) -> i32 {
+            0
+        }
+        fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
 
     impl goldsrc_api::EngineCvars for NoopEngineOps {
@@ -852,5 +1265,220 @@ mod tests {
         assert!(manager.dispatch_command("testcmd", 0, "hello"));
         // Unknown commands are not dispatched at all.
         assert!(!manager.dispatch_command("nonexistent", 0, ""));
+    }
+
+    #[derive(Default)]
+    struct MockMessageEngine {
+        messages: std::sync::Mutex<Vec<(i32, i32, Option<i32>)>>,
+        bytes: std::sync::Mutex<Vec<i32>>,
+        strings: std::sync::Mutex<Vec<String>>,
+        ended: std::sync::Mutex<usize>,
+    }
+
+    impl goldsrc_api::EnginePrecache for MockMessageEngine {
+        fn precache_model(&self, _path: &str) -> i32 {
+            0
+        }
+        fn precache_sound(&self, _path: &str) -> i32 {
+            0
+        }
+        fn precache_generic(&self, _path: &str) -> i32 {
+            0
+        }
+    }
+
+    impl goldsrc_api::EngineMessages for MockMessageEngine {
+        fn reg_user_msg(&self, _name: &str, _size: i32) -> i32 {
+            75
+        }
+        fn message_begin(
+            &self,
+            msg_dest: i32,
+            msg_type: i32,
+            _origin: Option<[f32; 3]>,
+            edict_index: Option<i32>,
+        ) {
+            self.messages
+                .lock()
+                .unwrap()
+                .push((msg_dest, msg_type, edict_index));
+        }
+        fn message_end(&self) {
+            *self.ended.lock().unwrap() += 1;
+        }
+        fn write_byte(&self, val: i32) {
+            self.bytes.lock().unwrap().push(val);
+        }
+        fn write_char(&self, _val: i32) {}
+        fn write_short(&self, _val: i32) {}
+        fn write_long(&self, _val: i32) {}
+        fn write_angle(&self, _val: f32) {}
+        fn write_coord(&self, _val: f32) {}
+        fn write_string(&self, val: &str) {
+            self.strings.lock().unwrap().push(val.to_string());
+        }
+        fn write_entity(&self, _val: i32) {}
+    }
+
+    impl goldsrc_api::EngineConsole for MockMessageEngine {
+        fn server_print(&self, _message: &str) {}
+        fn client_print(&self, _client_index: i32, _print_type: i32, _message: &str) {}
+        fn server_command(&self, _command: &str) {}
+    }
+
+    impl goldsrc_api::EngineEntities for MockMessageEngine {
+        fn entity_is_valid(&self, index: i32) -> bool {
+            (1..=32).contains(&index)
+        }
+        fn entity_classname(&self, _index: i32) -> Option<String> {
+            None
+        }
+        fn entity_health(&self, _index: i32) -> f32 {
+            0.0
+        }
+        fn entity_set_health(&self, _index: i32, _health: f32) {}
+        fn entity_origin(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
+        fn entity_velocity(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_velocity(&self, _index: i32, _vel: [f32; 3]) {}
+        fn entity_angles(&self, _index: i32) -> [f32; 3] {
+            [0.0; 3]
+        }
+        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
+        fn player_name(&self, _index: i32) -> Option<String> {
+            None
+        }
+        fn player_armorvalue(&self, _index: i32) -> f32 {
+            0.0
+        }
+        fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
+        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
+            None
+        }
+        fn remove_entity(&self, _index: i32) {}
+        fn drop_to_floor(&self, _index: i32) -> i32 {
+            0
+        }
+        fn dispatch_spawn(&self, _index: i32) -> i32 {
+            0
+        }
+        fn dispatch_touch(&self, _touched: i32, _other: i32) {}
+    }
+
+    impl goldsrc_api::EngineCvars for MockMessageEngine {
+        fn cvar_get_float(&self, _name: &str) -> f32 {
+            0.0
+        }
+        fn cvar_set_float(&self, _name: &str, _val: f32) {}
+        fn cvar_get_string(&self, _name: &str) -> Option<String> {
+            None
+        }
+        fn cvar_set_string(&self, _name: &str, _val: &str) {}
+    }
+
+    impl goldsrc_api::EnginePhysics for MockMessageEngine {
+        fn point_contents(&self, _point: [f32; 3]) -> i32 {
+            0
+        }
+        fn trace_line(
+            &self,
+            _start: [f32; 3],
+            _end: [f32; 3],
+            _flags: i32,
+            _ignore_ent: i32,
+        ) -> goldsrc_api::TraceResult {
+            goldsrc_api::TraceResult::default()
+        }
+        fn trace_hull(
+            &self,
+            _start: [f32; 3],
+            _end: [f32; 3],
+            _flags: i32,
+            _hull_number: i32,
+            _ignore_ent: i32,
+        ) -> goldsrc_api::TraceResult {
+            goldsrc_api::TraceResult::default()
+        }
+    }
+
+    impl goldsrc_api::EngineSound for MockMessageEngine {
+        fn emit_sound(
+            &self,
+            _entity: i32,
+            _channel: i32,
+            _sample: &str,
+            _volume: f32,
+            _attenuation: f32,
+            _flags: i32,
+            _pitch: i32,
+        ) {
+        }
+        fn emit_ambient_sound(
+            &self,
+            _entity: i32,
+            _pos: [f32; 3],
+            _sample: &str,
+            _volume: f32,
+            _attenuation: f32,
+            _flags: i32,
+            _pitch: i32,
+        ) {
+        }
+    }
+
+    #[test]
+    fn host_print_center_formats_and_dispatches_textmsg() {
+        let engine = Arc::new(MockMessageEngine::default());
+        let mut host_state = HostState {
+            engine: engine.clone(),
+            limits: wasmtime::StoreLimitsBuilder::new().build(),
+        };
+
+        host_state.host_print_center(1, "Header\nDescription line".to_string());
+
+        let messages = engine.messages.lock().unwrap().clone();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(
+            messages[0],
+            (goldsrc_api::MessageDest::One as i32, 75, Some(1))
+        );
+
+        let bytes = engine.bytes.lock().unwrap().clone();
+        assert_eq!(bytes, vec![goldsrc_api::HUD_PRINTCENTER]);
+
+        let strings = engine.strings.lock().unwrap().clone();
+        assert_eq!(strings, vec!["%s", "Header\rDescription line"]);
+
+        assert_eq!(*engine.ended.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn host_print_center_broadcast_to_all() {
+        let engine = Arc::new(MockMessageEngine::default());
+        let mut host_state = HostState {
+            engine: engine.clone(),
+            limits: wasmtime::StoreLimitsBuilder::new().build(),
+        };
+
+        host_state.host_print_center(0, "Global center notice".to_string());
+
+        let messages = engine.messages.lock().unwrap().clone();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(
+            messages[0],
+            (goldsrc_api::MessageDest::All as i32, 75, None)
+        );
+
+        let bytes = engine.bytes.lock().unwrap().clone();
+        assert_eq!(bytes, vec![goldsrc_api::HUD_PRINTCENTER]);
+
+        let strings = engine.strings.lock().unwrap().clone();
+        assert_eq!(strings, vec!["%s", "Global center notice"]);
+
+        assert_eq!(*engine.ended.lock().unwrap(), 1);
     }
 }

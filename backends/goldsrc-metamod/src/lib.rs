@@ -82,12 +82,42 @@ pub fn meta_globals() -> &'static mut meta_globals_t {
     unsafe { &mut *ptr }
 }
 
+static G_GAMEDLL_FUNCS: std::sync::atomic::AtomicPtr<gamedll_funcs_t> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
 pub fn set_meta_globals(ptr: *mut meta_globals_t) {
     G_META_GLOBALS.store(ptr, std::sync::atomic::Ordering::Relaxed);
 }
 
-pub fn set_meta_util_funcs(ptr: *mut mutil_funcs_t) {
+/// # Safety
+/// `ptr` must be valid or null (passed from Metamod).
+pub unsafe fn set_meta_util_funcs(ptr: *mut mutil_funcs_t) {
     G_META_UTIL.store(ptr, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// # Safety
+/// `ptr` must be valid or null (passed from Metamod).
+pub unsafe fn set_gamedll_funcs(ptr: *mut gamedll_funcs_t) {
+    G_GAMEDLL_FUNCS.store(ptr, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Resolves real GameDLL spawn and touch function pointers from Metamod after server activation.
+pub fn ensure_game_dll_hooks() {
+    let ptr = G_GAMEDLL_FUNCS.load(std::sync::atomic::Ordering::Relaxed);
+    if !ptr.is_null() {
+        // SAFETY: gamedll_funcs provides direct pointers to real GameDLL tables
+        unsafe {
+            let dllapi = (*ptr).dllapi_table;
+            if !dllapi.is_null() {
+                if let Some(spawn_fn) = (*dllapi).pfnSpawn {
+                    goldsrc::backend::set_game_dll_spawn(spawn_fn);
+                }
+                if let Some(touch_fn) = (*dllapi).pfnTouch {
+                    goldsrc::backend::set_game_dll_touch(touch_fn);
+                }
+            }
+        }
+    }
 }
 
 use goldsrc::backend::EngineBackend;
