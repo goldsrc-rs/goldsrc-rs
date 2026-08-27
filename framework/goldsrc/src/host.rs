@@ -86,28 +86,10 @@ impl HostRuntime {
             log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
 
-        // Load plugins.toml configuration if present
+        // Load or create plugins.toml configuration template
         let plugins_config_path = config_dir.join("plugins.toml");
-        let mut plugins_config = if plugins_config_path.is_file() {
-            match std::fs::read_to_string(&plugins_config_path) {
-                Ok(content) => match crate::plugins_config::PluginsConfig::parse(&content) {
-                    Ok(cfg) => {
-                        log::info!(target: "wasm", "Loaded plugin orchestration config from {:?}", plugins_config_path);
-                        cfg
-                    }
-                    Err(e) => {
-                        log::warn!(target: "wasm", "Failed to parse {:?}: {e}, using default discovery", plugins_config_path);
-                        crate::plugins_config::PluginsConfig::default()
-                    }
-                },
-                Err(e) => {
-                    log::warn!(target: "wasm", "Failed to read {:?}: {e}", plugins_config_path);
-                    crate::plugins_config::PluginsConfig::default()
-                }
-            }
-        } else {
-            crate::plugins_config::PluginsConfig::default()
-        };
+        let mut plugins_config =
+            crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
 
         // Recursive helper to discover all .wasm plugins in directory tree
         fn discover_wasm_plugins(

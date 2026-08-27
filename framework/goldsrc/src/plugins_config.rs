@@ -180,6 +180,75 @@ impl PluginsConfig {
             .map(|d| d.resolve())
             .unwrap_or_default()
     }
+
+    /// Loads `plugins.toml` from the specified path, or generates a documented default template.
+    pub fn load_or_create(config_path: &std::path::Path) -> Self {
+        if config_path.is_file()
+            && let Ok(content) = std::fs::read_to_string(config_path)
+        {
+            match Self::parse(&content) {
+                Ok(cfg) => return cfg,
+                Err(e) => {
+                    log::warn!(
+                        target: "wasm",
+                        "Failed to parse '{:?}': {e}. Using default discovery.",
+                        config_path
+                    );
+                }
+            }
+        }
+
+        let default_template = r#"# ==============================================================================
+# GoldSrc.rs Plugin Orchestration Configuration (plugins.toml)
+# ==============================================================================
+# This file controls plugin execution priority, profile groups, granular
+# debugging, and reactive server lifecycle rules.
+
+# ------------------------------------------------------------------------------
+# 1. Plugin Declarations & Priorities
+# ------------------------------------------------------------------------------
+# [[plugins]]
+# name = "admin_system"
+# enabled = true
+# priority = 150
+# debug = true
+
+# [[plugins]]
+# name = "test_suite/test_hud"
+# enabled = true
+# priority = 100
+# [plugins.debug]
+# level = "debug"
+# profile = true
+# epoch_limit = 100
+
+# ------------------------------------------------------------------------------
+# 2. Named Profile Groups
+# ------------------------------------------------------------------------------
+# [groups.match_mode]
+# enabled = false
+# plugins = ["cstrike_match", "knife_round"]
+
+# [groups.fun_mods]
+# enabled = false
+# plugins = ["gungame", "paintball"]
+
+# ------------------------------------------------------------------------------
+# 3. Reactive Server Rules
+# ------------------------------------------------------------------------------
+# [[rules]]
+# name = "auto_pause_on_warmup"
+# when = { cvar = "mp_warmup_time > 0", map = ["fy_*", "aim_*"] }
+# action = { pause = ["vip_menu"], set_cvar = { "sv_gravity" = 700 } }
+"#;
+
+        if let Some(parent) = config_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(config_path, default_template);
+
+        Self::default()
+    }
 }
 
 #[cfg(test)]
