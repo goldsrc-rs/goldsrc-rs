@@ -301,18 +301,16 @@ impl HostRuntime {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             guard.paused_plugins = paused_plugins.clone();
 
-            // 3.1. Apply explicit pause/unpause rule states
-            for (plugin_name, is_paused) in &paused_plugins {
-                let _ = guard.manager.pause_plugin(plugin_name, *is_paused);
-            }
-
-            // 3.2. Apply group and individual enabled/disabled state from the freshly loaded plugins_config
+            // 3.1. Apply group and individual enabled/disabled base state from plugins_config
             let plugins_info = guard.manager.get_plugins_info();
             for info in plugins_info {
-                if !plugins_config.is_plugin_enabled(&info.name) {
-                    let _ = guard.manager.pause_plugin(&info.name, true);
-                } else if !paused_plugins.get(&info.name).copied().unwrap_or(false) {
-                    let _ = guard.manager.pause_plugin(&info.name, false);
+                if let Some(is_paused) = paused_plugins.get(&info.name) {
+                    // Reactive rule has explicit override for this plugin
+                    let _ = guard.manager.pause_plugin(&info.name, *is_paused);
+                } else {
+                    // Fall back to declarative enabled/disabled status in plugins.toml
+                    let is_enabled = plugins_config.is_plugin_enabled(&info.name);
+                    let _ = guard.manager.pause_plugin(&info.name, !is_enabled);
                 }
             }
 
