@@ -209,49 +209,7 @@ impl PluginsConfig {
             }
         }
 
-        let default_template = r#"# ==============================================================================
-# GoldSrc.rs Plugin Orchestration Configuration (plugins.toml)
-# ==============================================================================
-# This file controls plugin execution priority, profile groups, granular
-# debugging, and reactive server lifecycle rules.
-
-# ------------------------------------------------------------------------------
-# 1. Plugin Declarations & Priorities
-# ------------------------------------------------------------------------------
-# [[plugins]]
-# name = "admin_system"
-# enabled = true
-# priority = 150
-# debug = true
-
-# [[plugins]]
-# name = "test_suite/test_hud"
-# enabled = true
-# priority = 100
-# [plugins.debug]
-# level = "debug"
-# profile = true
-# epoch_limit = 100
-
-# ------------------------------------------------------------------------------
-# 2. Named Profile Groups
-# ------------------------------------------------------------------------------
-# [groups.match_mode]
-# enabled = false
-# plugins = ["cstrike_match", "knife_round"]
-
-# [groups.fun_mods]
-# enabled = false
-# plugins = ["gungame", "paintball"]
-
-# ------------------------------------------------------------------------------
-# 3. Reactive Server Rules
-# ------------------------------------------------------------------------------
-# [[rules]]
-# name = "auto_pause_on_warmup"
-# when = { cvar = "mp_warmup_time > 0", map = ["fy_*", "aim_*"] }
-# action = { pause = ["vip_menu"], set_cvar = { "sv_gravity" = 700 } }
-"#;
+        let default_template = include_str!("../resources/plugins.template.toml");
 
         if let Some(parent) = config_path.parent() {
             let _ = std::fs::create_dir_all(parent);
