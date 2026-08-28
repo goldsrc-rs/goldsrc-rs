@@ -159,7 +159,7 @@ impl<Ctx> RuleEngine<Ctx> {
                     false
                 }
             }
-            "none_of" | "not" => {
+            "none_of" => {
                 if let toml::Value::Array(items) = cond_val {
                     !items.iter().any(|item| {
                         if let toml::Value::Table(tbl) = item {

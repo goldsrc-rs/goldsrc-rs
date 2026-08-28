@@ -178,7 +178,7 @@ impl EngineBackend {
             return auth_count;
         }
         let mut count = 0;
-        for i in 1..=32 {
+        for i in 1..=(goldsrc_api::consts::MAX_PLAYERS as i32) {
             if <Self as goldsrc_api::EngineEntities>::player_name(self, i).is_some() {
                 count += 1;
             }

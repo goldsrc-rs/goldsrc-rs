@@ -215,7 +215,24 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Direct Engine Live Player Tracker**:
   - Real-time slot-based player count queries (`pfnGetPlayerStats` / edict validation) for immediate rule triggering on connect/disconnect.
 
-## v0.14.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
+## v0.14.0 — Storage Engine (KV-Store & Async Database) & Architectural Refactoring 📝 Planned
+
+**Goal:** Provide high-performance Key-Value storage (sled / redb / persistent KV) and asynchronous SQLite/MySQL pooling for plugin state persistence, while decomposing large modules (`cli.rs`, `manager.rs`, `backend.rs`) into focused domain units.
+
+- [ ] **Embedded Key-Value & State Storage (`goldsrc-storage` / `KvStore`)**:
+  - Embedded zero-config KV-store (e.g. `redb` / `sled` / JSON-backed) for player ranks, VIP expiration, currency, and settings.
+  - Type-safe keys and transactional operations with async/non-blocking flushes to disk.
+- [ ] **Asynchronous Database Pool (SQLite & MySQL Bridge)**:
+  - Non-blocking connection pooling running in dedicated background worker threads (`crossbeam` / `flume`).
+  - Safe promise/callback pattern across WASM boundary for queries without dropping server tickrate.
+- [ ] **Domain Decomposition of Large Modules (1000+ LoC Refactoring)**:
+  - Refactor `hosts/goldsrc-wasm-host/src/manager.rs` into `manager/` submodule (`loader.rs`, `lifecycle.rs`, `dependencies.rs`, `commands.rs`).
+  - Refactor `framework/goldsrc/src/cli.rs` into `cli/` submodule (`router.rs`, `formatters.rs`, `handlers/`).
+  - Refactor `framework/goldsrc/src/backend.rs` into domain modules matching architectural blueprint in `DOCS.md`.
+- [ ] **Per-Player Localization & i18n Dictionary Engine**:
+  - Structured language dictionaries (`configs/lang/*.toml`) with per-player code-page formatting based on client language.
+
+## v0.15.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
 
 **Goal:** Support polyglot plugin development by dynamically loading external language runtimes (C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 
