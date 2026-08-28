@@ -590,7 +590,26 @@ impl PluginManager {
 
         let metadata = match bindings.call_get_metadata(&mut store) {
             Ok(meta_str) => match toml::from_str::<PluginMetadata>(&meta_str) {
-                Ok(meta) => Some(meta),
+                Ok(mut meta) => {
+                    if let Some(ref b) = meta.bundle {
+                        if b.is_empty()
+                            || b.contains("..")
+                            || b.starts_with('/')
+                            || b.starts_with('\\')
+                            || b.contains(':')
+                            || !b.chars().all(|c| {
+                                c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '/'
+                            })
+                        {
+                            crate::host_log(&format!(
+                                "Warning: Rejected invalid/unsafe bundle '{b}' for plugin at {:?}",
+                                path
+                            ));
+                            meta.bundle = None;
+                        }
+                    }
+                    Some(meta)
+                }
                 Err(err) => {
                     crate::host_log(&format!(
                         "Warning: Failed to parse metadata for plugin at {:?}: {}",

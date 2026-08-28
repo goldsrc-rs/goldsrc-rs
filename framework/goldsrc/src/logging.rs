@@ -159,7 +159,7 @@ impl Default for LogConfig {
 // Logger singleton
 // ============================================================================
 
-type ConsoleCb = Box<dyn Fn(&str) + Send + Sync + 'static>;
+type ConsoleCb = std::sync::Arc<dyn Fn(&str) + Send + Sync + 'static>;
 
 /// Formats the current UTC/system time as `(date_str, timestamp_str)`.
 /// E.g. `("2026-08-28", "2026-08-28 01:42:00")`.
@@ -293,9 +293,9 @@ impl GoldSrcLogger {
         }
     }
 
-    fn emit(&mut self, level: LogLevel, target: LogTarget, message: &str) {
+    fn emit(&mut self, level: LogLevel, target: LogTarget, message: &str) -> Option<String> {
         if !self.should_emit(level, target) {
-            return;
+            return None;
         }
 
         let (today, timestamp) = get_current_date_and_time();
@@ -308,13 +308,12 @@ impl GoldSrcLogger {
             message
         );
 
-        // File output with daily rotation and dedicated error stream
+        // File output with daily rotation and dedicated error stream (buffered)
         if self.config.file_output {
             self.ensure_writers(&today);
 
             if let Some(ref mut writer) = self.general_writer {
                 let _ = writer.write_all(plain_line.as_bytes());
-                let _ = writer.flush();
             }
 
             // Write to dedicated error file if level is Error
@@ -322,14 +321,11 @@ impl GoldSrcLogger {
                 && let Some(ref mut err_writer) = self.error_writer
             {
                 let _ = err_writer.write_all(plain_line.as_bytes());
-                let _ = err_writer.flush();
             }
         }
 
-        // Console output with ANSI colors
-        if self.config.console_output
-            && let Some(ref cb) = self.console_cb
-        {
+        // Return formatted console string to be dispatched OUTSIDE of the logger lock
+        if self.config.console_output && self.console_cb.is_some() {
             let level_color = match level {
                 LogLevel::Trace => "\x1b[36m",
                 LogLevel::Debug => "\x1b[90m",
@@ -340,13 +336,14 @@ impl GoldSrcLogger {
             let target_color = "\x1b[35m"; // Magenta for target
             let reset = "\x1b[0m";
 
-            let console_line = format!(
+            Some(format!(
                 "[{level_color}{}{reset}][{target_color}{}{reset}] {}\n",
                 level.as_str(),
                 target.as_str(),
                 message
-            );
-            cb(&console_line);
+            ))
+        } else {
+            None
         }
     }
 }
@@ -371,11 +368,22 @@ impl log::Log for LoggerImpl {
         let target = LogTarget::from_target_str(record.target());
         let message = record.args().to_string();
 
-        let mut guard = match self.inner.lock() {
-            Ok(g) => g,
-            Err(e) => e.into_inner(),
+        let (console_line, console_cb) = {
+            let mut guard = match self.inner.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
+            let console_line = guard.emit(level, target, &message);
+            let cb = guard.console_cb.clone();
+            (console_line, cb)
         };
-        guard.emit(level, target, &message);
+
+        // If console output is active, dispatch OUTSIDE of the logger lock to prevent deadlocks
+        if let Some(line) = console_line
+            && let Some(cb) = console_cb
+        {
+            cb(&line);
+        }
     }
 
     fn flush(&self) {
@@ -415,7 +423,7 @@ pub fn init_with_dir<F>(
 ) where
     F: Fn(&str) + Send + Sync + 'static,
 {
-    let cb: Option<ConsoleCb> = console_cb.map(|f| Box::new(f) as ConsoleCb);
+    let cb: Option<ConsoleCb> = console_cb.map(|f| std::sync::Arc::new(f) as ConsoleCb);
     let level_filter = config.level.to_level_filter();
 
     if let Ok(_logger) = LOGGER_INSTANCE.set(LoggerImpl {

@@ -3,7 +3,7 @@
 //! Provides decoupled condition evaluators ([`RuleCondition`]) and action
 //! executors ([`RuleAction`]) registered in a pluggable [`RuleRegistry`].
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// A pluggable condition evaluator for a specific context `Ctx`.
@@ -73,18 +73,18 @@ impl<Ctx> RuleRegistry<Ctx> {
 pub struct Rule {
     /// Human-readable name/description of the rule.
     pub name: String,
-    /// Map of condition name -> TOML value.
-    pub when: HashMap<String, toml::Value>,
-    /// Map of action name -> TOML value.
-    pub action: HashMap<String, toml::Value>,
+    /// Map of condition name -> TOML value (sorted deterministically).
+    pub when: BTreeMap<String, toml::Value>,
+    /// Map of action name -> TOML value (sorted deterministically).
+    pub action: BTreeMap<String, toml::Value>,
 }
 
 impl Rule {
     /// Creates a new rule.
     pub fn new<S: Into<String>>(
         name: S,
-        when: HashMap<String, toml::Value>,
-        action: HashMap<String, toml::Value>,
+        when: BTreeMap<String, toml::Value>,
+        action: BTreeMap<String, toml::Value>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -251,14 +251,14 @@ mod tests {
         registry.register_action(SetGravityAction);
         registry.register_action(BroadcastAction);
 
-        let mut when1 = HashMap::new();
+        let mut when1 = BTreeMap::new();
         when1.insert(
             "map".to_string(),
             toml::Value::String("de_dust2".to_string()),
         );
         when1.insert("players".to_string(), toml::Value::Integer(10));
 
-        let mut action1 = HashMap::new();
+        let mut action1 = BTreeMap::new();
         action1.insert("set_gravity".to_string(), toml::Value::Integer(600));
         action1.insert(
             "broadcast".to_string(),

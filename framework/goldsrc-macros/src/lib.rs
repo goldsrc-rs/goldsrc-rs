@@ -158,6 +158,22 @@ fn parse_plugin_attr(attr: proc_macro2::TokenStream) -> syn::Result<PluginAttr> 
                 } else if ident == "license" {
                     out.license = value;
                 } else if ident == "bundle" {
+                    if value.is_empty()
+                        || value.contains("..")
+                        || value.starts_with('/')
+                        || value.starts_with('\\')
+                        || value.contains(':')
+                        || !value
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '/')
+                    {
+                        return Err(syn::Error::new_spanned(
+                            &nv.value,
+                            format!(
+                                "invalid #[plugin(bundle = \"{value}\")]: must be non-empty, relative path without '..' or ':', using only [a-zA-Z0-9_/-]"
+                            ),
+                        ));
+                    }
                     out.bundle = Some(value);
                 } else {
                     return Err(syn::Error::new_spanned(

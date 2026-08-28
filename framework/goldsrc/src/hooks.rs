@@ -30,7 +30,8 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
 
     if name == "client_connect" || name == "client_disconnect" {
         let player_count = goldsrc_api::auth::Auth::total_players();
-        HostRuntime::evaluate_rules("", player_count);
+        let current_map = HostRuntime::current_map();
+        HostRuntime::evaluate_rules(&current_map, player_count);
     }
 
     res
@@ -115,6 +116,7 @@ pub fn on_server_deactivate() {
     if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
         mgr.on_map_change();
     }
+    HostRuntime::on_map_change();
     emit_event("server_deactivate", &[]);
 }
 

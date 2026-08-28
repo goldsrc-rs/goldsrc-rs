@@ -3,7 +3,7 @@
 //! Provides granular plugin debugging, profile groups, and reactive rules.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Log level for plugin debugging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -127,10 +127,10 @@ pub struct RuleConfig {
     pub name: String,
     /// Condition map: condition name -> TOML value.
     #[serde(default)]
-    pub when: HashMap<String, toml::Value>,
+    pub when: BTreeMap<String, toml::Value>,
     /// Action map: action name -> TOML value.
     #[serde(default)]
-    pub action: HashMap<String, toml::Value>,
+    pub action: BTreeMap<String, toml::Value>,
 }
 
 /// Root configuration schema for `plugins.toml`.
@@ -183,18 +183,29 @@ impl PluginsConfig {
 
     /// Loads `plugins.toml` from the specified path, or generates a documented default template.
     pub fn load_or_create(config_path: &std::path::Path) -> Self {
-        if config_path.is_file()
-            && let Ok(content) = std::fs::read_to_string(config_path)
-        {
-            match Self::parse(&content) {
-                Ok(cfg) => return cfg,
-                Err(e) => {
-                    log::warn!(
-                        target: "wasm",
-                        "Failed to parse '{:?}': {e}. Using default discovery.",
-                        config_path
-                    );
+        if config_path.is_file() {
+            if let Ok(content) = std::fs::read_to_string(config_path) {
+                match Self::parse(&content) {
+                    Ok(cfg) => return cfg,
+                    Err(e) => {
+                        log::error!(
+                            target: "wasm",
+                            "CRITICAL: Failed to parse '{:?}': {e}. Preserving file and using default in-memory config.",
+                            config_path
+                        );
+                        // Backup the corrupted file so administrator edits are not lost
+                        let bak_path = config_path.with_extension("toml.bak");
+                        let _ = std::fs::copy(config_path, &bak_path);
+                        return Self::default();
+                    }
                 }
+            } else {
+                log::warn!(
+                    target: "wasm",
+                    "Failed to read '{:?}', using default discovery.",
+                    config_path
+                );
+                return Self::default();
             }
         }
 

@@ -83,8 +83,22 @@ impl<'a> RuleCondition<ServerRuleContext<'a>> for PlayersCondition {
                 } else if let Some(val_str) = expr.strip_prefix("==") {
                     val_str.trim().parse::<usize>().is_ok_and(|v| count == v)
                 } else if let Some((start, end)) = expr.split_once("..") {
-                    let s = start.trim().parse::<usize>().unwrap_or(0);
-                    let e = end.trim().parse::<usize>().unwrap_or(usize::MAX);
+                    let Ok(s) = start.trim().parse::<usize>() else {
+                        log::warn!(
+                            target: "rules",
+                            "Invalid start range in players condition: '{}'",
+                            start
+                        );
+                        return false;
+                    };
+                    let Ok(e) = end.trim().parse::<usize>() else {
+                        log::warn!(
+                            target: "rules",
+                            "Invalid end range in players condition: '{}'",
+                            end
+                        );
+                        return false;
+                    };
                     count >= s && count <= e
                 } else {
                     expr.parse::<usize>().is_ok_and(|v| count == v)
@@ -123,11 +137,19 @@ impl<'a> RuleCondition<ServerRuleContext<'a>> for CvarCondition {
         } else if let Some((c, v)) = expr.split_once('<') {
             (c.trim(), "<", v.trim())
         } else {
+            log::warn!(target: "rules", "Invalid cvar expression operator: '{}'", expr);
             return false;
         };
 
+        let Ok(expected_val) = expected_str.parse::<f32>() else {
+            log::warn!(
+                target: "rules",
+                "Invalid numeric value in cvar condition: '{}'",
+                expected_str
+            );
+            return false;
+        };
         let current_val = ctx.engine.cvar_get_float(cvar_name);
-        let expected_val = expected_str.parse::<f32>().unwrap_or(0.0);
 
         match op {
             "==" => (current_val - expected_val).abs() < 0.001,
@@ -495,14 +517,14 @@ mod tests {
         {
             let registry = create_default_server_rule_registry();
 
-            let mut when = HashMap::new();
+            let mut when = std::collections::BTreeMap::new();
             when.insert("map".to_string(), toml::Value::String("de_*".to_string()));
             when.insert(
                 "players".to_string(),
                 toml::Value::String(">= 10".to_string()),
             );
 
-            let mut action = HashMap::new();
+            let mut action = std::collections::BTreeMap::new();
             action.insert(
                 "pause".to_string(),
                 toml::Value::Array(vec![toml::Value::String("warmup_mod".to_string())]),
