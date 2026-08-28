@@ -167,6 +167,10 @@ impl HostRuntime {
             current_map: String::new(),
         };
         let _ = RUNTIME.set(Mutex::new(runtime));
+
+        // Evaluate initial rules (e.g. initial pause/cvar states)
+        Self::evaluate_rules("", 0);
+
         Ok(())
     }
 
