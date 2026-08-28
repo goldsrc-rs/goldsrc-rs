@@ -434,6 +434,14 @@ pub fn init_with_dir<F>(
     }
 }
 
+/// Flushes any pending log records to disk.
+pub fn flush() {
+    if let Some(logger) = LOGGER_INSTANCE.get() {
+        use log::Log;
+        logger.flush();
+    }
+}
+
 /// Returns the path where today's log file is written (for display / config).
 pub fn log_file_path(backend: BackendType) -> PathBuf {
     let (today, _) = get_current_date_and_time();

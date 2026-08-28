@@ -39,7 +39,7 @@ impl HostRuntime {
         let sys_config = HostConfig::load_or_create(backend);
 
         // Initialise unified logger
-        let logs_dir = std::path::PathBuf::from(&sys_config.core.logs_dir);
+        let logs_dir = crate::paths::PathResolver::existing_log_dir(backend);
         crate::logging::init_with_dir(
             sys_config.logging.clone(),
             Some(logs_dir),
@@ -59,7 +59,7 @@ impl HostRuntime {
         log::info!(
             target: "core",
             "Config loaded from: \"{}\"",
-            main_cfg_path.display()
+            PathResolver::normalize(&main_cfg_path)
         );
 
         // Try to enable hot-reload watcher if enabled in config
@@ -135,10 +135,20 @@ impl HostRuntime {
 
             match manager.load_plugin(&path) {
                 Ok(index) => {
-                    log::info!(target: "wasm", "Loaded plugin [{index}] '{}' from {:?}", rel_name, path);
+                    log::info!(
+                        target: "wasm",
+                        "Loaded plugin [{index}] '{}' from \"{}\"",
+                        rel_name,
+                        PathResolver::normalize(&path)
+                    );
                 }
                 Err(e) => {
-                    log::error!(target: "wasm", "Failed to load plugin '{}' ({:?}): {e}", rel_name, path);
+                    log::error!(
+                        target: "wasm",
+                        "Failed to load plugin '{}' (\"{}\"): {e}",
+                        rel_name,
+                        PathResolver::normalize(&path)
+                    );
                 }
             }
         }
@@ -274,5 +284,6 @@ impl HostRuntime {
                 manager.on_server_frame();
             }
         });
+        crate::logging::flush();
     }
 }
