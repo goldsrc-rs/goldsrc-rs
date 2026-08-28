@@ -77,6 +77,19 @@ impl PathResolver {
         dirs
     }
 
+    /// Returns the first existing config directory, or the primary default path.
+    pub fn existing_config_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::config_dirs(backend) {
+            if dir.exists() {
+                return dir;
+            }
+        }
+        Self::config_dirs(backend)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| Self::framework_dir(backend).join(CONFIGS_DIR_NAME))
+    }
+
     /// Returns possible log directory paths in order of preference.
     pub fn log_dirs(backend: BackendType) -> Vec<PathBuf> {
         let exe_dir = std::env::current_exe()

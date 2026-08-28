@@ -76,8 +76,7 @@ impl HostRuntime {
             log::info!(target: "wasm", "Hot-reload watcher is ACTIVE for plugins");
         }
 
-        let config_dir =
-            crate::paths::PathResolver::framework_dir(backend).join(crate::paths::CONFIGS_DIR_NAME);
+        let config_dir = crate::paths::PathResolver::existing_config_dir(backend);
         if let Err(e) = manager.enable_config_watcher(&config_dir) {
             log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
