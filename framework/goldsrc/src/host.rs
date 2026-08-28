@@ -112,9 +112,8 @@ impl HostRuntime {
         }
 
         let mut discovered_plugins = Vec::new();
-        for dir in &plugins_dirs {
-            discover_wasm_plugins(dir, dir, &mut discovered_plugins);
-        }
+        let plugin_dir = crate::paths::PathResolver::existing_plugin_dir(backend);
+        discover_wasm_plugins(&plugin_dir, &plugin_dir, &mut discovered_plugins);
 
         // Sort discovered plugins by priority from plugins.toml (higher priority loads first)
         discovered_plugins.sort_by_key(|(name, _)| {
