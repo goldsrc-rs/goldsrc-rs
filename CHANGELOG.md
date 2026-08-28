@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-08-28
+
+### Added
+
+- **Dual-Format `plugins.toml` Parser (Named Map + Array-of-Tables)**:
+  - Full support for Named Tables: `[plugins.<name>]`, `[groups.<name>]`, and `[rules.<name>]`.
+  - Maintained 100% backward compatibility with `[[plugins]]` and `[[rules]]`.
+- **Granular Pause Reason Tracking (`PluginStatus::Paused { reason }`)**:
+  - Attached descriptive pause reasons (`"reactive rule"`, `"group 'test_suite' disabled"`, `"plugin 'test_hud' disabled in config"`).
+  - Formatted reason output in `grs info <name/idx>` and plugin status introspection.
+- **Recursive Boolean Conditions for Reactive Rules**:
+  - Added support for `all_of = [...]` (AND), `any_of = [...]` (OR), and `none_of` / `not` (NOT) composite conditions.
+- **Live Server Player Slot Tracker**:
+  - Live edict-based slot verification in `EngineBackend::count_active_players` for instant reactive evaluation on player connect and disconnect events.
+
 ## [0.13.0] - 2026-08-27
 
 ### Added

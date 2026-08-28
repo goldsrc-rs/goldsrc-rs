@@ -133,6 +133,58 @@ pub struct RuleConfig {
     pub action: BTreeMap<String, toml::Value>,
 }
 
+/// Individual plugin entry representation before resolving name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PluginEntryItem {
+    /// Whether the plugin is enabled for loading.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Load priority (higher priority loads earlier, default 100).
+    #[serde(default = "default_priority")]
+    pub priority: i32,
+    /// Debugging and profiling configuration.
+    #[serde(default)]
+    pub debug: Option<PluginDebugSetting>,
+}
+
+/// Flexible representation of `plugins` section supporting both array and named table (map).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PluginsSection {
+    Array(Vec<PluginEntry>),
+    Map(HashMap<String, PluginEntryItem>),
+}
+
+/// Flexible representation of `rules` section supporting both array and named table (map).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RulesSection {
+    Array(Vec<RuleConfig>),
+    Map(HashMap<String, RuleItemConfig>),
+}
+
+/// A reactive lifecycle rule without explicit `name` field (key is name).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuleItemConfig {
+    /// Condition map: condition name -> TOML value.
+    #[serde(default)]
+    pub when: BTreeMap<String, toml::Value>,
+    /// Action map: action name -> TOML value.
+    #[serde(default)]
+    pub action: BTreeMap<String, toml::Value>,
+}
+
+/// Intermediate raw TOML representation for flexible dual-format deserialization.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+struct RawPluginsConfig {
+    #[serde(default)]
+    plugins: Option<PluginsSection>,
+    #[serde(default)]
+    groups: HashMap<String, PluginGroup>,
+    #[serde(default)]
+    rules: Option<RulesSection>,
+}
+
 /// Root configuration schema for `plugins.toml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginsConfig {
@@ -142,26 +194,65 @@ pub struct PluginsConfig {
     /// Named profile groups (`[groups.<name>]`).
     #[serde(default)]
     pub groups: HashMap<String, PluginGroup>,
-    /// Reactive lifecycle rules (`[[rules]]`).
+    /// Reactive lifecycle rules (`[[rules]]` or `[rules.<name>]`).
     #[serde(default)]
     pub rules: Vec<RuleConfig>,
 }
 
 impl PluginsConfig {
-    /// Parses a `plugins.toml` string.
+    /// Parses a `plugins.toml` string supporting both Array-of-Tables and Named-Map formats.
     pub fn parse(toml_str: &str) -> Result<Self, toml::de::Error> {
-        toml::from_str(toml_str)
+        let raw: RawPluginsConfig = toml::from_str(toml_str)?;
+
+        let mut plugins = Vec::new();
+        if let Some(sec) = raw.plugins {
+            match sec {
+                PluginsSection::Array(arr) => plugins = arr,
+                PluginsSection::Map(map) => {
+                    for (name, item) in map {
+                        plugins.push(PluginEntry {
+                            name,
+                            enabled: item.enabled,
+                            priority: item.priority,
+                            debug: item.debug,
+                        });
+                    }
+                }
+            }
+        }
+
+        let mut rules = Vec::new();
+        if let Some(sec) = raw.rules {
+            match sec {
+                RulesSection::Array(arr) => rules = arr,
+                RulesSection::Map(map) => {
+                    for (name, item) in map {
+                        rules.push(RuleConfig {
+                            name,
+                            when: item.when,
+                            action: item.action,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(Self {
+            plugins,
+            groups: raw.groups,
+            rules,
+        })
     }
 
-    /// Checks whether a plugin is enabled, taking both individual entry and groups into account.
-    pub fn is_plugin_enabled(&self, plugin_name: &str) -> bool {
+    /// Checks whether a plugin is enabled, returning the reason if disabled.
+    pub fn plugin_disabled_reason(&self, plugin_name: &str) -> Option<String> {
         let base_name = plugin_name
             .rsplit_once('/')
             .map(|(_, b)| b)
             .unwrap_or(plugin_name);
 
-        // 1. If any group containing this plugin is explicitly disabled, the plugin is disabled
-        for group in self.groups.values() {
+        // 1. If any group containing this plugin is explicitly disabled
+        for (group_name, group) in &self.groups {
             if !group.enabled
                 && group.plugins.iter().any(|p| {
                     p == plugin_name
@@ -169,7 +260,7 @@ impl PluginsConfig {
                         || p.rsplit_once('/').map(|(_, b)| b).unwrap_or(p) == base_name
                 })
             {
-                return false;
+                return Some(format!("group '{}' disabled", group_name));
             }
         }
 
@@ -178,12 +269,17 @@ impl PluginsConfig {
             p.name == plugin_name
                 || p.name == base_name
                 || p.name.rsplit_once('/').map(|(_, b)| b).unwrap_or(&p.name) == base_name
-        }) {
-            return entry.enabled;
+        }) && !entry.enabled
+        {
+            return Some(format!("plugin '{}' disabled in config", entry.name));
         }
 
-        // 3. Default to enabled if not explicitly declared or disabled
-        true
+        None
+    }
+
+    /// Checks whether a plugin is enabled, taking both individual entry and groups into account.
+    pub fn is_plugin_enabled(&self, plugin_name: &str) -> bool {
+        self.plugin_disabled_reason(plugin_name).is_none()
     }
 
     /// Returns the resolved `PluginDebugConfig` for a given plugin.
@@ -288,6 +384,47 @@ mod tests {
         assert_eq!(cfg.rules.len(), 1);
         assert_eq!(cfg.rules[0].name, "disable_on_warmup");
         assert!(cfg.rules[0].when.contains_key("cvar"));
+        assert!(cfg.rules[0].action.contains_key("pause"));
+    }
+
+    #[test]
+    fn test_parse_plugins_config_map_format() {
+        let toml_str = r#"
+            [plugins.admin_system]
+            enabled = true
+            priority = 150
+            debug = true
+
+            [plugins.vip_core]
+            enabled = false
+            priority = 120
+
+            [groups.fun_mods]
+            enabled = false
+            plugins = ["gungame", "paintball"]
+
+            [rules.disable_on_dust2]
+            when = { map = ["de_dust2"] }
+            action = { pause = ["vip_core"] }
+        "#;
+
+        let cfg = PluginsConfig::parse(toml_str).unwrap();
+        assert_eq!(cfg.plugins.len(), 2);
+        let admin = cfg
+            .plugins
+            .iter()
+            .find(|p| p.name == "admin_system")
+            .unwrap();
+        assert!(admin.enabled);
+        assert_eq!(admin.priority, 150);
+
+        let vip = cfg.plugins.iter().find(|p| p.name == "vip_core").unwrap();
+        assert!(!vip.enabled);
+        assert_eq!(vip.priority, 120);
+
+        assert_eq!(cfg.rules.len(), 1);
+        assert_eq!(cfg.rules[0].name, "disable_on_dust2");
+        assert!(cfg.rules[0].when.contains_key("map"));
         assert!(cfg.rules[0].action.contains_key("pause"));
     }
 }

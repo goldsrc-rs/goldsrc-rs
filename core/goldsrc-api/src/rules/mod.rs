@@ -126,6 +126,65 @@ impl<Ctx> RuleEngine<Ctx> {
         self.rules = rules;
     }
 
+    /// Evaluates a single condition or boolean operator recursively.
+    pub fn evaluate_condition(&self, ctx: &Ctx, cond_name: &str, cond_val: &toml::Value) -> bool {
+        match cond_name {
+            "all_of" => {
+                if let toml::Value::Array(items) = cond_val {
+                    items.iter().all(|item| {
+                        if let toml::Value::Table(tbl) = item {
+                            tbl.iter().all(|(k, v)| self.evaluate_condition(ctx, k, v))
+                        } else {
+                            false
+                        }
+                    })
+                } else if let toml::Value::Table(tbl) = cond_val {
+                    tbl.iter().all(|(k, v)| self.evaluate_condition(ctx, k, v))
+                } else {
+                    false
+                }
+            }
+            "any_of" => {
+                if let toml::Value::Array(items) = cond_val {
+                    items.iter().any(|item| {
+                        if let toml::Value::Table(tbl) = item {
+                            tbl.iter().all(|(k, v)| self.evaluate_condition(ctx, k, v))
+                        } else {
+                            false
+                        }
+                    })
+                } else if let toml::Value::Table(tbl) = cond_val {
+                    tbl.iter().any(|(k, v)| self.evaluate_condition(ctx, k, v))
+                } else {
+                    false
+                }
+            }
+            "none_of" => {
+                if let toml::Value::Array(items) = cond_val {
+                    !items.iter().any(|item| {
+                        if let toml::Value::Table(tbl) = item {
+                            tbl.iter().all(|(k, v)| self.evaluate_condition(ctx, k, v))
+                        } else {
+                            false
+                        }
+                    })
+                } else if let toml::Value::Table(tbl) = cond_val {
+                    !tbl.iter().all(|(k, v)| self.evaluate_condition(ctx, k, v))
+                } else {
+                    false
+                }
+            }
+            _ => {
+                if let Some(cond) = self.registry.get_condition(cond_name) {
+                    cond.evaluate(ctx, cond_val)
+                } else {
+                    // Unknown condition fails closed
+                    false
+                }
+            }
+        }
+    }
+
     /// Evaluates all rules against `ctx` and executes actions for satisfied rules.
     /// Returns a vector of results `(rule_name, Result<(), Vec<String>>)`.
     pub fn evaluate_and_execute(&self, ctx: &mut Ctx) -> Vec<(String, Result<(), Vec<String>>)> {
@@ -135,13 +194,7 @@ impl<Ctx> RuleEngine<Ctx> {
             // All conditions in `when` must evaluate to true (AND logic)
             let mut satisfied = true;
             for (cond_name, cond_val) in &rule.when {
-                if let Some(cond) = self.registry.get_condition(cond_name) {
-                    if !cond.evaluate(ctx, cond_val) {
-                        satisfied = false;
-                        break;
-                    }
-                } else {
-                    // Unknown condition fails closed
+                if !self.evaluate_condition(ctx, cond_name, cond_val) {
                     satisfied = false;
                     break;
                 }

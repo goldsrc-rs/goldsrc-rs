@@ -171,6 +171,21 @@ impl EngineBackend {
         }
     }
 
+    /// Counts connected active human and bot players from engine edicts.
+    pub fn count_active_players(&self) -> usize {
+        let auth_count = goldsrc_api::auth::Auth::total_players();
+        if auth_count > 0 {
+            return auth_count;
+        }
+        let mut count = 0;
+        for i in 1..=(goldsrc_api::consts::MAX_PLAYERS as i32) {
+            if <Self as goldsrc_api::EngineEntities>::player_name(self, i).is_some() {
+                count += 1;
+            }
+        }
+        count
+    }
+
     /// Spawns an entity by classname.
     pub fn spawn_entity(&self, classname: &str) -> Option<goldsrc_api::Entity> {
         unsafe {

@@ -3,21 +3,20 @@
 # ==============================================================================
 # This file controls plugin execution priority, profile groups, granular
 # debugging, and reactive server lifecycle rules.
+# Both Named-Map format ([plugins.<name>]) and Array-of-Tables ([[plugins]]) are supported.
 
 # ------------------------------------------------------------------------------
-# 1. Plugin Declarations & Priorities
+# 1. Plugin Declarations & Priorities (Named Table Map)
 # ------------------------------------------------------------------------------
-# [[plugins]]
-# name = "admin_system"
+# [plugins.admin_system]
 # enabled = true
 # priority = 150
 # debug = true
 
-# [[plugins]]
-# name = "test_suite/test_hud"
+# [plugins.vip_menu]
 # enabled = true
-# priority = 100
-# [plugins.debug]
+# priority = 110
+# [plugins.vip_menu.debug]
 # level = "debug"
 # profile = true
 # epoch_limit = 100
@@ -36,7 +35,11 @@
 # ------------------------------------------------------------------------------
 # 3. Reactive Server Rules
 # ------------------------------------------------------------------------------
-# [[rules]]
-# name = "auto_pause_on_warmup"
+# [rules.auto_pause_on_warmup]
 # when = { cvar = "mp_warmup_time > 0", map = ["fy_*", "aim_*"] }
 # action = { pause = ["vip_menu"], set_cvar = { "sv_gravity" = 700 } }
+
+# [rules.unpause_on_players]
+# when = { any_of = [{ players = ">= 1" }, { cvar = "mp_force_plugins == 1" }] }
+# action = { unpause = ["test_suite/test_hud"] }
+
