@@ -83,8 +83,11 @@ pub enum PluginStatus {
     Loaded,
     /// 2. Active, fully initialized and executing ticks/events/commands.
     Running,
-    /// 3. Manually paused by administrator (`grs pause <name>`).
-    Paused,
+    /// 3. Paused by administrator, profile group, or reactive rule.
+    Paused {
+        #[serde(default)]
+        reason: Option<String>,
+    },
     /// 4. Cannot run due to missing mandatory requirements.
     Blocked { reason: String },
     /// 5. Temporarily degraded because a requirement is paused.
@@ -111,7 +114,7 @@ impl PluginStatus {
         match self {
             PluginStatus::Loaded => "LOADED",
             PluginStatus::Running => "RUNNING",
-            PluginStatus::Paused => "PAUSED",
+            PluginStatus::Paused { .. } => "PAUSED",
             PluginStatus::Blocked { .. } => "BLOCKED",
             PluginStatus::Degraded { .. } => "DEGRADED",
             PluginStatus::Poisoned { .. } => "POISONED",

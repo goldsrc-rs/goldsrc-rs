@@ -306,11 +306,23 @@ impl HostRuntime {
             for info in plugins_info {
                 if let Some(is_paused) = paused_plugins.get(&info.name) {
                     // Reactive rule has explicit override for this plugin
-                    let _ = guard.manager.pause_plugin(&info.name, *is_paused);
+                    let reason = if *is_paused {
+                        Some("reactive rule".to_string())
+                    } else {
+                        None
+                    };
+                    let _ = guard
+                        .manager
+                        .pause_plugin_with_reason(&info.name, *is_paused, reason);
                 } else {
                     // Fall back to declarative enabled/disabled status in plugins.toml
-                    let is_enabled = plugins_config.is_plugin_enabled(&info.name);
-                    let _ = guard.manager.pause_plugin(&info.name, !is_enabled);
+                    let disabled_reason = plugins_config.plugin_disabled_reason(&info.name);
+                    let is_paused = disabled_reason.is_some();
+                    let _ = guard.manager.pause_plugin_with_reason(
+                        &info.name,
+                        is_paused,
+                        disabled_reason,
+                    );
                 }
             }
 

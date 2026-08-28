@@ -201,18 +201,18 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Decomposed Micro-Plugins (`examples/demo_plugins`)**:
   - Split monolithic test plugins into clean, focused demonstration modules (`test_hud`, `test_menu`, `test_ecs`).
 
-## v0.13.1 — Orchestration Polish & Map-Format Configuration 📝 Planned
+## v0.13.1 — Orchestration Polish & Map-Format Configuration ✅
 
 **Goal:** Refine `plugins.toml` to support expressive Named Map headers (`[plugins.<name>]`, `[rules.<name>]`), fine-grained rule condition logic (`AND`/`OR`/`NOT`), and detailed pause reason tracking.
 
-- [ ] **Named Map TOML Configuration (`[plugins.<name>]`, `[rules.<name>]`)**:
+- [x] **Named Map TOML Configuration (`[plugins.<name>]`, `[rules.<name>]`)**:
   - Transition from array-of-tables `[[plugins]]` to clean named tables: `[plugins.admin_system]`, `[plugins.vip_core.debug]`.
   - Dual-format parser ensuring backward compatibility with array-of-tables syntax.
-- [ ] **Granular Pause Reason Tracking (`PluginStatus::Paused { reason }`)**:
+- [x] **Granular Pause Reason Tracking (`PluginStatus::Paused { reason }`)**:
   - Record the origin rule or group name that caused a plugin pause (displayed in `grs info <idx>` and `grs ls`).
-- [ ] **Boolean Condition Expressions for Reactive Rules**:
+- [x] **Boolean Condition Expressions for Reactive Rules**:
   - Support `all_of = [...]`, `any_of = [...]`, `none_of = [...]` (AND/OR/NOT logic) inside `when = { ... }` blocks.
-- [ ] **Direct Engine Live Player Tracker**:
+- [x] **Direct Engine Live Player Tracker**:
   - Real-time slot-based player count queries (`pfnGetPlayerStats` / edict validation) for immediate rule triggering on connect/disconnect.
 
 ## v0.14.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
