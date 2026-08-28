@@ -215,16 +215,21 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Direct Engine Live Player Tracker**:
   - Real-time slot-based player count queries (`pfnGetPlayerStats` / edict validation) for immediate rule triggering on connect/disconnect.
 
-## v0.14.0 — Storage Engine (KV-Store & Async Database) & Architectural Refactoring 📝 Planned
+## v0.14.0 — Storage Engine (SQLite WAL & KV-Buckets) & Architectural Refactoring 📝 Planned
 
-**Goal:** Provide high-performance Key-Value storage (sled / redb / persistent KV) and asynchronous SQLite/MySQL pooling for plugin state persistence, while decomposing large modules (`cli.rs`, `manager.rs`, `backend.rs`) into focused domain units.
+**Goal:** Provide a high-performance, non-blocking storage architecture tailored for GoldSrc 1000 FPS servers (SQLite in WAL mode, MPSC background batching, typed `Bucket<T>`, and strict WASM isolation) alongside core module domain decomposition.
 
-- [ ] **Embedded Key-Value & State Storage (`goldsrc-storage` / `KvStore`)**:
-  - Embedded zero-config KV-store (e.g. `redb` / `sled` / JSON-backed) for player ranks, VIP expiration, currency, and settings.
-  - Type-safe keys and transactional operations with async/non-blocking flushes to disk.
-- [ ] **Asynchronous Database Pool (SQLite & MySQL Bridge)**:
-  - Non-blocking connection pooling running in dedicated background worker threads (`crossbeam` / `flume`).
-  - Safe promise/callback pattern across WASM boundary for queries without dropping server tickrate.
+- [ ] **Dual Storage Port Abstraction (`core/goldsrc-api`)**:
+  - `trait StorageProvider` (KV port with `get`, `set`, and atomic `fetch_add`).
+  - `trait SqlDatabase` (Query port for relational operations and rank/ELO aggregations).
+  - Strongly typed `Bucket<T>` guest DX wrapper delegating to `StorageProvider` without redundant memory caching.
+- [ ] **Unified SQLite WAL Driver & Zero-Frame-Cost Runtime (`goldsrc-storage` / `framework`)**:
+  - Embedded zero-config SQLite driver in WAL mode (`cstrike/data/goldsrc.db`) serving both `goldsrc_kv` and custom relational tables.
+  - Zero-latency main-thread IO: writes dispatched via non-blocking `mpsc` channel to a background worker with 500ms batch flush.
+  - Guaranteed transactional flush on `client_disconnect` and `ServerDeactivate`.
+- [ ] **Strict WASM Host Storage Sandbox & Bucket Access Control**:
+  - Automatic `{plugin_id}/` prefix injection on all `host_storage_*` calls preventing cross-plugin data tampering.
+  - Explicit bucket sharing via plugin metadata allowlist (`[goldsrc.share] buckets = ["global/ranks"]`).
 - [ ] **Domain Decomposition of Large Modules (1000+ LoC Refactoring)**:
   - Refactor `hosts/goldsrc-wasm-host/src/manager.rs` into `manager/` submodule (`loader.rs`, `lifecycle.rs`, `dependencies.rs`, `commands.rs`).
   - Refactor `framework/goldsrc/src/cli.rs` into `cli/` submodule (`router.rs`, `formatters.rs`, `handlers/`).
