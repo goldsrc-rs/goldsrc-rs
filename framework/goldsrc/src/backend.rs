@@ -300,8 +300,15 @@ static USER_MSG_REGISTRY: std::sync::LazyLock<
 > = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
 
 pub type UserMsgResolverFn = fn(&str) -> i32;
+pub type MapNameResolverFn = fn() -> Option<String>;
 
 static USER_MSG_RESOLVER_FN: std::sync::OnceLock<UserMsgResolverFn> = std::sync::OnceLock::new();
+static MAP_NAME_RESOLVER_FN: std::sync::OnceLock<MapNameResolverFn> = std::sync::OnceLock::new();
+
+/// Sets a backend-specific resolver for querying the active map name.
+pub fn set_map_name_resolver(resolver: MapNameResolverFn) {
+    let _ = MAP_NAME_RESOLVER_FN.set(resolver);
+}
 
 /// Raw real-GameDLL entry points for direct calls (DispatchSpawn / Touch).
 ///
@@ -748,12 +755,35 @@ impl goldsrc_api::EngineCvars for EngineBackend {
     fn cvar_get_string(&self, name: &str) -> Option<String> {
         unsafe {
             let cname = std::ffi::CString::new(name).unwrap_or_default();
-            let ptr = call_engfunc_ret!((self.engfuncs)().pfnCVarGetString, cname.as_ptr());
-            if ptr.is_null() {
-                None
-            } else {
-                Some(std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned())
+            let funcs = (self.engfuncs)();
+            if let Some(pfn) = funcs.pfnCVarGetString {
+                let ptr = pfn(cname.as_ptr());
+                if !ptr.is_null() {
+                    let val = std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned();
+                    if !val.is_empty() {
+                        return Some(val);
+                    }
+                }
             }
+            if let Some(pfn_ptr) = funcs.pfnCVarGetPointer {
+                let cvar_ptr = pfn_ptr(cname.as_ptr());
+                if !cvar_ptr.is_null() && !(*cvar_ptr).string.is_null() {
+                    let val = std::ffi::CStr::from_ptr((*cvar_ptr).string)
+                        .to_string_lossy()
+                        .into_owned();
+                    if !val.is_empty() {
+                        return Some(val);
+                    }
+                }
+            }
+            if name == "mapname"
+                && let Some(resolver) = MAP_NAME_RESOLVER_FN.get()
+                && let Some(m) = resolver()
+                && !m.is_empty()
+            {
+                return Some(m);
+            }
+            None
         }
     }
 

@@ -232,16 +232,27 @@ impl HostRuntime {
             crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
 
         // 2. Snapshot engine, rules, config, and paused states under short lock
-        let (engine, mut plugins_config, mut paused_plugins) = {
+        let (engine, mut plugins_config, mut paused_plugins, effective_map) = {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             guard.plugins_config = fresh_config;
-            if !map_name.is_empty() {
-                guard.current_map = map_name.to_string();
+
+            let resolved_map = if !map_name.is_empty() {
+                map_name.to_string()
+            } else if !guard.current_map.is_empty() {
+                guard.current_map.clone()
+            } else {
+                guard.engine.cvar_get_string("mapname").unwrap_or_default()
+            };
+
+            if !resolved_map.is_empty() {
+                guard.current_map = resolved_map.clone();
             }
+
             (
                 guard.engine.clone(),
                 guard.plugins_config.clone(),
                 guard.paused_plugins.clone(),
+                resolved_map,
             )
         };
 
@@ -249,7 +260,7 @@ impl HostRuntime {
             target: "rules",
             "Evaluating {} rules for map: '{}', players: {}",
             plugins_config.rules.len(),
-            map_name,
+            effective_map,
             player_count
         );
 
@@ -264,7 +275,7 @@ impl HostRuntime {
             let rule_engine = goldsrc_api::rules::RuleEngine::new(registry, rules);
 
             let mut ctx = crate::rules::ServerRuleContext {
-                map_name,
+                map_name: &effective_map,
                 player_count,
                 engine: engine.as_ref(),
                 plugins_config: &mut plugins_config,
