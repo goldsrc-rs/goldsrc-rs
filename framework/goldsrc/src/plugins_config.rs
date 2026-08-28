@@ -155,15 +155,30 @@ impl PluginsConfig {
 
     /// Checks whether a plugin is enabled, taking both individual entry and groups into account.
     pub fn is_plugin_enabled(&self, plugin_name: &str) -> bool {
+        let base_name = plugin_name
+            .rsplit_once('/')
+            .map(|(_, b)| b)
+            .unwrap_or(plugin_name);
+
         // 1. If any group containing this plugin is explicitly disabled, the plugin is disabled
         for group in self.groups.values() {
-            if !group.enabled && group.plugins.iter().any(|p| p == plugin_name) {
+            if !group.enabled
+                && group.plugins.iter().any(|p| {
+                    p == plugin_name
+                        || p == base_name
+                        || p.rsplit_once('/').map(|(_, b)| b).unwrap_or(p) == base_name
+                })
+            {
                 return false;
             }
         }
 
         // 2. Check individual entry
-        if let Some(entry) = self.plugins.iter().find(|p| p.name == plugin_name) {
+        if let Some(entry) = self.plugins.iter().find(|p| {
+            p.name == plugin_name
+                || p.name == base_name
+                || p.name.rsplit_once('/').map(|(_, b)| b).unwrap_or(&p.name) == base_name
+        }) {
             return entry.enabled;
         }
 
