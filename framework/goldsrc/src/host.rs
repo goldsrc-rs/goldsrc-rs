@@ -85,6 +85,11 @@ impl HostRuntime {
         let plugins_config_path = config_dir.join("plugins.toml");
         let plugins_config =
             crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
+        log::info!(
+            target: "wasm",
+            "Plugins orchestration config loaded from: \"{}\"",
+            crate::paths::PathResolver::normalize(&plugins_config_path)
+        );
 
         // Recursive helper to discover all .wasm plugins in directory tree
         fn discover_wasm_plugins(
