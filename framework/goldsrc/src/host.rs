@@ -223,12 +223,18 @@ impl HostRuntime {
             return;
         };
 
-        // 1. Snapshot engine, rules, config, and paused states under short lock
+        // 1. Reload plugins.toml dynamically to pick up any changes made by the server administrator
+        let config_dir = crate::paths::PathResolver::existing_config_dir(
+            goldsrc_api::consts::BackendType::Metamod,
+        );
+        let plugins_config_path = config_dir.join("plugins.toml");
+        let fresh_config =
+            crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
+
+        // 2. Snapshot engine, rules, config, and paused states under short lock
         let (engine, mut plugins_config, mut paused_plugins) = {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
-            if guard.plugins_config.rules.is_empty() {
-                return;
-            }
+            guard.plugins_config = fresh_config;
             if !map_name.is_empty() {
                 guard.current_map = map_name.to_string();
             }
@@ -238,6 +244,14 @@ impl HostRuntime {
                 guard.paused_plugins.clone(),
             )
         };
+
+        log::info!(
+            target: "rules",
+            "Evaluating {} rules for map: '{}', players: {}",
+            plugins_config.rules.len(),
+            map_name,
+            player_count
+        );
 
         // 2. Evaluate rules and execute actions OUTSIDE of the HostRuntime lock
         {
@@ -276,11 +290,23 @@ impl HostRuntime {
         {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             guard.paused_plugins = paused_plugins.clone();
-            guard.plugins_config = plugins_config;
 
+            // 3.1. Apply explicit pause/unpause rule states
             for (plugin_name, is_paused) in &paused_plugins {
                 let _ = guard.manager.pause_plugin(plugin_name, *is_paused);
             }
+
+            // 3.2. Apply group and individual enabled/disabled state from the freshly loaded plugins_config
+            let plugins_info = guard.manager.get_plugins_info();
+            for info in plugins_info {
+                if !plugins_config.is_plugin_enabled(&info.name) {
+                    let _ = guard.manager.pause_plugin(&info.name, true);
+                } else if !paused_plugins.get(&info.name).copied().unwrap_or(false) {
+                    let _ = guard.manager.pause_plugin(&info.name, false);
+                }
+            }
+
+            guard.plugins_config = plugins_config;
             guard.manager.recalculate_dependency_states();
         }
     }
