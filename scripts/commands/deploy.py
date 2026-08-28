@@ -377,9 +377,10 @@ def verify_deploy(
 
     # Check 4: WASM plugins hashes
     for wasm_src in wasm_paths:
-        wasm_dst = wasm_target_dir / wasm_src.name
+        wasm_dst = get_plugin_dest_path(wasm_target_dir, wasm_src)
+
         if not wasm_dst.exists():
-            print(f"  [FAIL] WASM plugin not found: {wasm_dst.name}")
+            print(f"  [FAIL] WASM plugin not found: {wasm_dst}")
             all_ok = False
         else:
             src_hash = hashlib.md5(wasm_src.read_bytes()).hexdigest()
@@ -391,6 +392,45 @@ def verify_deploy(
                 all_ok = False
 
     return all_ok
+
+
+def extract_wasm_bundle(wasm_path: Path) -> str | None:
+    """Extract bundle name from embedded WASM metadata or filename conventions with strict path traversal validation."""
+    try:
+        data = wasm_path.read_bytes()
+        # Search for bundle = "..." in the embedded metadata string
+        marker = b'bundle = "'
+        idx = data.find(marker)
+        if idx != -1:
+            start = idx + len(marker)
+            end = data.find(b'"', start)
+            if end != -1:
+                bundle = data[start:end].decode("utf-8", errors="ignore").strip()
+                # Security check: Prevent path traversal (..) and absolute paths
+                if ".." in bundle or bundle.startswith("/") or bundle.startswith("\\") or ":" in bundle:
+                    print(f"Warning: Rejected dangerous bundle path '{bundle}' in {wasm_path.name}")
+                    return None
+                # Validate characters
+                import re
+                if re.match(r'^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$', bundle):
+                    return bundle
+    except Exception:
+        pass
+
+    # Fallback to test_ prefix convention
+    if wasm_path.name.startswith("test_"):
+        return "test_suite"
+    return None
+
+
+def get_plugin_dest_path(wasm_target_dir: Path, wasm_file: Path) -> Path:
+    """Computes destination path respecting safe bundle subfolders."""
+    bundle = extract_wasm_bundle(wasm_file)
+    if bundle:
+        dest_dir = wasm_target_dir / bundle
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        return dest_dir / wasm_file.name
+    return wasm_target_dir / wasm_file.name
 
 
 def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path, backend: str = "metamod") -> None:
@@ -410,7 +450,7 @@ def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path, backend: str = 
 
     for wasm_file in wasm_paths:
         if wasm_file.exists():
-            dest = wasm_target_dir / wasm_file.name
+            dest = get_plugin_dest_path(wasm_target_dir, wasm_file)
             shutil.copy2(wasm_file, dest)
             print(f"Copied WASM plugin: {dest}")
 

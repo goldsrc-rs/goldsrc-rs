@@ -66,7 +66,9 @@ def main(argv=None):
         "--target",
         "wasm32-unknown-unknown",
         "-p", "admin_system",
-        "-p", "test_suite",
+        "-p", "test_hud",
+        "-p", "test_menu",
+        "-p", "test_ecs",
         "-p", "vip_core",
         "-p", "vip_menu",
     ]

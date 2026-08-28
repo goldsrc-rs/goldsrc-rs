@@ -43,6 +43,9 @@ pub struct PluginMetadata {
     /// Plugin license (e.g. `MIT`, `GPL-3.0`, `Proprietary`).
     #[serde(default = "default_license")]
     pub license: String,
+    /// Target subfolder or bundle directory within `plugins/` (e.g. `test_suite`, `admin_system`).
+    #[serde(default)]
+    pub bundle: Option<String>,
     /// Registered system names (from `#[plugin(system = ...)]`).
     #[serde(default)]
     pub systems: Vec<String>,

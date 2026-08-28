@@ -6,6 +6,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-08-27
+
+### Added
+
+- **Reactive Rule & Provider Engine (`core/goldsrc-api` & `framework/goldsrc`)**:
+  - Generic, extensible `RuleEngine<Context>` with decoupled `RuleCondition` and `RuleAction` registries.
+  - Built-in condition evaluators: `map` (patterns/wildcards), `players` (range strings/counts), `cvar` (operators `==`, `!=`, `>=`, `<=`, `>`, `<`), and `time`.
+  - Built-in action executors: `pause`, `unpause`, `set_cvar`, and `exec` (console command execution).
+- **Declarative Plugin Orchestration (`plugins.toml`)**:
+  - `PluginsConfig` model parsing `[[plugins]]`, `[groups.<name>]`, and `[[rules]]`.
+  - Granular `PluginDebugConfig` (log levels `trace`..`error`, profiling, dedicated plugin log files, per-plugin epoch limits).
+  - Profile groups for instant batch toggling of plugin bundles.
+- **Recursive Directory Bundles (`plugins/<bundle>/*.wasm`)**:
+  - Recursive tree-walking loader discovering nested WASM plugin packs (e.g. `plugins/test_suite/test_hud.wasm`).
+  - Recursive `notify` file system watching for instant hot-reload across nested directories.
+- **Decomposed Micro-Plugins**:
+  - Split monolithic test suite into dedicated, focused modules: `test_hud`, `test_menu`, and `test_ecs`.
+  - Updated build and deployment automation to deploy bundle subfolders.
+
 ## [0.12.0] - 2026-08-27
 
 ### Added

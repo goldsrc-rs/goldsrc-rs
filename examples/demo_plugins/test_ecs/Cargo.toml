@@ -1,0 +1,14 @@
+[package]
+name = "test_ecs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Flat ECS state storage and system stages verification plugin"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+goldsrc = { workspace = true }

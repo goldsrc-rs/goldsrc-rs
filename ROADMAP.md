@@ -182,19 +182,38 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Typed CVar Abstraction**:
   - Type-safe `Cvar<i32>`, `Cvar<f32>`, `Cvar<String>` and flags (`CvarFlags::ARCHIVE`, `NOTIFY`, `SERVER`, `READ_ONLY`).
 
-## v0.13.0 — Modular Plugin Ecosystem, Lifecycle Orchestration & Profiles 📝 Planned
+## v0.13.0 — Reactive Rule Engine, Modular Bundles & Plugin Orchestration ✅
 
-**Goal:** Deliver directory tree bundle discovery, profile groups (`plugins.toml`), and conditional lifecycle orchestration inspired by AmxxModularEcosystem & MultiMod.
+**Goal:** Build a unified, extensible Reactive Rule & Extension Engine (`Core + Pluggable Providers`) powering declarative lifecycle orchestration (`plugins.toml`), directory bundles, profile groups, and dynamic server conditions.
 
-- [ ] **Recursive Directory Bundles (`plugins/<bundle>/*.wasm`)**:
+- [x] **Reactive Rule & Provider Engine (`goldsrc-api` & `framework/goldsrc`)**:
+  - Generic `RuleEngine<Context>` with decoupled `RuleCondition` and `RuleAction` provider registries.
+  - Built-in condition evaluators: `map` (patterns/wildcards), `players` (ranges/counts), `time` (server clock intervals), `cvar` (operators `==`, `!=`, `>`, `<`), `plugin_state`.
+  - Built-in action executors: `pause`, `unpause`, `load`, `unload`, `enable_group`, `disable_group`, `set_cvar`, `exec`, `broadcast`.
+  - Dynamic ad-hoc registration API allowing host modules and plugins to expose custom conditions and actions.
+- [x] **Recursive Directory Bundles (`plugins/<bundle>/*.wasm`)**:
   - Recursive directory tree walking for plugin packs (e.g. `plugins/test_suite/test_hud.wasm`).
-  - Recursive file system watching for hot-reloading nested bundles.
-- [ ] **Declarative Plugin Orchestration (`plugins.toml`)**:
-  - Fine-grained plugin controls: `enabled`, `debug`, `priority`.
+  - Recursive `notify` file system watching for instant hot-reloading across nested bundle subfolders.
+- [x] **Declarative Plugin Orchestration (`plugins.toml`)**:
+  - Fine-grained plugin controls: `enabled`, `priority`, and structured `debug` (logging levels, per-plugin log files, profiling).
   - Profile groups (`[groups.vip_pack]`, `[groups.match_mode]`) for instant multi-plugin toggling.
-  - Dynamic rule engine (`[[rules]]` based on map names, player count, or CVars).
-- [ ] **Decomposed Micro-Plugins**:
-  - Split monolithic test plugins into lightweight, focused demonstration modules (`test_hud`, `test_menu`, `test_ecs`).
+  - Reactive rule evaluations triggered on server lifecycle events (`ServerActivate`, `ClientConnect`, `ClientDisconnect`, `CvarChange`).
+- [x] **Decomposed Micro-Plugins (`examples/demo_plugins`)**:
+  - Split monolithic test plugins into clean, focused demonstration modules (`test_hud`, `test_menu`, `test_ecs`).
+
+## v0.13.1 — Orchestration Polish & Map-Format Configuration 📝 Planned
+
+**Goal:** Refine `plugins.toml` to support expressive Named Map headers (`[plugins.<name>]`, `[rules.<name>]`), fine-grained rule condition logic (`AND`/`OR`/`NOT`), and detailed pause reason tracking.
+
+- [ ] **Named Map TOML Configuration (`[plugins.<name>]`, `[rules.<name>]`)**:
+  - Transition from array-of-tables `[[plugins]]` to clean named tables: `[plugins.admin_system]`, `[plugins.vip_core.debug]`.
+  - Dual-format parser ensuring backward compatibility with array-of-tables syntax.
+- [ ] **Granular Pause Reason Tracking (`PluginStatus::Paused { reason }`)**:
+  - Record the origin rule or group name that caused a plugin pause (displayed in `grs info <idx>` and `grs ls`).
+- [ ] **Boolean Condition Expressions for Reactive Rules**:
+  - Support `all_of = [...]`, `any_of = [...]`, `none_of = [...]` (AND/OR/NOT logic) inside `when = { ... }` blocks.
+- [ ] **Direct Engine Live Player Tracker**:
+  - Real-time slot-based player count queries (`pfnGetPlayerStats` / edict validation) for immediate rule triggering on connect/disconnect.
 
 ## v0.14.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
 
@@ -209,3 +228,16 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
+
+## Future Milestones & Ecosystem Tools
+
+### Ecosystem Plugins & Developer Tooling
+
+- [ ] **`goldsrc-coreutils` (POSIX Shell & Diagnostic Tools for ReHLDS)**:
+  - Integration of modular `uutils/coreutils` Rust crates (`uu_ls`, `uu_cat`, `uu_head`, `uu_tail`, `uu_wc`, `uu_grep`, `uu_sort`).
+  - Sandboxed execution within the `cstrike/` root directory (Path Traversal protection & capability checks `admin.shell`).
+  - Native console I/O streaming directly into server console, RCON, and client admin chat.
+- [ ] **`grs` Dedicated CLI Tool (`cargo-goldsrc`)**:
+  - Scaffolding commands: `grs new <plugin> [--bundle <bundle>] [--multi-bin]`.
+  - Packaging & verification: `grs build`, `grs pack` (`.gsp` bundle format), and `grs lint`.
+  - Plugin registry integration: `grs install <plugin>`, `grs update`.

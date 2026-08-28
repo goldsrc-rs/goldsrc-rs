@@ -159,12 +159,76 @@ impl Default for LogConfig {
 // Logger singleton
 // ============================================================================
 
-type ConsoleCb = Box<dyn Fn(&str) + Send + Sync + 'static>;
+type ConsoleCb = std::sync::Arc<dyn Fn(&str) + Send + Sync + 'static>;
+
+/// Formats the current UTC/system time as `(date_str, timestamp_str)`.
+/// E.g. `("2026-08-28", "2026-08-28 01:42:00")`.
+fn get_current_date_and_time() -> (String, String) {
+    let now = std::time::SystemTime::now();
+    let duration = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let total_secs = duration.as_secs();
+
+    let sec = total_secs % 60;
+    let min = (total_secs / 60) % 60;
+    let hour = (total_secs / 3600) % 24;
+
+    // Days since epoch
+    let mut days = (total_secs / 86400) as i64;
+
+    // Unix epoch: 1970-01-01 (Thursday)
+    let mut year = 1970;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        let days_in_year = if leap { 366 } else { 365 };
+        if days < days_in_year {
+            break;
+        }
+        days -= days_in_year;
+        year += 1;
+    }
+
+    let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    let days_in_month = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+
+    let mut month = 1;
+    for &dim in &days_in_month {
+        if days < dim {
+            break;
+        }
+        days -= dim;
+        month += 1;
+    }
+    let day = days + 1;
+
+    let date_str = format!("{:04}-{:02}-{:02}", year, month, day);
+    let time_str = format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        year, month, day, hour, min, sec
+    );
+    (date_str, time_str)
+}
 
 struct GoldSrcLogger {
     config: LogConfig,
-    log_path: PathBuf,
-    file_handle: Option<std::io::BufWriter<std::fs::File>>,
+    logs_dir: PathBuf,
+    current_date: String,
+    general_writer: Option<std::io::BufWriter<std::fs::File>>,
+    error_writer: Option<std::io::BufWriter<std::fs::File>>,
     /// Optional callback forwarding messages to the server console.
     console_cb: Option<ConsoleCb>,
 }
@@ -181,17 +245,15 @@ impl GoldSrcLogger {
             fw_dir.join(crate::paths::LOGS_DIR_NAME)
         });
         let _ = fs::create_dir_all(&log_dir);
-        let log_path = log_dir.join(goldsrc_api::consts::DEFAULT_LOG_FILE_NAME);
-        let file_handle = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .ok()
-            .map(std::io::BufWriter::new);
+
+        let (date_str, _) = get_current_date_and_time();
+
         Self {
             config,
-            log_path,
-            file_handle,
+            logs_dir: log_dir,
+            current_date: date_str,
+            general_writer: None,
+            error_writer: None,
             console_cb,
         }
     }
@@ -206,33 +268,64 @@ impl GoldSrcLogger {
         self.config.targets.contains(&target)
     }
 
-    fn emit(&mut self, level: LogLevel, target: LogTarget, message: &str) {
-        if !self.should_emit(level, target) {
-            return;
-        }
+    fn ensure_writers(&mut self, today: &str) {
+        if self.current_date != today || self.general_writer.is_none() {
+            self.current_date = today.to_string();
+            let _ = fs::create_dir_all(&self.logs_dir);
 
-        // Clean plain text format for file: [INFO][core] message
-        let plain_line = format!("[{}][{}] {}\n", level.as_str(), target.as_str(), message);
-
-        // File output (re-uses open file handle if available, falls back to open on demand).
-        if self.config.file_output {
-            if let Some(ref mut writer) = self.file_handle {
-                let _ = writer.write_all(plain_line.as_bytes());
-            } else if let Ok(file) = OpenOptions::new()
+            // 1. General log: logs/YYYY-MM-DD.log
+            let gen_path = self.logs_dir.join(format!("{}.log", today));
+            self.general_writer = OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(&self.log_path)
-            {
-                let mut writer = std::io::BufWriter::new(file);
+                .open(gen_path)
+                .ok()
+                .map(std::io::BufWriter::new);
+
+            // 2. Error log: logs/error_YYYY-MM-DD.log
+            let err_path = self.logs_dir.join(format!("error_{}.log", today));
+            self.error_writer = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(err_path)
+                .ok()
+                .map(std::io::BufWriter::new);
+        }
+    }
+
+    fn emit(&mut self, level: LogLevel, target: LogTarget, message: &str) -> Option<String> {
+        if !self.should_emit(level, target) {
+            return None;
+        }
+
+        let (today, timestamp) = get_current_date_and_time();
+
+        // Structured plain text format for file: [2026-08-28 01:42:00][INFO][core] message
+        let plain_line = format!(
+            "[{timestamp}][{}][{}] {}\n",
+            level.as_str(),
+            target.as_str(),
+            message
+        );
+
+        // File output with daily rotation and dedicated error stream (buffered)
+        if self.config.file_output {
+            self.ensure_writers(&today);
+
+            if let Some(ref mut writer) = self.general_writer {
                 let _ = writer.write_all(plain_line.as_bytes());
-                self.file_handle = Some(writer);
+            }
+
+            // Write to dedicated error file if level is Error
+            if level == LogLevel::Error
+                && let Some(ref mut err_writer) = self.error_writer
+            {
+                let _ = err_writer.write_all(plain_line.as_bytes());
             }
         }
 
-        // Console output with ANSI colors
-        if self.config.console_output
-            && let Some(ref cb) = self.console_cb
-        {
+        // Return formatted console string to be dispatched OUTSIDE of the logger lock
+        if self.config.console_output && self.console_cb.is_some() {
             let level_color = match level {
                 LogLevel::Trace => "\x1b[36m",
                 LogLevel::Debug => "\x1b[90m",
@@ -243,13 +336,14 @@ impl GoldSrcLogger {
             let target_color = "\x1b[35m"; // Magenta for target
             let reset = "\x1b[0m";
 
-            let console_line = format!(
+            Some(format!(
                 "[{level_color}{}{reset}][{target_color}{}{reset}] {}\n",
                 level.as_str(),
                 target.as_str(),
                 message
-            );
-            cb(&console_line);
+            ))
+        } else {
+            None
         }
     }
 }
@@ -274,11 +368,22 @@ impl log::Log for LoggerImpl {
         let target = LogTarget::from_target_str(record.target());
         let message = record.args().to_string();
 
-        let mut guard = match self.inner.lock() {
-            Ok(g) => g,
-            Err(e) => e.into_inner(),
+        let (console_line, console_cb) = {
+            let mut guard = match self.inner.lock() {
+                Ok(g) => g,
+                Err(e) => e.into_inner(),
+            };
+            let console_line = guard.emit(level, target, &message);
+            let cb = guard.console_cb.clone();
+            (console_line, cb)
         };
-        guard.emit(level, target, &message);
+
+        // If console output is active, dispatch OUTSIDE of the logger lock to prevent deadlocks
+        if let Some(line) = console_line
+            && let Some(cb) = console_cb
+        {
+            cb(&line);
+        }
     }
 
     fn flush(&self) {
@@ -286,7 +391,10 @@ impl log::Log for LoggerImpl {
             Ok(g) => g,
             Err(e) => e.into_inner(),
         };
-        if let Some(ref mut writer) = guard.file_handle {
+        if let Some(ref mut writer) = guard.general_writer {
+            let _ = writer.flush();
+        }
+        if let Some(ref mut writer) = guard.error_writer {
             let _ = writer.flush();
         }
     }
@@ -315,7 +423,7 @@ pub fn init_with_dir<F>(
 ) where
     F: Fn(&str) + Send + Sync + 'static,
 {
-    let cb: Option<ConsoleCb> = console_cb.map(|f| Box::new(f) as ConsoleCb);
+    let cb: Option<ConsoleCb> = console_cb.map(|f| std::sync::Arc::new(f) as ConsoleCb);
     let level_filter = config.level.to_level_filter();
 
     if let Ok(_logger) = LOGGER_INSTANCE.set(LoggerImpl {
@@ -326,9 +434,18 @@ pub fn init_with_dir<F>(
     }
 }
 
-/// Returns the path where the log file is written (for display / config).
+/// Flushes any pending log records to disk.
+pub fn flush() {
+    if let Some(logger) = LOGGER_INSTANCE.get() {
+        use log::Log;
+        logger.flush();
+    }
+}
+
+/// Returns the path where today's log file is written (for display / config).
 pub fn log_file_path(backend: BackendType) -> PathBuf {
+    let (today, _) = get_current_date_and_time();
     PathResolver::framework_dir(backend)
         .join(crate::paths::LOGS_DIR_NAME)
-        .join(goldsrc_api::consts::DEFAULT_LOG_FILE_NAME)
+        .join(format!("{}.log", today))
 }
