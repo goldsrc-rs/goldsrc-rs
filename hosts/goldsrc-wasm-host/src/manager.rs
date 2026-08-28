@@ -697,7 +697,7 @@ impl PluginManager {
         for p in &self.plugins {
             if matches!(
                 p.status,
-                PluginStatus::Running | PluginStatus::Paused | PluginStatus::Loaded
+                PluginStatus::Running | PluginStatus::Paused { .. } | PluginStatus::Loaded
             ) {
                 let ver = p
                     .metadata
@@ -705,7 +705,7 @@ impl PluginManager {
                     .map(|m| m.version.clone())
                     .unwrap_or_else(|| "1.0.0".to_string());
                 loaded_plugins.insert(p.name.clone(), ver.clone());
-                if !matches!(p.status, PluginStatus::Paused) {
+                if !matches!(p.status, PluginStatus::Paused { .. }) {
                     running_plugins.insert(p.name.clone(), ver);
                 }
             }
@@ -814,12 +814,22 @@ impl PluginManager {
 
     /// Sets or clears the pause flag on a plugin by name or index query.
     pub fn pause_plugin(&mut self, query: &str, pause: bool) -> Result<String, CommandError> {
+        self.pause_plugin_with_reason(query, pause, None)
+    }
+
+    /// Sets or clears the pause flag on a plugin with a descriptive reason.
+    pub fn pause_plugin_with_reason(
+        &mut self,
+        query: &str,
+        pause: bool,
+        reason: Option<String>,
+    ) -> Result<String, CommandError> {
         let idx = self
             .find_plugin(query)
             .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
         if pause {
-            self.plugins[idx].status = PluginStatus::Paused;
-        } else if matches!(self.plugins[idx].status, PluginStatus::Paused) {
+            self.plugins[idx].status = PluginStatus::Paused { reason };
+        } else if matches!(self.plugins[idx].status, PluginStatus::Paused { .. }) {
             self.plugins[idx].status = PluginStatus::Running;
         }
         self.recalculate_dependency_states();
@@ -833,8 +843,8 @@ impl PluginManager {
     pub fn pause_all_plugins(&mut self, pause: bool) -> String {
         for p in &mut self.plugins {
             if pause {
-                p.status = PluginStatus::Paused;
-            } else if matches!(p.status, PluginStatus::Paused) {
+                p.status = PluginStatus::Paused { reason: None };
+            } else if matches!(p.status, PluginStatus::Paused { .. }) {
                 p.status = PluginStatus::Running;
             }
         }

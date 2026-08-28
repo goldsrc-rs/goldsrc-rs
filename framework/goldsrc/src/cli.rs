@@ -481,7 +481,8 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
 
             let mut plugins = manager.get_plugins_info();
             if only_paused {
-                plugins.retain(|p| matches!(p.status, goldsrc_wasm_host::PluginStatus::Paused));
+                plugins
+                    .retain(|p| matches!(p.status, goldsrc_wasm_host::PluginStatus::Paused { .. }));
             }
 
             let total_plugins = plugins.len();
@@ -848,7 +849,13 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     let status_str = match &info.status {
                         goldsrc_wasm_host::PluginStatus::Loaded => "Loaded".to_string(),
                         goldsrc_wasm_host::PluginStatus::Running => "Running".to_string(),
-                        goldsrc_wasm_host::PluginStatus::Paused => "Paused".to_string(),
+                        goldsrc_wasm_host::PluginStatus::Paused { reason } => {
+                            if let Some(r) = reason {
+                                format!("Paused ({r})")
+                            } else {
+                                "Paused".to_string()
+                            }
+                        }
                         goldsrc_wasm_host::PluginStatus::Blocked { reason } => {
                             format!("Blocked ({reason})")
                         }
