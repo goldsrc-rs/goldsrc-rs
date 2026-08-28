@@ -1,0 +1,14 @@
+[package]
+name = "test_hud"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "HUD, DHUD, and Screen Effects verification plugin"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+goldsrc = { workspace = true }

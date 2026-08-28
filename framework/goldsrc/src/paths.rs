@@ -1,7 +1,6 @@
 pub use goldsrc_api::consts::{
-    ADDONS_DIR_NAME, BackendType, CONFIGS_DIR_NAME, DEBUG_LOG_FILE_NAME, DEFAULT_CONFIG_FILE_NAME,
-    DEFAULT_LOG_FILE_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME, HOSTS_DIR_NAME, LOGS_DIR_NAME,
-    PLUGINS_DIR_NAME, WASM_EXT,
+    ADDONS_DIR_NAME, BackendType, CONFIGS_DIR_NAME, DEFAULT_CONFIG_FILE_NAME, DEFAULT_MOD_DIR,
+    FRAMEWORK_NAME, HOSTS_DIR_NAME, LOGS_DIR_NAME, PLUGINS_DIR_NAME, WASM_EXT,
 };
 use std::path::{Path, PathBuf};
 
@@ -85,7 +84,47 @@ impl PathResolver {
                 return dir;
             }
         }
-        Self::framework_dir(backend).join(CONFIGS_DIR_NAME)
+        Self::config_dirs(backend)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| Self::framework_dir(backend).join(CONFIGS_DIR_NAME))
+    }
+
+    /// Returns possible log directory paths in order of preference.
+    pub fn log_dirs(backend: BackendType) -> Vec<PathBuf> {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+        let mut dirs = Vec::new();
+
+        let rel_path = Self::framework_dir(backend).join(LOGS_DIR_NAME);
+        if let Some(ref base) = exe_dir {
+            dirs.push(base.join(&rel_path));
+            // Alternative without DEFAULT_MOD_DIR prefix
+            let mut alt_rel = PathBuf::new();
+            if backend == BackendType::Metamod {
+                alt_rel.push(ADDONS_DIR_NAME);
+            }
+            alt_rel.push(FRAMEWORK_NAME);
+            alt_rel.push(LOGS_DIR_NAME);
+            dirs.push(base.join(&alt_rel));
+        }
+
+        dirs.push(rel_path);
+        dirs
+    }
+
+    /// Returns the first existing log directory, or the primary default path.
+    pub fn existing_log_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::log_dirs(backend) {
+            if dir.exists() {
+                return dir;
+            }
+        }
+        Self::log_dirs(backend)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| Self::framework_dir(backend).join(LOGS_DIR_NAME))
     }
 
     /// Returns the path to goldsrc.toml.
@@ -103,11 +142,6 @@ impl PathResolver {
         }
 
         rel_path
-    }
-
-    /// Returns the path to debug.log.
-    pub fn debug_log_path(backend: BackendType) -> PathBuf {
-        Self::framework_dir(backend).join(DEBUG_LOG_FILE_NAME)
     }
 
     /// Normalizes a path to a consistent, human-readable string with forward

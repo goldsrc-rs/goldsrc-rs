@@ -1,12 +1,11 @@
 [package]
-name = "test_suite"
+name = "test_menu"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "ECS, entity inspection, sound playback, and CVar test suite"
-
+description = "Declarative multi-page and DHUD menu verification plugin"
 
 [lib]
 crate-type = ["cdylib"]

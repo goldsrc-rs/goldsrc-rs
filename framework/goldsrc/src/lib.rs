@@ -27,6 +27,11 @@ pub mod backend;
 /// `goldsrc.toml` configuration types and loader.
 pub mod config;
 pub use config::HostConfig;
+/// `plugins.toml` orchestration and profile configuration.
+pub mod plugins_config;
+pub use plugins_config::{
+    PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
+};
 /// Centralized hook dispatching helpers.
 #[cfg(feature = "host")]
 pub mod hooks;
@@ -34,6 +39,9 @@ pub mod hooks;
 pub mod logging;
 /// Filesystem path resolution helpers.
 pub mod paths;
+/// Built-in server reactive rule providers and executors.
+#[cfg(feature = "host")]
+pub mod rules;
 
 #[macro_export]
 macro_rules! log_info {

@@ -199,17 +199,19 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         name: "list",
         aliases: &["ls", "ps"],
         category: "Inspection & Debugging",
-        summary: "List loaded WASM plugins with pagination and filter options",
+        summary: "List loaded WASM plugins in hierarchical tree view or flat list",
         usage: "grs list [OPTIONS]",
         options: &[
             ("-p, --page <N>", "Show specific page (default: 1)"),
             ("-s, --size <N>", "Set page size (default: 5)"),
             ("-a, --all", "Show all plugins (ignore pagination)"),
+            ("--flat", "Disable bundle grouping and display as flat list"),
             ("--paused", "Show only paused plugins"),
         ],
         examples: &[
             "grs list",
             "grs list -p 2",
+            "grs list --flat",
             "grs list -a",
             "grs list --paused",
         ],
@@ -448,6 +450,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             let mut size: Option<usize> = None;
             let mut only_paused = false;
             let mut all = false;
+            let mut flat_view = false;
             while let Ok(Some(arg)) = parser.next() {
                 match arg {
                     Arg::Short('h') | Arg::Long("help") => {
@@ -465,6 +468,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         }
                     }
                     Arg::Short('a') | Arg::Long("all") => all = true,
+                    Arg::Long("flat") => flat_view = true,
                     Arg::Long("paused") => only_paused = true,
                     _ => {}
                 }
@@ -481,6 +485,122 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             }
 
             let total_plugins = plugins.len();
+            if plugins.is_empty() {
+                out("[GoldSrc.rs] WASM plugins (0):\n  (No plugins found)\n");
+                return;
+            }
+
+            // Check if we should render hierarchical tree view (default if bundles exist and !flat_view)
+            let has_bundles = plugins.iter().any(|p| {
+                p.metadata
+                    .as_ref()
+                    .and_then(|m| m.bundle.as_ref())
+                    .is_some()
+                    || p.name.contains('/')
+            });
+
+            if !flat_view && has_bundles {
+                out(&format!(
+                    "[GoldSrc.rs] WASM plugins ({} loaded):\n",
+                    total_plugins
+                ));
+
+                // Partition plugins into root vs bundles
+                let mut root_plugins = Vec::new();
+                let mut bundle_groups: std::collections::BTreeMap<
+                    String,
+                    Vec<&goldsrc_wasm_host::PluginInfo>,
+                > = std::collections::BTreeMap::new();
+
+                for p in &plugins {
+                    let bundle_name = p
+                        .metadata
+                        .as_ref()
+                        .and_then(|m| m.bundle.as_ref().cloned())
+                        .or_else(|| {
+                            if let Some((b, _)) = p.name.split_once('/') {
+                                Some(b.to_string())
+                            } else {
+                                None
+                            }
+                        });
+
+                    if let Some(b) = bundle_name {
+                        bundle_groups.entry(b).or_default().push(p);
+                    } else {
+                        root_plugins.push(p);
+                    }
+                }
+
+                // 1. Render root plugins
+                for p in root_plugins {
+                    let status = p.status.label();
+                    let version_str = p
+                        .metadata
+                        .as_ref()
+                        .map(|m| format!("v{}", m.version))
+                        .unwrap_or_else(|| "v1.0.0".to_string());
+                    let author_str = p
+                        .metadata
+                        .as_ref()
+                        .map(|m| {
+                            if m.author.trim().is_empty() {
+                                goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR
+                            } else {
+                                m.author.as_str()
+                            }
+                        })
+                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR);
+
+                    out(&format!(
+                        "  [#{}] {:<16} {:<8} {:<18} | {:<7}\n",
+                        p.index, p.name, version_str, author_str, status
+                    ));
+                }
+
+                // 2. Render bundles with tree branches
+                for (bundle_name, bundle_plugins) in bundle_groups {
+                    out(&format!(
+                        "  [{}/] ({} plugins)\n",
+                        bundle_name,
+                        bundle_plugins.len()
+                    ));
+                    let count = bundle_plugins.len();
+                    for (i, p) in bundle_plugins.iter().enumerate() {
+                        let is_last = i + 1 == count;
+                        let branch = if is_last { "└── " } else { "├── " };
+                        let status = p.status.label();
+                        let version_str = p
+                            .metadata
+                            .as_ref()
+                            .map(|m| format!("v{}", m.version))
+                            .unwrap_or_else(|| "v1.0.0".to_string());
+                        let display_name = p
+                            .name
+                            .strip_prefix(&format!("{}/", bundle_name))
+                            .unwrap_or(&p.name);
+                        let author_str = p
+                            .metadata
+                            .as_ref()
+                            .map(|m| {
+                                if m.author.trim().is_empty() {
+                                    goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR
+                                } else {
+                                    m.author.as_str()
+                                }
+                            })
+                            .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR);
+
+                        out(&format!(
+                            "    {}[#{}] {:<14} {:<8} {:<18} | {:<7}\n",
+                            branch, p.index, display_name, version_str, author_str, status
+                        ));
+                    }
+                }
+                return;
+            }
+
+            // Flat paginated view
             let page_size = if all {
                 total_plugins.max(1)
             } else {
@@ -495,11 +615,6 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 if total_pages == 0 { 1 } else { page },
                 if total_pages == 0 { 1 } else { total_pages }
             ));
-
-            if plugins.is_empty() {
-                out("  (No plugins found)\n");
-                return;
-            }
 
             let start = (page_idx * page_size).min(total_plugins);
             let end = (start + page_size).min(total_plugins);

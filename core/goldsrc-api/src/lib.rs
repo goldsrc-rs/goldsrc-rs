@@ -27,6 +27,8 @@ pub mod liblist;
 pub mod menu;
 /// Unified requirements DSL.
 pub mod requirements;
+/// Generic Reactive Rule & Provider Engine.
+pub mod rules;
 
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use client::{
@@ -56,6 +58,7 @@ pub use menu::{
     SlotAction, VisualDeny,
 };
 pub use requirements::{CvarOp, Requirement};
+pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
 
 /// Safe wrapper around `edict_t` (entity dictionary).
 ///

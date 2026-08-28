@@ -6,6 +6,9 @@ use goldsrc_wasm_host::error::HostError;
 pub struct HostRuntime {
     manager: PluginManager,
     engine: std::sync::Arc<dyn goldsrc_api::Engine>,
+    pub plugins_config: crate::plugins_config::PluginsConfig,
+    pub paused_plugins: std::collections::HashMap<String, bool>,
+    pub current_map: String,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -36,7 +39,7 @@ impl HostRuntime {
         let sys_config = HostConfig::load_or_create(backend);
 
         // Initialise unified logger
-        let logs_dir = std::path::PathBuf::from(&sys_config.core.logs_dir);
+        let logs_dir = crate::paths::PathResolver::existing_log_dir(backend);
         crate::logging::init_with_dir(
             sys_config.logging.clone(),
             Some(logs_dir),
@@ -59,70 +62,114 @@ impl HostRuntime {
             PathResolver::normalize(&main_cfg_path)
         );
 
-        let plugin_dir = std::path::PathBuf::from(&sys_config.core.plugins_dir);
-        let config_dir = std::path::PathBuf::from(&sys_config.core.configs_dir);
-
-        log::info!(
-            target: "core",
-            "Plugin dir: \"{}\"",
-            PathResolver::normalize(&plugin_dir)
-        );
-        log::info!(
-            target: "core",
-            "Config dir: \"{}\"",
-            PathResolver::normalize(&config_dir)
-        );
-
-        if sys_config.watcher.enabled
-            && let Err(e) = manager.enable_hot_reload(&plugin_dir)
-        {
-            log::warn!(target: "wasm", "Failed to enable hot reload on {:?}: {e}", plugin_dir);
+        // Try to enable hot-reload watcher if enabled in config
+        let plugins_dirs = crate::paths::PathResolver::plugin_dirs(backend);
+        let mut watcher_enabled = false;
+        for dir in &plugins_dirs {
+            if let Err(e) = manager.enable_hot_reload(dir) {
+                log::warn!(target: "wasm", "Failed to enable hot-reload on {:?}: {e}", dir);
+            } else {
+                watcher_enabled = true;
+            }
         }
-        if sys_config.watcher.watch_configs
-            && let Err(e) = manager.enable_config_watcher(&config_dir)
-        {
+        if watcher_enabled {
+            log::info!(target: "wasm", "Hot-reload watcher is ACTIVE for plugins");
+        }
+
+        let config_dir = crate::paths::PathResolver::existing_config_dir(backend);
+        if let Err(e) = manager.enable_config_watcher(&config_dir) {
             log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
 
-        // Auto-load all .wasm plugins in plugin_dir
-        if let Ok(entries) = std::fs::read_dir(&plugin_dir) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("wasm") {
-                    let file_name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy())
-                        .unwrap_or_default();
-                    match manager.load_plugin(&path) {
-                        Ok(_) => log::info!(
-                            target: "wasm",
-                            "Loaded plugin: \"{}\"",
-                            file_name
-                        ),
-                        Err(e) => log::error!(
-                            target: "wasm",
-                            "Failed to load \"{}\": {e}",
-                            file_name
-                        ),
+        // Load or create plugins.toml configuration template
+        let plugins_config_path = config_dir.join("plugins.toml");
+        let plugins_config =
+            crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
+        log::info!(
+            target: "wasm",
+            "Plugins orchestration config loaded from: \"{}\"",
+            crate::paths::PathResolver::normalize(&plugins_config_path)
+        );
+
+        // Recursive helper to discover all .wasm plugins in directory tree
+        fn discover_wasm_plugins(
+            dir: &std::path::Path,
+            base_dir: &std::path::Path,
+            out: &mut Vec<(String, std::path::PathBuf)>,
+        ) {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        discover_wasm_plugins(&path, base_dir, out);
+                    } else if path.extension().is_some_and(|ext| ext == "wasm")
+                        && let Ok(rel_path) = path.strip_prefix(base_dir)
+                    {
+                        let rel_str = rel_path
+                            .with_extension("")
+                            .to_string_lossy()
+                            .replace('\\', "/");
+                        out.push((rel_str, path));
                     }
                 }
             }
         }
 
-        manager.recalculate_dependency_states();
-        for info in manager.get_plugins_info() {
-            if let goldsrc_wasm_host::PluginStatus::Blocked { reason } = &info.status {
-                log::warn!(
-                    target: "wasm",
-                    "Plugin '{}' BLOCKED: {}",
-                    info.name,
-                    reason
-                );
+        let mut discovered_plugins = Vec::new();
+        let plugin_dir = crate::paths::PathResolver::existing_plugin_dir(backend);
+        discover_wasm_plugins(&plugin_dir, &plugin_dir, &mut discovered_plugins);
+
+        // Sort discovered plugins by priority from plugins.toml (higher priority loads first)
+        discovered_plugins.sort_by_key(|(name, _)| {
+            let priority = plugins_config
+                .plugins
+                .iter()
+                .find(|p| p.name == *name)
+                .map(|p| p.priority)
+                .unwrap_or(100);
+            std::cmp::Reverse(priority)
+        });
+
+        // Load plugins based on plugins.toml activation status
+        for (rel_name, path) in discovered_plugins {
+            let is_enabled = plugins_config.is_plugin_enabled(&rel_name);
+            match manager.load_plugin(&path) {
+                Ok(plugin_name) => {
+                    log::info!(
+                        target: "wasm",
+                        "Loaded plugin '{}' from \"{}\"",
+                        rel_name,
+                        PathResolver::normalize(&path)
+                    );
+                    if !is_enabled {
+                        let _ = manager.pause_plugin(&plugin_name, true);
+                    }
+                }
+                Err(e) => {
+                    log::error!(
+                        target: "wasm",
+                        "Failed to load plugin '{}' (\"{}\"): {e}",
+                        rel_name,
+                        PathResolver::normalize(&path)
+                    );
+                }
             }
         }
 
-        let runtime = Self { manager, engine };
+        let paused_plugins = std::collections::HashMap::new();
+
+        let runtime = Self {
+            manager,
+            engine,
+            plugins_config,
+            paused_plugins,
+            current_map: String::new(),
+        };
         let _ = RUNTIME.set(Mutex::new(runtime));
+
+        // Evaluate initial rules (e.g. initial pause/cvar states)
+        Self::evaluate_rules("", 0);
+
         Ok(())
     }
 
@@ -131,6 +178,31 @@ impl HostRuntime {
         RUNTIME
             .get()
             .and_then(|lock| lock.lock().ok().map(|g| g.engine.clone()))
+    }
+
+    /// Returns the currently active map name.
+    pub fn current_map() -> String {
+        RUNTIME
+            .get()
+            .and_then(|lock| lock.lock().ok().map(|g| g.current_map.clone()))
+            .unwrap_or_default()
+    }
+
+    /// Sets the active map name.
+    pub fn set_current_map(map_name: &str) {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.current_map = map_name.to_string();
+        }
+    }
+
+    /// Clears temporary rule pause overrides on map change.
+    pub fn on_map_change() {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.paused_plugins.clear();
+            guard.current_map.clear();
+        }
     }
 
     /// Run `f` with exclusive access to the `PluginManager`, if initialized.
@@ -143,6 +215,110 @@ impl HostRuntime {
         }
     }
 
+    /// Triggers reactive rule engine re-evaluation for current game state.
+    /// Drops the `HostRuntime` mutex during rule action execution to avoid deadlocks.
+    pub fn evaluate_rules(map_name: &str, player_count: usize) {
+        let Some(lock) = RUNTIME.get() else {
+            return;
+        };
+
+        // 1. Reload plugins.toml dynamically to pick up any changes made by the server administrator
+        let config_dir = crate::paths::PathResolver::existing_config_dir(
+            goldsrc_api::consts::BackendType::Metamod,
+        );
+        let plugins_config_path = config_dir.join("plugins.toml");
+        let fresh_config =
+            crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
+
+        // 2. Snapshot engine, rules, config, and paused states under short lock
+        let (engine, mut plugins_config, mut paused_plugins, effective_map) = {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.plugins_config = fresh_config;
+
+            let resolved_map = if !map_name.is_empty() {
+                map_name.to_string()
+            } else if !guard.current_map.is_empty() {
+                guard.current_map.clone()
+            } else {
+                guard.engine.cvar_get_string("mapname").unwrap_or_default()
+            };
+
+            if !resolved_map.is_empty() {
+                guard.current_map = resolved_map.clone();
+            }
+
+            (
+                guard.engine.clone(),
+                guard.plugins_config.clone(),
+                guard.paused_plugins.clone(),
+                resolved_map,
+            )
+        };
+
+        log::info!(
+            target: "rules",
+            "Evaluating {} rules for map: '{}', players: {}",
+            plugins_config.rules.len(),
+            effective_map,
+            player_count
+        );
+
+        // 2. Evaluate rules and execute actions OUTSIDE of the HostRuntime lock
+        {
+            let registry = crate::rules::create_default_server_rule_registry();
+            let rules: Vec<goldsrc_api::rules::Rule> = plugins_config
+                .rules
+                .iter()
+                .map(|r| goldsrc_api::rules::Rule::new(&r.name, r.when.clone(), r.action.clone()))
+                .collect();
+            let rule_engine = goldsrc_api::rules::RuleEngine::new(registry, rules);
+
+            let mut ctx = crate::rules::ServerRuleContext {
+                map_name: &effective_map,
+                player_count,
+                engine: engine.as_ref(),
+                plugins_config: &mut plugins_config,
+                paused_plugins: &mut paused_plugins,
+                execution_log: Vec::new(),
+            };
+
+            let results = rule_engine.evaluate_and_execute(&mut ctx);
+            for (rule_name, res) in results {
+                match res {
+                    Ok(_) => log::info!(target: "rules", "Executed reactive rule '{}'", rule_name),
+                    Err(errors) => log::warn!(
+                        target: "rules",
+                        "Failed to execute rule '{}': {:?}",
+                        rule_name,
+                        errors
+                    ),
+                }
+            }
+        }
+
+        // 3. Re-acquire lock to commit updated paused states and recalculate dependencies
+        {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.paused_plugins = paused_plugins.clone();
+
+            // 3.1. Apply group and individual enabled/disabled base state from plugins_config
+            let plugins_info = guard.manager.get_plugins_info();
+            for info in plugins_info {
+                if let Some(is_paused) = paused_plugins.get(&info.name) {
+                    // Reactive rule has explicit override for this plugin
+                    let _ = guard.manager.pause_plugin(&info.name, *is_paused);
+                } else {
+                    // Fall back to declarative enabled/disabled status in plugins.toml
+                    let is_enabled = plugins_config.is_plugin_enabled(&info.name);
+                    let _ = guard.manager.pause_plugin(&info.name, !is_enabled);
+                }
+            }
+
+            guard.plugins_config = plugins_config;
+            guard.manager.recalculate_dependency_states();
+        }
+    }
+
     /// Tick plugins frame event.
     pub fn on_server_frame() {
         Self::with_manager(|m| {
@@ -150,5 +326,6 @@ impl HostRuntime {
                 manager.on_server_frame();
             }
         });
+        crate::logging::flush();
     }
 }

@@ -72,7 +72,11 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
         "-p",
         "vip_menu",
         "-p",
-        "test_suite",
+        "test_hud",
+        "-p",
+        "test_menu",
+        "-p",
+        "test_ecs",
         "-p",
         "admin_system",
     ]
