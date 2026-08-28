@@ -237,7 +237,27 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [ ] **Per-Player Localization & i18n Dictionary Engine**:
   - Structured language dictionaries (`data/lang/*.toml`) with per-player code-page formatting based on client language.
 
-## v0.15.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
+## v0.15.0 — Gameplay Engine, Game-Specific SDK (`goldsrc-cstrike`) & VTable Hooks 📝 Planned
+
+**Goal:** Provide core gameplay hooks (`TakeDamage`, `Spawn`, `Killed`, `TraceAttack`), automated `gamedata.toml` offset generation, and the `goldsrc-cstrike` game-specific framework (Money, CS Teams, Defuse, Bomb).
+
+- [ ] **Automated Gamedata Pipeline (`data/gamedata/*.toml`)**:
+  - Offline/CLI gamedata generator and zero-crash memory signature validator with hot-patching.
+- [ ] **VTable & Entity Hooking Engine (`TakeDamage`, `Spawn`, `Killed`)**:
+  - Safe interceptors for `CBasePlayer` / `CBaseEntity` virtual tables.
+- [ ] **Game-Specific Framework (`goldsrc-cstrike`)**:
+  - High-level abstractions for Counter-Strike 1.6: `CsTeam`, `CsWeapon`, `Money`, `DefuseKit`, `Bomb`.
+
+## v0.16.0 — ReAPI Direct Bridge & Advanced Physics 📝 Planned
+
+**Goal:** Native zero-overhead integration with ReHLDS & ReGameDLL API, round events (`RoundStart`, `RoundEnd`), and raytracing physics.
+
+- [ ] **ReAPI Dynamic Capability & Feature Detection**:
+  - Direct C-ABI bridge to ReHLDS and ReGameDLL with graceful fallback on Vanilla HLDS.
+- [ ] **Advanced Raytracing & World Geometry (`RayTrace`, `Hull`, `DropToFloor`)**:
+  - Line-of-sight checks, custom entity physics, and hitbox intersections.
+
+## v0.17.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
 
 **Goal:** Support polyglot plugin development by dynamically loading external language runtimes (C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 
