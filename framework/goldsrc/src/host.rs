@@ -132,19 +132,18 @@ impl HostRuntime {
 
         // Load plugins based on plugins.toml activation status
         for (rel_name, path) in discovered_plugins {
-            if !plugins_config.is_plugin_enabled(&rel_name) {
-                log::info!(target: "wasm", "Skipping disabled plugin: '{}'", rel_name);
-                continue;
-            }
-
+            let is_enabled = plugins_config.is_plugin_enabled(&rel_name);
             match manager.load_plugin(&path) {
-                Ok(index) => {
+                Ok(plugin_name) => {
                     log::info!(
                         target: "wasm",
-                        "Loaded plugin [{index}] '{}' from \"{}\"",
+                        "Loaded plugin '{}' from \"{}\"",
                         rel_name,
                         PathResolver::normalize(&path)
                     );
+                    if !is_enabled {
+                        let _ = manager.pause_plugin(&plugin_name, true);
+                    }
                 }
                 Err(e) => {
                     log::error!(
