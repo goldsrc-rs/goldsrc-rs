@@ -24,13 +24,12 @@ pub mod host;
 #[cfg(feature = "host")]
 pub mod backend;
 
-/// `goldsrc.toml` configuration types and loader.
+/// System (`goldsrc.toml`) and plugins (`plugins.toml`) configuration models.
 pub mod config;
-pub use config::HostConfig;
-/// `plugins.toml` orchestration and profile configuration.
-pub mod plugins_config;
-pub use plugins_config::{
-    PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
+/// Backward-compatible alias for plugins_config module.
+pub use config::plugins as plugins_config;
+pub use config::{
+    HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
 };
 /// Centralized hook dispatching helpers.
 #[cfg(feature = "host")]

@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "admin_system"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
 ]
@@ -529,7 +529,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "goldsrc"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "crossbeam-channel",
  "goldsrc-api",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-api"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc-sys",
  "serde",
@@ -556,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-macros"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc-api",
  "proc-macro2",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-metamod"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
  "goldsrc-api",
@@ -578,7 +578,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-standalone"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
  "goldsrc-api",
@@ -589,7 +589,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-sys"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "bindgen",
  "cc",
@@ -597,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-wasm-host"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc-api",
  "log",
@@ -1250,21 +1250,21 @@ dependencies = [
 
 [[package]]
 name = "test_ecs"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_hud"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_menu"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
 ]
@@ -1354,14 +1354,14 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vip_core"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "vip_menu"
-version = "0.10.0"
+version = "0.14.0"
 dependencies = [
  "goldsrc",
 ]

@@ -320,7 +320,7 @@ impl PluginsConfig {
             }
         }
 
-        let default_template = include_str!("../resources/plugins.template.toml");
+        let default_template = include_str!("../../resources/plugins.template.toml");
 
         if let Some(parent) = config_path.parent() {
             let _ = std::fs::create_dir_all(parent);
