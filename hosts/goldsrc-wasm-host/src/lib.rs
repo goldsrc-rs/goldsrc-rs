@@ -19,10 +19,22 @@ pub use plugin::PluginStatus;
 
 pub type PrintCallback = fn(&str);
 pub type ShowMenuCallback = fn(i32, i32, i32, &str);
+pub type StorageGetCallback = fn(&str, &str) -> Option<Vec<u8>>;
+pub type StorageSetCallback = fn(&str, &str, &[u8]) -> bool;
+pub type StorageDeleteCallback = fn(&str, &str) -> bool;
+pub type StorageFetchAddCallback = fn(&str, &str, i64) -> i64;
+pub type TranslateCallback = fn(&str, &str, &str) -> String;
 
 static PRINT_CALLBACK: std::sync::RwLock<Option<PrintCallback>> = std::sync::RwLock::new(None);
 static SHOW_MENU_CALLBACK: std::sync::RwLock<Option<ShowMenuCallback>> =
     std::sync::RwLock::new(None);
+static STORAGE_GET_CB: std::sync::RwLock<Option<StorageGetCallback>> = std::sync::RwLock::new(None);
+static STORAGE_SET_CB: std::sync::RwLock<Option<StorageSetCallback>> = std::sync::RwLock::new(None);
+static STORAGE_DELETE_CB: std::sync::RwLock<Option<StorageDeleteCallback>> =
+    std::sync::RwLock::new(None);
+static STORAGE_FETCH_ADD_CB: std::sync::RwLock<Option<StorageFetchAddCallback>> =
+    std::sync::RwLock::new(None);
+static TRANSLATE_CB: std::sync::RwLock<Option<TranslateCallback>> = std::sync::RwLock::new(None);
 
 /// Set global callback for WASM server_print calls.
 pub fn set_print_callback(f: PrintCallback) {
@@ -34,6 +46,34 @@ pub fn set_print_callback(f: PrintCallback) {
 /// Set global callback when WASM plugins call `host_show_menu`.
 pub fn set_show_menu_callback(f: ShowMenuCallback) {
     if let Ok(mut lock) = SHOW_MENU_CALLBACK.write() {
+        *lock = Some(f);
+    }
+}
+
+/// Set global callbacks for WASM host storage operations.
+pub fn set_storage_callbacks(
+    get: StorageGetCallback,
+    set: StorageSetCallback,
+    delete: StorageDeleteCallback,
+    fetch_add: StorageFetchAddCallback,
+) {
+    if let Ok(mut lock) = STORAGE_GET_CB.write() {
+        *lock = Some(get);
+    }
+    if let Ok(mut lock) = STORAGE_SET_CB.write() {
+        *lock = Some(set);
+    }
+    if let Ok(mut lock) = STORAGE_DELETE_CB.write() {
+        *lock = Some(delete);
+    }
+    if let Ok(mut lock) = STORAGE_FETCH_ADD_CB.write() {
+        *lock = Some(fetch_add);
+    }
+}
+
+/// Set global callback for WASM host dictionary translations.
+pub fn set_translate_callback(f: TranslateCallback) {
+    if let Ok(mut lock) = TRANSLATE_CB.write() {
         *lock = Some(f);
     }
 }

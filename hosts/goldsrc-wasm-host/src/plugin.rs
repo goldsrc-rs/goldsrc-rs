@@ -58,6 +58,9 @@ pub struct PluginMetadata {
     /// Unified requirements DSL expressions (e.g. `["plugin:vip_core", "cvar:vip_enabled!=0"]`).
     #[serde(default)]
     pub require: Vec<String>,
+    /// Explicitly allowed shared storage buckets (e.g. `["global/ranks"]`).
+    #[serde(default)]
+    pub shared_buckets: Vec<String>,
 }
 
 fn default_author() -> String {

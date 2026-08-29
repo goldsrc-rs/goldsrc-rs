@@ -20,6 +20,10 @@ pub struct HostState {
     pub engine: Arc<dyn GoldsrcEngine>,
     /// Per-store memory and table limit enforcement.
     pub limits: wasmtime::StoreLimits,
+    /// Identifier of the calling plugin.
+    pub plugin_name: String,
+    /// Explicitly allowed shared storage buckets from metadata.
+    pub shared_buckets: Vec<String>,
 }
 
 /// Read-only snapshot of a loaded plugin, used for CLI listing/info.
@@ -40,6 +44,27 @@ pub struct PluginInfo {
     pub has_on_unload: bool,
     /// Whether the plugin exports `on_frame`.
     pub has_on_frame: bool,
+}
+
+impl HostState {
+    /// Resolves bucket name enforcing plugin isolation and allowlist sharing.
+    fn resolve_bucket(&self, bucket: &str) -> Option<String> {
+        if bucket.contains('/') {
+            // Check if bucket is explicitly allowlisted
+            if self.shared_buckets.iter().any(|b| b == bucket) {
+                Some(bucket.to_string())
+            } else {
+                crate::host_log(&format!(
+                    "[ERROR] Plugin '{}' attempted unauthorized access to shared bucket '{}'",
+                    self.plugin_name, bucket
+                ));
+                None
+            }
+        } else {
+            // Auto-prefix with plugin name
+            Some(format!("{}/{}", self.plugin_name, bucket))
+        }
+    }
 }
 
 impl api::Host for HostState {
@@ -430,6 +455,61 @@ impl api::Host for HostState {
     fn host_revoke_capability(&mut self, player_index: i32, name: String) -> bool {
         goldsrc_api::auth::Auth::revoke_capability(player_index, &name)
     }
+
+    fn host_storage_get(&mut self, bucket: String, key: String) -> Option<Vec<u8>> {
+        let resolved = self.resolve_bucket(&bucket)?;
+        if let Ok(lock) = crate::STORAGE_GET_CB.read() {
+            if let Some(cb) = *lock {
+                return cb(&resolved, &key);
+            }
+        }
+        None
+    }
+
+    fn host_storage_set(&mut self, bucket: String, key: String, val: Vec<u8>) -> bool {
+        let Some(resolved) = self.resolve_bucket(&bucket) else {
+            return false;
+        };
+        if let Ok(lock) = crate::STORAGE_SET_CB.read() {
+            if let Some(cb) = *lock {
+                return cb(&resolved, &key, &val);
+            }
+        }
+        false
+    }
+
+    fn host_storage_delete(&mut self, bucket: String, key: String) -> bool {
+        let Some(resolved) = self.resolve_bucket(&bucket) else {
+            return false;
+        };
+        if let Ok(lock) = crate::STORAGE_DELETE_CB.read() {
+            if let Some(cb) = *lock {
+                return cb(&resolved, &key);
+            }
+        }
+        false
+    }
+
+    fn host_storage_fetch_add(&mut self, bucket: String, key: String, delta: i64) -> i64 {
+        let Some(resolved) = self.resolve_bucket(&bucket) else {
+            return 0;
+        };
+        if let Ok(lock) = crate::STORAGE_FETCH_ADD_CB.read() {
+            if let Some(cb) = *lock {
+                return cb(&resolved, &key, delta);
+            }
+        }
+        0
+    }
+
+    fn host_translate(&mut self, dict: String, lang: String, key: String) -> String {
+        if let Ok(lock) = crate::TRANSLATE_CB.read() {
+            if let Some(cb) = *lock {
+                return cb(&dict, &lang, &key);
+            }
+        }
+        key
+    }
 }
 
 /// Manages the lifecycle of loaded WASM plugins: loading, unloading,
@@ -552,8 +632,9 @@ impl PluginManager {
             )
             .map_err(|e| LoadError::Embed(e.to_string()))?;
 
-            let mut encoder = wit_component::ComponentEncoder::default()
-                .validate(true)
+            let mut base_encoder = wit_component::ComponentEncoder::default();
+            let encoder = base_encoder.validate(true);
+            let encoder = encoder
                 .module(&wasm_bytes)
                 .map_err(|e| LoadError::Encode(format!("{e:#?}")))?;
             encoder
@@ -581,6 +662,8 @@ impl PluginManager {
         let state = HostState {
             engine: self.engine_ops.clone(),
             limits,
+            plugin_name: String::new(),
+            shared_buckets: Vec::new(),
         };
         let mut store = wasmtime::Store::new(&self.engine, state);
         store.limiter(|s| &mut s.limits);
@@ -626,6 +709,18 @@ impl PluginManager {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
+
+        let shared_buckets = metadata
+            .as_ref()
+            .map(|m| m.shared_buckets.clone())
+            .unwrap_or_default();
+
+        // Update HostState with validated plugin name and shared buckets allowlist
+        {
+            let data = store.data_mut();
+            data.plugin_name = name.clone();
+            data.shared_buckets = shared_buckets;
+        }
 
         Ok(LoadedPlugin {
             name,
@@ -1465,6 +1560,8 @@ mod tests {
         let mut host_state = HostState {
             engine: engine.clone(),
             limits: wasmtime::StoreLimitsBuilder::new().build(),
+            plugin_name: "test_plugin".to_string(),
+            shared_buckets: Vec::new(),
         };
 
         host_state.host_print_center(1, "Header\nDescription line".to_string());
@@ -1491,6 +1588,8 @@ mod tests {
         let mut host_state = HostState {
             engine: engine.clone(),
             limits: wasmtime::StoreLimitsBuilder::new().build(),
+            plugin_name: "test_plugin".to_string(),
+            shared_buckets: Vec::new(),
         };
 
         host_state.host_print_center(0, "Global center notice".to_string());

@@ -9,6 +9,9 @@ description = "Pure Rust traits (interfaces) for GoldSrc engine interaction"
 goldsrc-sys = { workspace = true }
 wit-bindgen = { workspace = true }
 toml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
 default = []

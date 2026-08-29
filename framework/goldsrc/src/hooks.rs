@@ -25,6 +25,9 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
         if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
             mgr.on_disconnect(index);
         }
+        if let Some(storage) = HostRuntime::storage() {
+            let _ = storage.flush();
+        }
     }
     let res = emit_event(name, &index.to_le_bytes());
 

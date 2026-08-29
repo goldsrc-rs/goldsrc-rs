@@ -29,6 +29,8 @@ pub mod menu;
 pub mod requirements;
 /// Generic Reactive Rule & Provider Engine.
 pub mod rules;
+/// Dual Storage Port Abstraction & Typed Bucket Facade.
+pub mod storage;
 
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use client::{
@@ -59,6 +61,7 @@ pub use menu::{
 };
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
+pub use storage::{Bucket, SqlDatabase, StorageError, StorageProvider};
 
 /// Safe wrapper around `edict_t` (entity dictionary).
 ///
