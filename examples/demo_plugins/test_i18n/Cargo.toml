@@ -1,0 +1,13 @@
+[package]
+name = "test_i18n"
+version = "0.14.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Multilingual i18n & Localization verification plugin for GoldSrc.rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+goldsrc = { workspace = true }
