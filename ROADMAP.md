@@ -219,22 +219,22 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 
 **Goal:** Provide a high-performance, non-blocking storage architecture tailored for GoldSrc 1000 FPS servers (SQLite in WAL mode, MPSC background batching, typed `Bucket<T>`, and strict WASM isolation) alongside core module domain decomposition.
 
-- [ ] **Dual Storage Port Abstraction (`core/goldsrc-api`)**:
+- [x] **Dual Storage Port Abstraction (`core/goldsrc-api`)**:
   - `trait StorageProvider` (KV port with `get`, `set`, and atomic `fetch_add`).
   - `trait SqlDatabase` (Query port for relational operations and rank/ELO aggregations).
   - Strongly typed `Bucket<T>` guest DX wrapper delegating to `StorageProvider` without redundant memory caching.
-- [ ] **Unified SQLite WAL Driver & Zero-Frame-Cost Runtime (`goldsrc-storage` / `framework`)**:
+- [x] **Unified SQLite WAL Driver & Zero-Frame-Cost Runtime (`goldsrc-storage` / `framework`)**:
   - Embedded zero-config SQLite driver in WAL mode (`cstrike/data/goldsrc.db`) serving both `goldsrc_kv` and custom relational tables.
   - Zero-latency main-thread IO: writes dispatched via non-blocking `mpsc` channel to a background worker with 500ms batch flush.
   - Guaranteed transactional flush on `client_disconnect` and `ServerDeactivate`.
-- [ ] **Strict WASM Host Storage Sandbox & Bucket Access Control**:
+- [x] **Strict WASM Host Storage Sandbox & Bucket Access Control**:
   - Automatic `{plugin_id}/` prefix injection on all `host_storage_*` calls preventing cross-plugin data tampering.
   - Explicit bucket sharing via plugin metadata allowlist (`[goldsrc.share] buckets = ["global/ranks"]`).
 - [ ] **Domain Decomposition of Large Modules (1000+ LoC Refactoring)**:
   - Refactor `hosts/goldsrc-wasm-host/src/manager.rs` into `manager/` submodule (`loader.rs`, `lifecycle.rs`, `dependencies.rs`, `commands.rs`).
   - Refactor `framework/goldsrc/src/cli.rs` into `cli/` submodule (`router.rs`, `formatters.rs`, `handlers/`).
   - Refactor `framework/goldsrc/src/backend.rs` into modular engine domain adapters (`messages`, `entities`, `physics`, `cvars`).
-- [ ] **Per-Player Localization & i18n Dictionary Engine**:
+- [x] **Per-Player Localization & i18n Dictionary Engine**:
   - Structured language dictionaries (`data/lang/*.toml`) with per-player code-page formatting based on client language.
 
 ## v0.15.0 — Gameplay Engine, Game-Specific SDK (`goldsrc-cstrike`) & VTable Hooks 📝 Planned
