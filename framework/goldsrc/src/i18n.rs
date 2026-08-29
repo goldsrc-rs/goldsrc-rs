@@ -96,19 +96,28 @@ impl I18nEngine {
         named_args: &[(&str, &str)],
         pos_args: &[&str],
     ) -> String {
-        let dict = DICTIONARIES.read().unwrap_or_else(|e| e.into_inner());
-        let dict_key = dict_name.to_lowercase();
-        let lang_key = lang.to_lowercase();
+        #[cfg(target_arch = "wasm32")]
+        {
+            let raw =
+                goldsrc_api::bindings::goldsrc::engine::api::host_translate(dict_name, lang, key);
+            Self::format_placeholders(&raw, named_args, pos_args)
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let dict = DICTIONARIES.read().unwrap_or_else(|e| e.into_inner());
+            let dict_key = dict_name.to_lowercase();
+            let lang_key = lang.to_lowercase();
 
-        // 1. Try specified language
-        let template = dict
-            .get(&(dict_key.clone(), lang_key, key.to_string()))
-            // 2. Fallback to English ("en")
-            .or_else(|| dict.get(&(dict_key, "en".to_string(), key.to_string())))
-            .cloned();
+            // 1. Try specified language
+            let template = dict
+                .get(&(dict_key.clone(), lang_key, key.to_string()))
+                // 2. Fallback to English ("en")
+                .or_else(|| dict.get(&(dict_key, "en".to_string(), key.to_string())))
+                .cloned();
 
-        let raw = template.unwrap_or_else(|| key.to_string());
-        Self::format_placeholders(&raw, named_args, pos_args)
+            let raw = template.unwrap_or_else(|| key.to_string());
+            Self::format_placeholders(&raw, named_args, pos_args)
+        }
     }
 
     /// Replaces `{name}` and `{0}` placeholders in string.

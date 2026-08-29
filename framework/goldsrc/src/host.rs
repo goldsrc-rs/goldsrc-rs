@@ -126,11 +126,11 @@ impl HostRuntime {
         );
 
         // Try to enable hot-reload watcher if enabled in config
-        let plugins_dirs = crate::paths::PathResolver::plugin_dirs(backend);
+        let existing_plugin_dir = crate::paths::PathResolver::existing_plugin_dir(backend);
         let mut watcher_enabled = false;
-        for dir in &plugins_dirs {
-            if let Err(e) = manager.enable_hot_reload(dir) {
-                log::warn!(target: "wasm", "Failed to enable hot-reload on {:?}: {e}", dir);
+        if existing_plugin_dir.exists() {
+            if let Err(e) = manager.enable_hot_reload(&existing_plugin_dir) {
+                log::warn!(target: "wasm", "Failed to enable hot-reload on {:?}: {e}", existing_plugin_dir);
             } else {
                 watcher_enabled = true;
             }
