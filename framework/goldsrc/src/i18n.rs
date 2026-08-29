@@ -236,7 +236,7 @@ impl I18nEngine {
         named_args: &[(&str, &str)],
         pos_args: &[&str],
     ) -> String {
-        Self::translate_with_caller("", dict_name, lang, key, named_args, pos_args)
+        Self::translate_with_caller(dict_name, dict_name, lang, key, named_args, pos_args)
     }
 
     /// Translates a key with explicit caller plugin verification.
