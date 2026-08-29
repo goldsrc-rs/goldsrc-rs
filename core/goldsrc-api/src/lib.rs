@@ -61,7 +61,7 @@ pub use menu::{
 };
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
-pub use storage::{Bucket, SqlDatabase, StorageError, StorageProvider};
+pub use storage::{SqlDatabase, StorageError, StorageProvider};
 
 /// Safe wrapper around `edict_t` (entity dictionary).
 ///

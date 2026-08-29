@@ -137,6 +137,25 @@ impl I18nEngine {
     }
 }
 
+/// Macro for formatted translations using dictionaries.
+///
+/// Lives in `i18n` for cohesion; `#[macro_export]` makes it available at crate root.
+#[macro_export]
+macro_rules! tr {
+    ($dict:expr, $lang:expr, $key:expr) => {
+        $crate::i18n::I18nEngine::translate($dict, $lang, $key, &[], &[])
+    };
+    ($dict:expr, $lang:expr, $key:expr, $($name:ident = $val:expr),* $(,)?) => {
+        $crate::i18n::I18nEngine::translate(
+            $dict,
+            $lang,
+            $key,
+            &[ $((stringify!($name), &$val.to_string())),* ],
+            &[],
+        )
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

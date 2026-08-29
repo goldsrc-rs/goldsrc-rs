@@ -6,16 +6,28 @@
 //! - Reads check the in-memory cache first, falling back to SQLite WAL queries.
 //! - Synchronous transactional flush on `client_disconnect` and `ServerDeactivate`.
 
-use crossbeam_channel::{Receiver, Sender, unbounded};
 use goldsrc_api::storage::{StorageError, StorageProvider};
-use rusqlite::{Connection, params};
+use std::marker::PhantomData;
+use std::sync::Arc;
+
+#[cfg(feature = "host")]
 use std::collections::HashMap;
+#[cfg(feature = "host")]
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+#[cfg(feature = "host")]
+use std::sync::{Mutex, RwLock};
+
+#[cfg(feature = "host")]
+use crossbeam_channel::{Receiver, Sender, unbounded};
+#[cfg(feature = "host")]
+use rusqlite::{Connection, params};
+#[cfg(feature = "host")]
 use std::thread::{self, JoinHandle};
+#[cfg(feature = "host")]
 use std::time::{Duration, Instant};
 
 /// Storage operation dispatched over the non-blocking MPSC channel.
+#[cfg(feature = "host")]
 #[derive(Debug)]
 enum StorageOp {
     Set {
@@ -30,9 +42,11 @@ enum StorageOp {
     Flush(Sender<()>),
 }
 
+#[cfg(feature = "host")]
 type StorageMemoryCache = HashMap<(String, String), Option<Vec<u8>>>;
 
 /// High-performance Key-Value & Relational Storage Engine backed by SQLite WAL.
+#[cfg(feature = "host")]
 pub struct SqliteStorageEngine {
     db_path: PathBuf,
     /// Fast in-memory cache for dirty/hot keys: (bucket, key) -> value
@@ -46,6 +60,7 @@ pub struct SqliteStorageEngine {
     worker_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
+#[cfg(feature = "host")]
 impl SqliteStorageEngine {
     /// Returns the database file path.
     pub fn path(&self) -> &Path {
@@ -261,6 +276,7 @@ impl SqliteStorageEngine {
     }
 }
 
+#[cfg(feature = "host")]
 impl StorageProvider for SqliteStorageEngine {
     fn get(&self, bucket: &str, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
         // 1. Check in-memory cache first
@@ -383,6 +399,69 @@ impl StorageProvider for SqliteStorageEngine {
             .map_err(|e| StorageError::Backend(format!("Failed to enqueue atomic write: {e}")))?;
 
         Ok(new_val)
+    }
+}
+
+/// Strongly-typed Key-Value Bucket facade for plugins (framework layer).
+///
+/// Wraps a [`StorageProvider`] with JSON serialization. Lives in `framework`
+/// so `core/goldsrc-api` stays `&[u8]`-only and does not impose a format.
+#[derive(Clone)]
+pub struct Bucket<T> {
+    provider: Arc<dyn StorageProvider>,
+    name: String,
+    _marker: PhantomData<T>,
+}
+
+impl<T> Bucket<T> {
+    /// Creates a new typed bucket handle.
+    pub fn new<S: Into<String>>(provider: Arc<dyn StorageProvider>, name: S) -> Self {
+        Self {
+            provider,
+            name: name.into(),
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns the bucket name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl<T: serde::de::DeserializeOwned> Bucket<T> {
+    /// Retrieves and deserializes a value by key.
+    pub fn get(&self, key: &str) -> Result<Option<T>, StorageError> {
+        let raw = self.provider.get(&self.name, key)?;
+        match raw {
+            Some(bytes) => {
+                let val: T = serde_json::from_slice(&bytes)
+                    .map_err(|e| StorageError::Serialization(e.to_string()))?;
+                Ok(Some(val))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+impl<T: serde::Serialize> Bucket<T> {
+    /// Serializes and stores a value by key.
+    pub fn set(&self, key: &str, value: &T) -> Result<(), StorageError> {
+        let bytes =
+            serde_json::to_vec(value).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        self.provider.set(&self.name, key, &bytes)
+    }
+
+    /// Deletes a key from the bucket.
+    pub fn delete(&self, key: &str) -> Result<bool, StorageError> {
+        self.provider.delete(&self.name, key)
+    }
+}
+
+impl Bucket<i64> {
+    /// Atomically increments/decrements an integer balance and returns the new value.
+    pub fn fetch_add(&self, key: &str, delta: i64) -> Result<i64, StorageError> {
+        self.provider.fetch_add(&self.name, key, delta)
     }
 }
 

@@ -37,43 +37,59 @@ pub use plugins_config::{
 pub mod hooks;
 /// Lightweight i18n & Localization Dictionary Engine.
 pub mod i18n;
-/// Unified structured logger for backends.
+/// Unified structured logger for backends and transparent WASM guest logger.
 pub mod logging;
+pub use logging::init_guest_logger;
 /// Filesystem path resolution helpers.
 pub mod paths;
 /// Built-in server reactive rule providers and executors.
 #[cfg(feature = "host")]
 pub mod rules;
 /// Unified SQLite WAL storage engine and background batching.
-#[cfg(feature = "host")]
 pub mod storage;
 pub use i18n::I18nEngine;
 
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        $crate::wasm_log::log_info(&format!($($arg)*))
+        {
+            #[cfg(target_arch = "wasm32")]
+            $crate::logging::init_guest_logger();
+            $crate::log::info!(target: "plugin", $($arg)*)
+        }
     };
 }
 
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {
-        $crate::wasm_log::log_warn(&format!($($arg)*))
+        {
+            #[cfg(target_arch = "wasm32")]
+            $crate::logging::init_guest_logger();
+            $crate::log::warn!(target: "plugin", $($arg)*)
+        }
     };
 }
 
 #[macro_export]
 macro_rules! log_err {
     ($($arg:tt)*) => {
-        $crate::wasm_log::log_err(&format!($($arg)*))
+        {
+            #[cfg(target_arch = "wasm32")]
+            $crate::logging::init_guest_logger();
+            $crate::log::error!(target: "plugin", $($arg)*)
+        }
     };
 }
 
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
-        $crate::wasm_log::log_debug(&format!($($arg)*))
+        {
+            #[cfg(target_arch = "wasm32")]
+            $crate::logging::init_guest_logger();
+            $crate::log::debug!(target: "plugin", $($arg)*)
+        }
     };
 }
 
@@ -93,35 +109,19 @@ pub use goldsrc_api::engine_api as engine;
 pub use goldsrc_api::hud as hud_api;
 pub use goldsrc_api::menu as menu_api;
 pub use goldsrc_api::{
-    Alive, Auth, Bot, Bucket, CapExpr, ChatScope, ClientKind, Command, CommandBuilder,
-    CommandContext, CommandError, CommandResult, CommandTarget, Condition, ConnectionState,
-    CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, FromArg, HLTV,
-    HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle,
-    LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind,
-    MenuStyle, Player, PlayerStateFilter, RenderedMenuPage, SlotAction, Spectator, SqlDatabase,
-    StorageError, StorageProvider, Team, Terrorist, Vector3, VisualDeny,
+    Alive, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder, CommandContext,
+    CommandError, CommandResult, CommandTarget, Condition, ConnectionState, CounterTerrorist, Dead,
+    DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, FromArg, HLTV, HudColor, HudCoord,
+    HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu,
+    MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, Player,
+    PlayerStateFilter, RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError,
+    StorageProvider, Team, Terrorist, Vector3, VisualDeny,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
     command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
 };
-
-/// Macro for formatted translations using dictionaries.
-#[macro_export]
-macro_rules! tr {
-    ($dict:expr, $lang:expr, $key:expr) => {
-        $crate::i18n::I18nEngine::translate($dict, $lang, $key, &[], &[])
-    };
-    ($dict:expr, $lang:expr, $key:expr, $($name:ident = $val:expr),* $(,)?) => {
-        $crate::i18n::I18nEngine::translate(
-            $dict,
-            $lang,
-            $key,
-            &[ $((stringify!($name), &$val.to_string())),* ],
-            &[],
-        )
-    };
-}
+pub use storage::Bucket;
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
@@ -142,77 +142,4 @@ pub mod prelude {
     };
     pub use crate::{command, event, menu_action, on_frame, on_load, on_unload, plugin, system};
     pub use crate::{log_debug, log_err, log_info, log_warn};
-}
-
-/// Direct logging helper for WASM plugins.
-pub mod wasm_log {
-    /// Logs an info message.
-    pub fn log_info(msg: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
-                "[INFO] {}",
-                msg
-            ));
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            ::log::info!(target: "plugin", "{}", msg);
-        }
-    }
-
-    /// Logs a warning message.
-    pub fn log_warn(msg: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
-                "[WARN] {}",
-                msg
-            ));
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            ::log::warn!(target: "plugin", "{}", msg);
-        }
-    }
-
-    /// Logs an error message.
-    pub fn log_err(msg: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
-                "[ERROR] {}",
-                msg
-            ));
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            ::log::error!(target: "plugin", "{}", msg);
-        }
-    }
-
-    /// Logs a debug message.
-    pub fn log_debug(msg: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(&format!(
-                "[DEBUG] {}",
-                msg
-            ));
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            ::log::debug!(target: "plugin", "{}", msg);
-        }
-    }
-
-    /// Forwards raw `msg` to the host logger (WASM) or `println!` (native).
-    pub fn print(msg: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::goldsrc_api::bindings::goldsrc::engine::api::host_log(msg);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        println!("{}", msg);
-    }
 }

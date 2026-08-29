@@ -1,28 +1,42 @@
-//! Dual Storage Port Abstraction & Typed Bucket Facade.
+//! Dual Storage Port Abstraction (raw bytes, no serialization format imposed).
 //!
-//! Provides decoupled KV storage ([`StorageProvider`]) with atomic operations,
-//! relational query interface ([`SqlDatabase`]), and strongly-typed [`Bucket<T>`]
-//! for plugin state persistence without main-thread I/O stalls.
-
-use std::marker::PhantomData;
-use std::sync::Arc;
+//! Provides decoupled KV storage ([`StorageProvider`]) with atomic operations
+//! and relational query interface ([`SqlDatabase`]). Typed serialization
+//! (`Bucket<T>`) lives in `framework/goldsrc` where the format can be chosen
+//! per-plugin (JSON, bincode, raw bytes).
 
 /// Domain errors occurring during storage operations.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StorageError {
     /// Requested key or bucket was not found.
-    #[error("Key not found in bucket '{bucket}': '{key}'")]
     NotFound { bucket: String, key: String },
     /// Unauthorized access to a private bucket outside allowlist.
-    #[error("Unauthorized bucket access: '{bucket}' (caller '{caller}')")]
     Unauthorized { bucket: String, caller: String },
     /// Serialization or deserialization failure.
-    #[error("Serialization error: {0}")]
     Serialization(String),
     /// Underlying storage backend error.
-    #[error("Backend error: {0}")]
     Backend(String),
 }
+
+impl std::fmt::Display for StorageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound { bucket, key } => {
+                write!(f, "Key not found in bucket '{bucket}': '{key}'")
+            }
+            Self::Unauthorized { bucket, caller } => {
+                write!(
+                    f,
+                    "Unauthorized bucket access: '{bucket}' (caller '{caller}')"
+                )
+            }
+            Self::Serialization(msg) => write!(f, "Serialization error: {msg}"),
+            Self::Backend(msg) => write!(f, "Backend error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for StorageError {}
 
 /// Key-Value Storage Provider trait (KV Port).
 ///
@@ -112,73 +126,11 @@ pub mod rusqlite_param {
     }
 }
 
-/// Strongly-typed Key-Value Bucket facade for plugins.
-///
-/// Wraps a [`StorageProvider`] reference with JSON serialization.
-#[derive(Clone)]
-pub struct Bucket<T> {
-    provider: Arc<dyn StorageProvider>,
-    name: String,
-    _marker: PhantomData<T>,
-}
-
-impl<T> Bucket<T> {
-    /// Creates a new typed bucket handle.
-    pub fn new<S: Into<String>>(provider: Arc<dyn StorageProvider>, name: S) -> Self {
-        Self {
-            provider,
-            name: name.into(),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns the bucket name.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-impl<T: serde::de::DeserializeOwned> Bucket<T> {
-    /// Retrieves and deserializes a value by key.
-    pub fn get(&self, key: &str) -> Result<Option<T>, StorageError> {
-        let raw = self.provider.get(&self.name, key)?;
-        match raw {
-            Some(bytes) => {
-                let val: T = serde_json::from_slice(&bytes)
-                    .map_err(|e| StorageError::Serialization(e.to_string()))?;
-                Ok(Some(val))
-            }
-            None => Ok(None),
-        }
-    }
-}
-
-impl<T: serde::Serialize> Bucket<T> {
-    /// Serializes and stores a value by key.
-    pub fn set(&self, key: &str, value: &T) -> Result<(), StorageError> {
-        let bytes =
-            serde_json::to_vec(value).map_err(|e| StorageError::Serialization(e.to_string()))?;
-        self.provider.set(&self.name, key, &bytes)
-    }
-
-    /// Deletes a key from the bucket.
-    pub fn delete(&self, key: &str) -> Result<bool, StorageError> {
-        self.provider.delete(&self.name, key)
-    }
-}
-
-impl Bucket<i64> {
-    /// Atomically increments/decrements an integer balance and returns the new value.
-    pub fn fetch_add(&self, key: &str, delta: i64) -> Result<i64, StorageError> {
-        self.provider.fetch_add(&self.name, key, delta)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::sync::RwLock;
+    use std::sync::{Arc, RwLock};
 
     #[derive(Default)]
     struct MockStorage(RwLock<HashMap<(String, String), Vec<u8>>>);
@@ -213,44 +165,22 @@ mod tests {
         }
     }
 
-    #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-    struct PlayerPref {
-        hud_enabled: bool,
-        chat_color: String,
-    }
-
     #[test]
-    fn test_typed_bucket_lifecycle() {
+    fn test_raw_storage_lifecycle() {
         let mock = Arc::new(MockStorage::default());
-        let bucket = Bucket::<PlayerPref>::new(mock.clone(), "player_prefs");
-
-        let pref = PlayerPref {
-            hud_enabled: true,
-            chat_color: "green".to_string(),
-        };
-
-        bucket.set("STEAM_0:0:12345", &pref).unwrap();
-
-        let retrieved = bucket.get("STEAM_0:0:12345").unwrap();
-        assert_eq!(retrieved, Some(pref));
-
-        let missing = bucket.get("STEAM_0:0:99999").unwrap();
-        assert_eq!(missing, None);
-
-        let deleted = bucket.delete("STEAM_0:0:12345").unwrap();
-        assert!(deleted);
-        assert_eq!(bucket.get("STEAM_0:0:12345").unwrap(), None);
+        mock.set("prefs", "k1", b"hello").unwrap();
+        assert_eq!(mock.get("prefs", "k1").unwrap(), Some(b"hello".to_vec()));
+        assert_eq!(mock.get("prefs", "missing").unwrap(), None);
+        assert!(mock.delete("prefs", "k1").unwrap());
+        assert_eq!(mock.get("prefs", "k1").unwrap(), None);
     }
 
     #[test]
     fn test_atomic_fetch_add() {
         let mock = Arc::new(MockStorage::default());
-        let bank = Bucket::<i64>::new(mock.clone(), "bank");
-
-        let b1 = bank.fetch_add("STEAM_0:0:1", 500).unwrap();
+        let b1 = mock.fetch_add("bank", "STEAM_0:0:1", 500).unwrap();
         assert_eq!(b1, 500);
-
-        let b2 = bank.fetch_add("STEAM_0:0:1", -150).unwrap();
+        let b2 = mock.fetch_add("bank", "STEAM_0:0:1", -150).unwrap();
         assert_eq!(b2, 350);
     }
 }

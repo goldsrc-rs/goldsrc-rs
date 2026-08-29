@@ -540,6 +540,7 @@ dependencies = [
  "log",
  "rusqlite",
  "serde",
+ "serde_json",
  "toml",
 ]
 
@@ -549,8 +550,6 @@ version = "0.10.0"
 dependencies = [
  "goldsrc-sys",
  "serde",
- "serde_json",
- "thiserror",
  "toml",
  "wit-bindgen",
 ]
