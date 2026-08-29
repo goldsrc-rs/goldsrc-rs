@@ -23,7 +23,7 @@ pub type StorageGetCallback = fn(&str, &str) -> Option<Vec<u8>>;
 pub type StorageSetCallback = fn(&str, &str, &[u8]) -> bool;
 pub type StorageDeleteCallback = fn(&str, &str) -> bool;
 pub type StorageFetchAddCallback = fn(&str, &str, i64) -> i64;
-pub type TranslateCallback = fn(&str, &str, &str) -> String;
+pub type TranslateCallback = fn(&str, &str, &str, &str) -> String;
 
 static PRINT_CALLBACK: std::sync::RwLock<Option<PrintCallback>> = std::sync::RwLock::new(None);
 static SHOW_MENU_CALLBACK: std::sync::RwLock<Option<ShowMenuCallback>> =

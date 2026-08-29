@@ -53,8 +53,8 @@ impl HostRuntime {
             },
         );
 
-        goldsrc_wasm_host::set_translate_callback(|dict, lang, key| {
-            crate::i18n::I18nEngine::translate(dict, lang, key, &[], &[])
+        goldsrc_wasm_host::set_translate_callback(|caller, dict, lang, key| {
+            crate::i18n::I18nEngine::translate_with_caller(caller, dict, lang, key, &[], &[])
         });
 
         let mut manager = PluginManager::new(engine.clone())

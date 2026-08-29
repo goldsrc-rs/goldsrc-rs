@@ -469,7 +469,7 @@ impl api::Host for HostState {
     fn host_translate(&mut self, dict: String, lang: String, key: String) -> String {
         if let Ok(lock) = crate::TRANSLATE_CB.read() {
             if let Some(cb) = *lock {
-                return cb(&dict, &lang, &key);
+                return cb(&self.plugin_name, &dict, &lang, &key);
             }
         }
         key
