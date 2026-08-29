@@ -1033,8 +1033,15 @@ mod tests {
 
     #[test]
     fn test_directory_and_file_merge() {
-        let temp_dir =
-            std::env::temp_dir().join(format!("goldsrc_test_lang_{}", std::process::id()));
+        let unique_id = format!(
+            "{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let temp_dir = std::env::temp_dir().join(format!("goldsrc_test_lang_{unique_id}"));
         let admin_dir = temp_dir.join("admin_system");
         let _ = std::fs::create_dir_all(&admin_dir);
 
