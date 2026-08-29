@@ -110,6 +110,14 @@ impl HostRuntime {
 
         // 2. Initialize i18n dictionaries from data/lang/*.toml
         let lang_dir = crate::paths::PathResolver::lang_dir(backend);
+        if !lang_dir.exists() {
+            let _ = std::fs::create_dir_all(&lang_dir);
+        }
+        let sample_lang_file = lang_dir.join("test_i18n.toml");
+        if !sample_lang_file.exists() {
+            let default_template = include_str!("../../../resources/lang/test_i18n.toml");
+            let _ = std::fs::write(&sample_lang_file, default_template);
+        }
         let lang_count = crate::i18n::I18nEngine::load_dir(&lang_dir);
         log::info!(
             target: "i18n",

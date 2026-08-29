@@ -13,6 +13,7 @@ members = [
     "examples/demo_plugins/test_menu",
     "examples/demo_plugins/test_ecs",
     "examples/demo_plugins/admin_system",
+    "examples/demo_plugins/test_i18n",
 ]
 default-members = [
     "core/goldsrc-sys",
