@@ -136,7 +136,15 @@ impl PathResolver {
 
         let rel_path = Self::framework_dir(backend).join(goldsrc_api::consts::DATA_DIR_NAME);
         if let Some(ref base) = exe_dir {
+            // 1. Primary: <exe_dir>/cstrike/addons/goldsrc/data (for Metamod) or <exe_dir>/cstrike/goldsrc/data (for Standalone)
             dirs.push(base.join(&rel_path));
+        }
+
+        // 2. Relative to working directory: cstrike/addons/goldsrc/data
+        dirs.push(rel_path);
+
+        if let Some(ref base) = exe_dir {
+            // 3. Fallback: <exe_dir>/addons/goldsrc/data (without mod dir prefix)
             let mut alt_rel = PathBuf::new();
             if backend == BackendType::Metamod {
                 alt_rel.push(ADDONS_DIR_NAME);
@@ -146,7 +154,6 @@ impl PathResolver {
             dirs.push(base.join(&alt_rel));
         }
 
-        dirs.push(rel_path);
         dirs
     }
 

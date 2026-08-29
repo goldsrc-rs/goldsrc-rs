@@ -79,6 +79,8 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
         "test_ecs",
         "-p",
         "admin_system",
+        "-p",
+        "test_i18n",
     ]
     if release:
         cmd.append("--release")
