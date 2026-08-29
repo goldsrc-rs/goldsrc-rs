@@ -513,6 +513,10 @@ def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
 
 
 def main(argv=None):
+    from .build import resolve_default_backend
+
+    default_backend = resolve_default_backend()
+
     parser = argparse.ArgumentParser(description="Deploy GoldSrc.rs backend and WASM modules")
     parser.add_argument(
         "--path",
@@ -523,8 +527,8 @@ def main(argv=None):
     parser.add_argument(
         "--backend",
         choices=["metamod", "standalone"],
-        default="metamod",
-        help="Backend to deploy (metamod or standalone, default: metamod)",
+        default=default_backend,
+        help=f"Backend to deploy (metamod or standalone, default: {default_backend} from .goldsrc.local.toml)",
     )
     parser.add_argument(
         "--no-build",

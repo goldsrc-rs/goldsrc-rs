@@ -56,32 +56,104 @@ def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc",
     return lib_path
 
 
+def discover_wasm_plugins() -> list[str]:
+    """Dynamically discover all WASM cdylib plugin crates in the workspace."""
+    repo_root = get_repo_root()
+    plugins = []
+
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib
+        except ImportError:
+            tomllib = None
+
+    if not tomllib:
+        # Fallback if tomllib is unavailable: scan examples/demo_plugins/ and plugins/
+        for root, dirs, files in os.walk(repo_root):
+            if "Cargo.toml" in files and ("plugins" in root or "demo_plugins" in root):
+                p = Path(root)
+                if p != repo_root:
+                    plugins.append(p.name)
+        return sorted(list(set(plugins)))
+
+    # Parse root Cargo.toml workspace members
+    root_manifest = repo_root / "Cargo.toml"
+    if root_manifest.exists():
+        data = tomllib.loads(root_manifest.read_text(encoding="utf-8"))
+        members = data.get("workspace", {}).get("members", [])
+        for member in members:
+            member_manifest = repo_root / member / "Cargo.toml"
+            if member_manifest.exists():
+                try:
+                    mdata = tomllib.loads(member_manifest.read_text(encoding="utf-8"))
+                    crate_type = mdata.get("lib", {}).get("crate-type", [])
+                    if "cdylib" in crate_type and ("plugins" in member or "demo_plugins" in member):
+                        pkg_name = mdata.get("package", {}).get("name")
+                        if pkg_name:
+                            plugins.append(pkg_name)
+                except Exception:
+                    pass
+
+    return sorted(list(set(plugins)))
+
+
+def resolve_default_backend() -> str:
+    """Resolve default backend ('metamod' or 'standalone') from .goldsrc.local.toml or environment."""
+    env_backend = os.environ.get("GOLDSRC_BACKEND")
+    if env_backend in ["metamod", "standalone"]:
+        return env_backend
+
+    repo_root = get_repo_root()
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib
+        except ImportError:
+            tomllib = None
+
+    if tomllib:
+        for cfg_name in [".goldsrc.local.toml", ".goldsrc.toml", "goldsrc.local.toml"]:
+            local_config = repo_root / cfg_name
+            if local_config.exists():
+                try:
+                    data = tomllib.loads(local_config.read_text(encoding="utf-8"))
+                    backend = (
+                        data.get("deploy", {}).get("backend")
+                        or data.get("build", {}).get("backend")
+                        or data.get("backend")
+                    )
+                    if backend in ["metamod", "standalone"]:
+                        return backend
+                except Exception:
+                    pass
+
+    return "metamod"
+
+
 def build_wasm_plugins(release: bool = False) -> list[Path]:
     """Build all WASM plugins for wasm32-unknown-unknown."""
     t_start = time.perf_counter()
-    print(f"Building WASM plugins ({'release' if release else 'debug'})...")
     repo_root = get_repo_root()
+    discovered_plugins = discover_wasm_plugins()
+
+    if not discovered_plugins:
+        print("No WASM plugin crates discovered in workspace.")
+        return []
+
+    print(f"Building {len(discovered_plugins)} WASM plugins ({', '.join(discovered_plugins)}) ({'release' if release else 'debug'})...")
 
     cmd = [
         "cargo",
         "build",
         "--target",
         "wasm32-unknown-unknown",
-        "-p",
-        "vip_core",
-        "-p",
-        "vip_menu",
-        "-p",
-        "test_hud",
-        "-p",
-        "test_menu",
-        "-p",
-        "test_ecs",
-        "-p",
-        "admin_system",
-        "-p",
-        "test_i18n",
     ]
+    for p in discovered_plugins:
+        cmd.extend(["-p", p])
+
     if release:
         cmd.append("--release")
 
@@ -130,12 +202,14 @@ def build_wasm_plugins(release: bool = False) -> list[Path]:
 def main(argv=None):
     import argparse
 
+    default_backend = resolve_default_backend()
+
     parser = argparse.ArgumentParser(description="Build GoldSrc.rs backend plugin")
     parser.add_argument(
         "--backend",
         choices=["metamod", "standalone"],
-        default="metamod",
-        help="Backend type to build (default: metamod)",
+        default=default_backend,
+        help=f"Backend type to build (default: {default_backend} from .goldsrc.local.toml)",
     )
     parser.add_argument("--target", default="i686-pc-windows-msvc", help="Build target")
     parser.add_argument("--debug", action="store_true", help="Build in debug mode")
