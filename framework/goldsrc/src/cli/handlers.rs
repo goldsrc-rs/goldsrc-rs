@@ -121,7 +121,7 @@ pub fn handle_list<F: FnMut(&str)>(
 
         for (bundle_name, bundle_plugins) in bundle_groups {
             out(&format!(
-                "  [{}/] ({} plugins)\n",
+                "  [{}] ({} plugins)\n",
                 bundle_name,
                 bundle_plugins.len()
             ));

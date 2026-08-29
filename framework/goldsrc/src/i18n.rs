@@ -65,8 +65,13 @@ impl I18nEngine {
 
     /// Loads all `*.toml` files from the specified `data/lang/` directory.
     pub fn load_dir(lang_dir: impl AsRef<Path>) -> usize {
+        let dir = lang_dir.as_ref();
+        if !dir.exists() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+
         let mut total = 0;
-        if let Ok(entries) = std::fs::read_dir(lang_dir) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_file() && path.extension().is_some_and(|ext| ext == "toml") {
