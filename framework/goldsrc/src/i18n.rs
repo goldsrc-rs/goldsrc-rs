@@ -1,9 +1,14 @@
 //! Lightweight, High-Performance i18n & Localization Dictionary Engine.
 //!
 //! Features:
-//! - Loads dictionary files (`data/lang/*.toml`) into in-memory hash tables (`O(1)` access).
+//! - Loads dictionary files (`data/lang/*.toml`) and modular subdirectories (`data/lang/<dict>/*.toml`).
+//! - Automatic merge and collision resolution for directory-based dictionaries.
+//! - Granular access control policies (`DictAccess::Public`, `DictAccess::Private`, `DictAccess::Shared`).
+//! - Guaranteed immutable Public access for system `common` dictionary with override protection.
+//! - Multi-level fallback resolution:
+//!   - `<dict>.<lang>` -> `<dict>.<fallback>` -> `<dict>.en` -> `common.<lang>` -> `common.<fallback>` -> `common.en` -> `raw_key`.
 //! - Hierarchical TOML schema:
-//!   - `[config]` (e.g. `fallback = "ru"`)
+//!   - `[config]` (e.g. `fallback = "ru"`, `access = "public" | "private" | { type = "shared", allowed = [...] }`)
 //!   - `[templates]` (declarative reusable macro layouts)
 //!   - `[vars]` & `[translations.<lang>.vars]` (scoped string variables & constants)
 //!   - `[translations.<lang>]` (or legacy flat `[ru]`, `[en]`)
@@ -12,19 +17,73 @@
 //!   - `@{t(text)}` / `@{team(text)}` -> Team color (`\x03`)
 //!   - `@{w(text)}` / `@{white(text)}` -> Standard color (`\x01`)
 //!   - `@{tag(text)}` -> `^3[\x04text^3]^1`
-//! - Macro calls: `@{templates.macro_name(param1, key='val')}`
-//! - Variables: `$vars.name`, `$name`, `${name}`
-//! - Runtime placeholders with default values: `{name='Guest'}`, `{0='Unknown'}`
-//! - Automatic Code Page & escape sequence handling.
+//! - Programmatic plugin API (`I18n::register_default`, `I18n::set_access`).
 //! - Fast macro `tr!` for ergonomic translation formatting.
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{LazyLock, RwLock};
 
+/// Access policy for a language dictionary.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum DictAccess {
+    /// Named variant: "public" or "private".
+    Simple(String),
+    /// Structured variant with explicit allowlist: `{ type = "shared", allowed = ["plugin1", "plugin2"] }`.
+    Structured {
+        #[serde(rename = "type")]
+        kind: String,
+        #[serde(default)]
+        allowed: Vec<String>,
+    },
+}
+
+impl Default for DictAccess {
+    fn default() -> Self {
+        Self::Simple("private".to_string())
+    }
+}
+
+impl DictAccess {
+    /// Checks if a caller plugin is permitted to access this dictionary.
+    pub fn is_allowed(&self, dict_name: &str, caller_plugin: &str) -> bool {
+        let clean_dict = dict_name.to_lowercase();
+        let clean_caller = caller_plugin.to_lowercase();
+
+        // 1. System 'common' is always accessible to everyone
+        if clean_dict == "common" {
+            return true;
+        }
+
+        // 2. The owner plugin can always access its own dictionary
+        if clean_dict == clean_caller || clean_caller.is_empty() {
+            return true;
+        }
+
+        match self {
+            Self::Simple(s) => {
+                let lower = s.to_lowercase();
+                lower == "public"
+            }
+            Self::Structured { kind, allowed } => {
+                let lower = kind.to_lowercase();
+                if lower == "public" {
+                    true
+                } else if lower == "shared" {
+                    allowed.iter().any(|p| p.to_lowercase() == clean_caller)
+                } else {
+                    false
+                }
+            }
+        }
+    }
+}
+
 type DictionaryKey = (String, String, String);
 type DictionaryStore = HashMap<DictionaryKey, String>;
 type FallbackStore = HashMap<String, String>;
+type AccessStore = HashMap<String, DictAccess>;
 
 /// Global in-memory dictionary repository: (plugin/dict_name, lang, key) -> template string.
 static DICTIONARIES: LazyLock<RwLock<DictionaryStore>> =
@@ -33,6 +92,9 @@ static DICTIONARIES: LazyLock<RwLock<DictionaryStore>> =
 /// Dictionary-specific fallback languages: dict_name -> fallback_lang.
 static DICT_FALLBACKS: LazyLock<RwLock<FallbackStore>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Dictionary-specific access control policies: dict_name -> DictAccess.
+static DICT_ACCESS: LazyLock<RwLock<AccessStore>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Centralized i18n manager for loading and translating game messages.
 pub struct I18nEngine;
@@ -52,8 +114,17 @@ impl I18nEngine {
         let parsed: toml::Table = toml::from_str(toml_str)
             .map_err(|e| format!("Failed to parse lang TOML for '{dict_name}': {e}"))?;
 
-        let compiled_entries = Compiler::compile(dict_name, &parsed)?;
+        let (compiled_entries, maybe_access) = Compiler::compile(dict_name, &parsed)?;
         let count = compiled_entries.len();
+
+        let clean_dict = dict_name.to_lowercase();
+
+        // Register access policy if defined
+        if let Some(access) = maybe_access {
+            Self::set_access(&clean_dict, access, true);
+        } else if clean_dict == "common" {
+            Self::set_access("common", DictAccess::Simple("public".to_string()), true);
+        }
 
         let mut dict = DICTIONARIES.write().unwrap_or_else(|e| e.into_inner());
         for ((d, l, k), val) in compiled_entries {
@@ -63,7 +134,44 @@ impl I18nEngine {
         Ok(count)
     }
 
-    /// Loads all `*.toml` files from the specified `data/lang/` directory.
+    /// Sets access policy for a dictionary.
+    pub fn set_access(dict_name: &str, access: DictAccess, from_disk_config: bool) {
+        let clean_dict = dict_name.to_lowercase();
+
+        // Guarantee immutable Public status for 'common'
+        if clean_dict == "common" {
+            let is_public = match &access {
+                DictAccess::Simple(s) => s.to_lowercase() == "public",
+                DictAccess::Structured { kind, .. } => kind.to_lowercase() == "public",
+            };
+            if !is_public {
+                log::warn!(
+                    target: "i18n",
+                    "Dictionary 'common' is system-level and cannot be set to non-public access. Ignored, remains 'Public'"
+                );
+            }
+            if let Ok(mut lock) = DICT_ACCESS.write() {
+                lock.insert(
+                    "common".to_string(),
+                    DictAccess::Simple("public".to_string()),
+                );
+            }
+            return;
+        }
+
+        if let Ok(mut lock) = DICT_ACCESS.write() {
+            if from_disk_config && lock.contains_key(&clean_dict) {
+                log::info!(
+                    target: "i18n",
+                    "Dictionary '{clean_dict}' access policy updated by disk config: {:?}",
+                    access
+                );
+            }
+            lock.insert(clean_dict, access);
+        }
+    }
+
+    /// Loads all `*.toml` files and modular directories from the specified `data/lang/` directory.
     pub fn load_dir(lang_dir: impl AsRef<Path>) -> usize {
         let dir = lang_dir.as_ref();
         if !dir.exists() {
@@ -71,25 +179,69 @@ impl I18nEngine {
         }
 
         let mut total = 0;
+        let mut single_files = HashMap::new();
+        let mut subdirs = HashMap::new();
+
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_file() && path.extension().is_some_and(|ext| ext == "toml") {
-                    let dict_name = path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("common");
-                    if let Ok(count) = Self::load_file(dict_name, &path) {
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        single_files.insert(stem.to_string(), path);
+                    }
+                } else if path.is_dir()
+                    && let Some(dir_name) = path.file_name().and_then(|s| s.to_str())
+                {
+                    subdirs.insert(dir_name.to_string(), path);
+                }
+            }
+        }
+
+        // 1. Process single files
+        for (dict_name, file_path) in &single_files {
+            if subdirs.contains_key(dict_name) {
+                log::debug!(
+                    target: "i18n",
+                    "Found both file '{dict_name}.toml' and directory '{dict_name}/'. Merging into dictionary '{dict_name}'."
+                );
+            }
+            if let Ok(count) = Self::load_file(dict_name, file_path) {
+                total += count;
+            }
+        }
+
+        // 2. Process directories (recursive merging)
+        for (dict_name, dir_path) in &subdirs {
+            if let Ok(sub_entries) = std::fs::read_dir(dir_path) {
+                for sub_entry in sub_entries.flatten() {
+                    let sub_path = sub_entry.path();
+                    if sub_path.is_file()
+                        && sub_path.extension().is_some_and(|ext| ext == "toml")
+                        && let Ok(count) = Self::load_file(dict_name, &sub_path)
+                    {
                         total += count;
                     }
                 }
             }
         }
+
         total
     }
 
-    /// Translates a key for the target language, falling back to dict fallback, then "en", then key name.
+    /// Translates a key with caller-based access check, target fallback, and common fallback.
     pub fn translate(
+        dict_name: &str,
+        lang: &str,
+        key: &str,
+        named_args: &[(&str, &str)],
+        pos_args: &[&str],
+    ) -> String {
+        Self::translate_with_caller("", dict_name, lang, key, named_args, pos_args)
+    }
+
+    /// Translates a key with explicit caller plugin verification.
+    pub fn translate_with_caller(
+        caller_plugin: &str,
         dict_name: &str,
         lang: &str,
         key: &str,
@@ -98,6 +250,7 @@ impl I18nEngine {
     ) -> String {
         #[cfg(target_arch = "wasm32")]
         {
+            let _ = caller_plugin;
             let raw =
                 goldsrc_api::bindings::goldsrc::engine::api::host_translate(dict_name, lang, key);
             Self::format_placeholders(&raw, named_args, pos_args)
@@ -107,6 +260,23 @@ impl I18nEngine {
             let dict_key = dict_name.to_lowercase();
             let lang_key = lang.to_lowercase();
 
+            // 1. Access Control Check
+            let is_allowed = {
+                let access_lock = DICT_ACCESS.read().unwrap_or_else(|e| e.into_inner());
+                let access = access_lock.get(&dict_key).cloned().unwrap_or_default();
+                access.is_allowed(&dict_key, caller_plugin)
+            };
+
+            if !is_allowed {
+                log::warn!(
+                    target: "i18n",
+                    "Access denied: plugin '{caller_plugin}' attempted to access private dictionary '{dict_name}'"
+                );
+                // Fallback to 'common' dictionary
+                return Self::lookup_common(&lang_key, key, named_args, pos_args);
+            }
+
+            // 2. Lookup in Target Dictionary
             let fallback_lang = {
                 let fallbacks = DICT_FALLBACKS.read().unwrap_or_else(|e| e.into_inner());
                 fallbacks
@@ -117,10 +287,9 @@ impl I18nEngine {
 
             let dict = DICTIONARIES.read().unwrap_or_else(|e| e.into_inner());
 
-            // 1. Try specified language
+            // Priority: target.lang -> target.dict_fallback -> target.en
             let template = dict
-                .get(&(dict_key.clone(), lang_key, key.to_string()))
-                // 2. Try dictionary-specific fallback language
+                .get(&(dict_key.clone(), lang_key.clone(), key.to_string()))
                 .or_else(|| {
                     dict.get(&(
                         dict_key.clone(),
@@ -128,13 +297,57 @@ impl I18nEngine {
                         key.to_string(),
                     ))
                 })
-                // 3. Fallback to English ("en")
-                .or_else(|| dict.get(&(dict_key, "en".to_string(), key.to_string())))
+                .or_else(|| dict.get(&(dict_key.clone(), "en".to_string(), key.to_string())))
                 .cloned();
 
-            let raw = template.unwrap_or_else(|| key.to_string());
-            Self::format_placeholders(&raw, named_args, pos_args)
+            drop(dict);
+
+            if let Some(raw) = template {
+                return Self::format_placeholders(&raw, named_args, pos_args);
+            }
+
+            // 3. Fallback to 'common' dictionary if not found in target
+            if dict_key != "common" {
+                return Self::lookup_common(&lang_key, key, named_args, pos_args);
+            }
+
+            // 4. Final raw key fallback
+            Self::format_placeholders(key, named_args, pos_args)
         }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn lookup_common(
+        lang_key: &str,
+        key: &str,
+        named_args: &[(&str, &str)],
+        pos_args: &[&str],
+    ) -> String {
+        let dict = DICTIONARIES.read().unwrap_or_else(|e| e.into_inner());
+        let common_key = "common".to_string();
+
+        let common_fallback = {
+            let fallbacks = DICT_FALLBACKS.read().unwrap_or_else(|e| e.into_inner());
+            fallbacks
+                .get(&common_key)
+                .cloned()
+                .unwrap_or_else(|| "en".to_string())
+        };
+
+        let template = dict
+            .get(&(common_key.clone(), lang_key.to_string(), key.to_string()))
+            .or_else(|| {
+                dict.get(&(
+                    common_key.clone(),
+                    common_fallback.to_lowercase(),
+                    key.to_string(),
+                ))
+            })
+            .or_else(|| dict.get(&(common_key, "en".to_string(), key.to_string())))
+            .cloned();
+
+        let raw = template.unwrap_or_else(|| key.to_string());
+        Self::format_placeholders(&raw, named_args, pos_args)
     }
 
     /// Replaces `{name}`, `{name='default'}`, `{0}`, and `{0='default'}` placeholders in string.
@@ -227,6 +440,9 @@ impl I18nEngine {
         if let Ok(mut fallbacks) = DICT_FALLBACKS.write() {
             fallbacks.clear();
         }
+        if let Ok(mut access) = DICT_ACCESS.write() {
+            access.clear();
+        }
     }
 }
 
@@ -241,19 +457,26 @@ impl<'a> Compiler<'a> {
     fn compile(
         dict_name: &'a str,
         table: &toml::Table,
-    ) -> Result<HashMap<DictionaryKey, String>, String> {
+    ) -> Result<(HashMap<DictionaryKey, String>, Option<DictAccess>), String> {
         let mut compiler = Self {
             dict_name,
             global_vars: HashMap::new(),
             global_templates: HashMap::new(),
         };
 
+        let mut parsed_access = None;
+
         // 1. Parse [config]
-        if let Some(toml::Value::Table(cfg)) = table.get("config")
-            && let Some(toml::Value::String(fb)) = cfg.get("fallback")
-        {
-            let mut fallbacks = DICT_FALLBACKS.write().unwrap_or_else(|e| e.into_inner());
-            fallbacks.insert(dict_name.to_lowercase(), fb.clone());
+        if let Some(toml::Value::Table(cfg)) = table.get("config") {
+            if let Some(toml::Value::String(fb)) = cfg.get("fallback") {
+                let mut fallbacks = DICT_FALLBACKS.write().unwrap_or_else(|e| e.into_inner());
+                fallbacks.insert(dict_name.to_lowercase(), fb.clone());
+            }
+            if let Some(acc_val) = cfg.get("access")
+                && let Ok(access) = acc_val.clone().try_into::<DictAccess>()
+            {
+                parsed_access = Some(access);
+            }
         }
 
         // 2. Parse [templates]
@@ -307,7 +530,7 @@ impl<'a> Compiler<'a> {
             }
         }
 
-        Ok(output)
+        Ok((output, parsed_access))
     }
 
     #[allow(clippy::type_complexity)]
@@ -743,5 +966,126 @@ mod tests {
         // 4. Test fallback to config.fallback ("ru") when asking for German
         let de_title = I18nEngine::translate("vip_menu", "de", "menu_title", &[], &[]);
         assert_eq!(de_title, "^3[\x04VIP System^3]^1 Выберите комплект:");
+    }
+
+    #[test]
+    fn test_access_control_and_common_fallback() {
+        let common_toml = r#"
+            [translations.ru]
+            btn_yes = "Да"
+            btn_no = "Нет"
+            btn_back = "Назад"
+        "#;
+
+        let vip_toml = r#"
+            [config]
+            access = { type = "shared", allowed = ["vip_menu", "vip_chat"] }
+
+            [translations.ru]
+            tag = "[VIP Core]"
+        "#;
+
+        let secret_toml = r#"
+            [config]
+            access = "private"
+
+            [translations.ru]
+            password = "SecretPassword123"
+        "#;
+
+        I18nEngine::clear();
+        I18nEngine::load_toml_string("common", common_toml).unwrap();
+        I18nEngine::load_toml_string("vip_core", vip_toml).unwrap();
+        I18nEngine::load_toml_string("secret_system", secret_toml).unwrap();
+
+        // 1. Owner can access its own private/shared dictionary
+        let owner_tag =
+            I18nEngine::translate_with_caller("vip_core", "vip_core", "ru", "tag", &[], &[]);
+        assert_eq!(owner_tag, "[VIP Core]");
+
+        // 2. Shared plugin can access shared dictionary
+        let shared_tag =
+            I18nEngine::translate_with_caller("vip_menu", "vip_core", "ru", "tag", &[], &[]);
+        assert_eq!(shared_tag, "[VIP Core]");
+
+        // 3. Unauthorized plugin is denied and falls back to common (or raw key)
+        let denied = I18nEngine::translate_with_caller(
+            "random_plugin",
+            "secret_system",
+            "ru",
+            "password",
+            &[],
+            &[],
+        );
+        assert_eq!(denied, "password"); // Key not in common, returns raw key
+
+        // 4. Any plugin can access common phrases even when calling another dict that lacks the key
+        let common_btn =
+            I18nEngine::translate_with_caller("vip_menu", "vip_core", "ru", "btn_yes", &[], &[]);
+        assert_eq!(common_btn, "Да");
+
+        // 5. Common dictionary cannot be locked down to private
+        I18nEngine::set_access("common", DictAccess::Simple("private".to_string()), true);
+        let common_allowed =
+            I18nEngine::translate_with_caller("any_plugin", "common", "ru", "btn_back", &[], &[]);
+        assert_eq!(common_allowed, "Назад");
+    }
+
+    #[test]
+    fn test_directory_and_file_merge() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("goldsrc_test_lang_{}", std::process::id()));
+        let admin_dir = temp_dir.join("admin_system");
+        let _ = std::fs::create_dir_all(&admin_dir);
+
+        let root_file = temp_dir.join("admin_system.toml");
+        let root_content = r#"
+            [translations.ru]
+            title = "Панель управления"
+            cmd_kick = "Кикнуть игрока"
+        "#;
+        std::fs::write(&root_file, root_content).unwrap();
+
+        let sub_file = admin_dir.join("bans.toml");
+        let sub_content = r#"
+            [translations.ru]
+            cmd_ban = "Забанить игрока"
+        "#;
+        std::fs::write(&sub_file, sub_content).unwrap();
+
+        I18nEngine::clear();
+        let count = I18nEngine::load_dir(&temp_dir);
+        assert_eq!(count, 3);
+
+        let title = I18nEngine::translate_with_caller(
+            "admin_system",
+            "admin_system",
+            "ru",
+            "title",
+            &[],
+            &[],
+        );
+        let kick = I18nEngine::translate_with_caller(
+            "admin_system",
+            "admin_system",
+            "ru",
+            "cmd_kick",
+            &[],
+            &[],
+        );
+        let ban = I18nEngine::translate_with_caller(
+            "admin_system",
+            "admin_system",
+            "ru",
+            "cmd_ban",
+            &[],
+            &[],
+        );
+
+        assert_eq!(title, "Панель управления");
+        assert_eq!(kick, "Кикнуть игрока");
+        assert_eq!(ban, "Забанить игрока");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
