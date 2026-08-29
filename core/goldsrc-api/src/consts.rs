@@ -48,6 +48,18 @@ pub const CONFIGS_DIR_NAME: &str = "configs";
 /// Standard logs directory name.
 pub const LOGS_DIR_NAME: &str = "logs";
 
+/// Standard data directory name.
+pub const DATA_DIR_NAME: &str = "data";
+
+/// Standard localization dictionaries directory name within data.
+pub const LANG_DIR_NAME: &str = "lang";
+
+/// Standard database directory name within data.
+pub const DB_DIR_NAME: &str = "db";
+
+/// Default SQLite database filename.
+pub const DEFAULT_DB_FILE_NAME: &str = "goldsrc.db";
+
 /// Standard hosts directory name.
 pub const HOSTS_DIR_NAME: &str = "hosts";
 

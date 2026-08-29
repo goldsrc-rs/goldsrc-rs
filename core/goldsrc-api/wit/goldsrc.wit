@@ -158,6 +158,25 @@ interface api {
 
     /// Revokes a capability from a player dynamically.
     host-revoke-capability: func(player-index: s32, name: string) -> bool;
+
+    /// --- Storage & State API ---
+
+    /// Gets a binary blob from the named bucket by key.
+    host-storage-get: func(bucket: string, key: string) -> option<list<u8>>;
+
+    /// Stores a binary blob into the named bucket by key.
+    host-storage-set: func(bucket: string, key: string, val: list<u8>) -> bool;
+
+    /// Deletes a key from the named bucket.
+    host-storage-delete: func(bucket: string, key: string) -> bool;
+
+    /// Atomically increments/decrements a 64-bit integer in the named bucket.
+    host-storage-fetch-add: func(bucket: string, key: string, delta: s64) -> s64;
+
+    /// --- Localization (i18n) API ---
+
+    /// Translates a dictionary key for the target player or server language.
+    host-translate: func(dict: string, lang: string, key: string) -> string;
 }
 
 world goldsrc-plugin {

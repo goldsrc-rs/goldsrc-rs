@@ -127,6 +127,56 @@ impl PathResolver {
             .unwrap_or_else(|| Self::framework_dir(backend).join(LOGS_DIR_NAME))
     }
 
+    /// Returns possible data directory paths in order of preference.
+    pub fn data_dirs(backend: BackendType) -> Vec<PathBuf> {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+        let mut dirs = Vec::new();
+
+        let rel_path = Self::framework_dir(backend).join(goldsrc_api::consts::DATA_DIR_NAME);
+        if let Some(ref base) = exe_dir {
+            dirs.push(base.join(&rel_path));
+            let mut alt_rel = PathBuf::new();
+            if backend == BackendType::Metamod {
+                alt_rel.push(ADDONS_DIR_NAME);
+            }
+            alt_rel.push(FRAMEWORK_NAME);
+            alt_rel.push(goldsrc_api::consts::DATA_DIR_NAME);
+            dirs.push(base.join(&alt_rel));
+        }
+
+        dirs.push(rel_path);
+        dirs
+    }
+
+    /// Returns the first existing data directory, or the primary default path.
+    pub fn existing_data_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::data_dirs(backend) {
+            if dir.exists() {
+                return dir;
+            }
+        }
+        Self::data_dirs(backend)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| {
+                Self::framework_dir(backend).join(goldsrc_api::consts::DATA_DIR_NAME)
+            })
+    }
+
+    /// Returns the primary localization directory (`data/lang`).
+    pub fn lang_dir(backend: BackendType) -> PathBuf {
+        Self::existing_data_dir(backend).join(goldsrc_api::consts::LANG_DIR_NAME)
+    }
+
+    /// Returns the primary SQLite database path (`data/db/goldsrc.db`).
+    pub fn db_path(backend: BackendType) -> PathBuf {
+        Self::existing_data_dir(backend)
+            .join(goldsrc_api::consts::DB_DIR_NAME)
+            .join(goldsrc_api::consts::DEFAULT_DB_FILE_NAME)
+    }
+
     /// Returns the path to goldsrc.toml.
     pub fn main_config_path(backend: BackendType) -> PathBuf {
         let exe_dir = std::env::current_exe()

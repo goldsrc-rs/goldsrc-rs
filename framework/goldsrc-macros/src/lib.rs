@@ -1007,6 +1007,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             fn on_load() {
+                ::goldsrc::init_guest_logger();
                 #on_load_fn
             }
 
