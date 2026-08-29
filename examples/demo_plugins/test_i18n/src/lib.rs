@@ -1,0 +1,68 @@
+use goldsrc::prelude::*;
+
+pub struct TestI18n;
+
+#[plugin(
+    name = "test_i18n",
+    version = "0.14.0",
+    author = "GoldSrc.rs Team",
+    description = "Multilingual i18n & Localization verification plugin for GoldSrc.rs",
+    url = "https://github.com/goldsrc-rs/goldsrc-rs"
+)]
+impl TestI18n {
+    #[on_load]
+    fn init() {
+        log_info!("[test_i18n] Localization verification plugin v0.14.0 loaded.");
+    }
+
+    /// Sends localized multi-language messages to a player.
+    /// Usage: `test_lang <player_index> <ru|en|es|de>`
+    #[command(
+        name = "test_lang",
+        aliases = ["langtest", "/lang", "!lang"],
+        description = "Tests dictionary translations in ru, en, es, de languages",
+        usage = "test_lang <player_index> <lang_code>"
+    )]
+    fn test_language(target: Player, lang: String) {
+        let lang_code = lang.to_lowercase();
+        let target_idx = target.index();
+        let player_name = target
+            .name()
+            .unwrap_or_else(|| format!("Player#{target_idx}"));
+
+        // 1. Format welcome message using tr! macro with named placeholder
+        let welcome = tr!("test_i18n", &lang_code, "welcome_msg", name = player_name);
+
+        // 2. Format reward message using tr! macro with multiple parameters
+        let reward = tr!(
+            "test_i18n",
+            &lang_code,
+            "reward_claimed",
+            amount = 5000,
+            xp = 250
+        );
+
+        // 3. Format admin alert
+        let alert = tr!(
+            "test_i18n",
+            &lang_code,
+            "admin_alert",
+            admin = "ServerAdmin",
+            map = "de_dust2"
+        );
+
+        // Send messages to client
+        target.print_chat(&welcome);
+        target.print_chat(&reward);
+        target.print_chat(&alert);
+
+        log_info!(
+            "[test_i18n] Dispatched '{}' messages to player #{}:\n  {}\n  {}\n  {}",
+            lang_code,
+            target_idx,
+            welcome,
+            reward,
+            alert
+        );
+    }
+}
