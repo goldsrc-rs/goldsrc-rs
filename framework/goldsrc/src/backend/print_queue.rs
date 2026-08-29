@@ -1,0 +1,100 @@
+//! Deferred server-print queue and safe formatting utilities.
+
+/// Deferred server-print queue.
+///
+/// Printing is deferred to the post-start-frame hook because the engine is
+/// unstable if a plugin prints mid-frame. Also escapes fmtlib-sensitive
+/// characters (`%`, `{`, `}`) — ReHLDS routes `ServerPrint` through fmtlib
+/// and unescaped braces would crash the server.
+pub struct PrintQueue(std::sync::Mutex<std::collections::VecDeque<String>>);
+
+/// Helper to escape format specifiers and braces for ReHLDS fmtlib safety.
+///
+/// Strips NUL bytes, escapes `%` → `%%`, `{`/`}` → `{{`/`}}`, CR/LF stripped, lines trimmed to 400 chars.
+pub fn escape_server_print(message: &str) -> String {
+    let safe = message
+        .replace('\0', "")
+        .replace('%', "%%")
+        .replace('{', "{{")
+        .replace('}', "}}")
+        .replace('\r', "")
+        .replace('\n', " ");
+    let mut end = safe.len().min(400);
+    while end > 0 && !safe.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}\n", safe[..end].trim_end())
+}
+
+/// Helper to sanitize console/center/chat prints with CP1251 encoding for Cyrillic GoldSrc client support.
+pub fn sanitize_client_print(message: &str) -> Vec<u8> {
+    let cp1251_bytes = goldsrc_api::utf8_to_cp1251(message);
+    let mut out = Vec::with_capacity(cp1251_bytes.len() + 1);
+    for &b in &cp1251_bytes {
+        if b == 0 {
+            continue;
+        }
+        if b == b'%' {
+            out.push(b'%');
+            out.push(b'%');
+        } else {
+            out.push(b);
+        }
+    }
+    out.push(0); // NUL terminator
+    out
+}
+
+/// Converts an engine-provided C string pointer to an owned `String`
+/// (empty on null). Lossy UTF-8, matching engine console semantics.
+///
+/// # Safety
+/// `ptr` must be null or point to a valid NUL-terminated UTF-8 C string.
+pub unsafe fn cstr_to_string(ptr: *const std::ffi::c_char) -> String {
+    if ptr.is_null() {
+        String::new()
+    } else {
+        // SAFETY: caller guarantees validity.
+        unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+    }
+}
+
+impl Default for PrintQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PrintQueue {
+    /// Create an empty print queue.
+    pub const fn new() -> Self {
+        Self(std::sync::Mutex::new(std::collections::VecDeque::new()))
+    }
+
+    /// Add a message to the back of the queue.
+    pub fn push(&self, message: &str) {
+        let mut queue = match self.0.lock() {
+            Ok(q) => q,
+            Err(e) => e.into_inner(),
+        };
+        queue.push_back(message.to_string());
+    }
+
+    /// Take all pending messages, escaping fmtlib-sensitive characters.
+    pub fn drain(&self) -> Vec<String> {
+        let messages = {
+            let mut queue = match self.0.lock() {
+                Ok(q) => q,
+                Err(e) => e.into_inner(),
+            };
+            if queue.is_empty() {
+                return Vec::new();
+            }
+            std::mem::take(&mut *queue)
+        };
+        messages
+            .into_iter()
+            .map(|message| escape_server_print(&message))
+            .collect()
+    }
+}

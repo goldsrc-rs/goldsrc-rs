@@ -8,14 +8,17 @@ description = "Public framework (SDK) for GoldSrc.rs plugin developers"
 [dependencies]
 goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true, features = ["unsafe-sys"] }
-goldsrc-wasm-host = { workspace = true, optional = true }
 goldsrc-macros = { workspace = true }
 lexopt = { workspace = true, optional = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 toml = { workspace = true }
 log = { workspace = true }
+rusqlite = { workspace = true, optional = true }
+crossbeam-channel = { workspace = true, optional = true }
+goldsrc-wasm-host = { workspace = true, optional = true }
 
 [features]
 # Enable the host-side management runtime and CLI.
-host = ["goldsrc-wasm-host"]
+host = ["goldsrc-wasm-host", "rusqlite", "crossbeam-channel"]
 host-cli = ["host", "lexopt"]

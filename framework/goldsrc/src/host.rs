@@ -1,4 +1,5 @@
 use crate::{HostConfig, paths::PathResolver};
+use goldsrc_api::StorageProvider;
 use goldsrc_api::consts::BackendType;
 use goldsrc_wasm_host::PluginManager;
 use goldsrc_wasm_host::error::HostError;
@@ -6,6 +7,7 @@ use goldsrc_wasm_host::error::HostError;
 pub struct HostRuntime {
     manager: PluginManager,
     engine: std::sync::Arc<dyn goldsrc_api::Engine>,
+    pub storage: std::sync::Arc<crate::storage::SqliteStorageEngine>,
     pub plugins_config: crate::plugins_config::PluginsConfig,
     pub paused_plugins: std::collections::HashMap<String, bool>,
     pub current_map: String,
@@ -16,7 +18,7 @@ use std::sync::{Mutex, OnceLock};
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 
 impl HostRuntime {
-    /// Initialize the host runtime, logger, configuration and hot reload watchers.
+    /// Initialize the host runtime, logger, configuration, storage, i18n and hot reload watchers.
     ///
     /// `engine` is the backend's [`goldsrc_api::Engine`] bridge — it gives
     /// WASM plugins access to the real game state. Call once at backend init.
@@ -31,6 +33,29 @@ impl HostRuntime {
         };
         goldsrc_wasm_host::set_print_callback(print_cb);
         goldsrc_wasm_host::set_show_menu_callback(|_player_idx, _keys_mask, _timeout, _text| {});
+
+        goldsrc_wasm_host::set_storage_callbacks(
+            |bucket, key| HostRuntime::storage().and_then(|s| s.get(bucket, key).ok().flatten()),
+            |bucket, key, val| {
+                HostRuntime::storage()
+                    .map(|s| s.set(bucket, key, val).is_ok())
+                    .unwrap_or(false)
+            },
+            |bucket, key| {
+                HostRuntime::storage()
+                    .map(|s| s.delete(bucket, key).unwrap_or(false))
+                    .unwrap_or(false)
+            },
+            |bucket, key, delta| {
+                HostRuntime::storage()
+                    .and_then(|s| s.fetch_add(bucket, key, delta).ok())
+                    .unwrap_or(0)
+            },
+        );
+
+        goldsrc_wasm_host::set_translate_callback(|dict, lang, key| {
+            crate::i18n::I18nEngine::translate(dict, lang, key, &[], &[])
+        });
 
         let mut manager = PluginManager::new(engine.clone())
             .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
@@ -60,6 +85,36 @@ impl HostRuntime {
             target: "core",
             "Config loaded from: \"{}\"",
             PathResolver::normalize(&main_cfg_path)
+        );
+
+        // 1. Initialize SQLite WAL Storage Engine in data/db/goldsrc.db
+        let db_path = crate::paths::PathResolver::db_path(backend);
+        let storage = match crate::storage::SqliteStorageEngine::open(&db_path) {
+            Ok(s) => {
+                log::info!(
+                    target: "storage",
+                    "SQLite WAL Storage Engine initialized at \"{}\"",
+                    PathResolver::normalize(&db_path)
+                );
+                s
+            }
+            Err(e) => {
+                log::error!(
+                    target: "storage",
+                    "Failed to initialize SQLite Storage Engine at \"{}\": {e}",
+                    PathResolver::normalize(&db_path)
+                );
+                return Err(HostError::Manager(format!("Storage init failed: {e}")));
+            }
+        };
+
+        // 2. Initialize i18n dictionaries from data/lang/*.toml
+        let lang_dir = crate::paths::PathResolver::lang_dir(backend);
+        let lang_count = crate::i18n::I18nEngine::load_dir(&lang_dir);
+        log::info!(
+            target: "i18n",
+            "Loaded {lang_count} localization entries from \"{}\"",
+            PathResolver::normalize(&lang_dir)
         );
 
         // Try to enable hot-reload watcher if enabled in config
@@ -103,12 +158,9 @@ impl HostRuntime {
                     if path.is_dir() {
                         discover_wasm_plugins(&path, base_dir, out);
                     } else if path.extension().is_some_and(|ext| ext == "wasm")
-                        && let Ok(rel_path) = path.strip_prefix(base_dir)
+                        && let Ok(rel) = path.strip_prefix(base_dir)
                     {
-                        let rel_str = rel_path
-                            .with_extension("")
-                            .to_string_lossy()
-                            .replace('\\', "/");
+                        let rel_str = rel.with_extension("").to_string_lossy().replace('\\', "/");
                         out.push((rel_str, path));
                     }
                 }
@@ -161,6 +213,7 @@ impl HostRuntime {
         let runtime = Self {
             manager,
             engine,
+            storage,
             plugins_config,
             paused_plugins,
             current_map: String::new(),
@@ -196,10 +249,18 @@ impl HostRuntime {
         }
     }
 
-    /// Clears temporary rule pause overrides on map change.
+    /// Returns a reference to the shared SQLite Storage Engine.
+    pub fn storage() -> Option<std::sync::Arc<crate::storage::SqliteStorageEngine>> {
+        RUNTIME
+            .get()
+            .and_then(|lock| lock.lock().ok().map(|g| g.storage.clone()))
+    }
+
+    /// Clears temporary rule pause overrides and flushes storage on map change.
     pub fn on_map_change() {
         if let Some(lock) = RUNTIME.get() {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = guard.storage.flush();
             guard.paused_plugins.clear();
             guard.current_map.clear();
         }

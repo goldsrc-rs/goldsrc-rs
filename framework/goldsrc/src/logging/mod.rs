@@ -1,21 +1,7 @@
-//! Unified structured logger for GoldSrc.rs backends.
-//!
-//! # Architecture
-//! The logger is a global singleton (`OnceLock<Mutex<GsLogger>>`) that is
-//! initialised once at server startup by the active backend.  Both backends
-//! share the same implementation via this crate.
-//!
-//! # Usage
-//! ```ignore
-//! // In the backend entry point, after the engine is ready:
-//! goldsrc::logging::init(config.logging.clone(), move |msg| {
-//!     engine.server_print(msg);
-//! });
-//!
-//! // Anywhere in the codebase:
-//! use goldsrc::logging::{LogLevel, LogTarget};
-//! goldsrc_sys::gslog!(LogLevel::Info, LogTarget::Core, "Plugin count: {}", n);
-//! ```
+//! Unified structured logger for GoldSrc.rs backends and transparent WASM guest logger.
+
+pub mod guest;
+pub use guest::init_guest_logger;
 
 use crate::paths::{BackendType, PathResolver};
 use serde::{Deserialize, Serialize};
