@@ -402,19 +402,41 @@ impl StorageProvider for SqliteStorageEngine {
     }
 }
 
-/// Strongly-typed Key-Value Bucket facade for plugins (framework layer).
-///
-/// Wraps a [`StorageProvider`] with JSON serialization. Lives in `framework`
-/// so `core/goldsrc-api` stays `&[u8]`-only and does not impose a format.
-#[derive(Clone)]
-pub struct Bucket<T> {
-    provider: Arc<dyn StorageProvider>,
-    name: String,
-    _marker: PhantomData<T>,
+/// Policy trait for serializing and deserializing bucket data.
+pub trait StorageFormat {
+    /// Serializes a value into byte representation.
+    fn encode<T: serde::Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, StorageError>;
+    /// Deserializes a value from byte representation.
+    fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, StorageError>;
 }
 
-impl<T> Bucket<T> {
-    /// Creates a new typed bucket handle.
+/// Standard human-readable JSON serialization format (default policy).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct JsonFormat;
+
+impl StorageFormat for JsonFormat {
+    fn encode<T: serde::Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, StorageError> {
+        serde_json::to_vec(value).map_err(|e| StorageError::Serialization(e.to_string()))
+    }
+
+    fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, StorageError> {
+        serde_json::from_slice(bytes).map_err(|e| StorageError::Serialization(e.to_string()))
+    }
+}
+
+/// Strongly-typed Key-Value Bucket facade for plugins (framework layer).
+///
+/// Wraps a [`StorageProvider`] with customizable [`StorageFormat`] policy (default: [`JsonFormat`]).
+/// Lives in `framework` so `core/goldsrc-api` stays `&[u8]`-only and does not impose a format.
+#[derive(Clone)]
+pub struct Bucket<T, F: StorageFormat = JsonFormat> {
+    provider: Arc<dyn StorageProvider>,
+    name: String,
+    _marker: PhantomData<(T, F)>,
+}
+
+impl<T, F: StorageFormat> Bucket<T, F> {
+    /// Creates a new typed bucket handle with the specified format policy.
     pub fn new<S: Into<String>>(provider: Arc<dyn StorageProvider>, name: S) -> Self {
         Self {
             provider,
@@ -429,14 +451,13 @@ impl<T> Bucket<T> {
     }
 }
 
-impl<T: serde::de::DeserializeOwned> Bucket<T> {
-    /// Retrieves and deserializes a value by key.
+impl<T: serde::de::DeserializeOwned, F: StorageFormat> Bucket<T, F> {
+    /// Retrieves and deserializes a value by key using the configured [`StorageFormat`].
     pub fn get(&self, key: &str) -> Result<Option<T>, StorageError> {
         let raw = self.provider.get(&self.name, key)?;
         match raw {
             Some(bytes) => {
-                let val: T = serde_json::from_slice(&bytes)
-                    .map_err(|e| StorageError::Serialization(e.to_string()))?;
+                let val: T = F::decode(&bytes)?;
                 Ok(Some(val))
             }
             None => Ok(None),
@@ -444,11 +465,10 @@ impl<T: serde::de::DeserializeOwned> Bucket<T> {
     }
 }
 
-impl<T: serde::Serialize> Bucket<T> {
-    /// Serializes and stores a value by key.
+impl<T: serde::Serialize, F: StorageFormat> Bucket<T, F> {
+    /// Serializes and stores a value by key using the configured [`StorageFormat`].
     pub fn set(&self, key: &str, value: &T) -> Result<(), StorageError> {
-        let bytes =
-            serde_json::to_vec(value).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bytes = F::encode(value)?;
         self.provider.set(&self.name, key, &bytes)
     }
 
@@ -458,7 +478,7 @@ impl<T: serde::Serialize> Bucket<T> {
     }
 }
 
-impl Bucket<i64> {
+impl<F: StorageFormat> Bucket<i64, F> {
     /// Atomically increments/decrements an integer balance and returns the new value.
     pub fn fetch_add(&self, key: &str, delta: i64) -> Result<i64, StorageError> {
         self.provider.fetch_add(&self.name, key, delta)
@@ -496,6 +516,23 @@ mod tests {
         // 5. Delete
         engine.delete("vip_menu", "STEAM_0:0:1").unwrap();
         assert_eq!(engine.get("vip_menu", "STEAM_0:0:1").unwrap(), None);
+
+        // 6. Test Bucket with custom format policy
+        #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+        struct PlayerProfile {
+            name: String,
+            level: u32,
+        }
+
+        let bucket = Bucket::<PlayerProfile, JsonFormat>::new(engine, "profiles");
+        let profile = PlayerProfile {
+            name: "Player1".to_string(),
+            level: 42,
+        };
+
+        bucket.set("STEAM_0:0:1", &profile).unwrap();
+        let loaded = bucket.get("STEAM_0:0:1").unwrap();
+        assert_eq!(loaded, Some(profile));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
