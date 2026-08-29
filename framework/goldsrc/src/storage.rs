@@ -465,7 +465,7 @@ impl Bucket<i64> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "host"))]
 mod tests {
     use super::*;
 

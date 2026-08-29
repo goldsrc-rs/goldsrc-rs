@@ -1,147 +1,10 @@
-//! Shared backend plumbing: engine access, deferred print queue and
-//! engfunc-call macros. Both Metamod and Standalone backends are thin
-//! adapters over this module (enabled by the `host` feature).
+//! Engine function table bridge implementing `goldsrc_api::Engine`.
 
+use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
+use crate::{call_engfunc, call_engfunc_ret};
 use goldsrc_sys::enginefuncs_t;
 
-/// Invokes an optional engfunc pointer with no arguments.
-#[macro_export]
-macro_rules! call_engfunc {
-    ($func:expr) => {
-        if let Some(f) = $func {
-            f();
-        }
-    };
-    ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*);
-        }
-    };
-}
-
-/// Invokes an optional engfunc pointer and returns its result, or
-/// `Default::default()` if the pointer is unset.
-#[macro_export]
-macro_rules! call_engfunc_ret {
-    ($func:expr) => {
-        if let Some(f) = $func {
-            f()
-        } else {
-            Default::default()
-        }
-    };
-    ($func:expr, $($arg:expr),*) => {
-        if let Some(f) = $func {
-            f($($arg),*)
-        } else {
-            Default::default()
-        }
-    };
-}
-
-/// Deferred server-print queue.
-///
-/// Printing is deferred to the post-start-frame hook because the engine is
-/// unstable if a plugin prints mid-frame. Also escapes fmtlib-sensitive
-/// characters (`%`, `{`, `}`) — ReHLDS routes `ServerPrint` through fmtlib
-/// and unescaped braces would crash the server.
-pub struct PrintQueue(std::sync::Mutex<std::collections::VecDeque<String>>);
-
-/// Helper to escape format specifiers and braces for ReHLDS fmtlib safety.
-///
-/// Strips NUL bytes, escapes `%` → `%%`, `{`/`}` → `{{`/`}}`, CR/LF stripped, lines trimmed to 400 chars.
-pub fn escape_server_print(message: &str) -> String {
-    let safe = message
-        .replace('\0', "")
-        .replace('%', "%%")
-        .replace('{', "{{")
-        .replace('}', "}}")
-        .replace('\r', "")
-        .replace('\n', " ");
-    let mut end = safe.len().min(400);
-    while end > 0 && !safe.is_char_boundary(end) {
-        end -= 1;
-    }
-    format!("{}\n", safe[..end].trim_end())
-}
-
-/// Helper to sanitize console/center/chat prints with CP1251 encoding for Cyrillic GoldSrc client support.
-pub fn sanitize_client_print(message: &str) -> Vec<u8> {
-    let cp1251_bytes = goldsrc_api::utf8_to_cp1251(message);
-    let mut out = Vec::with_capacity(cp1251_bytes.len() + 1);
-    for &b in &cp1251_bytes {
-        if b == 0 {
-            continue;
-        }
-        if b == b'%' {
-            out.push(b'%');
-            out.push(b'%');
-        } else {
-            out.push(b);
-        }
-    }
-    out.push(0); // NUL terminator
-    out
-}
-
-/// Converts an engine-provided C string pointer to an owned `String`
-/// (empty on null). Lossy UTF-8, matching engine console semantics.
-///
-/// # Safety
-/// `ptr` must be null or point to a valid NUL-terminated UTF-8 C string.
-pub unsafe fn cstr_to_string(ptr: *const std::ffi::c_char) -> String {
-    if ptr.is_null() {
-        String::new()
-    } else {
-        // SAFETY: caller guarantees validity.
-        unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
-    }
-}
-
-impl Default for PrintQueue {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PrintQueue {
-    /// Create an empty print queue.
-    pub const fn new() -> Self {
-        Self(std::sync::Mutex::new(std::collections::VecDeque::new()))
-    }
-
-    /// Add a message to the back of the queue.
-    pub fn push(&self, message: &str) {
-        let mut queue = match self.0.lock() {
-            Ok(q) => q,
-            Err(e) => e.into_inner(),
-        };
-        queue.push_back(message.to_string());
-    }
-
-    /// Take all pending messages, escaping fmtlib-sensitive characters.
-    pub fn drain(&self) -> Vec<String> {
-        let messages = {
-            let mut queue = match self.0.lock() {
-                Ok(q) => q,
-                Err(e) => e.into_inner(),
-            };
-            if queue.is_empty() {
-                return Vec::new();
-            }
-            std::mem::take(&mut *queue)
-        };
-        messages
-            .into_iter()
-            .map(|message| escape_server_print(&message))
-            .collect()
-    }
-}
-
 /// Standard `Engine` implementation parameterized by the engfunc source.
-///
-/// Both backends differ only in how they obtain the engine function table,
-/// so the whole `Engine` trait implementation lives here once.
 #[derive(Clone, Copy)]
 pub struct EngineBackend {
     engfuncs: fn() -> &'static enginefuncs_t,
@@ -159,6 +22,7 @@ impl EngineBackend {
             print_queue,
         }
     }
+
     /// Creates a player handle from an index if valid.
     pub fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
         unsafe {
@@ -236,7 +100,6 @@ static PRECACHE_GENERICS: std::sync::LazyLock<std::sync::Mutex<std::collections:
 impl EngineBackend {
     /// Precaches all pending/registered resources during map spawn phase.
     pub fn precache_pending_resources(&self) {
-        // Pre-register standard built-in sounds
         let default_sounds = [
             "events/tutor_msg.wav",
             "items/suitchargeno1.wav",
@@ -325,10 +188,6 @@ pub fn set_map_name_resolver(resolver: MapNameResolverFn) {
     let _ = MAP_NAME_RESOLVER_FN.set(resolver);
 }
 
-/// Raw real-GameDLL entry points for direct calls (DispatchSpawn / Touch).
-///
-/// Only backends that own the GameDLL function table can register these
-/// (the standalone proxy); metamod chains through its own tables instead.
 pub type GamedllSpawnFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> i32;
 pub type GamedllTouchFn =
     unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::edict_t);
@@ -346,7 +205,7 @@ pub fn set_game_dll_touch(f: GamedllTouchFn) {
     let _ = GAME_DLL_TOUCH.set(f);
 }
 
-/// Sets a backend-specific resolver for finding user message IDs (e.g. via Metamod `pfnGetUserMsgID`).
+/// Sets a backend-specific resolver for finding user message IDs.
 pub fn set_user_msg_resolver(resolver: UserMsgResolverFn) {
     let _ = USER_MSG_RESOLVER_FN.set(resolver);
 }
@@ -363,7 +222,6 @@ pub fn register_user_msg_id(name: &str, id: i32) {
 
 impl goldsrc_api::EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
-        // 1. Check cached registry
         if let Ok(map) = USER_MSG_REGISTRY.read()
             && let Some(&id) = map.get(name)
             && id > 0
@@ -372,7 +230,6 @@ impl goldsrc_api::EngineMessages for EngineBackend {
             return id;
         }
 
-        // 2. Check resolver callback if registered by backend (e.g. Metamod)
         if let Some(resolver) = USER_MSG_RESOLVER_FN.get() {
             let id = resolver(name);
             if id > 0 && id != 255 {
@@ -381,7 +238,6 @@ impl goldsrc_api::EngineMessages for EngineBackend {
             }
         }
 
-        // 3. Fallback to engine pfnRegUserMsg
         let engine_id = unsafe {
             if let Ok(cname) = std::ffi::CString::new(name) {
                 call_engfunc_ret!((self.engfuncs)().pfnRegUserMsg, cname.as_ptr(), size)
@@ -620,7 +476,6 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             if pedict.is_null() {
                 return None;
             }
-            // Method 1: pfnGetInfoKeyBuffer + pfnInfoKeyValue
             if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
                 && let Some(infokey_val) = funcs.pfnInfoKeyValue
             {
@@ -634,7 +489,6 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                     return Some(name_str.to_string());
                 }
             }
-            // Method 2: pfnSzFromIndex(v.netname)
             let netname_offset = (*pedict).v.netname;
             if netname_offset != 0
                 && let Some(sz_from_idx) = funcs.pfnSzFromIndex
@@ -675,8 +529,6 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             if pent.is_null() {
                 return None;
             }
-            // SF_NORESPAWN (1 << 30): In HLSDK/ReHLDS CItem / CBasePlayerItem, ensures dynamically
-            // spawned items do not respawn after round restart or item respawn timers.
             (*pent).v.spawnflags |= 1 << 30;
 
             let idx = crate::api_registry::edict_index(pent);
@@ -720,8 +572,6 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 if p.is_null() { None } else { Some(p) }
             });
             match (pent, GAME_DLL_SPAWN.get()) {
-                // SAFETY: edict resolved from the engine; fn pointer registered
-                // by the backend from the real GameDLL function table.
                 (Some(p), Some(f)) => f(p),
                 _ => {
                     log::debug!(target: "core", "dispatch_spawn({index}): no GameDLL bridge");
@@ -741,8 +591,6 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 })
             };
             match (resolve(touched), resolve(other), GAME_DLL_TOUCH.get()) {
-                // SAFETY: edicts resolved from the engine; fn pointer registered
-                // by the backend from the real GameDLL function table.
                 (Some(a), Some(b), Some(f)) => f(a, b),
                 _ => {
                     log::debug!(target: "core", "dispatch_touch({touched},{other}): no GameDLL bridge");

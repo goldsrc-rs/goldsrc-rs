@@ -230,10 +230,10 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Strict WASM Host Storage Sandbox & Bucket Access Control**:
   - Automatic `{plugin_id}/` prefix injection on all `host_storage_*` calls preventing cross-plugin data tampering.
   - Explicit bucket sharing via plugin metadata allowlist (`[goldsrc.share] buckets = ["global/ranks"]`).
-- [ ] **Domain Decomposition of Large Modules (1000+ LoC Refactoring)**:
-  - Refactor `hosts/goldsrc-wasm-host/src/manager.rs` into `manager/` submodule (`loader.rs`, `lifecycle.rs`, `dependencies.rs`, `commands.rs`).
-  - Refactor `framework/goldsrc/src/cli.rs` into `cli/` submodule (`router.rs`, `formatters.rs`, `handlers/`).
-  - Refactor `framework/goldsrc/src/backend.rs` into modular engine domain adapters (`messages`, `entities`, `physics`, `cvars`).
+- [x] **Domain Decomposition of Large Modules (1000+ LoC Refactoring)**:
+  - Refactor `hosts/goldsrc-wasm-host/src/manager.rs` into `manager/` submodule (`loader.rs`, `lifecycle.rs`, `state.rs`, `watcher.rs`).
+  - Refactor `framework/goldsrc/src/cli.rs` into `cli/` submodule (`router.rs`, `specs.rs`, `handlers.rs`).
+  - Refactor `framework/goldsrc/src/backend.rs` into modular engine domain adapters (`engine_bridge.rs`, `print_queue.rs`).
 - [x] **Per-Player Localization & i18n Dictionary Engine**:
   - Structured language dictionaries (`data/lang/*.toml`) with per-player code-page formatting based on client language.
 
