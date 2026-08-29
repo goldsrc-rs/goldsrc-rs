@@ -1,26 +1,42 @@
-# GoldSrc.rs Localization Dictionary Template
+# GoldSrc.rs Localization Dictionary Template (v0.14.x)
 # Dictionary Name: test_i18n (placed in data/lang/test_i18n.toml)
 
-[ru]
-welcome_msg = "^3[\x04GoldSrc.rs^3] ^1Добро пожаловать на сервер, ^4{name}^1! (Язык: ^3Русский^1)"
-lang_info = "^3[\x04i18n^3] ^1Текущий выбранный язык: ^4{lang}^1. Всего записей в словаре: ^4{count}^1."
-reward_claimed = "^3[\x04Награда^3] ^1Вы получили бонус в размере ^4{amount}^1$ и ^4{xp}^1 XP!"
-admin_alert = "^3[\x04Внимание^3] ^1Администратор ^4{admin}^1 изменил карту на ^3{map}^1."
+[config]
+fallback = "en"
 
-[en]
-welcome_msg = "^3[\x04GoldSrc.rs^3] ^1Welcome to the server, ^4{name}^1! (Language: ^3English^1)"
-lang_info = "^3[\x04i18n^3] ^1Currently active language: ^4{lang}^1. Total dictionary entries: ^4{count}^1."
-reward_claimed = "^3[\x04Reward^3] ^1You received a bonus of ^4{amount}^1$ and ^4{xp}^1 XP!"
-admin_alert = "^3[\x04Alert^3] ^1Administrator ^4{admin}^1 changed map to ^3{map}^1."
+[templates]
+box = "$vars.tag {0} @{w('(WASM i18n Demo)')}"
+alert_box = "$vars.alert_tag {0}"
 
-[es]
-welcome_msg = "^3[\x04GoldSrc.rs^3] ^1¡Bienvenido al servidor, ^4{name}^1! (Idioma: ^3Español^1)"
-lang_info = "^3[\x04i18n^3] ^1Idioma seleccionado: ^4{lang}^1. Entradas en diccionario: ^4{count}^1."
-reward_claimed = "^3[\x04Recompensa^3] ^1¡Has recibido un bono de ^4{amount}^1$ y ^4{xp}^1 XP!"
-admin_alert = "^3[\x04Alerta^3] ^1El administrador ^4{admin}^1 cambió el mapa a ^3{map}^1."
+[vars]
+tag = "@{tag('GoldSrc.rs')}"
+alert_tag = "@{tag('Внимание')}"
+reward_tag = "@{tag('Награда')}"
+currency = "$"
 
-[de]
-welcome_msg = "^3[\x04GoldSrc.rs^3] ^1Willkommen auf dem Server, ^4{name}^1! (Sprache: ^3Deutsch^1)"
-lang_info = "^3[\x04i18n^3] ^1Aktuelle Sprache: ^4{lang}^1. Wörterbucheinträge: ^4{count}^1."
-reward_claimed = "^3[\x04Belohnung^3] ^1Du hast einen Bonus von ^4{amount}^1$ und ^4{xp}^1 XP erhalten!"
-admin_alert = "^3[\x04Alarm^3] ^1Administrator ^4{admin}^1 hat die Karte auf ^3{map}^1 geändert."
+[translations.ru.vars]
+currency = "₽"
+
+[translations.ru]
+welcome_msg = "$vars.tag Добро пожаловать на сервер, @{g('{name=\'Гость\'}')}! (Язык: @{t('Русский')})"
+lang_info = "$vars.tag Текущий выбранный язык: @{g('{lang}')}. Всего записей: @{g('{count}')}."
+reward_claimed = "$vars.reward_tag Вы получили бонус в размере @{g('{amount=\'1000\'}')} $vars.currency и @{g('{xp=\'50\'}')} XP!"
+admin_alert = "$vars.alert_tag Администратор @{g('{admin=\'Server\'}')} изменил карту на @{t('{map=\'de_dust2\'}')}."
+
+[translations.en]
+welcome_msg = "$vars.tag Welcome to the server, @{g('{name=\'Guest\'}')}! (Language: @{t('English')})"
+lang_info = "$vars.tag Currently active language: @{g('{lang}')}. Total entries: @{g('{count}')}."
+reward_claimed = "@{tag('Reward')} You received a bonus of @{g('{amount=\'1000\'}')} $vars.currency and @{g('{xp=\'50\'}')} XP!"
+admin_alert = "@{tag('Alert')} Administrator @{g('{admin=\'Server\'}')} changed map to @{t('{map=\'de_dust2\'}')}."
+
+[translations.es]
+welcome_msg = "$vars.tag ¡Bienvenido al servidor, @{g('{name=\'Invitado\'}')}! (Idioma: @{t('Español')})"
+lang_info = "$vars.tag Idioma seleccionado: @{g('{lang}')}. Entradas: @{g('{count}')}."
+reward_claimed = "@{tag('Recompensa')} ¡Has recibido un bono de @{g('{amount=\'1000\'}')} $vars.currency y @{g('{xp=\'50\'}')} XP!"
+admin_alert = "@{tag('Alerta')} El administrador @{g('{admin=\'Server\'}')} cambió el mapa a @{t('{map=\'de_dust2\'}')}."
+
+[translations.de]
+welcome_msg = "$vars.tag Willkommen auf dem Server, @{g('{name=\'Gast\'}')}! (Sprache: @{t('Deutsch')})"
+lang_info = "$vars.tag Aktuelle Sprache: @{g('{lang}')}. Einträge: @{g('{count}')}."
+reward_claimed = "@{tag('Belohnung')} Du hast einen Bonus von @{g('{amount=\'1000\'}')} $vars.currency und @{g('{xp=\'50\'}')} XP erhalten!"
+admin_alert = "@{tag('Alarm')} Administrator @{g('{admin=\'Server\'}')} hat die Karte auf @{t('{map=\'de_dust2\'}')} geändert."
