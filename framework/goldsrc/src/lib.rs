@@ -47,6 +47,7 @@ pub mod rules;
 /// Unified SQLite WAL storage engine and background batching.
 pub mod storage;
 pub use i18n::I18nEngine;
+pub use storage::{Bucket, JsonFormat, StorageFormat};
 
 #[macro_export]
 macro_rules! log_info {
@@ -120,7 +121,6 @@ pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
     command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
 };
-pub use storage::Bucket;
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {

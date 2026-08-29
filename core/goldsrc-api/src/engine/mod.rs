@@ -1,7 +1,6 @@
 //! Modular engine sub-system traits, composite engine bridge, and API facade.
 
 pub mod api;
-pub mod codec;
 pub mod console;
 pub mod cvars;
 pub mod entities;
@@ -9,9 +8,9 @@ pub mod messages;
 pub mod physics;
 pub mod precache;
 pub mod sound;
+pub mod text;
 
 pub use api as engine_api;
-pub use codec::{format_center_text, format_say_text, utf8_to_cp1251};
 pub use console::EngineConsole;
 pub use cvars::EngineCvars;
 pub use entities::EngineEntities;
@@ -19,6 +18,9 @@ pub use messages::{EngineMessages, MessageBuilder, MessageDest};
 pub use physics::{EnginePhysics, TraceResult};
 pub use precache::EnginePrecache;
 pub use sound::EngineSound;
+/// Backward-compatible alias for text formatting.
+pub use text as codec;
+pub use text::{format_center_text, format_say_text, utf8_to_cp1251};
 
 /// Maximum number of players supported by the GoldSrc engine.
 pub const MAX_PLAYERS: u16 = 32;
