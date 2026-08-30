@@ -91,15 +91,22 @@ impl HostRuntime {
                             None,
                             Some(player_index),
                         );
+                        // 1. Sender entity index for team color ^3 resolution
                         engine.write_byte(player_index);
-                        let safe_msg = if formatted.len() > 175 {
+                        // 2. Chat message payload (starts with \x02 / \x01 in CS 1.6 client)
+                        let payload = if !formatted.starts_with(['\x01', '\x02', '\x03', '\x04']) {
+                            format!("\x01{formatted}")
+                        } else {
+                            formatted
+                        };
+                        let safe_msg = if payload.len() > 175 {
                             let mut end = 175;
-                            while end > 0 && !formatted.is_char_boundary(end) {
+                            while end > 0 && !payload.is_char_boundary(end) {
                                 end -= 1;
                             }
-                            &formatted[..end]
+                            &payload[..end]
                         } else {
-                            &formatted
+                            &payload
                         };
                         engine.write_string(safe_msg);
                         engine.message_end();

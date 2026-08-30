@@ -75,6 +75,7 @@ pub unsafe extern "C" fn Meta_Attach(
             // Fill the META_FUNCTIONS table with our hook functions.
             (*meta_functions).pfnGetEntityAPI2 = Some(crate::GetEntityAPI2);
             (*meta_functions).pfnGetEntityAPI2_Post = Some(crate::GetEntityAPI2_Post);
+            (*meta_functions).pfnGetEngineFunctions_Post = Some(GetEngineFunctions_Post);
 
             // Register the unified hook strategy before any table query.
             goldsrc::api_registry::register(goldsrc::api_registry::Registry {
