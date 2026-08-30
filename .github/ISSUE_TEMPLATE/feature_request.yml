@@ -1,0 +1,67 @@
+name: "✨ Feature Request"
+description: "Suggest a new feature, architecture enhancement, or DX improvement"
+title: "feat(<scope>): <short description of the feature>"
+labels: ["enhancement", "proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new idea for GoldSrc.rs! Please articulate the problem, use case, and proposed architecture.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: "Affected Component / Layer"
+      description: "Which part of the GoldSrc.rs architecture does this proposal target?"
+      options:
+        - "Framework & SDK (goldsrc / goldsrc-api)"
+        - "WASM Host & Plugin Manager (goldsrc-wasm-host)"
+        - "Engine Adapters (goldsrc-metamod / goldsrc-standalone)"
+        - "Storage Engine (goldsrc-storage)"
+        - "Procedural Macros (goldsrc-macros)"
+        - "CLI & Developer Tooling (grs / scripts)"
+        - "Game Specific (goldsrc-cstrike)"
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem or Motivation"
+      description: "Is your feature request related to a problem or limitation? Please describe."
+      placeholder: "Currently, plugin developers have to manually implement..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Proposed Solution & Design"
+      description: "Describe the solution you would like to see, including API design or code examples if applicable."
+      placeholder: |
+        ```rust
+        #[placeholder(name = "rank")]
+        fn get_rank(player: Player) -> String { ... }
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives Considered"
+      description: "Any alternative solutions, workarounds, or prior art (e.g. from AMX Mod X, SourceMod, or other Rust game engines)."
+      placeholder: "An alternative approach would be to..."
+    validations:
+      false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "Confirmation"
+      options:
+        - label: "I have checked existing issues and ROADMAP.md to ensure this feature is not already tracked."
+          required: true
+        - label: "I am willing to submit a Pull Request or participate in RFC discussion for this feature."
+          required: false
