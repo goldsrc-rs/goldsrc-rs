@@ -117,7 +117,12 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
             } else {
                 goldsrc_api::chat::ChatScope::all()
             };
-            return crate::chat::process_chat_message(sender, text, scope);
+            return crate::chat::process_chat_message_with_manager(
+                Some(manager),
+                sender,
+                text,
+                scope,
+            );
         }
 
         // Direct client console command

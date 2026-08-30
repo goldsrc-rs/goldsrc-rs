@@ -1,6 +1,6 @@
-//! In-game Chat Interception, Filtering Pipeline, and Safe Packet Chunking.
-
-use goldsrc_api::chat::{ChatMessage, ChatScope, LifeStateFilter, TeamTarget, split_chat_chunks};
+use goldsrc_api::chat::{ChatMessage, ChatScope};
+#[cfg(feature = "host")]
+use goldsrc_api::chat::{LifeStateFilter, TeamTarget, split_chat_chunks};
 use goldsrc_api::client::{LifeState, Player, Team};
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -57,6 +57,34 @@ pub fn dispatch_local_chat_middleware(
 /// Broadcasts to eligible recipients matching the message's `ChatScope`.
 /// Returns whether the message was handled and should be blocked from the vanilla engine.
 pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) -> bool {
+    #[cfg(feature = "host")]
+    {
+        process_chat_message_with_manager(None, sender, raw_text, scope)
+    }
+    #[cfg(not(feature = "host"))]
+    {
+        let mut msg = ChatMessage::new(sender, raw_text, scope);
+        let pipeline = match CHAT_PIPELINE.read() {
+            Ok(p) => p,
+            Err(e) => e.into_inner(),
+        };
+        for middleware in pipeline.iter() {
+            if !middleware(&mut msg) || msg.is_blocked {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+/// Dispatches a chat message using an optional pre-locked `PluginManager` to avoid re-entrant mutex deadlocks.
+#[cfg(feature = "host")]
+pub fn process_chat_message_with_manager(
+    mut manager: Option<&mut goldsrc_wasm_host::PluginManager>,
+    sender: Player,
+    raw_text: &str,
+    scope: ChatScope,
+) -> bool {
     let mut msg = ChatMessage::new(sender, raw_text, scope);
 
     // 1. Run native host middleware pipeline (censorship, ranks, custom prefixes)
@@ -76,9 +104,14 @@ pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) ->
     #[cfg(feature = "host")]
     {
         let is_team = matches!(msg.scope.team, TeamTarget::SameTeam);
-        let wasm_result = crate::host::HostRuntime::with_manager(|mgr| {
-            mgr.map(|m| m.dispatch_chat(sender.index(), &msg.formatted_text, is_team))
-        });
+        let wasm_result = if let Some(ref mut m) = manager {
+            Some(m.dispatch_chat(sender.index(), &msg.formatted_text, is_team))
+        } else {
+            crate::host::HostRuntime::with_manager(|mgr| {
+                mgr.map(|m| m.dispatch_chat(sender.index(), &msg.formatted_text, is_team))
+            })
+        };
+
         match wasm_result {
             Some(Some(transformed)) => {
                 if let Some((prefix, rest)) = transformed.split_once("__PREFIX_SPLIT__") {
@@ -96,7 +129,8 @@ pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) ->
     }
 
     // 3. Run placeholder expansion
-    let interpolated = crate::placeholders::format_placeholders(&msg.formatted_text, sender);
+    let interpolated =
+        crate::placeholders::format_placeholders_with_manager(&msg.formatted_text, sender, manager);
     msg.formatted_text = interpolated;
 
     // 3. Render final output with player name and prefix
@@ -196,6 +230,7 @@ pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) ->
     true // Handled by GoldSrc.rs chat engine
 }
 
+#[cfg(feature = "host")]
 fn matches_lifestate(player: Player, filter: LifeStateFilter) -> bool {
     match filter {
         LifeStateFilter::Any => true,
@@ -204,6 +239,7 @@ fn matches_lifestate(player: Player, filter: LifeStateFilter) -> bool {
     }
 }
 
+#[cfg(feature = "host")]
 fn is_opposite_team(a: Team, b: Team) -> bool {
     matches!(
         (a, b),

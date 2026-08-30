@@ -277,8 +277,13 @@ pub fn dispatch_local_placeholder(name: &str, caller_idx: i32, param: &str) -> O
     reg.evaluate_call(caller, &call).ok()
 }
 
-/// Replaces all `{...}` placeholders in `template` evaluated in the context of `caller`.
-pub fn format_placeholders(template: &str, caller: Player) -> String {
+/// Replaces all `{...}` placeholders with an optional pre-locked `PluginManager` reference.
+#[cfg(feature = "host")]
+pub fn format_placeholders_with_manager(
+    template: &str,
+    caller: Player,
+    mut manager: Option<&mut goldsrc_wasm_host::PluginManager>,
+) -> String {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
 
@@ -297,23 +302,27 @@ pub fn format_placeholders(template: &str, caller: Player) -> String {
                 Ok(call) => match reg.evaluate_call(caller, &call) {
                     Ok(val) => out.push_str(&val),
                     Err(_) => {
-                        #[cfg(feature = "host")]
-                        {
-                            let wasm_res = crate::host::HostRuntime::with_manager(|mgr| {
+                        let param = call
+                            .get_positional(0)
+                            .or_else(|| call.get_named("target"))
+                            .unwrap_or_default();
+
+                        let resolved = if let Some(ref mut m) = manager {
+                            m.dispatch_placeholder(&call.ident, caller.index(), param)
+                        } else {
+                            crate::host::HostRuntime::with_manager(|mgr| {
                                 mgr.and_then(|m| {
-                                    let param = call
-                                        .get_positional(0)
-                                        .or_else(|| call.get_named("target"))
-                                        .unwrap_or_default();
                                     m.dispatch_placeholder(&call.ident, caller.index(), param)
                                 })
-                            });
-                            if let Some(val) = wasm_res {
-                                out.push_str(&val);
-                                rest = &tail[end + 1..];
-                                continue;
-                            }
+                            })
+                        };
+
+                        if let Some(val) = resolved {
+                            out.push_str(&val);
+                            rest = &tail[end + 1..];
+                            continue;
                         }
+
                         // Keep original if unresolvable
                         out.push('{');
                         out.push_str(inner);
@@ -335,6 +344,55 @@ pub fn format_placeholders(template: &str, caller: Player) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// Replaces all `{...}` placeholders in `template` evaluated in the context of `caller`.
+pub fn format_placeholders(template: &str, caller: Player) -> String {
+    #[cfg(feature = "host")]
+    {
+        format_placeholders_with_manager(template, caller, None)
+    }
+    #[cfg(not(feature = "host"))]
+    {
+        let mut out = String::with_capacity(template.len());
+        let mut rest = template;
+
+        while let Some(start) = rest.find('{') {
+            out.push_str(&rest[..start]);
+            let tail = &rest[start + 1..];
+
+            if let Some(end) = tail.find('}') {
+                let inner = &tail[..end];
+                let reg = match PLACEHOLDER_REGISTRY.read() {
+                    Ok(r) => r,
+                    Err(e) => e.into_inner(),
+                };
+
+                match parse_placeholder_call(inner) {
+                    Ok(call) => match reg.evaluate_call(caller, &call) {
+                        Ok(val) => out.push_str(&val),
+                        Err(_) => {
+                            out.push('{');
+                            out.push_str(inner);
+                            out.push('}');
+                        }
+                    },
+                    Err(_) => {
+                        out.push('{');
+                        out.push_str(inner);
+                        out.push('}');
+                    }
+                }
+                rest = &tail[end + 1..];
+            } else {
+                out.push('{');
+                rest = tail;
+                break;
+            }
+        }
+        out.push_str(rest);
+        out
+    }
 }
 
 #[cfg(test)]
