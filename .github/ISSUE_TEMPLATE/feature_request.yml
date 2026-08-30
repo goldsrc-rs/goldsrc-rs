@@ -1,4 +1,4 @@
-name: "✨ Feature Request"
+name: "Feature Request"
 description: "Suggest a new feature, architecture enhancement, or DX improvement"
 title: "feat(<scope>): <short description of the feature>"
 labels: ["enhancement", "proposal"]
@@ -54,7 +54,7 @@ body:
       description: "Any alternative solutions, workarounds, or prior art (e.g. from AMX Mod X, SourceMod, or other Rust game engines)."
       placeholder: "An alternative approach would be to..."
     validations:
-      false
+      required: false
 
   - type: checkboxes
     id: checklist
