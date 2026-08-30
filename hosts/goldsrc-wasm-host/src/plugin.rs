@@ -127,10 +127,12 @@ impl PluginStatus {
 }
 
 /// Epoch deadline constants for WASM execution timeout protection.
-pub const EPOCH_DEADLINE_FRAME: u64 = 5;
-pub const EPOCH_DEADLINE_EVENT: u64 = 10;
-pub const EPOCH_DEADLINE_COMMAND: u64 = 10;
-pub const EPOCH_DEADLINE_LOAD: u64 = 50;
+/// The background epoch timer thread increments epoch every 2ms.
+/// 250 epochs = ~500ms, 500 epochs = ~1000ms (1 second).
+pub const EPOCH_DEADLINE_FRAME: u64 = 250;
+pub const EPOCH_DEADLINE_EVENT: u64 = 500;
+pub const EPOCH_DEADLINE_COMMAND: u64 = 500;
+pub const EPOCH_DEADLINE_LOAD: u64 = 1000;
 
 /// Single loaded WASM component instance.
 pub struct LoadedPlugin {
