@@ -75,6 +75,12 @@ impl MenuBuilder {
         self
     }
 
+    /// Sets the target language code for automatic navigation buttons localization.
+    pub fn lang<S: AsRef<str>>(mut self, lang: S) -> Self {
+        self.menu.style = self.menu.style.with_lang(lang.as_ref());
+        self
+    }
+
     /// Sets the rendering backend (Text or Dhud).
     pub fn renderer(mut self, renderer: MenuRendererKind) -> Self {
         self.menu.renderer = renderer;

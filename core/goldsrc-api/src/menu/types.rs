@@ -506,6 +506,36 @@ impl MenuStyle {
         }
     }
 
+    /// Returns localized navigation labels (back, next, exit) for the given language code.
+    pub fn localized_nav_labels(lang: &str) -> (&'static str, &'static str, &'static str) {
+        match lang.to_lowercase().as_str() {
+            "ru" => ("Назад", "Вперед", "Выход"),
+            "es" => ("Atrás", "Siguiente", "Salir"),
+            "de" => ("Zurück", "Weiter", "Beenden"),
+            _ => ("Back", "Next", "Exit"),
+        }
+    }
+
+    /// Adapts the style navigation texts to the specified language code.
+    pub fn with_lang(mut self, lang: &str) -> Self {
+        let (back, next, exit) = Self::localized_nav_labels(lang);
+        let is_brackets = self.exit_text.contains('[');
+        if is_brackets {
+            self.back_text = format!("\\y[8] {back}\n");
+            self.next_text = format!("\\y[9] {next}\n");
+            self.exit_text = format!("\\r[0] {exit}\n");
+        } else if self.exit_text.contains("\\r0.") || self.exit_text.contains("\\y8.") {
+            self.back_text = format!("\\y8. {back}\n");
+            self.next_text = format!("\\y9. {next}\n");
+            self.exit_text = format!("\\r0. {exit}\n");
+        } else {
+            self.back_text = format!("8. {back}\n");
+            self.next_text = format!("9. {next}\n");
+            self.exit_text = format!("0. {exit}\n");
+        }
+        self
+    }
+
     /// Sets whether the "Back" button should shift to slot 9 on the last page.
     pub fn with_dynamic_back(mut self, enabled: bool) -> Self {
         self.dynamic_back_slot = enabled;

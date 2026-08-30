@@ -153,6 +153,7 @@ impl TestMenu {
 
         let menu = Menu::builder(title)
             .style(MenuStyle::brackets())
+            .lang(&lang_code)
             .item(MenuItem::new(item_hp, 201).keep_open())
             .item(MenuItem::new(item_ap, 202).keep_open())
             .item((item_m4a1, 203))
