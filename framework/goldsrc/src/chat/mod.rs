@@ -23,17 +23,43 @@ where
     pipeline.push(Arc::new(middleware));
 }
 
+/// Dispatches local chat middleware pipeline inside a WASM plugin.
+pub fn dispatch_local_chat_middleware(
+    sender_idx: i32,
+    text: &str,
+    is_team: bool,
+) -> Option<String> {
+    let sender = Player::new(sender_idx);
+    let scope = if is_team {
+        ChatScope::same_team()
+    } else {
+        ChatScope::all()
+    };
+    let mut msg = ChatMessage::new(sender, text, scope);
+    let pipeline = match CHAT_PIPELINE.read() {
+        Ok(p) => p,
+        Err(e) => e.into_inner(),
+    };
+    for middleware in pipeline.iter() {
+        let continue_processing = middleware(&mut msg);
+        if !continue_processing || msg.is_blocked {
+            return None;
+        }
+    }
+    if let Some(ref prefix) = msg.prefix {
+        Some(format!("{prefix}__PREFIX_SPLIT__{}", msg.formatted_text))
+    } else {
+        Some(msg.formatted_text)
+    }
+}
+
 /// Dispatches an incoming `say` or `say_team` text command through the chat processing pipeline.
 /// Broadcasts to eligible recipients matching the message's `ChatScope`.
 /// Returns whether the message was handled and should be blocked from the vanilla engine.
 pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) -> bool {
     let mut msg = ChatMessage::new(sender, raw_text, scope);
 
-    // 1. Run placeholder expansion
-    let interpolated = crate::placeholders::format_placeholders(&msg.formatted_text, sender);
-    msg.formatted_text = interpolated;
-
-    // 2. Run middleware pipeline (censorship, ranks, custom prefixes)
+    // 1. Run native host middleware pipeline (censorship, ranks, custom prefixes)
     let pipeline = match CHAT_PIPELINE.read() {
         Ok(p) => p,
         Err(e) => e.into_inner(),
@@ -42,9 +68,36 @@ pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) ->
     for middleware in pipeline.iter() {
         let continue_processing = middleware(&mut msg);
         if !continue_processing || msg.is_blocked {
-            return true; // blocked by middleware
+            return true; // blocked by native middleware
         }
     }
+
+    // 2. Run WASM plugins chat middleware
+    #[cfg(feature = "host")]
+    {
+        let is_team = matches!(msg.scope.team, TeamTarget::SameTeam);
+        let wasm_result = crate::host::HostRuntime::with_manager(|mgr| {
+            mgr.map(|m| m.dispatch_chat(sender.index(), &msg.formatted_text, is_team))
+        });
+        match wasm_result {
+            Some(Some(transformed)) => {
+                if let Some((prefix, rest)) = transformed.split_once("__PREFIX_SPLIT__") {
+                    msg.prefix = Some(prefix.to_string());
+                    msg.formatted_text = rest.to_string();
+                } else {
+                    msg.formatted_text = transformed;
+                }
+            }
+            Some(None) => {
+                return true; // blocked by WASM middleware
+            }
+            None => {}
+        }
+    }
+
+    // 3. Run placeholder expansion
+    let interpolated = crate::placeholders::format_placeholders(&msg.formatted_text, sender);
+    msg.formatted_text = interpolated;
 
     // 3. Render final output with player name and prefix
     let sender_name = sender

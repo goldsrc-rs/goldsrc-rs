@@ -477,4 +477,9 @@ impl api::Host for HostState {
         }
         key
     }
+
+    fn host_register_placeholder(&mut self, name: String, _description: String) -> bool {
+        crate::manager::register_host_placeholder(&name, &self.plugin_name);
+        true
+    }
 }

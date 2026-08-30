@@ -218,6 +218,10 @@ pub fn register_placeholder<F>(name: &str, description: &str, handler: F)
 where
     F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        goldsrc_api::bindings::goldsrc::engine::api::host_register_placeholder(name, description);
+    }
     let mut reg = match PLACEHOLDER_REGISTRY.write() {
         Ok(r) => r,
         Err(e) => e.into_inner(),
@@ -243,11 +247,34 @@ pub fn register_placeholder_with_metadata<F>(
 ) where
     F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        goldsrc_api::bindings::goldsrc::engine::api::host_register_placeholder(
+            &metadata.name,
+            &metadata.description,
+        );
+    }
     let mut reg = match PLACEHOLDER_REGISTRY.write() {
         Ok(r) => r,
         Err(e) => e.into_inner(),
     };
     reg.register(plugin_name, metadata, Arc::new(handler));
+}
+
+/// Dispatches a placeholder resolution request inside a WASM plugin.
+pub fn dispatch_local_placeholder(name: &str, caller_idx: i32, param: &str) -> Option<String> {
+    let caller = Player::new(caller_idx);
+    let raw_expr = if param.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name}({param})")
+    };
+    let call = parse_placeholder_call(&raw_expr).ok()?;
+    let reg = match PLACEHOLDER_REGISTRY.read() {
+        Ok(r) => r,
+        Err(e) => e.into_inner(),
+    };
+    reg.evaluate_call(caller, &call).ok()
 }
 
 /// Replaces all `{...}` placeholders in `template` evaluated in the context of `caller`.
@@ -270,6 +297,23 @@ pub fn format_placeholders(template: &str, caller: Player) -> String {
                 Ok(call) => match reg.evaluate_call(caller, &call) {
                     Ok(val) => out.push_str(&val),
                     Err(_) => {
+                        #[cfg(feature = "host")]
+                        {
+                            let wasm_res = crate::host::HostRuntime::with_manager(|mgr| {
+                                mgr.and_then(|m| {
+                                    let param = call
+                                        .get_positional(0)
+                                        .or_else(|| call.get_named("target"))
+                                        .unwrap_or_default();
+                                    m.dispatch_placeholder(&call.ident, caller.index(), param)
+                                })
+                            });
+                            if let Some(val) = wasm_res {
+                                out.push_str(&val);
+                                rest = &tail[end + 1..];
+                                continue;
+                            }
+                        }
                         // Keep original if unresolvable
                         out.push('{');
                         out.push_str(inner);

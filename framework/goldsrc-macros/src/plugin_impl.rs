@@ -805,6 +805,14 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
             fn on_command(name: String, caller: i32, args: String) -> bool {
                 #on_command_fn
             }
+
+            fn on_placeholder(name: String, caller: i32, param: String) -> Option<String> {
+                ::goldsrc::placeholders::dispatch_local_placeholder(&name, caller, &param)
+            }
+
+            fn on_chat(sender: i32, text: String, is_team: bool) -> Option<String> {
+                ::goldsrc::chat::dispatch_local_chat_middleware(sender, &text, is_team)
+            }
         }
 
         #[cfg(target_arch = "wasm32")]

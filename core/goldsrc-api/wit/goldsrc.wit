@@ -180,6 +180,11 @@ interface api {
 
     /// Translates a dictionary key for the target player or server language.
     host-translate: func(dict: string, lang: string, key: string) -> string;
+
+    /// --- Placeholder API ---
+
+    /// Registers a custom placeholder in the host engine.
+    host-register-placeholder: func(name: string, description: string) -> bool;
 }
 
 world goldsrc-plugin {
@@ -201,6 +206,13 @@ world goldsrc-plugin {
     /// `caller` is the 1-based player index, or 0 for server console.
     /// Returns `true` if the command was handled (consumed).
     export on-command: func(name: string, caller: s32, args: string) -> bool;
+
+    /// Invoked to resolve a custom placeholder registered by this plugin.
+    export on-placeholder: func(name: string, caller: s32, param: string) -> option<string>;
+
+    /// Invoked when a player sends a chat message.
+    /// Returns Some(formatted_text) to broadcast, or None to suppress.
+    export on-chat: func(sender: s32, text: string, is-team: bool) -> option<string>;
 
     /// Retrieves a TOML string containing the plugin's metadata.
     export get-metadata: func() -> string;

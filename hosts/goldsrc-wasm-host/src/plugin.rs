@@ -224,6 +224,52 @@ impl LoadedPlugin {
         }
     }
 
+    /// Invokes the plugin's `on_placeholder` export.
+    pub fn call_on_placeholder(
+        &mut self,
+        name: &str,
+        caller: i32,
+        param: &str,
+    ) -> wasmtime::Result<Option<String>> {
+        if !self.status.is_executable() {
+            return Ok(None);
+        }
+        self.store.set_epoch_deadline(EPOCH_DEADLINE_EVENT);
+        let res = self
+            .bindings
+            .call_on_placeholder(&mut self.store, name, caller, param);
+        match res {
+            Err(e) => {
+                self.poison(&e);
+                Err(e)
+            }
+            Ok(val) => Ok(val),
+        }
+    }
+
+    /// Invokes the plugin's `on_chat` export.
+    pub fn call_on_chat(
+        &mut self,
+        sender: i32,
+        text: &str,
+        is_team: bool,
+    ) -> wasmtime::Result<Option<String>> {
+        if !self.status.is_executable() {
+            return Ok(Some(text.to_string()));
+        }
+        self.store.set_epoch_deadline(EPOCH_DEADLINE_COMMAND);
+        let res = self
+            .bindings
+            .call_on_chat(&mut self.store, sender, text, is_team);
+        match res {
+            Err(e) => {
+                self.poison(&e);
+                Err(e)
+            }
+            Ok(val) => Ok(val),
+        }
+    }
+
     /// Returns whether the component exports a top-level function `name`.
     pub fn has_export(&self, name: &str) -> bool {
         self.component.get_export(None, name).is_some()
