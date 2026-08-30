@@ -24,6 +24,16 @@ pub enum BackendType {
 }
 
 // ----------------------------------------------------------------------------
+// Entity Flags (edict->v.flags)
+// ----------------------------------------------------------------------------
+
+/// Entity flag indicating this edict is a connected client (`FL_CLIENT` = `1 << 3`).
+pub const FL_CLIENT: i32 = 1 << 3;
+
+/// Entity flag indicating this edict is a simulated bot/fake client (`FL_FAKECLIENT` = `1 << 13`).
+pub const FL_FAKECLIENT: i32 = 1 << 13;
+
+// ----------------------------------------------------------------------------
 // File and Directory Names
 // ----------------------------------------------------------------------------
 

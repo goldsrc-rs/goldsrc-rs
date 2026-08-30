@@ -25,21 +25,18 @@ impl EngineBackend {
 
     /// Creates a player handle from an index if valid.
     ///
-    /// For player slots (1..=32) the edict must have `FL_CLIENT` (bit 8) set;
+    /// For player slots (1..=32) the edict must have `FL_CLIENT` (1 << 3) set;
     /// engine slots without a connected client will not have this flag even when
     /// `edict.free == 0`, so we reject them here before handing off to
     /// `EDict::is_valid()` which only checks the serial number.
     pub fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
         unsafe {
             let funcs = (self.engfuncs)();
-            let edict = (funcs.pfnPEntityOfEntIndex)?(index);
-            if edict.is_null() || (*edict).free != 0 {
+            let edict = (funcs.pfnPEntityOfEntIndex).and_then(|f| f(index).as_mut())?;
+            if edict.free != 0 {
                 return None;
             }
-            // Player slots that are not yet occupied by a real client will lack
-            // FL_CLIENT (1 << 8).  Sending a network message to such a slot
-            // triggers "Host_Error: WriteDest_Parm: not a client".
-            if (1..=32).contains(&index) && (*edict).v.flags & (1 << 8) == 0 {
+            if (1..=32).contains(&index) && edict.v.flags & goldsrc_api::consts::FL_CLIENT == 0 {
                 return None;
             }
             Some(goldsrc_api::Player::from_raw(index, edict))
@@ -423,9 +420,9 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 return false;
             }
             if (1..=32).contains(&index) {
-                // GoldSrc engine: pev->flags & FL_CLIENT (1 << 8).
-                // Edict is a connected client only if FL_CLIENT (256) is set.
-                if pedict.v.flags & (1 << 8) == 0 {
+                // GoldSrc engine: pev->flags & FL_CLIENT (1 << 3 = 8).
+                // Edict is a connected client only if FL_CLIENT is set.
+                if pedict.v.flags & goldsrc_api::consts::FL_CLIENT == 0 {
                     return false;
                 }
                 if pedict.v.netname != 0 {
