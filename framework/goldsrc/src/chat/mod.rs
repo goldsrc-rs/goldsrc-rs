@@ -74,6 +74,16 @@ pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) ->
     // 4. Split message into safe 180-byte chunks
     let chunks = split_chat_chunks(&full_text);
 
+    // [DEBUG] Log what we're about to broadcast
+    #[cfg(feature = "host")]
+    if let Some(engine) = crate::host::HostRuntime::engine() {
+        engine.server_print(&format!(
+            "[chat-dbg] broadcasting {} chunk(s), scope={:?}, full_text='{full_text}'\n",
+            chunks.len(),
+            msg.scope.team
+        ));
+    }
+
     // 5. Broadcast chunks to target recipients based on ChatScope
     let sender_team = sender.team();
     match msg.scope.team {
@@ -88,7 +98,14 @@ pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) ->
         TeamTarget::All => {
             for i in 1..=32 {
                 let target = Player::new(i);
-                if target.is_valid() && matches_lifestate(target, msg.scope.state) {
+                let valid = target.is_valid();
+                #[cfg(feature = "host")]
+                if let Some(engine) = crate::host::HostRuntime::engine()
+                    && valid
+                {
+                    engine.server_print(&format!("[chat-dbg] sending to slot {i} (valid)\n"));
+                }
+                if valid && matches_lifestate(target, msg.scope.state) {
                     for chunk in &chunks {
                         target.print_chat(chunk);
                     }
