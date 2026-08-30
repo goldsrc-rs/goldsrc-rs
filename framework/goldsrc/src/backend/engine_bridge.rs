@@ -403,7 +403,39 @@ impl goldsrc_api::EngineConsole for EngineBackend {
 
 impl goldsrc_api::EngineEntities for EngineBackend {
     fn entity_is_valid(&self, index: i32) -> bool {
-        self.get_player(index).is_some_and(|p| p.is_valid())
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let Some(pedict) = (funcs.pfnPEntityOfEntIndex).and_then(|f| f(index).as_mut()) else {
+                return false;
+            };
+            if pedict.free != 0 {
+                return false;
+            }
+            if (1..=32).contains(&index) {
+                // GoldSrc engine: pev->flags & FL_CLIENT (1 << 8).
+                // Edict is a connected client only if FL_CLIENT (256) is set.
+                if pedict.v.flags & (1 << 8) == 0 {
+                    return false;
+                }
+                if pedict.v.netname != 0 {
+                    return true;
+                }
+                if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
+                    && let Some(infokey_val) = funcs.pfnInfoKeyValue
+                {
+                    let buffer = get_infokey(pedict);
+                    let key = std::ffi::CString::new("name").unwrap_or_default();
+                    let val_ptr = infokey_val(buffer, key.as_ptr());
+                    if !val_ptr.is_null()
+                        && let Ok(name_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
+                    {
+                        return !name_str.trim().is_empty();
+                    }
+                }
+                return true;
+            }
+            true
+        }
     }
 
     fn entity_classname(&self, index: i32) -> Option<String> {
