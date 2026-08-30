@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WASM Epoch Timeout Hardening**:
   - Increased epoch deadlines (`EPOCH_DEADLINE_COMMAND = 500`, `EPOCH_DEADLINE_LOAD = 1000`) providing 1-2s wall-clock headroom to prevent spurious plugin poisoning on Windows QuickEdit / console pauses.
 
+### Fixed
+
+- **i18n Macro Argument & Placeholder Defaults Parsing**:
+  - Fixed `Compiler::parse_args` to strictly validate named parameters, preventing nested placeholder default values (e.g. `@{g('{name=\'Гость\'}')}`) from being misinterpreted as macro kwargs and generating empty color tags.
+- **Server Console Cyrillic Suffix Truncation**:
+  - Replaced indiscriminate `trim_end()` in `escape_server_print` with `trim_end_matches(['\r', '\n'])`, preventing truncation of the trailing characters of Cyrillic words ("Нет" -> "Не").
+
 ## [0.13.1] - 2026-08-28
 
 ### Added
