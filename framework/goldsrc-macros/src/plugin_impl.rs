@@ -377,14 +377,11 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                             };
                             let ty = &pat_type.ty;
                             param_idents.push(ident.clone());
-                            if ident == "caller" || ident == "caller_idx" {
+                            if ident == "caller" {
                                 param_bindings.push(quote! {
                                     let mut #ident: #ty = caller;
                                 });
-                            } else if ident == "player"
-                                || ident == "sender"
-                                || ident == "caller_player"
-                            {
+                            } else if ident == "player" {
                                 param_bindings.push(quote! {
                                     let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&caller.to_string()) {
                                         Ok(val) => val,
