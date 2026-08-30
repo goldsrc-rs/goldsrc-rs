@@ -3,6 +3,7 @@
 
 [config]
 fallback = "en"
+access = "public"
 
 [templates]
 box = "{tag} {0} @{w('(WASM i18n Demo)')}"

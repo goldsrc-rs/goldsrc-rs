@@ -135,17 +135,12 @@ impl TestMenu {
         description = "Opens interactive multilingual menu integrated with i18n dictionaries",
         usage = "langmenu [ru|en|es|de]"
     )]
-    fn handle_lang_menu(caller: i32, args: String) {
-        let player = Player::new(caller);
-        if !player.is_valid() {
-            return;
-        }
-
-        let explicit_lang = args.trim();
-        let lang_code = if explicit_lang.is_empty() {
+    fn handle_lang_menu(player: Player, lang: String) {
+        let clean_lang = lang.trim();
+        let lang_code = if clean_lang.is_empty() || clean_lang.parse::<i32>().is_ok() {
             player.lang()
         } else {
-            explicit_lang.to_lowercase()
+            clean_lang.to_lowercase()
         };
 
         let title = tr!("test_i18n", &lang_code, "menu_title");
@@ -170,7 +165,7 @@ impl TestMenu {
         log_info!(
             "[Test Menu] Opened localized menu (lang='{}') for player #{}",
             lang_code,
-            caller
+            player.index()
         );
     }
 
