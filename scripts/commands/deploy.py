@@ -456,7 +456,7 @@ def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path, backend: str = 
 
 
 def deploy_lang_dictionaries(repo_root: Path, game_path: Path, backend: str = "metamod") -> None:
-    """Copy localization dictionaries (resources/lang, examples/demo_lang) to data/lang/ directory."""
+    """Copy localization dictionaries (resources/lang, examples/**/lang, data/lang) to data/lang/ directory."""
     if backend == "standalone":
         mod_dir = game_path / DEFAULT_MOD
         if not mod_dir.exists():
@@ -470,23 +470,36 @@ def deploy_lang_dictionaries(repo_root: Path, game_path: Path, backend: str = "m
 
     lang_target_dir.mkdir(parents=True, exist_ok=True)
 
-    sources = [
+    # 1. Standard search roots
+    sources: list[Path] = [
         repo_root / "resources" / "lang",
-        repo_root / "examples" / "demo_lang",
+        repo_root / "data" / "lang",
     ]
 
+    # 2. Automatically discover any 'lang' folders inside examples/
+    examples_dir = repo_root / "examples"
+    if examples_dir.exists():
+        for lang_folder in examples_dir.glob("**/lang"):
+            if lang_folder.is_dir() and lang_folder not in sources:
+                sources.append(lang_folder)
+
+    copied_files: set[str] = set()
     for src_dir in sources:
         if src_dir.exists() and src_dir.is_dir():
             for item in src_dir.iterdir():
                 dest = lang_target_dir / item.name
-                if item.is_file():
+                if item.is_file() and item.suffix.lower() == ".toml":
                     shutil.copy2(item, dest)
-                    print(f"Copied localization file: {dest}")
+                    if item.name not in copied_files:
+                        print(f"Copied localization file: {dest}")
+                        copied_files.add(item.name)
                 elif item.is_dir():
                     if dest.exists():
                         shutil.rmtree(dest)
                     shutil.copytree(item, dest)
-                    print(f"Copied localization directory: {dest}")
+                    if item.name not in copied_files:
+                        print(f"Copied localization directory: {dest}")
+                        copied_files.add(item.name)
 
 
 def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
@@ -578,7 +591,21 @@ def main(argv=None):
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="Verify deployment without deploying",
+        help="Run standalone verification check only without building or deploying",
+    )
+    parser.add_argument(
+        "--metric",
+        "--metrics",
+        dest="metrics",
+        action="store_true",
+        default=True,
+        help="Display detailed execution time breakdown upon completion (default: true)",
+    )
+    parser.add_argument(
+        "--no-metrics",
+        dest="metrics",
+        action="store_false",
+        help="Suppress deployment time breakdown metrics table",
     )
     args = parser.parse_args(argv)
 
@@ -593,11 +620,11 @@ def main(argv=None):
     wasm_plugins = [p for p in wasm_dir.glob("*.wasm") if p.is_file()]
 
     if args.verify:
-        print(f"Verifying {args.backend} deployment...")
+        print(f"Verifying {args.backend} deployment at {game_path}...")
         if verify_deploy(game_path, dll_path, wasm_plugins, args.backend, args.target):
-            print("\nAll checks passed!")
+            print("\nAll checks passed successfully!")
         else:
-            print("\nSome checks failed!")
+            print("\nSome verification checks failed!", file=sys.stderr)
             sys.exit(1)
         return
 
@@ -626,18 +653,19 @@ def main(argv=None):
 
     if verified:
         total_time = time.perf_counter() - t_deploy_total
-        print(f"\n========================================")
-        print(f"       Deployment Time Breakdown        ")
-        print(f"========================================")
-        print(f"  • Build & Optimization : {build_time:.2f}s")
-        print(f"  • Copy & Registration  : {copy_time:.2f}s")
-        print(f"  • Post-Deploy Verify   : {verify_time:.2f}s")
-        print(f"  --------------------------------------")
-        print(f"  • Total Elapsed Time   : {total_time:.2f}s")
-        print(f"========================================\n")
+        if args.metrics:
+            print(f"\n========================================")
+            print(f"       Deployment Time Breakdown        ")
+            print(f"========================================")
+            print(f"  • Build & Optimization : {build_time:.2f}s")
+            print(f"  • Copy & Registration  : {copy_time:.2f}s")
+            print(f"  • Post-Deploy Verify   : {verify_time:.2f}s")
+            print(f"  --------------------------------------")
+            print(f"  • Total Elapsed Time   : {total_time:.2f}s")
+            print(f"========================================\n")
         print("Deployment verified successfully!")
     else:
-        print("\nDeployment verification failed!")
+        print("\nDeployment verification failed!", file=sys.stderr)
         sys.exit(1)
 
 

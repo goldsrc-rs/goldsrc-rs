@@ -129,10 +129,13 @@ Deploy directly to your local HLDS test server:
 
 ```bash
 # Deploy Standalone backend and WASM plugins (updates liblist.gam automatically)
-python -m scripts deploy --path "C:/path/to/hlds/server" --backend standalone --verify
+python -m scripts deploy --path "C:/path/to/hlds/server" --backend standalone
 
 # Or deploy Metamod backend (updates plugins.ini automatically)
-python -m scripts deploy --path "C:/path/to/hlds/server" --backend metamod --verify
+python -m scripts deploy --path "C:/path/to/hlds/server" --backend metamod
+
+# Or run standalone verification check only
+python -m scripts verify --path "C:/path/to/hlds/server" --backend metamod
 ```
 
 ### In-Game Management (`grs` CLI)
@@ -171,7 +174,8 @@ GoldSrc.rs provides a built-in server console and client command `grs` (or `gold
 GoldSrc.rs builds upon decades of community reverse engineering and tooling:
 
 - **Valve Software** — for Half-Life and the GoldSrc engine.
-- **[AlliedModders](https://github.com/alliedmodders)** — for canonical HLSDK headers, Metamod, and AMX Mod X.
+- **[AlliedModders](https://github.com/alliedmodders)** & **Will Day** — for canonical HLSDK headers, original Metamod, and AMX Mod X.
+- **[Metamod-r Team](https://github.com/theAsmodai/metamod-r)** (Asmodai, Dreamstalker, s1lentq) — for modern optimized Metamod-r architecture and reverse-engineering contributions.
 - **[ReHLDS Team](https://github.com/dreamstalker/rehlds)** & **[ReGameDLL Team](https://github.com/s1lentq/ReGameDLL_CS)** — for reverse-engineered engine/gamedll insights.
 - **[AmxxModularEcosystem](https://github.com/AmxxModularEcosystem)** (VipModular) — for pioneering modular plugin architecture and decoupled capability management in the GoldSrc ecosystem.
 - **[MultiMod Manager](https://github.com/FEDERICOMB96/amxx-multimod-manager)** — for inspiration on dynamic plugin lifecycle orchestration, profile bundles, and mode switching.
