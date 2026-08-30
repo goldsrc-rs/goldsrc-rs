@@ -8,7 +8,7 @@ fallback = "en"
 access = "public"
 
 [templates]
-tag = "^3[\x04{0}^3]^1"
+tag = "^3[^4{0}^3]^1"
 info = "$vars.tag {0}"
 
 [vars]
