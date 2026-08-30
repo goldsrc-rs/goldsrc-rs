@@ -16,6 +16,7 @@ pub struct HostRuntime {
 use std::sync::{Mutex, OnceLock};
 
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
+static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_api::Engine>> = OnceLock::new();
 
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration, storage, i18n and hot reload watchers.
@@ -53,23 +54,15 @@ impl HostRuntime {
             },
         );
 
+        let _ = ENGINE_INSTANCE.set(engine.clone());
+
         goldsrc_wasm_host::set_translate_callback(|caller, dict, lang, key| {
             crate::i18n::I18nEngine::translate_with_caller(caller, dict, lang, key, &[], &[])
         });
 
         goldsrc_api::client::player::set_player_resolver_hook(|index| {
-            if let Some(engine) = HostRuntime::engine()
-                && (1..=32).contains(&index)
-                && engine.entity_is_valid(index)
-            {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    Some(goldsrc_api::Player::from_index(index))
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    Some(goldsrc_api::Player::new(index))
-                }
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_handle(index)
             } else {
                 None
             }
@@ -91,25 +84,30 @@ impl HostRuntime {
                     }
                     let formatted = goldsrc_api::format_say_text(message);
                     let say_text_id = engine.reg_user_msg("SayText", -1);
-                    let msg_id = if say_text_id <= 0 { 76 } else { say_text_id };
-                    engine.message_begin(
-                        goldsrc_api::MessageDest::One as i32,
-                        msg_id,
-                        None,
-                        Some(player_index),
-                    );
-                    engine.write_byte(player_index);
-                    let safe_msg = if formatted.len() > 175 {
-                        let mut end = 175;
-                        while end > 0 && !formatted.is_char_boundary(end) {
-                            end -= 1;
-                        }
-                        &formatted[..end]
+                    if say_text_id > 0 && say_text_id < 255 {
+                        engine.message_begin(
+                            goldsrc_api::MessageDest::One as i32,
+                            say_text_id,
+                            None,
+                            Some(player_index),
+                        );
+                        engine.write_byte(player_index);
+                        let safe_msg = if formatted.len() > 175 {
+                            let mut end = 175;
+                            while end > 0 && !formatted.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            &formatted[..end]
+                        } else {
+                            &formatted
+                        };
+                        engine.write_string(safe_msg);
+                        engine.message_end();
                     } else {
-                        &formatted
-                    };
-                    engine.write_string(safe_msg);
-                    engine.message_end();
+                        // Fallback to HUD_PRINTCHAT via ClientPrintf if SayText user message isn't registered yet
+                        let safe_text = format!("{formatted}\n");
+                        engine.client_print(player_index, goldsrc_api::HUD_PRINTCHAT, &safe_text);
+                    }
                 }
             }
         });
@@ -298,9 +296,7 @@ impl HostRuntime {
 
     /// Returns a clone of the Engine reference if initialized.
     pub fn engine() -> Option<std::sync::Arc<dyn goldsrc_api::Engine>> {
-        RUNTIME
-            .get()
-            .and_then(|lock| lock.lock().ok().map(|g| g.engine.clone()))
+        ENGINE_INSTANCE.get().cloned()
     }
 
     /// Returns the currently active map name.

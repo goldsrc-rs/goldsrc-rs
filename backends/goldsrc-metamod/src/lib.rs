@@ -58,6 +58,27 @@ pub fn init_wasm_host() {
         None
     });
 
+    goldsrc::backend::set_user_msg_resolver(|name| {
+        let util_ptr = G_META_UTIL.load(std::sync::atomic::Ordering::Relaxed);
+        if !util_ptr.is_null() {
+            unsafe {
+                if let Some(get_msg_id) = (*util_ptr).pfnGetUserMsgID
+                    && let Ok(cname) = std::ffi::CString::new(name)
+                {
+                    let mut size: i32 = 0;
+                    let id = get_msg_id(
+                        &entrypoints::PLUGIN_INFO,
+                        cname.as_ptr(),
+                        &mut size as *mut _,
+                    );
+                    if id > 0 && id != 255 {
+                        return id;
+                    }
+                }
+            }
+        }
+        0
+    });
     let engine: std::sync::Arc<dyn goldsrc_api::Engine> =
         std::sync::Arc::new(goldsrc::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE));
     if let Err(e) = goldsrc::host::HostRuntime::init(

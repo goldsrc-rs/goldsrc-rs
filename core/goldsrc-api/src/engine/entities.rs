@@ -64,4 +64,20 @@ pub trait EngineEntities: Send + Sync {
     /// Forces the real GameDLL's Touch between two entities
     /// (`touched` delivered into `other`, e.g. weapon → player).
     fn dispatch_touch(&self, touched: i32, other: i32);
+
+    /// Constructs a safe Player entity handle from a player slot index if valid.
+    fn player_handle(&self, index: i32) -> Option<crate::client::Player> {
+        if (1..=32).contains(&index) && self.entity_is_valid(index) {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                Some(crate::client::Player::from_index(index))
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                Some(crate::client::Player::new(index))
+            }
+        } else {
+            None
+        }
+    }
 }

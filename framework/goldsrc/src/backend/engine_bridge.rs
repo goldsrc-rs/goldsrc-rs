@@ -474,6 +474,10 @@ impl goldsrc_api::EngineEntities for EngineBackend {
         }
     }
 
+    fn player_handle(&self, index: i32) -> Option<goldsrc_api::Player> {
+        self.get_player(index)
+    }
+
     fn player_name(&self, index: i32) -> Option<String> {
         unsafe {
             let funcs = (self.engfuncs)();
@@ -507,6 +511,47 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 }
             }
             None
+        }
+    }
+
+    fn player_team(&self, index: i32) -> i32 {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = match funcs.pfnPEntityOfEntIndex {
+                Some(f) => f(index),
+                None => return 0,
+            };
+            if pedict.is_null() {
+                return 0;
+            }
+
+            // 1. Direct edict team offset (CS 1.6 / CZ team slot: 1=T, 2=CT, 3=Spectator)
+            let edict_team = (*pedict).v.team;
+            if (1..=3).contains(&edict_team) {
+                return edict_team;
+            }
+
+            // 2. Query infobuffer for "model" (e.g. "terror", "leet", "urban", "gign", "gsg9", "sas")
+            if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
+                && let Some(infokey_val) = funcs.pfnInfoKeyValue
+            {
+                let buffer = get_infokey(pedict);
+                let model_key = std::ffi::CString::new("model").unwrap_or_default();
+                let val_ptr = infokey_val(buffer, model_key.as_ptr());
+                if !val_ptr.is_null()
+                    && let Ok(model_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
+                {
+                    let m = model_str.to_ascii_lowercase();
+                    if m == "terror" || m == "leet" || m == "arctic" || m == "guerilla" {
+                        return 1; // Terrorist
+                    } else if m == "urban" || m == "gsg9" || m == "gign" || m == "sas" || m == "vip"
+                    {
+                        return 2; // Counter-Terrorist
+                    }
+                }
+            }
+
+            0 // Unassigned
         }
     }
 
