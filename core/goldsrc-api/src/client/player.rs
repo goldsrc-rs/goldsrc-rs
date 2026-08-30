@@ -1,7 +1,6 @@
 //! Safe wrapper around player entities with serial-validated edict access.
 
 use crate::Vector3;
-use crate::client::types::AsLangCode;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::edict::EDict;
 #[cfg(not(target_arch = "wasm32"))]
@@ -20,6 +19,9 @@ pub type PlayerNameResolverHook = fn(i32) -> Option<String>;
 pub type PlayerTeamResolverHook = fn(i32) -> i32;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub type PlayerLangResolverHook = fn(i32) -> Option<String>;
+
+#[cfg(not(target_arch = "wasm32"))]
 static NATIVE_PRINT_HOOK: RwLock<Option<NativePrintHook>> = RwLock::new(None);
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -30,6 +32,9 @@ static PLAYER_NAME_RESOLVER_HOOK: RwLock<Option<PlayerNameResolverHook>> = RwLoc
 
 #[cfg(not(target_arch = "wasm32"))]
 static PLAYER_TEAM_RESOLVER_HOOK: RwLock<Option<PlayerTeamResolverHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_LANG_RESOLVER_HOOK: RwLock<Option<PlayerLangResolverHook>> = RwLock::new(None);
 
 /// Registers the native backend print dispatcher for host-side `Player::print_*` calls.
 #[cfg(not(target_arch = "wasm32"))]
@@ -59,6 +64,14 @@ pub fn set_player_name_hook(hook: PlayerNameResolverHook) {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn set_player_team_hook(hook: PlayerTeamResolverHook) {
     if let Ok(mut lock) = PLAYER_TEAM_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player lang resolver for `Player::lang()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_lang_hook(hook: PlayerLangResolverHook) {
+    if let Ok(mut lock) = PLAYER_LANG_RESOLVER_HOOK.write() {
         *lock = Some(hook);
     }
 }
@@ -160,7 +173,24 @@ impl Player {
 
     /// Returns the player's preferred language code (e.g. `"ru"`, `"en"`).
     pub fn lang(&self) -> String {
-        self.as_lang_code().to_string()
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_cvar_get_string("_lang")
+                .or_else(|| {
+                    crate::bindings::goldsrc::engine::api::host_cvar_get_string("server_language")
+                })
+                .unwrap_or_else(|| "en".to_string())
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(lock) = PLAYER_LANG_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+                && let Some(lang) = resolver(self.index)
+            {
+                return lang;
+            }
+            "en".to_string()
+        }
     }
 
     /// Returns the entity's class name, if set.
@@ -587,6 +617,12 @@ impl From<i32> for Player {
 
 impl From<&Player> for Player {
     fn from(p: &Player) -> Self {
+        *p
+    }
+}
+
+impl From<&mut Player> for Player {
+    fn from(p: &mut Player) -> Self {
         *p
     }
 }

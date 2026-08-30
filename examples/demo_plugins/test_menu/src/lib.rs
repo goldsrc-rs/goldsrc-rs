@@ -126,4 +126,115 @@ impl TestMenu {
         player.set_origin(pos);
         player.print_center("[Test Menu] Телепортирован вверх");
     }
+
+    /// Opens a localized multilingual test menu integrated with i18n dictionaries.
+    /// Usage: `langmenu [ru|en|es|de]` or chat `/langmenu` / `/langmenu es`.
+    #[command(
+        name = "langmenu",
+        aliases = ["/langmenu", "!langmenu", "test_lang_menu", "lang_menu"],
+        description = "Opens interactive multilingual menu integrated with i18n dictionaries",
+        usage = "langmenu [ru|en|es|de]"
+    )]
+    fn handle_lang_menu(caller: i32, args: String) {
+        let player = Player::new(caller);
+        if !player.is_valid() {
+            return;
+        }
+
+        let explicit_lang = args.trim();
+        let lang_code = if explicit_lang.is_empty() {
+            player.lang()
+        } else {
+            explicit_lang.to_lowercase()
+        };
+
+        let title = tr!("test_i18n", &lang_code, "menu_title");
+        let item_hp = tr!("test_i18n", &lang_code, "menu_item_hp");
+        let item_ap = tr!("test_i18n", &lang_code, "menu_item_ap");
+        let item_m4a1 = tr!("test_i18n", &lang_code, "menu_item_m4a1");
+        let item_ak47 = tr!("test_i18n", &lang_code, "menu_item_ak47");
+        let item_awp = tr!("test_i18n", &lang_code, "menu_item_awp");
+        let item_deagle = tr!("test_i18n", &lang_code, "menu_item_deagle");
+
+        let menu = Menu::builder(title)
+            .style(MenuStyle::brackets())
+            .item(MenuItem::new(item_hp, 201).keep_open())
+            .item(MenuItem::new(item_ap, 202).keep_open())
+            .item((item_m4a1, 203))
+            .item((item_ak47, 204))
+            .item((item_awp, 205))
+            .item((item_deagle, 206))
+            .build();
+
+        player.open_menu(&menu);
+        log_info!(
+            "[Test Menu] Opened localized menu (lang='{}') for player #{}",
+            lang_code,
+            caller
+        );
+    }
+
+    #[menu_action(id = 201)]
+    fn on_lang_menu_heal(player: &mut Player) {
+        let cur = player.health();
+        player.set_health(cur + 100.0);
+        let msg = tr!("test_i18n", player, "menu_action_reward", item = "+100 HP");
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 202)]
+    fn on_lang_menu_armor(player: &mut Player) {
+        let cur = player.armorvalue();
+        player.set_armorvalue(cur + 100.0);
+        let msg = tr!("test_i18n", player, "menu_action_reward", item = "+100 AP");
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 203)]
+    fn on_lang_menu_m4a1(player: &mut Player) {
+        player.give_item("weapon_m4a1");
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            item = "M4A1 Carbine"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 204)]
+    fn on_lang_menu_ak47(player: &mut Player) {
+        player.give_item("weapon_ak47");
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            item = "AK-47 Kalashnikov"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 205)]
+    fn on_lang_menu_awp(player: &mut Player) {
+        player.give_item("weapon_awp");
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            item = "AWP Sniper"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 206)]
+    fn on_lang_menu_deagle(player: &mut Player) {
+        player.give_item("weapon_deagle");
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            item = "Desert Eagle"
+        );
+        player.print_chat(&msg);
+    }
 }

@@ -81,6 +81,13 @@ impl HostRuntime {
                 0
             }
         });
+        goldsrc_api::client::player::set_player_lang_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_lang(index)
+            } else {
+                None
+            }
+        });
         goldsrc_api::client::player::set_native_print_hook(|player_index, target, message| {
             let Some(engine) = HostRuntime::engine() else {
                 return;

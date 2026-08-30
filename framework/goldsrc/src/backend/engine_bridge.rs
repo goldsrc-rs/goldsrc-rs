@@ -2,6 +2,7 @@
 
 use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
 use crate::{call_engfunc, call_engfunc_ret};
+use goldsrc_api::EngineCvars;
 use goldsrc_sys::enginefuncs_t;
 
 /// Standard `Engine` implementation parameterized by the engfunc source.
@@ -551,6 +552,32 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 }
             }
             None
+        }
+    }
+
+    fn player_lang(&self, index: i32) -> Option<String> {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if pedict.is_null() {
+                return None;
+            }
+            if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
+                && let Some(infokey_val) = funcs.pfnInfoKeyValue
+            {
+                let buffer = get_infokey(pedict);
+                for key_name in ["_lang", "_cl_lang", "lang", "cl_lang"] {
+                    let key = std::ffi::CString::new(key_name).unwrap_or_default();
+                    let val_ptr = infokey_val(buffer, key.as_ptr());
+                    if !val_ptr.is_null()
+                        && let Ok(lang_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
+                        && !lang_str.trim().is_empty()
+                    {
+                        return Some(lang_str.trim().to_lowercase());
+                    }
+                }
+            }
+            self.cvar_get_string("server_language")
         }
     }
 

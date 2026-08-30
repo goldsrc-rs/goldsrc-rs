@@ -40,6 +40,11 @@ pub trait EngineEntities: Send + Sync {
         0
     }
 
+    /// Player preferred language (from `setinfo _lang` or server default).
+    fn player_lang(&self, _index: i32) -> Option<String> {
+        None
+    }
+
     /// Player armor value.
     fn player_armorvalue(&self, index: i32) -> f32;
 

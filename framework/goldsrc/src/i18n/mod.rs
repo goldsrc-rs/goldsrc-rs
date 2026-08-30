@@ -329,20 +329,20 @@ impl I18nEngine {
 macro_rules! tr {
     ($dict:expr, $lang:expr, $key:expr) => {{
         use $crate::AsLangCode as _;
-        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code(), $key, &[], &[])
+        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], &[])
     }};
     ($dict:expr, $lang:expr, $key:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
         use $crate::AsLangCode as _;
         let named: &[(&str, &str)] = &[
             $( (stringify!($k), &$v.to_string()) ),*
         ];
-        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code(), $key, named, &[])
+        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code().as_ref(), $key, named, &[])
     }};
     ($dict:expr, $lang:expr, $key:expr, $( $pos:expr ),* $(,)?) => {{
         use $crate::AsLangCode as _;
         let pos: &[&str] = &[
             $( &$pos.to_string() ),*
         ];
-        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code(), $key, &[], pos)
+        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], pos)
     }};
 }
