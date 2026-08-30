@@ -10,7 +10,7 @@ pub struct PrintQueue(std::sync::Mutex<std::collections::VecDeque<String>>);
 
 /// Helper to escape format specifiers and braces for ReHLDS fmtlib safety.
 ///
-/// Strips NUL bytes, escapes `%` → `%%`, `{`/`}` → `{{`/`}}`, CR/LF stripped, lines trimmed to 400 chars.
+/// Strips NUL bytes, escapes `%` → `%%`, `{`/`}` → `{{`/`}}`, CR/LF stripped, lines trimmed to 1024 chars.
 pub fn escape_server_print(message: &str) -> String {
     let safe = message
         .replace('\0', "")
@@ -19,11 +19,12 @@ pub fn escape_server_print(message: &str) -> String {
         .replace('}', "}}")
         .replace('\r', "")
         .replace('\n', " ");
-    let mut end = safe.len().min(400);
+    let mut end = safe.len().min(1024);
     while end > 0 && !safe.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{}\n", safe[..end].trim_end())
+    let slice = &safe[..end];
+    format!("{}\n", slice.trim_end_matches(['\r', '\n']))
 }
 
 /// Helper to sanitize console/center/chat prints with CP1251 encoding for Cyrillic GoldSrc client support.

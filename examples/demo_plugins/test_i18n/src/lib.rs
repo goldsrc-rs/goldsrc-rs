@@ -30,7 +30,7 @@ impl TestI18n {
             .name()
             .unwrap_or_else(|| format!("Player#{target_idx}"));
 
-        // 1. Format welcome message using tr! macro with named placeholder
+        // 1. Format welcome message using tr! macro with named placeholder and explicit lang_code
         let welcome = tr!("test_i18n", &lang_code, "welcome_msg", name = player_name);
 
         // 2. Format reward message using tr! macro with multiple parameters & defaults
@@ -51,7 +51,10 @@ impl TestI18n {
             map = "de_dust2"
         );
 
-        // 4. Test multi-level fallback to system 'common' dictionary
+        // 4. Test player-based language resolution (&target implementing AsLangCode)
+        let player_default_msg = tr!("test_i18n", &target, "welcome_msg");
+
+        // 5. Test multi-level fallback to system 'common' dictionary
         let btn_confirm = tr!("test_i18n", &lang_code, "btn_yes");
         let btn_cancel = tr!("test_i18n", &lang_code, "btn_no");
 
@@ -60,16 +63,23 @@ impl TestI18n {
         target.print_chat(&reward);
         target.print_chat(&alert);
         target.print_chat(&format!(
+            "^3[Player Lang ({} Defaults)]^1 {}",
+            target.lang(),
+            player_default_msg
+        ));
+        target.print_chat(&format!(
             "^3[Common Fallback]^1 OK: \x04{btn_confirm}\x01 | Cancel: \x04{btn_cancel}\x01"
         ));
 
         log_info!(
-            "[test_i18n] Dispatched '{}' messages to player #{}:\n  {}\n  {}\n  {}\n  Buttons: {} / {}",
+            "[test_i18n] Dispatched '{}' messages to player #{}:\n  {}\n  {}\n  {}\n  Player Default ({}): {}\n  Buttons: {} / {}",
             lang_code,
             target_idx,
             welcome,
             reward,
             alert,
+            target.lang(),
+            player_default_msg,
             btn_confirm,
             btn_cancel
         );

@@ -1,6 +1,7 @@
 //! Comprehensive test suite for the i18n subsystem.
 
 use super::*;
+use crate::tr;
 use std::sync::Mutex;
 
 /// Global test lock to serialize tests that mutate global `I18nEngine` state.
@@ -269,4 +270,58 @@ fn test_directory_and_file_merge() {
     assert_eq!(ban, "Забанить игрока");
 
     let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_macro_with_nested_placeholder_defaults_and_player_lang() {
+    let _lock = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let toml_content = r#"
+        [vars]
+        tag = "@{tag('GoldSrc.rs')}"
+
+        [translations.ru]
+        welcome_msg = "$vars.tag Добро пожаловать, @{g('{name='Гость'}')}!"
+        reward_msg = "$vars.tag Бонус: @{g('{amount='1000'}')} ₽ и @{g('{xp='50'}')} XP!"
+
+        [translations.en]
+        welcome_msg = "$vars.tag Welcome, @{g('{name='Guest'}')}!"
+        reward_msg = "$vars.tag Bonus: @{g('{amount='1000'}')} $ and @{g('{xp='50'}')} XP!"
+    "#;
+
+    I18nEngine::clear();
+    let count = I18nEngine::load_toml_string("demo_i18n", toml_content).unwrap();
+    assert_eq!(count, 4);
+
+    // 1. Interpolation with provided named values
+    let msg_custom = tr!("demo_i18n", "ru", "welcome_msg", name = "Player#1");
+    assert_eq!(
+        msg_custom,
+        "^3[\x04GoldSrc.rs^3]^1 Добро пожаловать, \x04Player#1\x01!"
+    );
+
+    // 2. Interpolation with defaults (no params passed)
+    let msg_default = tr!("demo_i18n", "ru", "welcome_msg");
+    assert_eq!(
+        msg_default,
+        "^3[\x04GoldSrc.rs^3]^1 Добро пожаловать, \x04Гость\x01!"
+    );
+
+    // 3. Multi-param interpolation with numbers
+    let reward = tr!("demo_i18n", "ru", "reward_msg", amount = 5000, xp = 250);
+    assert_eq!(
+        reward,
+        "^3[\x04GoldSrc.rs^3]^1 Бонус: \x045000\x01 ₽ и \x04250\x01 XP!"
+    );
+
+    // 4. Test Player as AsLangCode in tr! macro
+    let player = goldsrc_api::client::Player::new(1);
+    assert_eq!(player.lang(), "en");
+    let player_welcome = tr!("demo_i18n", &player, "welcome_msg", name = "TestUser");
+    assert_eq!(
+        player_welcome,
+        "^3[\x04GoldSrc.rs^3]^1 Welcome, \x04TestUser\x01!"
+    );
+
+    // 5. Test server_lang()
+    assert_eq!(I18nEngine::server_lang(), "en");
 }

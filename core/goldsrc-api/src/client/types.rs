@@ -79,3 +79,89 @@ impl From<i32> for Team {
         }
     }
 }
+
+/// Trait for types that can be resolved into a language code identifier (e.g. `"ru"`, `"en"`).
+pub trait AsLangCode {
+    /// Returns the active language code reference for translation lookups.
+    fn as_lang_code(&self) -> &str;
+}
+
+impl AsLangCode for str {
+    fn as_lang_code(&self) -> &str {
+        self
+    }
+}
+
+impl AsLangCode for &str {
+    fn as_lang_code(&self) -> &str {
+        self
+    }
+}
+
+impl AsLangCode for String {
+    fn as_lang_code(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl AsLangCode for &String {
+    fn as_lang_code(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl AsLangCode for crate::client::Player {
+    fn as_lang_code(&self) -> &str {
+        // In the future, dynamic client info `_cl_lang` can be queried here.
+        // Fallback default is "en".
+        "en"
+    }
+}
+
+impl AsLangCode for &crate::client::Player {
+    fn as_lang_code(&self) -> &str {
+        "en"
+    }
+}
+
+impl<T: AsLangCode> AsLangCode for crate::client::Alive<T> {
+    fn as_lang_code(&self) -> &str {
+        self.0.as_lang_code()
+    }
+}
+
+impl<T: AsLangCode> AsLangCode for crate::client::Dead<T> {
+    fn as_lang_code(&self) -> &str {
+        self.0.as_lang_code()
+    }
+}
+
+impl AsLangCode for crate::client::Terrorist {
+    fn as_lang_code(&self) -> &str {
+        self.0.as_lang_code()
+    }
+}
+
+impl AsLangCode for crate::client::CounterTerrorist {
+    fn as_lang_code(&self) -> &str {
+        self.0.as_lang_code()
+    }
+}
+
+impl AsLangCode for crate::client::Spectator {
+    fn as_lang_code(&self) -> &str {
+        self.0.as_lang_code()
+    }
+}
+
+impl AsLangCode for crate::client::Bot {
+    fn as_lang_code(&self) -> &str {
+        self.0.as_lang_code()
+    }
+}
+
+impl AsLangCode for crate::client::HLTV {
+    fn as_lang_code(&self) -> &str {
+        self.0.as_lang_code()
+    }
+}

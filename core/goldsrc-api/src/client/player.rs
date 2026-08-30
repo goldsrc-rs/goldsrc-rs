@@ -1,6 +1,7 @@
 //! Safe wrapper around player entities with serial-validated edict access.
 
 use crate::Vector3;
+use crate::client::types::AsLangCode;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::edict::EDict;
 
@@ -77,6 +78,11 @@ impl Player {
         {
             self.inner.netname()
         }
+    }
+
+    /// Returns the player's preferred language code (e.g. `"ru"`, `"en"`).
+    pub fn lang(&self) -> String {
+        self.as_lang_code().to_string()
     }
 
     /// Returns the entity's class name, if set.

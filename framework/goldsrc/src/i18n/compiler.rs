@@ -363,19 +363,10 @@ impl<'a> Compiler<'a> {
                     i += 1; // skip '('
                     let mut paren_depth = 1;
                     let mut args_raw = String::new();
-                    let mut in_quote: Option<char> = None;
 
                     while i < chars.len() && paren_depth > 0 {
                         let c = chars[i].1;
-                        if let Some(q) = in_quote {
-                            if c == q && (i == 0 || chars[i - 1].1 != '\\') {
-                                in_quote = None;
-                            }
-                            args_raw.push(c);
-                        } else if c == '\'' || c == '"' {
-                            in_quote = Some(c);
-                            args_raw.push(c);
-                        } else if c == '(' {
+                        if c == '(' {
                             paren_depth += 1;
                             args_raw.push(c);
                         } else if c == ')' {
@@ -386,6 +377,11 @@ impl<'a> Compiler<'a> {
                         } else {
                             args_raw.push(c);
                         }
+                        i += 1;
+                    }
+
+                    // Skip whitespace between ')' and '}' if any
+                    while i < chars.len() && chars[i].1.is_whitespace() {
                         i += 1;
                     }
 
@@ -416,6 +412,7 @@ impl<'a> Compiler<'a> {
         let mut tokens = Vec::new();
         let mut cur = String::new();
         let mut in_quote: Option<char> = None;
+        let mut brace_depth = 0;
 
         for c in raw.chars() {
             if let Some(q) = in_quote {
@@ -426,7 +423,15 @@ impl<'a> Compiler<'a> {
             } else if c == '\'' || c == '"' {
                 in_quote = Some(c);
                 cur.push(c);
-            } else if c == ',' {
+            } else if c == '{' {
+                brace_depth += 1;
+                cur.push(c);
+            } else if c == '}' {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                }
+                cur.push(c);
+            } else if c == ',' && brace_depth == 0 {
                 tokens.push(cur.trim().to_string());
                 cur.clear();
             } else {
@@ -438,11 +443,43 @@ impl<'a> Compiler<'a> {
         }
 
         for token in tokens {
+            let mut is_named = false;
             if let Some((k, v)) = token.split_once('=') {
-                let clean_v = v.trim().trim_matches('\'').trim_matches('"');
-                named.insert(k.trim().to_string(), clean_v.to_string());
-            } else {
-                let clean_v = token.trim().trim_matches('\'').trim_matches('"');
+                let k_trim = k.trim();
+                if !k_trim.starts_with('{')
+                    && !k_trim.starts_with('\'')
+                    && !k_trim.starts_with('"')
+                    && !k_trim.is_empty()
+                    && k_trim.chars().all(|c| c.is_alphanumeric() || c == '_')
+                {
+                    let trimmed = v.trim();
+                    let clean_v = if (trimmed.starts_with('\'')
+                        && trimmed.ends_with('\'')
+                        && trimmed.len() >= 2)
+                        || (trimmed.starts_with('"')
+                            && trimmed.ends_with('"')
+                            && trimmed.len() >= 2)
+                    {
+                        &trimmed[1..trimmed.len() - 1]
+                    } else {
+                        trimmed
+                    };
+                    named.insert(k_trim.to_string(), clean_v.to_string());
+                    is_named = true;
+                }
+            }
+
+            if !is_named {
+                let trimmed = token.trim();
+                let clean_v = if (trimmed.starts_with('\'')
+                    && trimmed.ends_with('\'')
+                    && trimmed.len() >= 2)
+                    || (trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2)
+                {
+                    &trimmed[1..trimmed.len() - 1]
+                } else {
+                    trimmed
+                };
                 pos.push(clean_v.to_string());
             }
         }

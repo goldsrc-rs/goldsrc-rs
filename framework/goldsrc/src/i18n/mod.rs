@@ -297,6 +297,12 @@ impl I18nEngine {
         format_placeholders(&raw, named_args, pos_args)
     }
 
+    /// Returns the global server default language code (from `server_language` cvar or fallback "en").
+    pub fn server_lang() -> String {
+        goldsrc_api::engine_api::cvar_get_string("server_language")
+            .unwrap_or_else(|| "en".to_string())
+    }
+
     /// Clears all loaded dictionaries.
     pub fn clear() {
         if let Ok(mut dict) = DICTIONARIES.write() {
@@ -312,27 +318,31 @@ impl I18nEngine {
 }
 
 /// Macro for translating keys from dictionaries with optional named & positional arguments.
+/// Accepts language codes (`&str`, `String`) as well as `&Player` or `Player`.
 ///
 /// # Examples
 /// ```ignore
-/// let msg = tr!("vip_menu", "ru", "welcome", name = "Player");
+/// let msg = tr!("vip_menu", &player, "welcome", name = "Player");
 /// let msg = tr!("vip_menu", "ru", "award", "1000", "Knife");
 /// ```
 #[macro_export]
 macro_rules! tr {
-    ($dict:expr, $lang:expr, $key:expr) => {
-        $crate::i18n::I18nEngine::translate($dict, $lang, $key, &[], &[])
-    };
+    ($dict:expr, $lang:expr, $key:expr) => {{
+        use $crate::AsLangCode as _;
+        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code(), $key, &[], &[])
+    }};
     ($dict:expr, $lang:expr, $key:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
+        use $crate::AsLangCode as _;
         let named: &[(&str, &str)] = &[
             $( (stringify!($k), &$v.to_string()) ),*
         ];
-        $crate::i18n::I18nEngine::translate($dict, $lang, $key, named, &[])
+        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code(), $key, named, &[])
     }};
     ($dict:expr, $lang:expr, $key:expr, $( $pos:expr ),* $(,)?) => {{
+        use $crate::AsLangCode as _;
         let pos: &[&str] = &[
             $( &$pos.to_string() ),*
         ];
-        $crate::i18n::I18nEngine::translate($dict, $lang, $key, &[], pos)
+        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code(), $key, &[], pos)
     }};
 }

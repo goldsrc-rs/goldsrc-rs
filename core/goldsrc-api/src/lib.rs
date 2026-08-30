@@ -34,8 +34,8 @@ pub mod storage;
 
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use client::{
-    Alive, Bot, ClientKind, ConnectionState, CounterTerrorist, Dead, HLTV, LifeState, Player,
-    PrintTarget, Spectator, Team, Terrorist,
+    Alive, AsLangCode, Bot, ClientKind, ConnectionState, CounterTerrorist, Dead, HLTV, LifeState,
+    Player, PrintTarget, Spectator, Team, Terrorist,
 };
 pub use command::{
     ChatScope, Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget,
