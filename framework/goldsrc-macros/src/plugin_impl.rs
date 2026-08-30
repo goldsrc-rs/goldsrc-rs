@@ -381,13 +381,25 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                                 param_bindings.push(quote! {
                                     let mut #ident: #ty = caller;
                                 });
+                            } else if ident == "player"
+                                || ident == "sender"
+                                || ident == "caller_player"
+                            {
+                                param_bindings.push(quote! {
+                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&caller.to_string()) {
+                                        Ok(val) => val,
+                                        Err(err) => {
+                                            ::goldsrc::log_warn!("[Command '{}'] Caller invalid: {}", name, err);
+                                            return true;
+                                        }
+                                    };
+                                });
                             } else {
                                 param_bindings.push(quote! {
                                     let __next_tok = __iter.next();
                                     let __tok_str = match __next_tok {
-                                        Some(t) if !t.is_empty() => t.to_string(),
-                                        _ if caller > 0 => caller.to_string(),
-                                        _ => String::new(),
+                                        Some(t) => t.to_string(),
+                                        None => String::new(),
                                     };
                                     let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&__tok_str) {
                                         Ok(val) => val,

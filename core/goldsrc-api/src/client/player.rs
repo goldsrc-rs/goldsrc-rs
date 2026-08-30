@@ -175,10 +175,7 @@ impl Player {
     pub fn lang(&self) -> String {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_cvar_get_string("_lang")
-                .or_else(|| {
-                    crate::bindings::goldsrc::engine::api::host_cvar_get_string("server_language")
-                })
+            crate::bindings::goldsrc::engine::api::host_player_lang(self.index)
                 .unwrap_or_else(|| "en".to_string())
         }
         #[cfg(not(target_arch = "wasm32"))]

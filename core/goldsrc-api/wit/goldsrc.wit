@@ -51,6 +51,9 @@ interface api {
 
     /// Retrieves a player's name.
     host-player-name: func(index: s32) -> option<string>;
+
+    /// Retrieves a player's preferred language code (from setinfo _lang or server default).
+    host-player-lang: func(index: s32) -> option<string>;
     
     /// Retrieves a player's team slot (0=Unassigned, 1=T, 2=CT, 3=Spectator).
     host-player-team: func(index: s32) -> s32;

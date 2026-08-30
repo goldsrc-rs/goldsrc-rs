@@ -173,7 +173,14 @@ impl TestMenu {
     fn on_lang_menu_heal(player: &mut Player) {
         let cur = player.health();
         player.set_health(cur + 100.0);
-        let msg = tr!("test_i18n", player, "menu_action_reward", item = "+100 HP");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "+100 HP"
+        );
         player.print_chat(&msg);
     }
 
@@ -181,17 +188,26 @@ impl TestMenu {
     fn on_lang_menu_armor(player: &mut Player) {
         let cur = player.armorvalue();
         player.set_armorvalue(cur + 100.0);
-        let msg = tr!("test_i18n", player, "menu_action_reward", item = "+100 AP");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "+100 AP"
+        );
         player.print_chat(&msg);
     }
 
     #[menu_action(id = 203)]
     fn on_lang_menu_m4a1(player: &mut Player) {
         player.give_item("weapon_m4a1");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
         let msg = tr!(
             "test_i18n",
             player,
             "menu_action_reward",
+            name = name,
             item = "M4A1 Carbine"
         );
         player.print_chat(&msg);
@@ -200,10 +216,12 @@ impl TestMenu {
     #[menu_action(id = 204)]
     fn on_lang_menu_ak47(player: &mut Player) {
         player.give_item("weapon_ak47");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
         let msg = tr!(
             "test_i18n",
             player,
             "menu_action_reward",
+            name = name,
             item = "AK-47 Kalashnikov"
         );
         player.print_chat(&msg);
@@ -212,10 +230,12 @@ impl TestMenu {
     #[menu_action(id = 205)]
     fn on_lang_menu_awp(player: &mut Player) {
         player.give_item("weapon_awp");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
         let msg = tr!(
             "test_i18n",
             player,
             "menu_action_reward",
+            name = name,
             item = "AWP Sniper"
         );
         player.print_chat(&msg);
@@ -224,10 +244,12 @@ impl TestMenu {
     #[menu_action(id = 206)]
     fn on_lang_menu_deagle(player: &mut Player) {
         player.give_item("weapon_deagle");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
         let msg = tr!(
             "test_i18n",
             player,
             "menu_action_reward",
+            name = name,
             item = "Desert Eagle"
         );
         player.print_chat(&msg);
