@@ -1,0 +1,37 @@
+# GoldSrc.rs System Common Localization Dictionary
+# Dictionary Name: common (placed in data/lang/common.toml)
+
+[config]
+version = "1.0.0"
+author = "GoldSrc.rs Team"
+fallback = "en"
+access = "public"
+
+[templates]
+tag = "^3[^4{0}^3]^1"
+info = "$vars.tag {0}"
+
+[vars]
+tag = "@{tag('GoldSrc')}"
+
+[translations.ru]
+btn_yes = "Да"
+btn_no = "Нет"
+btn_back = "Назад"
+btn_cancel = "Отмена"
+btn_exit = "Выход"
+btn_next = "Далее"
+btn_prev = "Назад"
+msg_access_denied = "$vars.tag У вас нет доступа к этой команде."
+msg_unknown_command = "$vars.tag Неизвестная команда."
+
+[translations.en]
+btn_yes = "Yes"
+btn_no = "No"
+btn_back = "Back"
+btn_cancel = "Cancel"
+btn_exit = "Exit"
+btn_next = "Next"
+btn_prev = "Prev"
+msg_access_denied = "$vars.tag Access denied."
+msg_unknown_command = "$vars.tag Unknown command."

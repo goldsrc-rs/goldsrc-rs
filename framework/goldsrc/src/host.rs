@@ -113,6 +113,11 @@ impl HostRuntime {
         if !lang_dir.exists() {
             let _ = std::fs::create_dir_all(&lang_dir);
         }
+        let common_lang_file = lang_dir.join("common.toml");
+        if !common_lang_file.exists() {
+            let default_common = include_str!("../../../resources/lang/common.toml");
+            let _ = std::fs::write(&common_lang_file, default_common);
+        }
         let sample_lang_file = lang_dir.join("test_i18n.toml");
         if !sample_lang_file.exists() {
             let default_template = include_str!("../../../resources/lang/test_i18n.toml");
