@@ -1095,6 +1095,12 @@ pub fn system(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("system")
 }
 
+/// Marker attribute for contextual placeholder handlers (`#[placeholder(name = "rank", usage = "{rank}")]`).
+#[proc_macro_attribute]
+pub fn placeholder(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("placeholder")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

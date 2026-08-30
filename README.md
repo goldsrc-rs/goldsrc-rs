@@ -29,7 +29,6 @@ sandboxing, zero-overhead FFI, ergonomic ECS abstractions, and dynamic hot-reloa
   - [2. Build Backends and Plugins](#2-build-backends-and-plugins)
   - [3. Deploy to Server](#3-deploy-to-server)
   - [In-Game Management (`grs` CLI)](#in-game-management-grs-cli)
-- [Ecosystem & Future Tooling](#ecosystem--future-tooling)
 - [Maintainers](#maintainers)
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
@@ -165,17 +164,6 @@ GoldSrc.rs provides a built-in server console and client command `grs` (or `gold
 | `grs reload <plugin>` | Hot-reload a plugin without restarting the server |
 | `grs pause / unpause` | Pause or resume event dispatching for a plugin |
 | `grs status` | Print engine backend, memory usage, and runtime info |
-
-## Ecosystem & Future Tooling
-
-The GoldSrc.rs initiative extends beyond the core engine runtime into dedicated ecosystem developer and administration tooling:
-
-- **`goldsrc-coreutils` (Planned)**:
-  - Integration of modular `uutils/coreutils` POSIX utilities directly inside the GoldSrc / HLDS console (`ls`, `cat`, `head`, `tail`, `grep`, `wc`).
-  - Sandboxed execution within the `cstrike/` root with strict path traversal isolation and capability-based authorization (`admin.shell`).
-- **`cargo-goldsrc` / `grs` Dedicated CLI Tool (Planned)**:
-  - Developer workstation tooling for plugin scaffolding (`grs new <plugin>`), verification, and packaging (`.gsp` bundle format).
-  - Plugin registry integration for one-command installation (`grs install <plugin>`) and updates.
 
 ## Maintainers
 

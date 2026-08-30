@@ -24,8 +24,12 @@ pub mod host;
 #[cfg(feature = "host")]
 pub mod backend;
 
+/// In-game Chat Interception, Filtering Pipeline, and Safe Packet Chunking.
+pub mod chat;
 /// System (`goldsrc.toml`) and plugins (`plugins.toml`) configuration models.
 pub mod config;
+/// Dynamic Contextual Placeholder Engine, Registry, and String Interpolator.
+pub mod placeholders;
 /// Backward-compatible alias for plugins_config module.
 pub use config::plugins as plugins_config;
 pub use config::{
@@ -46,7 +50,9 @@ pub mod paths;
 pub mod rules;
 /// Unified SQLite WAL storage engine and background batching.
 pub mod storage;
+pub use chat::process_chat_message;
 pub use i18n::I18nEngine;
+pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use storage::{Bucket, JsonFormat, StorageFormat};
 
 #[macro_export]

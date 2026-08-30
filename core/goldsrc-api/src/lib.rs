@@ -7,6 +7,8 @@
 pub mod auth;
 /// Generated WASM bindings (wasm32 only).
 pub mod bindings;
+/// In-game chat interception, formatting, and packet splitting.
+pub mod chat;
 /// Core player and client domain abstractions, states, and typestate guards.
 pub mod client;
 /// Command routing targets, scope filters, programmatic builder, and errors.
@@ -15,6 +17,8 @@ pub mod command;
 pub mod consts;
 /// Typed CVar bindings and flags.
 pub mod cvar;
+/// Unified Expression DSL lexer, parser, and grammar primitives.
+pub mod dsl;
 /// Validated `edict_t` handle.
 pub mod edict;
 /// Modular engine sub-system traits, unified engine bridge, and API facade.
@@ -25,6 +29,8 @@ pub mod hud;
 pub mod liblist;
 /// Declarative multi-page menu system.
 pub mod menu;
+/// Dynamic contextual placeholders and function calls.
+pub mod placeholders;
 /// Unified requirements DSL.
 pub mod requirements;
 /// Generic Reactive Rule & Provider Engine.
@@ -33,15 +39,17 @@ pub mod rules;
 pub mod storage;
 
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
+pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
     Alive, AsLangCode, Bot, ClientKind, ConnectionState, CounterTerrorist, Dead, HLTV, LifeState,
     Player, PrintTarget, Spectator, Team, Terrorist,
 };
 pub use command::{
-    ChatScope, Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget,
-    FromArg, PlayerStateFilter,
+    Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, FromArg,
+    PlayerStateFilter,
 };
 pub use cvar::{Cvar, CvarFlags};
+pub use dsl::{CallArg, Lexer, PlaceholderCall, Token, parse_placeholder_call};
 pub use edict::EDict;
 pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
@@ -59,6 +67,7 @@ pub use menu::{
     MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, RenderedMenuPage,
     SlotAction, VisualDeny,
 };
+pub use placeholders::{PlaceholderHandler, PlaceholderMetadata, PlayerTarget};
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
