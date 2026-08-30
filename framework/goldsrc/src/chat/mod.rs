@@ -46,11 +46,29 @@ pub fn process_chat_message(sender: Player, raw_text: &str, scope: ChatScope) ->
         }
     }
 
-    // 3. Render final output with prefix
-    let full_text = if let Some(ref prefix) = msg.prefix {
-        format!("{prefix}{}", msg.formatted_text)
-    } else {
-        msg.formatted_text.clone()
+    // 3. Render final output with player name and prefix
+    let sender_name = sender
+        .name()
+        .unwrap_or_else(|| format!("Player#{}", sender.index()));
+
+    let full_text = match msg.scope.team {
+        TeamTarget::SameTeam => {
+            if let Some(ref prefix) = msg.prefix {
+                format!(
+                    "{prefix}^2(TEAM)^1 ^3{sender_name}^1 :  {}",
+                    msg.formatted_text
+                )
+            } else {
+                format!("^2(TEAM)^1 ^3{sender_name}^1 :  {}", msg.formatted_text)
+            }
+        }
+        _ => {
+            if let Some(ref prefix) = msg.prefix {
+                format!("{prefix}^3{sender_name}^1 :  {}", msg.formatted_text)
+            } else {
+                format!("^3{sender_name}^1 :  {}", msg.formatted_text)
+            }
+        }
     };
 
     // 4. Split message into safe 180-byte chunks

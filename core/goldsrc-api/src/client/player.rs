@@ -4,6 +4,36 @@ use crate::Vector3;
 use crate::client::types::AsLangCode;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::edict::EDict;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::RwLock;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type NativePrintHook = fn(i32, crate::client::PrintTarget, &str);
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type PlayerResolverHook = fn(i32) -> Option<Player>;
+
+#[cfg(not(target_arch = "wasm32"))]
+static NATIVE_PRINT_HOOK: RwLock<Option<NativePrintHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_RESOLVER_HOOK: RwLock<Option<PlayerResolverHook>> = RwLock::new(None);
+
+/// Registers the native backend print dispatcher for host-side `Player::print_*` calls.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_native_print_hook(hook: NativePrintHook) {
+    if let Ok(mut lock) = NATIVE_PRINT_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player resolver for `Player::new(index)` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_resolver_hook(hook: PlayerResolverHook) {
+    if let Ok(mut lock) = PLAYER_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
 
 /// Safe wrapper around a player entity.
 ///
@@ -30,16 +60,30 @@ impl Player {
         }
     }
 
+    /// Creates a Player handle from a verified index on native host.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn from_index(index: i32) -> Self {
+        Self {
+            index,
+            inner: EDict::invalid(),
+        }
+    }
+
     /// Creates a `Player` handle for `index`.
     #[cfg(target_arch = "wasm32")]
     pub fn new(index: i32) -> Self {
         Self { index }
     }
 
-    /// Creates a `Player` handle for `index` with an invalid backing edict
-    /// (host-only placeholder; use [`Player::from_raw`] with a real pointer).
+    /// Creates a `Player` handle for `index` with backing edict resolved via host engine if available.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(index: i32) -> Self {
+        if let Ok(lock) = PLAYER_RESOLVER_HOOK.read()
+            && let Some(resolver) = *lock
+            && let Some(player) = resolver(index)
+        {
+            return player;
+        }
         Self {
             index,
             inner: EDict::invalid(),
@@ -300,7 +344,11 @@ impl Player {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (self.index, target, msg);
+            if let Ok(lock) = NATIVE_PRINT_HOOK.read()
+                && let Some(hook) = *lock
+            {
+                hook(self.index, target, msg);
+            }
         }
     }
 

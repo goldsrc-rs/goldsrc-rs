@@ -93,7 +93,15 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
                     return true;
                 }
             }
-            return false;
+
+            // Route standard player chat through the chat interceptor / placeholder pipeline
+            let sender = goldsrc_api::client::Player::new(player_idx);
+            let scope = if cmd.eq_ignore_ascii_case("say_team") {
+                goldsrc_api::chat::ChatScope::same_team()
+            } else {
+                goldsrc_api::chat::ChatScope::all()
+            };
+            return crate::chat::process_chat_message(sender, text, scope);
         }
 
         // Direct client console command

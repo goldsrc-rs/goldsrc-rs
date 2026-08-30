@@ -18,6 +18,11 @@ pub fn format_say_text(input: &str) -> String {
                     out.push('\x01');
                     continue;
                 }
+                '2' => {
+                    chars.next();
+                    out.push('\x02');
+                    continue;
+                }
                 '3' => {
                     chars.next();
                     out.push('\x03');

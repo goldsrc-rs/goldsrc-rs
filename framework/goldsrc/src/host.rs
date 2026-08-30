@@ -57,6 +57,63 @@ impl HostRuntime {
             crate::i18n::I18nEngine::translate_with_caller(caller, dict, lang, key, &[], &[])
         });
 
+        goldsrc_api::client::player::set_player_resolver_hook(|index| {
+            if let Some(engine) = HostRuntime::engine()
+                && (1..=32).contains(&index)
+                && engine.entity_is_valid(index)
+            {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    Some(goldsrc_api::Player::from_index(index))
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    Some(goldsrc_api::Player::new(index))
+                }
+            } else {
+                None
+            }
+        });
+        goldsrc_api::client::player::set_native_print_hook(|player_index, target, message| {
+            let Some(engine) = HostRuntime::engine() else {
+                return;
+            };
+            match target {
+                goldsrc_api::PrintTarget::Console => {
+                    engine.client_print(player_index, goldsrc_api::HUD_PRINTCONSOLE, message);
+                }
+                goldsrc_api::PrintTarget::Center => {
+                    engine.client_print(player_index, goldsrc_api::HUD_PRINTCENTER, message);
+                }
+                goldsrc_api::PrintTarget::Chat | goldsrc_api::PrintTarget::ColoredChat => {
+                    if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+                        return;
+                    }
+                    let formatted = goldsrc_api::format_say_text(message);
+                    let say_text_id = engine.reg_user_msg("SayText", -1);
+                    let msg_id = if say_text_id <= 0 { 76 } else { say_text_id };
+                    engine.message_begin(
+                        goldsrc_api::MessageDest::One as i32,
+                        msg_id,
+                        None,
+                        Some(player_index),
+                    );
+                    engine.write_byte(player_index);
+                    let safe_msg = if formatted.len() > 175 {
+                        let mut end = 175;
+                        while end > 0 && !formatted.is_char_boundary(end) {
+                            end -= 1;
+                        }
+                        &formatted[..end]
+                    } else {
+                        &formatted
+                    };
+                    engine.write_string(safe_msg);
+                    engine.message_end();
+                }
+            }
+        });
+
         let mut manager = PluginManager::new(engine.clone())
             .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
         manager.set_plugin_dirs(crate::paths::PathResolver::plugin_dirs(backend));
