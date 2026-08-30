@@ -16,11 +16,11 @@ impl TestI18n {
     }
 
     /// Sends localized multi-language messages to a player.
-    /// Usage: `test_lang <player_index> <ru|en|es|de>`
+    /// Usage: `test_lang <player_index> <ru|en|es|de|unknown>`
     #[command(
         name = "test_lang",
         aliases = ["langtest", "/lang", "!lang"],
-        description = "Tests dictionary translations in ru, en, es, de languages",
+        description = "Tests dictionary translations in ru, en, es, de languages + fallback chain",
         usage = "test_lang <player_index> <lang_code>"
     )]
     fn test_language(target: Player, lang: String) {
@@ -33,7 +33,7 @@ impl TestI18n {
         // 1. Format welcome message using tr! macro with named placeholder
         let welcome = tr!("test_i18n", &lang_code, "welcome_msg", name = player_name);
 
-        // 2. Format reward message using tr! macro with multiple parameters
+        // 2. Format reward message using tr! macro with multiple parameters & defaults
         let reward = tr!(
             "test_i18n",
             &lang_code,
@@ -51,18 +51,27 @@ impl TestI18n {
             map = "de_dust2"
         );
 
+        // 4. Test multi-level fallback to system 'common' dictionary
+        let btn_confirm = tr!("test_i18n", &lang_code, "btn_yes");
+        let btn_cancel = tr!("test_i18n", &lang_code, "btn_no");
+
         // Send messages to client
         target.print_chat(&welcome);
         target.print_chat(&reward);
         target.print_chat(&alert);
+        target.print_chat(&format!(
+            "^3[Common Fallback]^1 OK: \x04{btn_confirm}\x01 | Cancel: \x04{btn_cancel}\x01"
+        ));
 
         log_info!(
-            "[test_i18n] Dispatched '{}' messages to player #{}:\n  {}\n  {}\n  {}",
+            "[test_i18n] Dispatched '{}' messages to player #{}:\n  {}\n  {}\n  {}\n  Buttons: {} / {}",
             lang_code,
             target_idx,
             welcome,
             reward,
-            alert
+            alert,
+            btn_confirm,
+            btn_cancel
         );
     }
 }
