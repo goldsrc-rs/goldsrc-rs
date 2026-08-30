@@ -12,13 +12,15 @@ pub enum CallArg {
     Named { name: String, value: String },
 }
 
-/// Parsed functional placeholder descriptor: `{domain:ident(args...)}`.
+/// Parsed functional placeholder descriptor: `{domain:ident(args...)}` or `{ident='default'}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceholderCall {
     /// Domain/Plugin prefix if specified (e.g. `stats` in `{stats:rank}`).
     pub domain: Option<String>,
     /// Primary placeholder identifier (e.g. `rank`, `ip`, `name`).
     pub ident: String,
+    /// Optional default fallback value (e.g. `Guest` in `{name='Guest'}`).
+    pub default: Option<String>,
     /// List of parsed call arguments.
     pub args: Vec<CallArg>,
 }
@@ -72,6 +74,14 @@ pub fn parse_placeholder_call(raw: &str) -> Result<PlaceholderCall, String> {
         (head.trim(), Some(&tail[..tail.len() - 1]))
     } else {
         (trimmed, None)
+    };
+
+    let (prefix_and_ident, default) = match prefix_and_ident.split_once('=') {
+        Some((head, def)) => {
+            let clean_def = def.trim().trim_matches(['\'', '"']).to_string();
+            (head.trim(), Some(clean_def))
+        }
+        None => (prefix_and_ident, None),
     };
 
     let (domain, ident) = if let Some((d, id)) = prefix_and_ident.split_once(':') {
@@ -138,6 +148,7 @@ pub fn parse_placeholder_call(raw: &str) -> Result<PlaceholderCall, String> {
     Ok(PlaceholderCall {
         domain,
         ident,
+        default,
         args,
     })
 }
@@ -205,7 +216,7 @@ pub struct PlaceholderMetadata {
     pub capability: Option<String>,
 }
 
-/// Trait implemented by placeholder provider callbacks.
+/// Trait implemented by native and WASM placeholder providers.
 pub trait PlaceholderHandler: Send + Sync {
     /// Evaluates the placeholder function for a given caller and parsed call arguments.
     fn evaluate(&self, caller: Player, call: &PlaceholderCall) -> String;
@@ -229,6 +240,7 @@ mod tests {
         let p1 = parse_placeholder_call("name").unwrap();
         assert_eq!(p1.domain, None);
         assert_eq!(p1.ident, "name");
+        assert_eq!(p1.default, None);
         assert!(p1.args.is_empty());
 
         let p2 = parse_placeholder_call("stats:rank(target='bruh', format='short')").unwrap();
@@ -240,5 +252,9 @@ mod tests {
         let p3 = parse_placeholder_call("ip('127.0.0.1')").unwrap();
         assert_eq!(p3.ident, "ip");
         assert_eq!(p3.get_positional(0), Some("127.0.0.1"));
+
+        let p4 = parse_placeholder_call("name='Guest'").unwrap();
+        assert_eq!(p4.ident, "name");
+        assert_eq!(p4.default.as_deref(), Some("Guest"));
     }
 }

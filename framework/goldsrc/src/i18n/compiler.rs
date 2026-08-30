@@ -220,13 +220,45 @@ impl<'a> Compiler<'a> {
         let mut chars = text.chars().peekable();
 
         while let Some(c) = chars.next() {
-            if c == '\\' && chars.peek() == Some(&'$') {
-                result.push('$');
-                chars.next();
-                continue;
-            }
+            if c == '\\' {
+                if let Some(&next) = chars.peek()
+                    && (next == '{' || next == '}' || next == '$' || next == '@' || next == '\\')
+                {
+                    result.push('\\');
+                    result.push(next);
+                    chars.next();
+                    continue;
+                }
+                result.push('\\');
+            } else if c == '{' {
+                let mut var_name = String::new();
+                let mut closed = false;
+                for vc in chars.by_ref() {
+                    if vc == '}' {
+                        closed = true;
+                        break;
+                    }
+                    var_name.push(vc);
+                }
 
-            if c == '$' {
+                if closed {
+                    let clean_name = var_name.strip_prefix("vars.").unwrap_or(&var_name);
+                    if let Some(val) = vars.get(clean_name) {
+                        result.push_str(val);
+                    } else if let Some(val) = vars.get(&var_name) {
+                        result.push_str(val);
+                    } else {
+                        // Keep runtime placeholder: {name}, {0}, {name='Guest'}
+                        result.push('{');
+                        result.push_str(&var_name);
+                        result.push('}');
+                    }
+                } else {
+                    result.push('{');
+                    result.push_str(&var_name);
+                }
+            } else if c == '$' {
+                // Backward-compatible fallback for legacy $var or ${var}
                 if chars.peek() == Some(&'{') {
                     chars.next(); // skip '{'
                     let mut var_name = String::new();
@@ -243,41 +275,34 @@ impl<'a> Compiler<'a> {
                         if let Some(val) = vars.get(clean_name) {
                             result.push_str(val);
                         } else {
-                            result.push_str("${");
+                            result.push('{');
                             result.push_str(&var_name);
                             result.push('}');
                         }
-                    } else {
-                        result.push_str("${");
-                        result.push_str(&var_name);
                     }
-                    continue;
-                }
-
-                // Check for $vars.name or $name
-                let mut var_ident = String::new();
-                while let Some(&nc) = chars.peek() {
-                    if nc.is_alphanumeric() || nc == '_' || nc == '.' {
-                        var_ident.push(nc);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-
-                if var_ident.is_empty() {
-                    result.push('$');
-                    continue;
-                }
-
-                let clean_ident = var_ident.strip_prefix("vars.").unwrap_or(&var_ident);
-                if let Some(val) = vars.get(clean_ident) {
-                    result.push_str(val);
-                } else if let Some(val) = vars.get(&var_ident) {
-                    result.push_str(val);
                 } else {
-                    result.push('$');
-                    result.push_str(&var_ident);
+                    let mut var_ident = String::new();
+                    while let Some(&nc) = chars.peek() {
+                        if nc.is_alphanumeric() || nc == '_' || nc == '.' {
+                            var_ident.push(nc);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if var_ident.is_empty() {
+                        result.push('$');
+                        continue;
+                    }
+
+                    let clean_ident = var_ident.strip_prefix("vars.").unwrap_or(&var_ident);
+                    if let Some(val) = vars.get(clean_ident) {
+                        result.push_str(val);
+                    } else {
+                        result.push('$');
+                        result.push_str(&var_ident);
+                    }
                 }
             } else {
                 result.push(c);

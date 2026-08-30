@@ -79,6 +79,10 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
             if text.starts_with('"') && text.ends_with('"') && text.len() >= 2 {
                 text = &text[1..text.len() - 1];
             }
+            if text.trim().is_empty() {
+                // Suppress empty chat messages
+                return true;
+            }
             let mut parts = text.split_whitespace();
             if let Some(trigger) = parts.next() {
                 let clean_trigger = trigger.trim_start_matches(['/', '!']);

@@ -285,20 +285,41 @@ pub fn format_placeholders_with_manager(
     mut manager: Option<&mut goldsrc_wasm_host::PluginManager>,
 ) -> String {
     let mut out = String::with_capacity(template.len());
-    let mut rest = template;
+    let mut chars = template.chars().peekable();
 
-    while let Some(start) = rest.find('{') {
-        out.push_str(&rest[..start]);
-        let tail = &rest[start + 1..];
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(&next) = chars.peek()
+                && (next == '{' || next == '}' || next == '\\')
+            {
+                out.push(next);
+                chars.next();
+                continue;
+            }
+            out.push('\\');
+        } else if c == '{' {
+            let mut inner = String::new();
+            let mut closed = false;
+            for ic in chars.by_ref() {
+                if ic == '}' {
+                    closed = true;
+                    break;
+                }
+                inner.push(ic);
+            }
 
-        if let Some(end) = tail.find('}') {
-            let inner = &tail[..end];
+            if !closed {
+                out.push('{');
+                out.push_str(&inner);
+                continue;
+            }
+
             let reg = match PLACEHOLDER_REGISTRY.read() {
                 Ok(r) => r,
                 Err(e) => e.into_inner(),
             };
 
-            match parse_placeholder_call(inner) {
+            match parse_placeholder_call(&inner) {
                 Ok(call) => match reg.evaluate_call(caller, &call) {
                     Ok(val) => out.push_str(&val),
                     Err(_) => {
@@ -319,30 +340,26 @@ pub fn format_placeholders_with_manager(
 
                         if let Some(val) = resolved {
                             out.push_str(&val);
-                            rest = &tail[end + 1..];
-                            continue;
+                        } else if let Some(ref def) = call.default {
+                            out.push_str(def);
+                        } else {
+                            out.push('{');
+                            out.push_str(&inner);
+                            out.push('}');
                         }
-
-                        // Keep original if unresolvable
-                        out.push('{');
-                        out.push_str(inner);
-                        out.push('}');
                     }
                 },
                 Err(_) => {
                     out.push('{');
-                    out.push_str(inner);
+                    out.push_str(&inner);
                     out.push('}');
                 }
             }
-            rest = &tail[end + 1..];
         } else {
-            out.push('{');
-            rest = tail;
-            break;
+            out.push(c);
         }
     }
-    out.push_str(rest);
+
     out
 }
 
@@ -355,42 +372,64 @@ pub fn format_placeholders(template: &str, caller: Player) -> String {
     #[cfg(not(feature = "host"))]
     {
         let mut out = String::with_capacity(template.len());
-        let mut rest = template;
+        let mut chars = template.chars().peekable();
 
-        while let Some(start) = rest.find('{') {
-            out.push_str(&rest[..start]);
-            let tail = &rest[start + 1..];
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(&next) = chars.peek()
+                    && (next == '{' || next == '}' || next == '\\')
+                {
+                    out.push(next);
+                    chars.next();
+                    continue;
+                }
+                out.push('\\');
+            } else if c == '{' {
+                let mut inner = String::new();
+                let mut closed = false;
+                for ic in chars.by_ref() {
+                    if ic == '}' {
+                        closed = true;
+                        break;
+                    }
+                    inner.push(ic);
+                }
 
-            if let Some(end) = tail.find('}') {
-                let inner = &tail[..end];
+                if !closed {
+                    out.push('{');
+                    out.push_str(&inner);
+                    continue;
+                }
+
                 let reg = match PLACEHOLDER_REGISTRY.read() {
                     Ok(r) => r,
                     Err(e) => e.into_inner(),
                 };
 
-                match parse_placeholder_call(inner) {
+                match parse_placeholder_call(&inner) {
                     Ok(call) => match reg.evaluate_call(caller, &call) {
                         Ok(val) => out.push_str(&val),
                         Err(_) => {
-                            out.push('{');
-                            out.push_str(inner);
-                            out.push('}');
+                            if let Some(ref def) = call.default {
+                                out.push_str(def);
+                            } else {
+                                out.push('{');
+                                out.push_str(&inner);
+                                out.push('}');
+                            }
                         }
                     },
                     Err(_) => {
                         out.push('{');
-                        out.push_str(inner);
+                        out.push_str(&inner);
                         out.push('}');
                     }
                 }
-                rest = &tail[end + 1..];
             } else {
-                out.push('{');
-                rest = tail;
-                break;
+                out.push(c);
             }
         }
-        out.push_str(rest);
+
         out
     }
 }
@@ -406,5 +445,15 @@ mod tests {
         assert!(formatted.contains("Hello, Player#1!"));
         assert!(formatted.contains("127.0.0.1"));
         assert!(formatted.contains("HP: 0")); // default unspawned player health in pure unit test
+    }
+
+    #[test]
+    fn test_placeholder_default_fallback_and_escapes() {
+        let player = Player::new(1);
+        let formatted = format_placeholders(
+            "Hello, {unknown_var='Guest'}! Escaped: \\{escaped_tag\\}",
+            player,
+        );
+        assert_eq!(formatted, "Hello, Guest! Escaped: {escaped_tag}");
     }
 }
