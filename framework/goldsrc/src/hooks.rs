@@ -40,6 +40,12 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
     res
 }
 
+/// Dispatches client userinfo change event and updates active player menu if open.
+pub fn on_client_user_info_changed(player_idx: i32) {
+    emit_player_event("client_user_info_changed", player_idx);
+    goldsrc_api::menu::refresh_player_menu(player_idx);
+}
+
 /// Dispatches a console / client command to the WASM host.
 /// Returns `true` if the host runtime is active and processed the command.
 pub fn dispatch_command(cmd: &str, args: &str) -> bool {

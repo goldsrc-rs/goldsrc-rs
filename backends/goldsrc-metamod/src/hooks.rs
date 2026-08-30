@@ -69,6 +69,10 @@ impl EntityHooks for MetamodHooks {
     fn client_disconnect_post(&self, index: i32) {
         goldsrc::hooks::emit_player_event("client_disconnect", index);
     }
+
+    fn client_user_info_changed_post(&self, index: i32) {
+        goldsrc::hooks::on_client_user_info_changed(index);
+    }
 }
 
 /// Static hook instance handed to the registry in `Meta_Attach`.

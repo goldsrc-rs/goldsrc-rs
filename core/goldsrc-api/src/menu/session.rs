@@ -197,6 +197,28 @@ pub fn close_menu(player_idx: i32) {
     }
 }
 
+/// Re-renders and sends the currently open menu for `player_idx` if present, updating navigation text for their active language.
+pub fn refresh_player_menu(player_idx: i32) {
+    let mut sessions = MENU_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(session) = sessions.get_mut(&player_idx) {
+        let player = crate::client::Player::new(player_idx);
+        let lang = player.lang();
+        session.menu.style = session.menu.style.clone().with_lang(&lang);
+        render_and_send(player_idx, session);
+    }
+}
+
+/// Re-renders and sends all currently open menus for all players.
+pub fn refresh_all_menus() {
+    let mut sessions = MENU_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    for (&player_idx, session) in sessions.iter_mut() {
+        let player = crate::client::Player::new(player_idx);
+        let lang = player.lang();
+        session.menu.style = session.menu.style.clone().with_lang(&lang);
+        render_and_send(player_idx, session);
+    }
+}
+
 fn render_and_send(player_idx: i32, session: &mut PlayerMenuSession) {
     let player = crate::client::Player::new(player_idx);
     let ctx = MenuContext {

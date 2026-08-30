@@ -79,6 +79,8 @@ pub trait EntityHooks: Send + Sync {
     fn client_connect_post(&self, index: i32) {}
     /// Post-`pfnClientDisconnect`.
     fn client_disconnect_post(&self, index: i32) {}
+    /// Post-`pfnClientUserInfoChanged`.
+    fn client_user_info_changed_post(&self, index: i32) {}
     /// Post-`pfnStartFrame`.
     fn start_frame_post(&self) {}
 }
@@ -388,6 +390,20 @@ pub unsafe extern "C" fn api_client_disconnect_post(p_entity: *mut edict_t) {
 }
 
 /// # Safety
+/// Metamod post-hook callback; `p_entity` must be a valid edict pointer.
+pub unsafe extern "C" fn api_client_user_info_changed_post(
+    p_entity: *mut edict_t,
+    _infobuffer: *mut c_char,
+) {
+    catch_ffi_panic("client_user_info_changed_post", (), || {
+        if let Some(h) = hooks() {
+            let index = unsafe { edict_index(p_entity) };
+            h.client_user_info_changed_post(index);
+        }
+    });
+}
+
+/// # Safety
 /// Metamod post-hook callback; invoked only through the installed tables.
 pub unsafe extern "C" fn api_start_frame_post() {
     catch_ffi_panic("start_frame_post", (), || {
@@ -474,6 +490,7 @@ pub unsafe fn install_dll_api2_post(table: *mut DLL_FUNCTIONS) {
         t.pfnServerActivate = Some(api_server_activate);
         t.pfnClientConnect = Some(api_client_connect_post);
         t.pfnClientDisconnect = Some(api_client_disconnect_post);
+        t.pfnClientUserInfoChanged = Some(api_client_user_info_changed_post);
         t.pfnStartFrame = Some(api_start_frame_post);
     }
 }

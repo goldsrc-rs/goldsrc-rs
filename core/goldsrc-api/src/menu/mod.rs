@@ -5,7 +5,10 @@ pub mod session;
 pub mod types;
 
 pub use builder::{MenuBuilder, MenuPageBuilder};
-pub use session::{PlayerMenuSession, close_menu, handle_menu_slot, open_menu};
+pub use session::{
+    PlayerMenuSession, close_menu, handle_menu_slot, open_menu, refresh_all_menus,
+    refresh_player_menu,
+};
 pub use types::{
     Condition, DenyAction, DenyPolicy, ExitBehavior, ItemKind, ItemTitle, Menu, MenuContext,
     MenuItem, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,
