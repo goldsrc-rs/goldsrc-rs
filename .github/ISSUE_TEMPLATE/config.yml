@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "GitHub Discussions"
+    url: "https://github.com/goldsrc-rs/goldsrc-rs/discussions"
+    about: "Ask questions, share ideas, and discuss GoldSrc.rs development with the community."
+  - name: "Project Roadmap"
+    url: "https://github.com/goldsrc-rs/goldsrc-rs/blob/dev/ROADMAP.md"
+    about: "Inspect active milestones and upcoming architectural features."
+  - name: "Security Vulnerability Report"
+    url: "https://github.com/goldsrc-rs/goldsrc-rs/security/advisories/new"
+    about: "Privately report security or memory safety issues in accordance with SECURITY.md."

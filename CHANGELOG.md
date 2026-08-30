@@ -6,6 +6,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-08-30
+
+### Added
+
+- **Lightweight i18n & Localization Dictionary Engine (`framework/goldsrc/src/i18n`)**:
+  - Modular TOML dictionary parser with lexical variable scoping (`$vars.name`), template macros (`@{tag('VIP')}`, `@{g('{name}')}`), and per-player fallback chains.
+  - Access control policies (`DictAccess::Public`, `Private`, `Shared`) with fallback to global `common.toml`.
+  - Fluent dictionary builder (`LangDict::builder`) and directory auto-merging (`I18nEngine::load_dir`).
+  - Convenient `tr!` macro with seamless support for `AsLangCode` (`&str`, `String`, `&Player`, `Player`, `Alive<T>`, `Terrorist`, etc.).
+  - `Player::lang(&self)` and `I18nEngine::server_lang()` helpers for zero-boilerplate language resolution.
+- **Embedded SQLite WAL Storage Engine (`goldsrc-storage` & `framework`)**:
+  - High-performance SQLite engine running in WAL mode with background `mpsc` batching.
+  - Strongly typed `Bucket<T>` guest DX wrapper with zero-cost serialization.
+  - Strict WASM host isolation with automatic `{plugin_id}/` key prefixes.
+- **Multi-Line Console Print Splitting & Expanded Buffer**:
+  - `EngineBackend::server_print` splits multiline messages line-by-line (`\n`) for clean rendering in server console and RCON.
+  - Expanded `escape_server_print` line length buffer to 1024 bytes.
+- **WASM Epoch Timeout Hardening**:
+  - Increased epoch deadlines (`EPOCH_DEADLINE_COMMAND = 500`, `EPOCH_DEADLINE_LOAD = 1000`) providing 1-2s wall-clock headroom to prevent spurious plugin poisoning on Windows QuickEdit / console pauses.
+
+### Fixed
+
+- **i18n Macro Argument & Placeholder Defaults Parsing**:
+  - Fixed `Compiler::parse_args` to strictly validate named parameters, preventing nested placeholder default values (e.g. `@{g('{name=\'Гость\'}')}`) from being misinterpreted as macro kwargs and generating empty color tags.
+- **Server Console Cyrillic Suffix Truncation**:
+  - Replaced indiscriminate `trim_end()` in `escape_server_print` with `trim_end_matches(['\r', '\n'])`, preventing truncation of the trailing characters of Cyrillic words ("Нет" -> "Не").
+
 ## [0.13.1] - 2026-08-28
 
 ### Added

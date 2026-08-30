@@ -215,9 +215,9 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Direct Engine Live Player Tracker**:
   - Real-time slot-based player count queries (`pfnGetPlayerStats` / edict validation) for immediate rule triggering on connect/disconnect.
 
-## v0.14.0 — Storage Engine (SQLite WAL & KV-Buckets) & Architectural Refactoring 📝 Planned
+## v0.14.0 — Storage Engine (SQLite WAL & KV-Buckets) & Localization (i18n) ✅
 
-**Goal:** Provide a high-performance, non-blocking storage architecture tailored for GoldSrc 1000 FPS servers (SQLite in WAL mode, MPSC background batching, typed `Bucket<T>`, and strict WASM isolation) alongside core module domain decomposition.
+**Goal:** Provide a high-performance, non-blocking storage architecture tailored for GoldSrc 1000 FPS servers (SQLite in WAL mode, MPSC background batching, typed `Bucket<T>`, and strict WASM isolation) alongside structured per-player i18n localization.
 
 - [x] **Dual Storage Port Abstraction (`core/goldsrc-api`)**:
   - `trait StorageProvider` (KV port with `get`, `set`, and atomic `fetch_add`).
@@ -234,13 +234,20 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Refactor `hosts/goldsrc-wasm-host/src/manager.rs` into `manager/` submodule (`loader.rs`, `lifecycle.rs`, `state.rs`, `watcher.rs`).
   - Refactor `framework/goldsrc/src/cli.rs` into `cli/` submodule (`router.rs`, `specs.rs`, `handlers.rs`).
   - Refactor `framework/goldsrc/src/backend.rs` into modular engine domain adapters (`engine_bridge.rs`, `print_queue.rs`).
-- [x] **Per-Player Localization & i18n Dictionary Engine**:
-  - Structured language dictionaries (`data/lang/*.toml`) with per-player code-page formatting based on client language.
+- [x] **Per-Player Localization & i18n Dictionary Engine (`framework/goldsrc/src/i18n`)**:
+  - Structured language dictionaries (`data/lang/*.toml`) with lexical variable scoping, color/macro expansions, and access controls.
+  - `AsLangCode` trait, `player.lang()`, `I18nEngine::server_lang()`, and zero-boilerplate `tr!` macro.
 
-## v0.15.0 — Gameplay Engine, Game-Specific SDK (`goldsrc-cstrike`) & VTable Hooks 📝 Planned
+## v0.15.0 — Gameplay Engine, Game-Specific SDK (`goldsrc-cstrike`) & Unified DSL / Chat 📝 Planned
 
-**Goal:** Provide core gameplay hooks (`TakeDamage`, `Spawn`, `Killed`, `TraceAttack`), automated `gamedata.toml` offset generation, and the `goldsrc-cstrike` game-specific framework (Money, CS Teams, Defuse, Bomb).
+**Goal:** Provide core gameplay hooks (`TakeDamage`, `Spawn`, `Killed`, `TraceAttack`), automated `gamedata.toml` offset generation, `goldsrc-cstrike` framework (Money, CS Teams, Defuse, Bomb), and unified Expression DSL / Placeholder engine with rich chat interception.
 
+- [ ] **Unified GoldSrc Expression DSL & Placeholder Engine (`goldsrc_api::dsl`)**:
+  - Unified zero-allocation AST/lexer powering Requirements, Capabilities, and Placeholders.
+  - Procedural macro `#[placeholder(name = "...", usage = "...")]` with typed arguments (`{ip(target='Player')}`).
+  - Built-in diagnostic suggestions ("Did you mean...?") and server CLI introspection (`goldsrc placeholders <plugin>`).
+- [ ] **Chat Processing & Multi-Chunk SayText Router (`goldsrc_api::chat`)**:
+  - Interceptor pipeline for `say` / `say_team` with dynamic color formatting and safe multi-chunk packet splitting exceeding 185 bytes.
 - [ ] **Automated Gamedata Pipeline (`data/gamedata/*.toml`)**:
   - Offline/CLI gamedata generator and zero-crash memory signature validator with hot-patching.
 - [ ] **VTable & Entity Hooking Engine (`TakeDamage`, `Spawn`, `Killed`)**:
