@@ -231,6 +231,9 @@ impl HostRuntime {
         if let Err(e) = manager.enable_config_watcher(&config_dir) {
             log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
+        if let Err(e) = manager.enable_config_watcher(&lang_dir) {
+            log::warn!(target: "wasm", "Failed to enable lang watcher on {:?}: {e}", lang_dir);
+        }
 
         // Load or create plugins.toml configuration template
         let plugins_config_path = config_dir.join("plugins.toml");

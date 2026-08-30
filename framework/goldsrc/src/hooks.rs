@@ -5,6 +5,21 @@ use crate::host::HostRuntime;
 /// Dispatches an event with an optional payload to all loaded WASM plugins.
 /// Returns `true` if the host runtime is active and processed the event.
 pub fn emit_event(name: &str, payload: &[u8]) -> bool {
+    if name == "config_changed"
+        && let Ok(path_str) = std::str::from_utf8(payload)
+    {
+        let path = std::path::Path::new(path_str);
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            && let Ok(count) = crate::i18n::I18nEngine::load_file(stem, path)
+        {
+            log::info!(
+                target: "i18n",
+                "Hot-reloaded {count} keys from \"{}\"",
+                crate::paths::PathResolver::normalize(path)
+            );
+            goldsrc_api::menu::refresh_all_menus();
+        }
+    }
     HostRuntime::with_manager(|m| match m {
         Some(manager) => {
             manager.call_on_event(name, payload);

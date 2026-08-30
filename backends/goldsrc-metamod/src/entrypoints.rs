@@ -262,10 +262,6 @@ unsafe extern "C" fn hook_reg_user_msg_post(
             && msg_id != 255
             && let Ok(c_str) = unsafe { std::ffi::CStr::from_ptr(psz_name) }.to_str()
         {
-            crate::backend().server_print(&format!(
-                "[GoldSrc.rs DEBUG] Captured RegUserMsg '{}' => id={}\n",
-                c_str, msg_id
-            ));
             goldsrc::backend::register_user_msg_id(c_str, msg_id);
         }
         msg_id

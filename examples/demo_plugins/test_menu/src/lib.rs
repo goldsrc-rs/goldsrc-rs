@@ -163,9 +163,13 @@ impl TestMenu {
             .build();
 
         player.open_menu(&menu);
+        let name = player
+            .name()
+            .unwrap_or_else(|| format!("#{}", player.index()));
         log_info!(
-            "[Test Menu] Opened localized menu (lang='{}') for player #{}",
+            "[Test Menu] Opened localized menu (lang='{}') for player '{}' (#{})",
             lang_code,
+            name,
             player.index()
         );
     }
