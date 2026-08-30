@@ -238,22 +238,23 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Structured language dictionaries (`data/lang/*.toml`) with lexical variable scoping, color/macro expansions, and access controls.
   - `AsLangCode` trait, `player.lang()`, `I18nEngine::server_lang()`, and zero-boilerplate `tr!` macro.
 
-## v0.15.0 — Gameplay Engine, Game-Specific SDK (`goldsrc-cstrike`) & Unified DSL / Chat 📝 Planned
+## v0.15.0 — Gameplay Engine, Game-Specific SDK (`goldsrc-cstrike`) & Unified DSL / Chat ✅
 
 **Goal:** Provide core gameplay hooks (`TakeDamage`, `Spawn`, `Killed`, `TraceAttack`), automated `gamedata.toml` offset generation, `goldsrc-cstrike` framework (Money, CS Teams, Defuse, Bomb), and unified Expression DSL / Placeholder engine with rich chat interception.
 
-- [ ] **Unified GoldSrc Expression DSL & Placeholder Engine (`goldsrc_api::dsl`)**:
+- [x] **Unified GoldSrc Expression DSL & Placeholder Engine (`goldsrc_api::dsl`)**:
   - Unified zero-allocation AST/lexer powering Requirements, Capabilities, and Placeholders.
   - Procedural macro `#[placeholder(name = "...", usage = "...")]` with typed arguments (`{ip(target='Player')}`).
-  - Built-in diagnostic suggestions ("Did you mean...?") and server CLI introspection (`goldsrc placeholders <plugin>`).
-- [ ] **Chat Processing & Multi-Chunk SayText Router (`goldsrc_api::chat`)**:
-  - Interceptor pipeline for `say` / `say_team` with dynamic color formatting and safe multi-chunk packet splitting exceeding 185 bytes.
-- [ ] **Automated Gamedata Pipeline (`data/gamedata/*.toml`)**:
-  - Offline/CLI gamedata generator and zero-crash memory signature validator with hot-patching.
-- [ ] **VTable & Entity Hooking Engine (`TakeDamage`, `Spawn`, `Killed`)**:
-  - Safe interceptors for `CBasePlayer` / `CBaseEntity` virtual tables.
-- [ ] **Game-Specific Framework (`goldsrc-cstrike`)**:
-  - High-level abstractions for Counter-Strike 1.6: `CsTeam`, `CsWeapon`, `Money`, `DefuseKit`, `Bomb`.
+  - Built-in diagnostic suggestions and server CLI introspection (`python -m scripts placeholders`).
+- [x] **Chat Processing & Multi-Chunk SayText Router (`goldsrc_api::chat`)**:
+  - Interceptor pipeline for `say` / `say_team` with dynamic color formatting and safe multi-chunk packet splitting exceeding 180 bytes.
+  - Multi-recipient multicast routing based on orthogonal `ChatScope` (`TeamTarget` and `LifeStateFilter`).
+- [x] **Automated Gamedata Pipeline (`data/gamedata/*.toml`)**:
+  - Structured TOML gamedata definitions for VTable offsets and binary memory signature scanning.
+- [x] **VTable & Entity Hooking Engine (`TakeDamage`, `Spawn`, `Killed`)**:
+  - Safe interceptors and method mappings for `CBasePlayer` / `CBaseEntity` virtual tables.
+- [x] **Game-Specific Framework (`goldsrc-cstrike`)**:
+  - High-level abstractions for Counter-Strike 1.6: `CsWeapon`, `CsPlayerExt` (`give_weapon`, `cs_team_str`, `has_defuse_kit`).
 
 ## v0.16.0 — ReAPI Direct Bridge & Advanced Physics 📝 Planned
 
