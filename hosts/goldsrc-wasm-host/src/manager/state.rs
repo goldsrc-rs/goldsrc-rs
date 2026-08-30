@@ -93,6 +93,9 @@ impl api::Host for HostState {
     fn host_player_name(&mut self, index: i32) -> Option<String> {
         self.engine.player_name(index)
     }
+    fn host_player_team(&mut self, index: i32) -> i32 {
+        self.engine.player_team(index)
+    }
     fn host_player_armorvalue(&mut self, index: i32) -> f32 {
         self.engine.player_armorvalue(index)
     }

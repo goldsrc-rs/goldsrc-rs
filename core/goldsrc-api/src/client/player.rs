@@ -253,6 +253,32 @@ impl Player {
         }
     }
 
+    /// Returns the player's current game team.
+    pub fn team(&self) -> crate::client::Team {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::client::Team::from(crate::bindings::goldsrc::engine::api::host_player_team(
+                self.index,
+            ))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.inner.team().unwrap_or(0).into()
+        }
+    }
+
+    /// Returns the player's current life state.
+    pub fn life_state(&self) -> crate::client::LifeState {
+        if !self.is_valid() {
+            return crate::client::LifeState::Dead;
+        }
+        if self.health() > 0.0 {
+            crate::client::LifeState::Alive
+        } else {
+            crate::client::LifeState::Dead
+        }
+    }
+
     /// Prints a message to the specified target (console / center / chat).
     ///
     /// This is the single dispatch point; the `print_*` helpers below are

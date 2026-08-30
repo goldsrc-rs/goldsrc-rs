@@ -35,6 +35,11 @@ pub trait EngineEntities: Send + Sync {
     /// Player display name (e.g. "Player").
     fn player_name(&self, index: i32) -> Option<String>;
 
+    /// Player game team slot (0=Unassigned, 1=Terrorist, 2=CT, 3=Spectator).
+    fn player_team(&self, _index: i32) -> i32 {
+        0
+    }
+
     /// Player armor value.
     fn player_armorvalue(&self, index: i32) -> f32;
 
