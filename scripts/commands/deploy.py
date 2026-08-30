@@ -455,6 +455,40 @@ def deploy_wasm_plugins(wasm_paths: list[Path], game_path: Path, backend: str = 
             print(f"Copied WASM plugin: {dest}")
 
 
+def deploy_lang_dictionaries(repo_root: Path, game_path: Path, backend: str = "metamod") -> None:
+    """Copy localization dictionaries (resources/lang, examples/demo_lang) to data/lang/ directory."""
+    if backend == "standalone":
+        mod_dir = game_path / DEFAULT_MOD
+        if not mod_dir.exists():
+            mod_dir = game_path
+        lang_target_dir = mod_dir / FRAMEWORK_NAME / "data" / "lang"
+    else:
+        addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
+        if not addons_dir.exists():
+            addons_dir = game_path / ADDONS_DIR_NAME
+        lang_target_dir = addons_dir / FRAMEWORK_NAME / "data" / "lang"
+
+    lang_target_dir.mkdir(parents=True, exist_ok=True)
+
+    sources = [
+        repo_root / "resources" / "lang",
+        repo_root / "examples" / "demo_lang",
+    ]
+
+    for src_dir in sources:
+        if src_dir.exists() and src_dir.is_dir():
+            for item in src_dir.iterdir():
+                dest = lang_target_dir / item.name
+                if item.is_file():
+                    shutil.copy2(item, dest)
+                    print(f"Copied localization file: {dest}")
+                elif item.is_dir():
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                    shutil.copytree(item, dest)
+                    print(f"Copied localization directory: {dest}")
+
+
 def resolve_game_path(cli_path: str | None, repo_root: Path) -> Path:
     """Resolve HLDS server directory path from CLI, environment, or local config."""
     # 1. Explicit CLI argument
@@ -582,6 +616,7 @@ def main(argv=None):
     t_copy_start = time.perf_counter()
     deploy_plugin(dll_path, game_path, backend=args.backend, target=args.target)
     deploy_wasm_plugins(wasm_plugins, game_path, backend=args.backend)
+    deploy_lang_dictionaries(repo_root, game_path, backend=args.backend)
     copy_time = time.perf_counter() - t_copy_start
 
     print(f"\nVerifying {args.backend} deployment...")
