@@ -1,8 +1,9 @@
 //! Global Placeholder Engine, Registry, and String Interpolator for GoldSrc.rs.
 
 use goldsrc_api::client::Player;
-use goldsrc_api::dsl::{PlaceholderCall, parse_placeholder_call};
-use goldsrc_api::placeholders::{PlaceholderHandler, PlaceholderMetadata};
+use goldsrc_api::placeholders::{
+    PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, parse_placeholder_call,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 

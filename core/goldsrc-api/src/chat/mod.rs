@@ -2,21 +2,85 @@
 
 use crate::client::Player;
 
-/// Visibility scope for dispatched chat messages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChatScope {
-    /// Broadcast to all connected clients.
+/// Team targeting filter for chat messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TeamTarget {
+    /// Broadcast to all teams / public.
+    #[default]
     All,
     /// Sent only to teammates of the sender.
-    Team,
-    /// Visible only to dead players and spectators.
-    DeadOnly,
-    /// Visible only to alive players.
-    AliveOnly,
-    /// Sent to a specific single recipient player.
+    SameTeam,
+    /// Sent only to players of the opposite team.
+    OppositeTeam,
+    /// Sent to a specific player slot (1..32).
     Direct(i32),
-    /// Sent only to players holding admin capabilities.
-    AdminOnly,
+}
+
+/// Life state filter for recipient players.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LifeStateFilter {
+    /// Delivered to players in any life state (alive or dead).
+    #[default]
+    Any,
+    /// Delivered only to alive players.
+    AliveOnly,
+    /// Delivered only to dead players and spectators.
+    DeadOnly,
+}
+
+/// Structured visibility scope for dispatched chat messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ChatScope {
+    /// Team routing target.
+    pub team: TeamTarget,
+    /// Player life state filter.
+    pub state: LifeStateFilter,
+}
+
+impl ChatScope {
+    /// Creates a default public scope (all players, any life state).
+    pub const fn all() -> Self {
+        Self {
+            team: TeamTarget::All,
+            state: LifeStateFilter::Any,
+        }
+    }
+
+    /// Creates a team-only chat scope for teammates.
+    pub const fn same_team() -> Self {
+        Self {
+            team: TeamTarget::SameTeam,
+            state: LifeStateFilter::Any,
+        }
+    }
+
+    /// Creates an opposite-team chat scope.
+    pub const fn opposite_team() -> Self {
+        Self {
+            team: TeamTarget::OppositeTeam,
+            state: LifeStateFilter::Any,
+        }
+    }
+
+    /// Creates a direct private chat scope to a specific player.
+    pub const fn direct(slot: i32) -> Self {
+        Self {
+            team: TeamTarget::Direct(slot),
+            state: LifeStateFilter::Any,
+        }
+    }
+
+    /// Constrains this chat scope to alive recipients only.
+    pub const fn alive_only(mut self) -> Self {
+        self.state = LifeStateFilter::AliveOnly;
+        self
+    }
+
+    /// Constrains this chat scope to dead recipients and spectators only.
+    pub const fn dead_only(mut self) -> Self {
+        self.state = LifeStateFilter::DeadOnly;
+        self
+    }
 }
 
 /// Structured chat message in the interceptor middleware pipeline.
@@ -118,6 +182,17 @@ pub fn split_chat_chunks(message: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_chat_scope_composition() {
+        let team_dead = ChatScope::same_team().dead_only();
+        assert_eq!(team_dead.team, TeamTarget::SameTeam);
+        assert_eq!(team_dead.state, LifeStateFilter::DeadOnly);
+
+        let opp_alive = ChatScope::opposite_team().alive_only();
+        assert_eq!(opp_alive.team, TeamTarget::OppositeTeam);
+        assert_eq!(opp_alive.state, LifeStateFilter::AliveOnly);
+    }
 
     #[test]
     fn test_split_chat_chunks_short() {

@@ -1,4 +1,4 @@
-//! Hierarchical Capability DSL parser and AST evaluator.
+//! Hierarchical Capability DSL parser and AST evaluator unified on `goldsrc_api::dsl`.
 //!
 //! # Grammar:
 //! ```text
@@ -11,6 +11,7 @@
 //! CapNode    := Ident ( '.' Ident | '.*' )*
 //! ```
 
+use crate::dsl::{Lexer, Token};
 use std::collections::HashSet;
 
 /// Abstract Syntax Tree (AST) for Capability expressions.
@@ -27,7 +28,7 @@ pub enum CapExpr {
 }
 
 impl CapExpr {
-    /// Parse a DSL expression string into an AST.
+    /// Parse a DSL expression string into an AST using the unified DSL Lexer.
     pub fn parse(input: &str) -> Result<Self, String> {
         let tokens = Lexer::tokenize(input)?;
         let mut parser = Parser::new(tokens);
@@ -78,115 +79,16 @@ impl CapExpr {
 }
 
 // ---------------------------------------------------------------------------
-// Lexer
+// Unified Parser
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Token {
-    Ident(String),
-    And,
-    Or,
-    Not,
-    Colon,
-    Comma,
-    LParen,
-    RParen,
-    LBracket,
-    RBracket,
-    Star,
-}
-
-struct Lexer<'a> {
-    chars: std::iter::Peekable<std::str::Chars<'a>>,
-}
-
-impl<'a> Lexer<'a> {
-    fn tokenize(input: &'a str) -> Result<Vec<Token>, String> {
-        let mut lexer = Self {
-            chars: input.chars().peekable(),
-        };
-        let mut tokens = Vec::new();
-
-        while let Some(&ch) = lexer.chars.peek() {
-            match ch {
-                ' ' | '\t' | '\r' | '\n' => {
-                    lexer.chars.next();
-                }
-                '&' => {
-                    lexer.chars.next();
-                    tokens.push(Token::And);
-                }
-                '|' => {
-                    lexer.chars.next();
-                    tokens.push(Token::Or);
-                }
-                '!' => {
-                    lexer.chars.next();
-                    tokens.push(Token::Not);
-                }
-                ':' => {
-                    lexer.chars.next();
-                    tokens.push(Token::Colon);
-                }
-                ',' => {
-                    lexer.chars.next();
-                    tokens.push(Token::Comma);
-                }
-                '(' => {
-                    lexer.chars.next();
-                    tokens.push(Token::LParen);
-                }
-                ')' => {
-                    lexer.chars.next();
-                    tokens.push(Token::RParen);
-                }
-                '[' => {
-                    lexer.chars.next();
-                    tokens.push(Token::LBracket);
-                }
-                ']' => {
-                    lexer.chars.next();
-                    tokens.push(Token::RBracket);
-                }
-                '*' => {
-                    lexer.chars.next();
-                    tokens.push(Token::Star);
-                }
-                _ if ch.is_alphanumeric() || ch == '_' || ch == '.' || ch == '-' => {
-                    let mut s = String::new();
-                    while let Some(&c) = lexer.chars.peek() {
-                        if c.is_alphanumeric() || c == '_' || c == '.' || c == '-' || c == '*' {
-                            s.push(c);
-                            lexer.chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    match s.to_uppercase().as_str() {
-                        "AND" => tokens.push(Token::And),
-                        "OR" => tokens.push(Token::Or),
-                        "NOT" => tokens.push(Token::Not),
-                        _ => tokens.push(Token::Ident(s)),
-                    }
-                }
-                _ => return Err(format!("Unexpected character in DSL: '{ch}'")),
-            }
-        }
-        Ok(tokens)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Parser
-// ---------------------------------------------------------------------------
-
-struct Parser {
-    tokens: Vec<Token>,
+struct Parser<'a> {
+    tokens: Vec<Token<'a>>,
     pos: usize,
 }
 
-impl Parser {
-    fn new(tokens: Vec<Token>) -> Self {
+impl<'a> Parser<'a> {
+    fn new(tokens: Vec<Token<'a>>) -> Self {
         Self { tokens, pos: 0 }
     }
 
@@ -194,11 +96,11 @@ impl Parser {
         self.pos >= self.tokens.len()
     }
 
-    fn peek(&self) -> Option<&Token> {
+    fn peek(&self) -> Option<&Token<'a>> {
         self.tokens.get(self.pos)
     }
 
-    fn next(&mut self) -> Option<Token> {
+    fn next(&mut self) -> Option<Token<'a>> {
         if self.pos < self.tokens.len() {
             let tok = self.tokens[self.pos].clone();
             self.pos += 1;
@@ -246,17 +148,17 @@ impl Parser {
                 let inner = self.parse_factor()?;
                 Ok(CapExpr::Not(Box::new(inner)))
             }
-            Some(Token::LParen) => {
+            Some(Token::OpenParen) => {
                 self.next();
                 let expr = self.parse_expr()?;
                 match self.next() {
-                    Some(Token::RParen) => Ok(expr),
+                    Some(Token::CloseParen) => Ok(expr),
                     other => Err(format!("Expected ')' after expression, got {:?}", other)),
                 }
             }
             Some(Token::Ident(_)) => {
-                let name = match self.next() {
-                    Some(Token::Ident(s)) => s,
+                let mut name = match self.next() {
+                    Some(Token::Ident(s)) => s.to_string(),
                     _ => unreachable!(),
                 };
 
@@ -268,11 +170,11 @@ impl Parser {
                             self.next();
                             Ok(CapExpr::Node(format!("{name}.*")))
                         }
-                        Some(Token::LBracket) => {
+                        Some(Token::OpenBracket) => {
                             self.next();
                             let mut sub_nodes = Vec::new();
                             while let Some(tok) = self.peek() {
-                                if *tok == Token::RBracket {
+                                if *tok == Token::CloseBracket {
                                     break;
                                 }
                                 let sub_expr = self.parse_factor()?;
@@ -284,7 +186,7 @@ impl Parser {
                                 }
                             }
                             match self.next() {
-                                Some(Token::RBracket) => {
+                                Some(Token::CloseBracket) => {
                                     if sub_nodes.is_empty() {
                                         Err("Empty capability group '[]' is forbidden".to_string())
                                     } else if sub_nodes.len() == 1 {
@@ -299,6 +201,28 @@ impl Parser {
                         other => Err(format!("Expected '[' or '*' after ':', got {:?}", other)),
                     }
                 } else {
+                    // Consume subsequent `.ident` or `.*` segments
+                    while let Some(Token::Dot) = self.peek() {
+                        self.next(); // consume '.'
+                        match self.peek() {
+                            Some(Token::Star) => {
+                                self.next();
+                                name.push_str(".*");
+                                break;
+                            }
+                            Some(Token::Ident(sub)) => {
+                                name.push('.');
+                                name.push_str(sub);
+                                self.next();
+                            }
+                            other => {
+                                return Err(format!(
+                                    "Expected identifier or '*' after '.', got {:?}",
+                                    other
+                                ));
+                            }
+                        }
+                    }
                     Ok(CapExpr::Node(name))
                 }
             }
@@ -326,10 +250,6 @@ fn prefix_expr(prefix: &str, expr: CapExpr) -> CapExpr {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

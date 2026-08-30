@@ -49,7 +49,7 @@ pub use command::{
     PlayerStateFilter,
 };
 pub use cvar::{Cvar, CvarFlags};
-pub use dsl::{CallArg, Lexer, PlaceholderCall, Token, parse_placeholder_call};
+pub use dsl::{Lexer, Token};
 pub use edict::EDict;
 pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
@@ -67,7 +67,10 @@ pub use menu::{
     MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, RenderedMenuPage,
     SlotAction, VisualDeny,
 };
-pub use placeholders::{PlaceholderHandler, PlaceholderMetadata, PlayerTarget};
+pub use placeholders::{
+    CallArg, PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, PlayerTarget,
+    parse_placeholder_call,
+};
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
