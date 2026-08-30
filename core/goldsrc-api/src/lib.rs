@@ -15,6 +15,8 @@ pub mod client;
 pub mod command;
 /// Global constants for the engine and framework.
 pub mod consts;
+/// Counter-Strike 1.6 game domain abstractions, weapon constants, and rules.
+pub mod cstrike;
 /// Typed CVar bindings and flags.
 pub mod cvar;
 /// Unified Expression DSL lexer, parser, and grammar primitives.
@@ -23,6 +25,8 @@ pub mod dsl;
 pub mod edict;
 /// Modular engine sub-system traits, unified engine bridge, and API facade.
 pub mod engine;
+/// Gamedata definitions, signature scanning, and VTable offset configurations.
+pub mod gamedata;
 /// Screen HUD and DHUD message builders and styling.
 pub mod hud;
 /// Mod descriptor manifest (`liblist.gam`) parser and model.

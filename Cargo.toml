@@ -14,6 +14,7 @@ members = [
     "examples/demo_plugins/test_ecs",
     "examples/demo_plugins/admin_system",
     "examples/demo_plugins/test_i18n",
+    "examples/demo_plugins/test_chat",
 ]
 default-members = [
     "core/goldsrc-sys",

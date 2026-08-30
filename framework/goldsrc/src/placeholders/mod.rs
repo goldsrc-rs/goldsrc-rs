@@ -213,6 +213,43 @@ fn resolve_target(caller: Player, call: &PlaceholderCall) -> Player {
     caller
 }
 
+/// Registers a custom placeholder provider with default metadata.
+pub fn register_placeholder<F>(name: &str, description: &str, handler: F)
+where
+    F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
+{
+    let mut reg = match PLACEHOLDER_REGISTRY.write() {
+        Ok(r) => r,
+        Err(e) => e.into_inner(),
+    };
+    reg.register(
+        "custom",
+        PlaceholderMetadata {
+            name: name.to_string(),
+            description: description.to_string(),
+            usage: format!("{{{name}}}"),
+            aliases: Vec::new(),
+            capability: None,
+        },
+        Arc::new(handler),
+    );
+}
+
+/// Registers a custom placeholder provider with full metadata.
+pub fn register_placeholder_with_metadata<F>(
+    plugin_name: &str,
+    metadata: PlaceholderMetadata,
+    handler: F,
+) where
+    F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
+{
+    let mut reg = match PLACEHOLDER_REGISTRY.write() {
+        Ok(r) => r,
+        Err(e) => e.into_inner(),
+    };
+    reg.register(plugin_name, metadata, Arc::new(handler));
+}
+
 /// Replaces all `{...}` placeholders in `template` evaluated in the context of `caller`.
 pub fn format_placeholders(template: &str, caller: Player) -> String {
     let mut out = String::with_capacity(template.len());
