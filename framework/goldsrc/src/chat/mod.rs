@@ -1,7 +1,9 @@
 use goldsrc_api::chat::{ChatMessage, ChatScope};
 #[cfg(feature = "host")]
 use goldsrc_api::chat::{LifeStateFilter, TeamTarget, split_chat_chunks};
-use goldsrc_api::client::{LifeState, Player, Team};
+use goldsrc_api::client::Player;
+#[cfg(feature = "host")]
+use goldsrc_api::client::{LifeState, Team};
 use std::sync::{Arc, LazyLock, RwLock};
 
 /// Type definition for a chat filter middleware handler.
@@ -161,16 +163,6 @@ pub fn process_chat_message_with_manager(
     // 4. Split message into safe 180-byte chunks
     let chunks = split_chat_chunks(&full_text);
 
-    // [DEBUG] Log what we're about to broadcast
-    #[cfg(feature = "host")]
-    if let Some(engine) = crate::host::HostRuntime::engine() {
-        engine.server_print(&format!(
-            "[chat-dbg] broadcasting {} chunk(s), scope={:?}, full_text='{full_text}'\n",
-            chunks.len(),
-            msg.scope.team
-        ));
-    }
-
     // 5. Broadcast chunks to target recipients based on ChatScope
     let sender_team = sender.team();
     match msg.scope.team {
@@ -185,14 +177,7 @@ pub fn process_chat_message_with_manager(
         TeamTarget::All => {
             for i in 1..=32 {
                 let target = Player::new(i);
-                let valid = target.is_valid();
-                #[cfg(feature = "host")]
-                if let Some(engine) = crate::host::HostRuntime::engine()
-                    && valid
-                {
-                    engine.server_print(&format!("[chat-dbg] sending to slot {i} (valid)\n"));
-                }
-                if valid && matches_lifestate(target, msg.scope.state) {
+                if target.is_valid() && matches_lifestate(target, msg.scope.state) {
                     for chunk in &chunks {
                         target.print_chat(chunk);
                     }
@@ -245,4 +230,120 @@ fn is_opposite_team(a: Team, b: Team) -> bool {
         (a, b),
         (Team::Terrorist, Team::CounterTerrorist) | (Team::CounterTerrorist, Team::Terrorist)
     )
+}
+
+/// Formats a chat string with placeholder evaluation and arguments.
+#[macro_export]
+macro_rules! chat_format {
+    ($fmt:expr) => {{
+        $fmt.to_string()
+    }};
+    ($fmt:expr, $( $arg:tt )*) => {{
+        format!($fmt, $( $arg )*)
+    }};
+}
+
+/// Prints a formatted colored message to a specific player with safe chunk splitting.
+///
+/// Expands `{...}` placeholders and converts color tags (`^1`..`^4`).
+///
+/// # Examples
+/// ```ignore
+/// chat_print!(player, "^4[Admin]^1 Welcome, {name}! Your health: {hp}");
+/// chat_print!(1, "^3Server tag:^1 {server_tag}");
+/// ```
+#[macro_export]
+macro_rules! chat_print {
+    ($target:expr, $msg:literal) => {{
+        let player = $crate::Player::from($target);
+        let formatted = $crate::placeholders::format_placeholders($msg, player);
+        let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
+        for chunk in chunks {
+            player.print_chat(&chunk);
+        }
+    }};
+    ($target:expr, $fmt:expr, $( $arg:expr ),* $(,)?) => {{
+        let text = format!($fmt, $( $arg ),*);
+        let player = $crate::Player::from($target);
+        let formatted = $crate::placeholders::format_placeholders(&text, player);
+        let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
+        for chunk in chunks {
+            player.print_chat(&chunk);
+        }
+    }};
+}
+
+/// Broadcasts a formatted colored message to all connected players with safe chunk splitting.
+///
+/// # Examples
+/// ```ignore
+/// chat_broadcast!("^4[Server]^1 Next map vote starting soon!");
+/// chat_broadcast!("^2[Announcement]^1 {server_tag} updated!");
+/// ```
+#[macro_export]
+macro_rules! chat_broadcast {
+    ($msg:literal) => {{
+        for i in 1..=32 {
+            let player = $crate::Player::new(i);
+            if player.is_valid() {
+                let formatted = $crate::placeholders::format_placeholders($msg, player);
+                let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
+                for chunk in chunks {
+                    player.print_chat(&chunk);
+                }
+            }
+        }
+    }};
+    ($fmt:expr, $( $arg:expr ),* $(,)?) => {{
+        let text = format!($fmt, $( $arg ),*);
+        for i in 1..=32 {
+            let player = $crate::Player::new(i);
+            if player.is_valid() {
+                let formatted = $crate::placeholders::format_placeholders(&text, player);
+                let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
+                for chunk in chunks {
+                    player.print_chat(&chunk);
+                }
+            }
+        }
+    }};
+}
+
+/// Broadcasts a formatted colored message to all teammates of the sender with safe chunk splitting.
+///
+/// # Examples
+/// ```ignore
+/// chat_team!(sender, "^2(TEAM)^1 Player {name} needs assistance!");
+/// ```
+#[macro_export]
+macro_rules! chat_team {
+    ($sender:expr, $msg:literal) => {{
+        let sender = $crate::Player::from($sender);
+        let sender_team = sender.team();
+        for i in 1..=32 {
+            let player = $crate::Player::new(i);
+            if player.is_valid() && player.team() == sender_team {
+                let formatted = $crate::placeholders::format_placeholders($msg, player);
+                let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
+                for chunk in chunks {
+                    player.print_chat(&chunk);
+                }
+            }
+        }
+    }};
+    ($sender:expr, $fmt:expr, $( $arg:expr ),* $(,)?) => {{
+        let text = format!($fmt, $( $arg ),*);
+        let sender = $crate::Player::from($sender);
+        let sender_team = sender.team();
+        for i in 1..=32 {
+            let player = $crate::Player::new(i);
+            if player.is_valid() && player.team() == sender_team {
+                let formatted = $crate::placeholders::format_placeholders(&text, player);
+                let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
+                for chunk in chunks {
+                    player.print_chat(&chunk);
+                }
+            }
+        }
+    }};
 }

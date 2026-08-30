@@ -579,6 +579,18 @@ impl From<Player> for crate::Entity {
     }
 }
 
+impl From<i32> for Player {
+    fn from(index: i32) -> Self {
+        Player::new(index)
+    }
+}
+
+impl From<&Player> for Player {
+    fn from(p: &Player) -> Self {
+        *p
+    }
+}
+
 // SAFETY: Player is just a wrapper around raw pointers / integer index.
 // The caller must ensure the pointer is valid when used.
 unsafe impl Send for Player {}

@@ -94,16 +94,10 @@ impl HostRuntime {
                 }
                 goldsrc_api::PrintTarget::Chat | goldsrc_api::PrintTarget::ColoredChat => {
                     if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
-                        engine.server_print(&format!(
-                            "[chat-dbg] print_chat #{player_index}: entity_is_valid=false, skipping\n"
-                        ));
                         return;
                     }
                     let formatted = goldsrc_api::format_say_text(message);
                     let say_text_id = engine.reg_user_msg("SayText", -1);
-                    engine.server_print(&format!(
-                        "[chat-dbg] print_chat #{player_index}: say_text_id={say_text_id} msg='{message}'\n"
-                    ));
                     if say_text_id > 0 && say_text_id < 255 {
                         engine.message_begin(
                             goldsrc_api::MessageDest::One as i32,

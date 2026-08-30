@@ -145,6 +145,9 @@ pub mod prelude {
         RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team,
         Terrorist, Vector3, VisualDeny,
     };
-    pub use crate::{command, event, menu_action, on_frame, on_load, on_unload, plugin, system};
+    pub use crate::{
+        chat_broadcast, chat_format, chat_print, chat_team, command, event, menu_action, on_frame,
+        on_load, on_unload, plugin, system,
+    };
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }

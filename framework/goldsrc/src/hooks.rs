@@ -71,20 +71,10 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
 
     HostRuntime::with_manager(|m| {
         let Some(manager) = m else {
-            if let Some(engine) = HostRuntime::engine() {
-                engine.server_print(&format!(
-                    "[chat-dbg] say from #{player_idx} but manager=None, cmd={cmd}\n"
-                ));
-            }
             return false;
         };
 
         if cmd.eq_ignore_ascii_case("say") || cmd.eq_ignore_ascii_case("say_team") {
-            if let Some(engine) = HostRuntime::engine() {
-                engine.server_print(&format!(
-                    "[chat-dbg] say #{player_idx} raw_args='{raw_args}'\n"
-                ));
-            }
             let mut text = raw_args.trim();
             if text.starts_with('"') && text.ends_with('"') && text.len() >= 2 {
                 text = &text[1..text.len() - 1];
@@ -106,12 +96,6 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
 
             // Route standard player chat through the chat interceptor / placeholder pipeline
             let sender = goldsrc_api::client::Player::new(player_idx);
-            if let Some(engine) = HostRuntime::engine() {
-                engine.server_print(&format!(
-                    "[chat-dbg] sender #{player_idx} is_valid={}\n",
-                    sender.is_valid()
-                ));
-            }
             let scope = if cmd.eq_ignore_ascii_case("say_team") {
                 goldsrc_api::chat::ChatScope::same_team()
             } else {
