@@ -67,6 +67,20 @@ impl HostRuntime {
                 None
             }
         });
+        goldsrc_api::client::player::set_player_name_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_name(index)
+            } else {
+                None
+            }
+        });
+        goldsrc_api::client::player::set_player_team_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_team(index)
+            } else {
+                0
+            }
+        });
         goldsrc_api::client::player::set_native_print_hook(|player_index, target, message| {
             let Some(engine) = HostRuntime::engine() else {
                 return;

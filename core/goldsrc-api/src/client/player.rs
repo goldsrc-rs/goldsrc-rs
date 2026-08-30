@@ -14,10 +14,22 @@ pub type NativePrintHook = fn(i32, crate::client::PrintTarget, &str);
 pub type PlayerResolverHook = fn(i32) -> Option<Player>;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub type PlayerNameResolverHook = fn(i32) -> Option<String>;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type PlayerTeamResolverHook = fn(i32) -> i32;
+
+#[cfg(not(target_arch = "wasm32"))]
 static NATIVE_PRINT_HOOK: RwLock<Option<NativePrintHook>> = RwLock::new(None);
 
 #[cfg(not(target_arch = "wasm32"))]
 static PLAYER_RESOLVER_HOOK: RwLock<Option<PlayerResolverHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_NAME_RESOLVER_HOOK: RwLock<Option<PlayerNameResolverHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_TEAM_RESOLVER_HOOK: RwLock<Option<PlayerTeamResolverHook>> = RwLock::new(None);
 
 /// Registers the native backend print dispatcher for host-side `Player::print_*` calls.
 #[cfg(not(target_arch = "wasm32"))]
@@ -31,6 +43,22 @@ pub fn set_native_print_hook(hook: NativePrintHook) {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn set_player_resolver_hook(hook: PlayerResolverHook) {
     if let Ok(mut lock) = PLAYER_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player name resolver for `Player::name()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_name_hook(hook: PlayerNameResolverHook) {
+    if let Ok(mut lock) = PLAYER_NAME_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player team resolver for `Player::team()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_team_hook(hook: PlayerTeamResolverHook) {
+    if let Ok(mut lock) = PLAYER_TEAM_RESOLVER_HOOK.write() {
         *lock = Some(hook);
     }
 }
@@ -120,6 +148,12 @@ impl Player {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
+            if let Ok(lock) = PLAYER_NAME_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+                && let Some(name) = resolver(self.index)
+            {
+                return Some(name);
+            }
             self.inner.netname()
         }
     }
@@ -307,6 +341,11 @@ impl Player {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
+            if let Ok(lock) = PLAYER_TEAM_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+            {
+                return resolver(self.index).into();
+            }
             self.inner.team().unwrap_or(0).into()
         }
     }
