@@ -15,7 +15,11 @@ import time
 def build_plugin(backend: str = "metamod", target: str = "i686-pc-windows-msvc", release: bool = True) -> Path:
     """Build a backend plugin (metamod or standalone) and return the path to the produced library."""
     t0 = time.perf_counter()
-    crate_name = "goldsrc-standalone" if backend == "standalone" else "goldsrc-metamod"
+    crate_name = (
+        "goldsrc-backend-standalone"
+        if backend == "standalone"
+        else "goldsrc-backend-metamod"
+    )
     lib_basename = "goldsrc_standalone" if backend == "standalone" else "goldsrc_metamod"
 
     print(f"Building {backend} backend ({crate_name}) for {target} ({'release' if release else 'debug'})...")

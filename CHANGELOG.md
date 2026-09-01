@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-09-01
+
+### Added
+
+- **Architectural Layer Decomposition & `goldsrc-core` Extraction**:
+  - Extracted all host-side runtime orchestration (`HostRuntime`), engine bridge, CLI router, SQLite storage runtime, i18n engine, placeholder registry, and hook dispatchers from `framework/goldsrc` into dedicated `core/goldsrc-core` crate.
+  - Purified `framework/goldsrc` as a pure, lightweight guest SDK (Flat ECS, `tr!`, `chat_print!`, `chat_broadcast!`, macro re-exports, transparent guest logger) without heavy dependencies (`wasmtime`, `rusqlite`, `libloading`).
+- **Standardized Workspace Member Naming Scheme (`goldsrc-<category>-<name>`)**:
+  - Renamed `hosts/goldsrc-wasm-host` -> `hosts/goldsrc-host-wasm` (`goldsrc-host-wasm`).
+  - Renamed `backends/goldsrc-standalone` -> `backends/goldsrc-backend-standalone` (`goldsrc-backend-standalone`).
+  - Renamed `backends/goldsrc-metamod` -> `backends/goldsrc-backend-metamod` (`goldsrc-backend-metamod`).
+- **Unified Workspace Versioning**:
+  - Bumped all crates and workspace members to `0.15.0`.
+  - Migrated demo plugins to `version.workspace = true` and workspace dependency inheritance.
+- **Python Deployment & Tooling Integration**:
+  - Updated `scripts/commands/build.py` and `scripts/commands/deploy.py` to seamlessly target new crate names and structure.
+
 ## [0.14.0] - 2026-09-01
 
 ### Added

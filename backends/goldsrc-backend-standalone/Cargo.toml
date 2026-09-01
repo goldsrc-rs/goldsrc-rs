@@ -1,0 +1,15 @@
+[package]
+name = "goldsrc-backend-standalone"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Standalone backend for GoldSrc.rs — direct engine integration without Metamod"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+goldsrc-sys = { workspace = true }
+goldsrc-api = { workspace = true }
+goldsrc-core = { workspace = true }
+libloading = { workspace = true }
