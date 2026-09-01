@@ -76,6 +76,8 @@ goldsrc-rs/
 ├── framework/
 │   ├── goldsrc/                    # Lightweight guest SDK: Flat ECS, tr!, chat_print!, logging
 │   └── goldsrc-macros/             # Procedural macros: #[plugin], #[command], #[on_load]
+├── games/
+│   └── goldsrc-game-cstrike/       # Counter-Strike 1.6 game types, constants, weapons, and teams
 ├── resources/
 │   └── lang/                       # Global shared localization dictionaries (common.toml, test_i18n.toml)
 ├── examples/

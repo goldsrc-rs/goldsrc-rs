@@ -6,6 +6,7 @@ license.workspace = true
 description = "Standalone backend for GoldSrc.rs — direct engine integration without Metamod"
 
 [lib]
+name = "goldsrc_standalone"
 crate-type = ["cdylib"]
 
 [dependencies]

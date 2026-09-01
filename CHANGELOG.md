@@ -6,6 +6,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-09-01
+
+### Added
+
+- **ReAPI Direct C-ABI Bridge & Dynamic Capability Detection (`core/goldsrc-sys` & `core/goldsrc-core`)**:
+  - Implemented zero-overhead FFI bindings to ReHLDS (`VREHLDS_HLDS_API_VERSION`) and ReGameDLL (`VRE_GAMEDLL_API_VERSION`).
+  - Added `ReApiBridge` runtime service with thread-safe dynamic capability detection (`rehlds_active`, `regamedll_active`, major/minor version queries).
+  - Integrated `CreateInterface` factory resolution inside standalone proxy (`goldsrc-backend-standalone`) and engine bridge.
+  - Added `engine_api()` helper to `goldsrc-api` for safe dynamic access to the active engine instance.
+- **Advanced Raytracing & World Geometry (`core/goldsrc-api` & `core/goldsrc-core`)**:
+  - Added `trace_hull_box` for arbitrary axis-aligned bounding box collision queries.
+  - Added `trace_model` for entity bounding box / studio model raycasting.
+  - Added `check_visibility` helper for direct line-of-sight verification between world points.
+- **Counter-Strike Game Data & Constants Subsystem (`games/goldsrc-game-cstrike`)**:
+  - Extracted game-specific CS 1.6 logic into dedicated `goldsrc-game-cstrike` crate.
+  - Implemented type-safe `CsWeapon` properties, `CsTeam` helpers, max clip sizes, and ammo types.
+- **Comprehensive 5-Phase ECS Verification (`framework/goldsrc`)**:
+  - Added multi-phase integration tests ensuring deterministic execution order: `Validate` -> `Modify` -> `Execute` -> `React` -> `Monitor` across all engine stages.
+
 ## [0.15.0] - 2026-09-01
 
 ### Added

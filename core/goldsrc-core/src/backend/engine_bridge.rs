@@ -873,6 +873,52 @@ impl goldsrc_api::EnginePhysics for EngineBackend {
             }
         }
     }
+
+    fn trace_model(
+        &self,
+        start: [f32; 3],
+        end: [f32; 3],
+        flags: i32,
+        ent_index: i32,
+    ) -> goldsrc_api::TraceResult {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let mut raw_trace = std::mem::zeroed::<goldsrc_sys::TraceResult>();
+            let pedict = funcs
+                .pfnPEntityOfEntIndex
+                .map(|f| f(ent_index))
+                .unwrap_or(std::ptr::null_mut());
+
+            if let Some(pfn_trace_model) = funcs.pfnTraceModel {
+                pfn_trace_model(
+                    start.as_ptr(),
+                    end.as_ptr(),
+                    flags,
+                    pedict,
+                    &mut raw_trace as *mut _,
+                );
+
+                let hit_id = if raw_trace.pHit.is_null() {
+                    -1
+                } else {
+                    crate::api_registry::edict_index(raw_trace.pHit)
+                };
+
+                goldsrc_api::TraceResult {
+                    all_solid: raw_trace.fAllSolid != 0,
+                    start_solid: raw_trace.fStartSolid != 0,
+                    in_open: raw_trace.fInOpen != 0,
+                    in_water: raw_trace.fInWater != 0,
+                    fraction: raw_trace.flFraction,
+                    end_pos: raw_trace.vecEndPos,
+                    plane_normal: raw_trace.vecPlaneNormal,
+                    hit_entity: hit_id,
+                }
+            } else {
+                self.trace_line(start, end, flags, ent_index)
+            }
+        }
+    }
 }
 
 impl goldsrc_api::EngineSound for EngineBackend {

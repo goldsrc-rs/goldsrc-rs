@@ -559,4 +559,65 @@ mod tests {
             vec!["validate", "modify", "exec_1", "exec_2", "monitor"]
         );
     }
+
+    #[test]
+    fn test_five_phase_all_stages_execution() {
+        static PHASES_HIT: std::sync::Mutex<Vec<SystemPhase>> = std::sync::Mutex::new(Vec::new());
+
+        fn p_val(_world: &mut World, _target: Option<EntityId>) {
+            PHASES_HIT.lock().unwrap().push(SystemPhase::Validate);
+        }
+        fn p_mod(_world: &mut World, _target: Option<EntityId>) {
+            PHASES_HIT.lock().unwrap().push(SystemPhase::Modify);
+        }
+        fn p_exe(_world: &mut World, _target: Option<EntityId>) {
+            PHASES_HIT.lock().unwrap().push(SystemPhase::Execute);
+        }
+        fn p_rea(_world: &mut World, _target: Option<EntityId>) {
+            PHASES_HIT.lock().unwrap().push(SystemPhase::React);
+        }
+        fn p_mon(_world: &mut World, _target: Option<EntityId>) {
+            PHASES_HIT.lock().unwrap().push(SystemPhase::Monitor);
+        }
+
+        let mut registry = SystemRegistry::new();
+
+        type PhaseRunner = (SystemPhase, fn(&mut World, Option<EntityId>));
+        let funcs: [PhaseRunner; 5] = [
+            (SystemPhase::Monitor, p_mon),
+            (SystemPhase::React, p_rea),
+            (SystemPhase::Execute, p_exe),
+            (SystemPhase::Modify, p_mod),
+            (SystemPhase::Validate, p_val),
+        ];
+
+        for (phase, run_fn) in funcs {
+            registry.register(SystemDescriptor {
+                name: "phase_test",
+                stage: Stage::TakeDamage,
+                phase,
+                before: vec![],
+                after: vec![],
+                run: run_fn,
+            });
+        }
+
+        let mut world = World::new();
+        PHASES_HIT.lock().unwrap().clear();
+
+        registry.run_stage(Stage::TakeDamage, &mut world, Some(EntityId(1)));
+
+        let hits = PHASES_HIT.lock().unwrap().clone();
+        assert_eq!(hits.len(), 5);
+        assert_eq!(
+            hits,
+            vec![
+                SystemPhase::Validate,
+                SystemPhase::Modify,
+                SystemPhase::Execute,
+                SystemPhase::React,
+                SystemPhase::Monitor,
+            ]
+        );
+    }
 }

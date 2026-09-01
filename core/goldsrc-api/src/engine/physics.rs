@@ -59,4 +59,39 @@ pub trait EnginePhysics: Send + Sync {
         hull_number: i32,
         ignore_ent: i32,
     ) -> TraceResult;
+
+    /// Cast an arbitrary axis-aligned bounding box from `start` to `end`.
+    fn trace_hull_box(
+        &self,
+        start: [f32; 3],
+        end: [f32; 3],
+        mins: [f32; 3],
+        maxs: [f32; 3],
+        flags: i32,
+        ignore_ent: i32,
+    ) -> TraceResult {
+        // Default implementation maps to standard player hull (hull 1) or point trace
+        if mins == [0.0; 3] && maxs == [0.0; 3] {
+            self.trace_line(start, end, flags, ignore_ent)
+        } else {
+            self.trace_hull(start, end, flags, 1, ignore_ent)
+        }
+    }
+
+    /// Cast a ray against a specific entity's bounding box/model.
+    fn trace_model(
+        &self,
+        start: [f32; 3],
+        end: [f32; 3],
+        flags: i32,
+        ent_index: i32,
+    ) -> TraceResult {
+        self.trace_line(start, end, flags, ent_index)
+    }
+
+    /// Checks direct line-of-sight visibility between two world points.
+    fn check_visibility(&self, src: [f32; 3], dest: [f32; 3]) -> bool {
+        let trace = self.trace_line(src, dest, 0, -1);
+        trace.fraction >= 0.999
+    }
 }
