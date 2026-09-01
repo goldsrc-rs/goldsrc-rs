@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build Tooling & Acceleration Enhancements**:
   - Added `--backend both` (and `--backend all`) support to `scripts/commands/build.py` to compile both `goldsrc-backend-standalone` and `goldsrc-backend-metamod` in a single command.
   - Added `sccache` and `wasm-opt` environment detection, status reporting, and automatic installation helper to `scripts/commands/setup.py`.
+  - Added `--ci` mode to `scripts/commands/setup.py` utilizing Git `sparse-checkout` (`--filter=blob:none`) to download only required C headers for `bindgen` (`hlsdk` and `metamod-r`), reducing CI setup duration from ~30s to 2s.
 
 ## [0.14.0] - 2026-09-01
 
