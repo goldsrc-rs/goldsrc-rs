@@ -14,6 +14,7 @@ members = [
     "examples/demo_plugins/test_ecs",
     "examples/demo_plugins/admin_system",
     "examples/demo_plugins/test_i18n",
+    "examples/demo_plugins/test_chat",
 ]
 default-members = [
     "core/goldsrc-sys",
@@ -68,6 +69,7 @@ crossbeam-channel = "0.5"
 opt-level = 0
 debug = 1
 split-debuginfo = "unpacked"
+panic = "unwind"
 
 # NOTE: `panic` must stay "unwind" — `catch_ffi_panic` (catch_unwind) relies on
 # unwinding to stop Rust panics at the C-ABI boundary before they kill HLDS.
@@ -76,3 +78,4 @@ lto = "thin"
 opt-level = "z"
 strip = "debuginfo"
 codegen-units = 16
+panic = "unwind"

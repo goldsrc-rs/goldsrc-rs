@@ -24,6 +24,12 @@ static MENU_SESSIONS: std::sync::LazyLock<Mutex<HashMap<i32, PlayerMenuSession>>
 static PENDING_PARENT: std::sync::LazyLock<Mutex<HashMap<i32, ParentMenuState>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
+static MENU_DEBOUNCE_TRACKER: std::sync::LazyLock<Mutex<HashMap<i32, std::time::Instant>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+static ITEM_COOLDOWN_TRACKER: std::sync::LazyLock<Mutex<HashMap<(i32, u32), std::time::Instant>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
 /// Opens a declarative `Menu` for a player and registers its navigation session.
 pub fn open_menu(player_idx: i32, menu: Menu) {
     let mut sessions = MENU_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
@@ -71,6 +77,57 @@ pub fn handle_menu_slot(player_idx: i32, slot: u8) -> Option<SlotAction> {
             action_name,
             keep_open,
         } => {
+            // 1. Menu global debounce anti-flood check
+            if let Some(debounce_dur) = session.menu.debounce {
+                let mut last_presses = MENU_DEBOUNCE_TRACKER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let now = std::time::Instant::now();
+                if let Some(last) = last_presses.get(&player_idx)
+                    && now.duration_since(*last) < debounce_dur
+                {
+                    sessions.insert(player_idx, session);
+                    return None;
+                }
+                last_presses.insert(player_idx, now);
+            }
+
+            // 2. Item-level cooldown check
+            if let Some(item) = session.menu.items.iter().find(|i| match i.kind {
+                crate::menu::ItemKind::Action { id: item_id, .. } => item_id == id,
+                _ => false,
+            }) && let Some((cooldown_dur, ref on_spam)) = item.cooldown
+            {
+                let mut cooldowns = ITEM_COOLDOWN_TRACKER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let now = std::time::Instant::now();
+                if let Some(last) = cooldowns.get(&(player_idx, id))
+                    && now.duration_since(*last) < cooldown_dur
+                {
+                    match on_spam {
+                        crate::menu::AntiSpamAction::Ignore
+                        | crate::menu::AntiSpamAction::MakeInactive => {}
+                        crate::menu::AntiSpamAction::Feedback(fb) => {
+                            let player = crate::client::Player::new(player_idx);
+                            if let Some((target, ref msg)) = fb.message {
+                                player.print(target, msg);
+                            }
+                            if let Some(ref sound) = fb.sound {
+                                player.play_sound(sound);
+                            }
+                        }
+                        crate::menu::AntiSpamAction::CloseMenu => {
+                            crate::client::Player::new(player_idx).show_raw_menu(0, 0, "");
+                            return None;
+                        }
+                    }
+                    sessions.insert(player_idx, session);
+                    return None;
+                }
+                cooldowns.insert((player_idx, id), now);
+            }
+
             // Save parent session state in case action handler calls open_menu
             if let Ok(mut pend) = PENDING_PARENT.lock() {
                 pend.insert(
@@ -145,15 +202,12 @@ pub fn handle_menu_slot(player_idx: i32, slot: u8) -> Option<SlotAction> {
                             };
                             parent_menu
                                 .render_page(&ctx, 0)
-                                .map(|r| r.total_pages)
+                                .map(|p| p.total_pages)
                                 .unwrap_or(1)
                         };
 
                         let resolved_page = if target_page < 0 {
-                            let offset = (-target_page) as usize;
-                            total_pages.saturating_sub(offset)
-                        } else if target_page == 0 {
-                            0
+                            total_pages.saturating_sub(1)
                         } else {
                             (target_page as usize)
                                 .saturating_sub(1)
@@ -176,10 +230,13 @@ pub fn handle_menu_slot(player_idx: i32, slot: u8) -> Option<SlotAction> {
             None
         }
         SlotAction::DenyFeedback(ref deny_act) => {
-            if let crate::menu::DenyAction::Feedback { message, .. } = deny_act {
+            if let crate::menu::DenyAction::Feedback(fb) = deny_act {
                 let player = crate::client::Player::new(player_idx);
-                if let Some(msg) = message {
-                    player.print_center(msg);
+                if let Some((target, ref msg)) = fb.message {
+                    player.print(target, msg);
+                }
+                if let Some(ref sound) = fb.sound {
+                    player.play_sound(sound);
                 }
             }
             sessions.insert(player_idx, session);
@@ -188,12 +245,59 @@ pub fn handle_menu_slot(player_idx: i32, slot: u8) -> Option<SlotAction> {
     }
 }
 
-/// Clears menu session for the player.
+/// Clears menu session, debounces, and cooldowns for the player.
 pub fn close_menu(player_idx: i32) {
     if let Ok(mut sessions) = MENU_SESSIONS.lock()
         && sessions.remove(&player_idx).is_some()
     {
         crate::client::Player::new(player_idx).show_raw_menu(0, 0, "");
+    }
+    if let Ok(mut pending) = PENDING_PARENT.lock() {
+        pending.remove(&player_idx);
+    }
+    if let Ok(mut debounce) = MENU_DEBOUNCE_TRACKER.lock() {
+        debounce.remove(&player_idx);
+    }
+    if let Ok(mut cooldowns) = ITEM_COOLDOWN_TRACKER.lock() {
+        cooldowns.retain(|(p, _), _| *p != player_idx);
+    }
+}
+
+/// Closes all menu sessions and purges all tracker maps on map change / shutdown.
+pub fn clear_all_menus() {
+    if let Ok(mut sessions) = MENU_SESSIONS.lock() {
+        sessions.clear();
+    }
+    if let Ok(mut pending) = PENDING_PARENT.lock() {
+        pending.clear();
+    }
+    if let Ok(mut debounce) = MENU_DEBOUNCE_TRACKER.lock() {
+        debounce.clear();
+    }
+    if let Ok(mut cooldowns) = ITEM_COOLDOWN_TRACKER.lock() {
+        cooldowns.clear();
+    }
+}
+
+/// Re-renders and sends the currently open menu for `player_idx` if present, updating navigation text for their active language.
+pub fn refresh_player_menu(player_idx: i32) {
+    let mut sessions = MENU_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(session) = sessions.get_mut(&player_idx) {
+        let player = crate::client::Player::new(player_idx);
+        let lang = player.lang();
+        session.menu.style = session.menu.style.clone().with_lang(&lang);
+        render_and_send(player_idx, session);
+    }
+}
+
+/// Re-renders and sends all currently open menus for all players.
+pub fn refresh_all_menus() {
+    let mut sessions = MENU_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    for (&player_idx, session) in sessions.iter_mut() {
+        let player = crate::client::Player::new(player_idx);
+        let lang = player.lang();
+        session.menu.style = session.menu.style.clone().with_lang(&lang);
+        render_and_send(player_idx, session);
     }
 }
 

@@ -76,7 +76,7 @@ impl MenuSessionManager {
             expiry_time: expiry,
         };
 
-        self.render_and_send(player_idx, &mut session, engine);
+        self.render_and_send(player_idx, &mut session, engine, current_time);
         self.sessions.insert(player_idx, session);
     }
 
@@ -131,13 +131,13 @@ impl MenuSessionManager {
                 if session.current_page > 0 {
                     session.current_page -= 1;
                 }
-                self.render_and_send(player_idx, &mut session, engine);
+                self.render_and_send(player_idx, &mut session, engine, current_time);
                 self.sessions.insert(player_idx, session);
                 true
             }
             SlotAction::NextPage => {
                 session.current_page += 1;
-                self.render_and_send(player_idx, &mut session, engine);
+                self.render_and_send(player_idx, &mut session, engine, current_time);
                 self.sessions.insert(player_idx, session);
                 true
             }
@@ -153,7 +153,7 @@ impl MenuSessionManager {
                     } else {
                         None
                     };
-                    self.render_and_send(player_idx, &mut session, engine);
+                    self.render_and_send(player_idx, &mut session, engine, current_time);
                     self.sessions.insert(player_idx, session);
                 } else {
                     // Close completely
@@ -163,16 +163,13 @@ impl MenuSessionManager {
             }
             SlotAction::DenyFeedback(deny_action) => {
                 match deny_action {
-                    goldsrc_api::menu::DenyAction::Feedback { message, sound } => {
-                        if let Some(msg) = message {
-                            engine.client_print(
-                                player_idx,
-                                goldsrc_api::MessageDest::One as i32,
-                                &format!("{msg}\n"),
-                            );
+                    goldsrc_api::menu::DenyAction::Feedback(fb) => {
+                        if let Some((target, ref msg)) = fb.message {
+                            let player = crate::Player::new(player_idx);
+                            player.print(target, msg);
                         }
-                        if let Some(snd) = sound {
-                            engine.emit_sound(player_idx, 0, &snd, 1.0, 0.8, 0, 100);
+                        if let Some(ref snd) = fb.sound {
+                            engine.emit_sound(player_idx, 0, snd, 1.0, 0.8, 0, 100);
                         }
                     }
                     goldsrc_api::menu::DenyAction::Custom(cb) => {
@@ -284,9 +281,14 @@ impl MenuSessionManager {
         player_idx: i32,
         session: &mut PlayerMenuSession,
         engine: &dyn Engine,
+        current_time: f32,
     ) {
         let is_alive = engine.entity_health(player_idx) > 0.0;
-        let elapsed = self.round_start_time;
+        let elapsed = if self.round_start_time > 0.0 && current_time >= self.round_start_time {
+            current_time - self.round_start_time
+        } else {
+            0.0
+        };
 
         let ctx = MenuContext {
             player_index: player_idx,

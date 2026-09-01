@@ -56,6 +56,46 @@ pub enum CommandTarget {
 // FromArg Trait & Parsers
 // ---------------------------------------------------------------------------
 
+/// Splits a command argument line into tokens respecting quotes (`"..."`).
+/// If quotes are unclosed, takes the remaining content without trailing quote.
+pub fn split_command_args(args: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut chars = args.chars().peekable();
+
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() {
+            chars.next();
+            continue;
+        }
+
+        if c == '"' {
+            chars.next(); // Consume opening quote
+            let mut current = String::new();
+            while let Some(&ch) = chars.peek() {
+                if ch == '"' {
+                    chars.next(); // Consume closing quote
+                    break;
+                }
+                current.push(ch);
+                chars.next();
+            }
+            tokens.push(current);
+        } else {
+            let mut current = String::new();
+            while let Some(&ch) = chars.peek() {
+                if ch.is_whitespace() {
+                    break;
+                }
+                current.push(ch);
+                chars.next();
+            }
+            tokens.push(current);
+        }
+    }
+
+    tokens
+}
+
 /// Trait for types that can be parsed from a command argument string token.
 pub trait FromArg: Sized {
     /// Attempts to parse `Self` from a command argument string token.
@@ -121,5 +161,24 @@ impl FromArg for Dead<Player> {
                 token
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_command_args_quoted_and_unquoted() {
+        let args = r#"hello "world test" 123 "another string""#;
+        let tokens = split_command_args(args);
+        assert_eq!(tokens, vec!["hello", "world test", "123", "another string"]);
+    }
+
+    #[test]
+    fn test_split_command_args_cyrillic_quotes() {
+        let args = r#""Привет в developer область!""#;
+        let tokens = split_command_args(args);
+        assert_eq!(tokens, vec!["Привет в developer область!"]);
     }
 }

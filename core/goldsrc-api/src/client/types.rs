@@ -5,7 +5,7 @@
 /// Wire values match the engine's `PRINT_TYPE` enum consumed by
 /// `pfnClientPrintf` (`print_console = 0`, ...). Note these differ from the
 /// AMX Mod X `print_*` numbering — never pass AMXX constants here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]
 pub enum PrintTarget {
     /// Player's game console. No color codes supported in any mod.
@@ -14,10 +14,13 @@ pub enum PrintTarget {
     Center = 1,
     /// Chat area via the `SayText` user message.
     Chat = 2,
+    /// Top-left developer notification area (print_notify = 3).
+    Notify = 3,
     /// Chat area with color escapes: `^1` default, `^3` team, `^4` green.
     /// Colors render only in mods whose client parses SayText markup
     /// (CS 1.6 / CZ); elsewhere codes appear as literal text.
-    ColoredChat = 3,
+    #[default]
+    ColoredChat = 4,
 }
 
 /// Client classification kind.
@@ -80,88 +83,88 @@ impl From<i32> for Team {
     }
 }
 
+use std::borrow::Cow;
+
 /// Trait for types that can be resolved into a language code identifier (e.g. `"ru"`, `"en"`).
 pub trait AsLangCode {
     /// Returns the active language code reference for translation lookups.
-    fn as_lang_code(&self) -> &str;
+    fn as_lang_code(&self) -> Cow<'_, str>;
 }
 
 impl AsLangCode for str {
-    fn as_lang_code(&self) -> &str {
-        self
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Borrowed(self)
     }
 }
 
 impl AsLangCode for &str {
-    fn as_lang_code(&self) -> &str {
-        self
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Borrowed(*self)
     }
 }
 
 impl AsLangCode for String {
-    fn as_lang_code(&self) -> &str {
-        self.as_str()
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Borrowed(self.as_str())
     }
 }
 
 impl AsLangCode for &String {
-    fn as_lang_code(&self) -> &str {
-        self.as_str()
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Borrowed(self.as_str())
     }
 }
 
 impl AsLangCode for crate::client::Player {
-    fn as_lang_code(&self) -> &str {
-        // In the future, dynamic client info `_cl_lang` can be queried here.
-        // Fallback default is "en".
-        "en"
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Owned(self.lang())
     }
 }
 
 impl AsLangCode for &crate::client::Player {
-    fn as_lang_code(&self) -> &str {
-        "en"
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Owned(self.lang())
     }
 }
 
 impl<T: AsLangCode> AsLangCode for crate::client::Alive<T> {
-    fn as_lang_code(&self) -> &str {
+    fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
 }
 
 impl<T: AsLangCode> AsLangCode for crate::client::Dead<T> {
-    fn as_lang_code(&self) -> &str {
+    fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
 }
 
 impl AsLangCode for crate::client::Terrorist {
-    fn as_lang_code(&self) -> &str {
+    fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
 }
 
 impl AsLangCode for crate::client::CounterTerrorist {
-    fn as_lang_code(&self) -> &str {
+    fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
 }
 
 impl AsLangCode for crate::client::Spectator {
-    fn as_lang_code(&self) -> &str {
+    fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
 }
 
 impl AsLangCode for crate::client::Bot {
-    fn as_lang_code(&self) -> &str {
+    fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
 }
 
 impl AsLangCode for crate::client::HLTV {
-    fn as_lang_code(&self) -> &str {
+    fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
 }

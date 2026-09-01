@@ -83,6 +83,13 @@ class CommandRegistry:
             aliases=("generate-logo", "branding"),
             group="Assets & Branding",
         )
+        self.register(
+            name="placeholders",
+            description="Inspect registered placeholders across core and plugins",
+            loader=lambda: __import__("commands.placeholders", fromlist=["main"]).main,
+            aliases=("placeholder", "vars"),
+            group="Diagnostics & Tools",
+        )
 
     def _load_crash_analyzer(self) -> Callable:
         try:

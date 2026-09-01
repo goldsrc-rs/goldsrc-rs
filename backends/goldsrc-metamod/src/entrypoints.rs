@@ -75,6 +75,7 @@ pub unsafe extern "C" fn Meta_Attach(
             // Fill the META_FUNCTIONS table with our hook functions.
             (*meta_functions).pfnGetEntityAPI2 = Some(crate::GetEntityAPI2);
             (*meta_functions).pfnGetEntityAPI2_Post = Some(crate::GetEntityAPI2_Post);
+            (*meta_functions).pfnGetEngineFunctions_Post = Some(GetEngineFunctions_Post);
 
             // Register the unified hook strategy before any table query.
             goldsrc::api_registry::register(goldsrc::api_registry::Registry {
@@ -261,10 +262,6 @@ unsafe extern "C" fn hook_reg_user_msg_post(
             && msg_id != 255
             && let Ok(c_str) = unsafe { std::ffi::CStr::from_ptr(psz_name) }.to_str()
         {
-            crate::backend().server_print(&format!(
-                "[GoldSrc.rs DEBUG] Captured RegUserMsg '{}' => id={}\n",
-                c_str, msg_id
-            ));
             goldsrc::backend::register_user_msg_id(c_str, msg_id);
         }
         msg_id

@@ -1,4 +1,4 @@
-//! Centralized hook dispatcher and safe event emission for backends.
+//! Centralized event and command dispatcher for backends and WASM plugins.
 
 use crate::host::HostRuntime;
 
@@ -22,11 +22,9 @@ pub fn emit_event(name: &str, payload: &[u8]) -> bool {
 pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
         goldsrc_api::auth::Auth::remove_player(index);
+        goldsrc_api::menu::close_player_menu(index);
         if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
             mgr.on_disconnect(index);
-        }
-        if let Some(storage) = HostRuntime::storage() {
-            let _ = storage.flush();
         }
     }
     let res = emit_event(name, &index.to_le_bytes());
@@ -38,6 +36,12 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
     }
 
     res
+}
+
+/// Dispatches client userinfo change event and updates active player menu if open.
+pub fn on_client_user_info_changed(player_idx: i32) {
+    emit_player_event("client_user_info_changed", player_idx);
+    goldsrc_api::menu::refresh_player_menu(player_idx);
 }
 
 /// Dispatches a console / client command to the WASM host.
@@ -79,6 +83,10 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
             if text.starts_with('"') && text.ends_with('"') && text.len() >= 2 {
                 text = &text[1..text.len() - 1];
             }
+            if text.trim().is_empty() {
+                // Suppress empty chat messages
+                return true;
+            }
             let mut parts = text.split_whitespace();
             if let Some(trigger) = parts.next() {
                 let clean_trigger = trigger.trim_start_matches(['/', '!']);
@@ -93,7 +101,20 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
                     return true;
                 }
             }
-            return false;
+
+            // Route standard player chat through the chat interceptor / placeholder pipeline
+            let sender = goldsrc_api::client::Player::new(player_idx);
+            let scope = if cmd.eq_ignore_ascii_case("say_team") {
+                goldsrc_api::chat::ChatScope::same_team()
+            } else {
+                goldsrc_api::chat::ChatScope::all()
+            };
+            return crate::chat::process_chat_message_with_manager(
+                Some(manager),
+                sender,
+                text,
+                scope,
+            );
         }
 
         // Direct client console command
@@ -116,6 +137,7 @@ pub fn on_server_activate() {
 pub fn on_server_deactivate() {
     goldsrc_api::edict::bump_map_generation();
     goldsrc_api::auth::Auth::clear_all_players();
+    goldsrc_api::menu::clear_all_menus();
     if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
         mgr.on_map_change();
     }

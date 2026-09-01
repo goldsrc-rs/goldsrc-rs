@@ -1249,6 +1249,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_chat"
+version = "0.14.0"
+dependencies = [
+ "goldsrc",
+ "goldsrc-macros",
+]
+
+[[package]]
 name = "test_ecs"
 version = "0.14.0"
 dependencies = [

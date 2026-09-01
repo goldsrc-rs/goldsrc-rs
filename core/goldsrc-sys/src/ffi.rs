@@ -7,6 +7,12 @@
 ///
 /// Use [`catch_ffi_panic`] in **every** `#[no_mangle] pub extern` entry-point
 /// and every `unsafe extern "C"` hook callback registered with the engine.
+/// Maximum expected engine string pool size in GoldSrc / ReHLDS (4MB).
+pub const STRING_POOL_MAX: usize = 0x400000;
+
+/// Maximum offset mask for direct `pStringBase` pointer offsets (`0x3F_FFFF`).
+pub const STRING_POOL_MASK: usize = STRING_POOL_MAX - 1;
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// Marker wrapper to make a `&'static T` value `Sync` when it is only ever
@@ -77,4 +83,51 @@ where
             default
         }
     }
+}
+
+/// Safely computes the length of a C-string up to `max_len` bytes without out-of-bounds reads.
+///
+/// # Safety
+/// If `ptr` is non-null, it must point to readable memory of at least `max_len` bytes
+/// or contain a NUL terminator before `max_len`.
+#[inline]
+pub unsafe fn libc_strnlen(ptr: *const std::os::raw::c_char, max_len: usize) -> usize {
+    if ptr.is_null() {
+        return 0;
+    }
+    let u8_ptr = ptr as *const u8;
+    for i in 0..max_len {
+        // SAFETY: caller guarantees ptr points to valid mapped memory.
+        if unsafe { *u8_ptr.add(i) } == 0 {
+            return i;
+        }
+    }
+    max_len
+}
+
+/// Safely extracts a trimmed UTF-8 `String` from a raw C string pointer up to `max_len` bytes.
+///
+/// Returns `None` if `ptr` is null, empty, or contains non-UTF-8 characters.
+///
+/// # Safety
+/// `ptr` must be null or point to readable memory.
+pub unsafe fn cstr_to_string_bounded(
+    ptr: *const std::os::raw::c_char,
+    max_len: usize,
+) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    let len = unsafe { libc_strnlen(ptr, max_len) };
+    if len == 0 {
+        return None;
+    }
+    let slice = unsafe { std::slice::from_raw_parts(ptr as *const u8, len) };
+    if let Ok(s) = std::str::from_utf8(slice) {
+        let clean = s.trim();
+        if !clean.is_empty() {
+            return Some(clean.to_string());
+        }
+    }
+    None
 }

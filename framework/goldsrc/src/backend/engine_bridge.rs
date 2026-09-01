@@ -2,6 +2,7 @@
 
 use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
 use crate::{call_engfunc, call_engfunc_ret};
+use goldsrc_api::EngineCvars;
 use goldsrc_sys::enginefuncs_t;
 
 /// Standard `Engine` implementation parameterized by the engfunc source.
@@ -24,11 +25,19 @@ impl EngineBackend {
     }
 
     /// Creates a player handle from an index if valid.
+    ///
+    /// For player slots (1..=32) the edict must have `FL_CLIENT` (1 << 3) set;
+    /// engine slots without a connected client will not have this flag even when
+    /// `edict.free == 0`, so we reject them here before handing off to
+    /// `EDict::is_valid()` which only checks the serial number.
     pub fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
         unsafe {
             let funcs = (self.engfuncs)();
-            let edict = (funcs.pfnPEntityOfEntIndex)?(index);
-            if edict.is_null() {
+            let edict = (funcs.pfnPEntityOfEntIndex).and_then(|f| f(index).as_mut())?;
+            if edict.free != 0 {
+                return None;
+            }
+            if (1..=32).contains(&index) && edict.v.flags & goldsrc_api::consts::FL_CLIENT == 0 {
                 return None;
             }
             Some(goldsrc_api::Player::from_raw(index, edict))
@@ -220,6 +229,10 @@ pub fn register_user_msg_id(name: &str, id: i32) {
     }
 }
 
+static ACTIVE_MSG_TYPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static ACTIVE_MSG_STRINGS: std::sync::LazyLock<std::sync::Mutex<Vec<String>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
+
 impl goldsrc_api::EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
         if let Ok(map) = USER_MSG_REGISTRY.read()
@@ -261,6 +274,11 @@ impl goldsrc_api::EngineMessages for EngineBackend {
         origin: Option<[f32; 3]>,
         edict_index: Option<i32>,
     ) {
+        ACTIVE_MSG_TYPE.store(msg_type, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut list) = ACTIVE_MSG_STRINGS.lock() {
+            list.clear();
+        }
+
         unsafe {
             let porigin = match origin {
                 Some(ref pos) => pos.as_ptr(),
@@ -284,6 +302,18 @@ impl goldsrc_api::EngineMessages for EngineBackend {
     }
 
     fn message_end(&self) {
+        let _msg_type = ACTIVE_MSG_TYPE.swap(0, std::sync::atomic::Ordering::Relaxed);
+        let strings = ACTIVE_MSG_STRINGS
+            .lock()
+            .map(|mut l| std::mem::take(&mut *l))
+            .unwrap_or_default();
+
+        if !strings.is_empty() {
+            // Emit generic user message strings event for subscribers and game plugins
+            let combined = strings.join("\t");
+            crate::hooks::dispatcher::emit_event("user_msg", combined.as_bytes());
+        }
+
         unsafe {
             call_engfunc!((self.engfuncs)().pfnMessageEnd);
         }
@@ -326,6 +356,12 @@ impl goldsrc_api::EngineMessages for EngineBackend {
     }
 
     fn write_string(&self, val: &str) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_STRINGS.lock()
+        {
+            list.push(val.to_string());
+        }
+
         unsafe {
             let clean = val.replace('\0', "");
             let safe = if clean.len() > 500 {
@@ -403,7 +439,39 @@ impl goldsrc_api::EngineConsole for EngineBackend {
 
 impl goldsrc_api::EngineEntities for EngineBackend {
     fn entity_is_valid(&self, index: i32) -> bool {
-        self.get_player(index).is_some_and(|p| p.is_valid())
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let Some(pedict) = (funcs.pfnPEntityOfEntIndex).and_then(|f| f(index).as_mut()) else {
+                return false;
+            };
+            if pedict.free != 0 {
+                return false;
+            }
+            if (1..=32).contains(&index) {
+                // GoldSrc engine: pev->flags & FL_CLIENT (1 << 3 = 8).
+                // Edict is a connected client only if FL_CLIENT is set.
+                if pedict.v.flags & goldsrc_api::consts::FL_CLIENT == 0 {
+                    return false;
+                }
+                if pedict.v.netname != 0 {
+                    return true;
+                }
+                if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
+                    && let Some(infokey_val) = funcs.pfnInfoKeyValue
+                {
+                    let buffer = get_infokey(pedict);
+                    let key = std::ffi::CString::new("name").unwrap_or_default();
+                    let val_ptr = infokey_val(buffer, key.as_ptr());
+                    if !val_ptr.is_null()
+                        && let Ok(name_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
+                    {
+                        return !name_str.trim().is_empty();
+                    }
+                }
+                return true;
+            }
+            true
+        }
     }
 
     fn entity_classname(&self, index: i32) -> Option<String> {
@@ -474,7 +542,14 @@ impl goldsrc_api::EngineEntities for EngineBackend {
         }
     }
 
+    fn player_handle(&self, index: i32) -> Option<goldsrc_api::Player> {
+        self.get_player(index)
+    }
+
     fn player_name(&self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return None;
+        }
         unsafe {
             let funcs = (self.engfuncs)();
             let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
@@ -487,11 +562,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 let buffer = get_infokey(pedict);
                 let key = std::ffi::CString::new("name").unwrap_or_default();
                 let val_ptr = infokey_val(buffer, key.as_ptr());
-                if !val_ptr.is_null()
-                    && let Ok(name_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
-                    && !name_str.is_empty()
-                {
-                    return Some(name_str.to_string());
+                if let Some(name) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 64) {
+                    return Some(name);
                 }
             }
             let netname_offset = (*pedict).v.netname;
@@ -499,14 +571,56 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 && let Some(sz_from_idx) = funcs.pfnSzFromIndex
             {
                 let str_ptr = sz_from_idx(netname_offset as i32);
-                if !str_ptr.is_null()
-                    && let Ok(name_str) = std::ffi::CStr::from_ptr(str_ptr).to_str()
-                    && !name_str.is_empty()
-                {
-                    return Some(name_str.to_string());
+                if let Some(name) = goldsrc_sys::ffi::cstr_to_string_bounded(str_ptr, 64) {
+                    return Some(name);
                 }
             }
             None
+        }
+    }
+
+    fn player_lang(&self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return None;
+        }
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if pedict.is_null() {
+                return None;
+            }
+            if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
+                && let Some(infokey_val) = funcs.pfnInfoKeyValue
+            {
+                let buffer = get_infokey(pedict);
+                for key_name in ["_lang", "_cl_lang", "lang", "cl_lang"] {
+                    let key = std::ffi::CString::new(key_name).unwrap_or_default();
+                    let val_ptr = infokey_val(buffer, key.as_ptr());
+                    if let Some(lang) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 16) {
+                        return Some(lang.to_lowercase());
+                    }
+                }
+            }
+            self.cvar_get_string("server_language")
+        }
+    }
+
+    fn player_team(&self, index: i32) -> i32 {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return 0;
+        }
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = match funcs.pfnPEntityOfEntIndex {
+                Some(f) => f(index),
+                None => return 0,
+            };
+            if pedict.is_null() {
+                return 0;
+            }
+
+            // Universal GoldSrc entity team index
+            (*pedict).v.team
         }
     }
 
@@ -534,7 +648,6 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             if pent.is_null() {
                 return None;
             }
-            (*pent).v.spawnflags |= 1 << 30;
 
             let idx = crate::api_registry::edict_index(pent);
             if idx > 0 { Some(idx) } else { None }

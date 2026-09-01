@@ -235,6 +235,13 @@ impl EDict {
         }
     }
 
+    /// Entity team (CS 1.6 / CZ team slot).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn team(self) -> Option<i32> {
+        let ptr = self.raw_ptr()?;
+        Some(unsafe { (*ptr).v.team })
+    }
+
     /// Entity angles (pitch, yaw, roll).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn angles(self) -> Option<[f32; 3]> {

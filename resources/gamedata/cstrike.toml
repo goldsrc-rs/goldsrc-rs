@@ -1,0 +1,66 @@
+# Counter-Strike 1.6 Gamedata Offsets & Signatures
+
+game = "cstrike"
+os = "windows"
+
+[vtable_offsets]
+# CBaseEntity / CBasePlayer virtual table method indices (Windows MSVC)
+Spawn = 0
+Precache = 1
+KeyValue = 2
+Save = 3
+Restore = 4
+ObjectCaps = 5
+Activate = 6
+SetObjectCollisionBox = 7
+Classify = 8
+DeathNotice = 9
+TraceAttack = 10
+TakeDamage = 11
+TakeHealth = 12
+Killed = 13
+BloodColor = 14
+TraceBleed = 15
+IsTriggered = 16
+MyMonsterPointer = 17
+MySquadMonsterPointer = 18
+GetToggleState = 19
+AddPoints = 20
+AddPointsToTeam = 21
+AddPlayerItem = 22
+RemovePlayerItem = 23
+GiveAmmo = 24
+GetDelay = 25
+IsMoving = 26
+OverrideReset = 27
+DamageDecal = 28
+SetToggleState = 29
+StartSneaking = 30
+StopSneaking = 31
+OnControls = 32
+IsSneaking = 33
+IsAlive = 34
+IsBSPModel = 35
+ReflectGauss = 36
+HasTarget = 37
+IsInWorld = 38
+IsPlayer = 39
+IsNetClient = 40
+TeamID = 41
+GetNextTarget = 42
+Think = 43
+Touch = 44
+Use = 45
+Blocked = 46
+Respawn = 47
+ResetMaxSpeed = 73
+
+[signatures.CBasePlayer_TakeDamage]
+name = "CBasePlayer::TakeDamage"
+pattern = "55 8B EC 83 EC 20 53 56 57 8B 7D 08"
+offset = 0
+
+[signatures.CBasePlayer_Killed]
+name = "CBasePlayer::Killed"
+pattern = "55 8B EC 83 EC 10 53 56 57 8B 7D 08 85 FF"
+offset = 0

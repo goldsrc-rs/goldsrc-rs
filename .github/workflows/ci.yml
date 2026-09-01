@@ -8,48 +8,13 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_BUILD_JOBS: 2
+  RUSTFLAGS: "-D warnings -C debuginfo=0"
 
 jobs:
-  build-windows:
-    name: Build (Windows)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: i686-pc-windows-msvc
-
-      - name: Cache Rust dependencies & build artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install LLVM (if missing)
-        shell: pwsh
-        run: |
-          if (!(Test-Path "C:\Program Files\LLVM\lib")) {
-            winget install LLVM.LLVM --accept-package-agreements --accept-source-agreements
-          }
-
-      - name: Setup references
-        run: python -m scripts setup
-
-      - name: Build
-        run: cargo build --target i686-pc-windows-msvc --workspace
-        env:
-          LIBCLANG_PATH: C:\Program Files\LLVM\lib
-
-      - name: Check formatting
-        run: cargo fmt -- --check
-
-      - name: Run clippy
-        run: cargo clippy --target i686-pc-windows-msvc --workspace -- -D warnings
-
-      - name: Run tests (host target)
-        run: cargo test --workspace
-
-  build-linux:
-    name: Build (Linux)
+  fmt-check:
+    name: Code Formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,30 +22,93 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: i686-unknown-linux-gnu,wasm32-unknown-unknown
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  build-windows:
+    name: Build (Windows)
+    needs: [fmt-check]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Cache Rust dependencies & build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install 32-bit build tools & Clang
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-msvc,wasm32-unknown-unknown
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install LLVM
+        run: choco install llvm --no-progress -y
+
+      - name: Setup references
+        run: python -m scripts setup
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\lib
+
+      - name: Run clippy
+        run: cargo clippy --target i686-pc-windows-msvc --workspace --locked -- -D warnings
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\lib
+
+      - name: Run unit tests with nextest
+        run: cargo nextest run --target i686-pc-windows-msvc --workspace --locked
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\lib
+
+      - name: Run doc tests
+        run: cargo test --doc --target i686-pc-windows-msvc --workspace --locked
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\lib
+
+  build-linux:
+    name: Build (Linux)
+    needs: [fmt-check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache Rust dependencies & build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-unknown-linux-gnu,wasm32-unknown-unknown
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install 32-bit build tools, Clang & Mold
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y gcc-multilib libclang-dev
+          sudo apt-get install -y gcc-multilib libclang-dev mold
 
       - name: Setup references
         run: python -m scripts setup
 
-      - name: Build
-        run: cargo build --target i686-unknown-linux-gnu --workspace
+      - name: Run clippy
+        run: cargo clippy --target i686-unknown-linux-gnu --workspace --locked -- -D warnings
         env:
           LIBCLANG_PATH: /usr/lib/llvm-18/lib
+          RUSTFLAGS: "-D warnings -C debuginfo=0 -C link-arg=-fuse-ld=mold"
 
-      - name: Check formatting
-        run: cargo fmt -- --check
+      - name: Run unit tests with nextest
+        run: cargo nextest run --target i686-unknown-linux-gnu --workspace --locked
+        env:
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
+          RUSTFLAGS: "-D warnings -C debuginfo=0 -C link-arg=-fuse-ld=mold"
 
-      - name: Run clippy
-        run: cargo clippy --target i686-unknown-linux-gnu --workspace -- -D warnings
-
-      - name: Run tests (host target)
-        run: cargo test --workspace
+      - name: Run doc tests
+        run: cargo test --doc --target i686-unknown-linux-gnu --workspace --locked
+        env:
+          LIBCLANG_PATH: /usr/lib/llvm-18/lib
+          RUSTFLAGS: "-D warnings -C debuginfo=0 -C link-arg=-fuse-ld=mold"

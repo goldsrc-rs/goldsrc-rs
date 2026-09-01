@@ -35,6 +35,16 @@ pub trait EngineEntities: Send + Sync {
     /// Player display name (e.g. "Player").
     fn player_name(&self, index: i32) -> Option<String>;
 
+    /// Player game team slot (0=Unassigned, 1=Terrorist, 2=CT, 3=Spectator).
+    fn player_team(&self, _index: i32) -> i32 {
+        0
+    }
+
+    /// Player preferred language (from `setinfo _lang` or server default).
+    fn player_lang(&self, _index: i32) -> Option<String> {
+        None
+    }
+
     /// Player armor value.
     fn player_armorvalue(&self, index: i32) -> f32;
 
@@ -59,4 +69,20 @@ pub trait EngineEntities: Send + Sync {
     /// Forces the real GameDLL's Touch between two entities
     /// (`touched` delivered into `other`, e.g. weapon → player).
     fn dispatch_touch(&self, touched: i32, other: i32);
+
+    /// Constructs a safe Player entity handle from a player slot index if valid.
+    fn player_handle(&self, index: i32) -> Option<crate::client::Player> {
+        if (1..=32).contains(&index) && self.entity_is_valid(index) {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                Some(crate::client::Player::from_index(index))
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                Some(crate::client::Player::new(index))
+            }
+        } else {
+            None
+        }
+    }
 }

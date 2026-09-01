@@ -1,9 +1,80 @@
 //! Safe wrapper around player entities with serial-validated edict access.
 
 use crate::Vector3;
-use crate::client::types::AsLangCode;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::edict::EDict;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::RwLock;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type NativePrintHook = fn(i32, crate::client::PrintTarget, &str);
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type PlayerResolverHook = fn(i32) -> Option<Player>;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type PlayerNameResolverHook = fn(i32) -> Option<String>;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type PlayerTeamResolverHook = fn(i32) -> i32;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type PlayerLangResolverHook = fn(i32) -> Option<String>;
+
+#[cfg(not(target_arch = "wasm32"))]
+static NATIVE_PRINT_HOOK: RwLock<Option<NativePrintHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_RESOLVER_HOOK: RwLock<Option<PlayerResolverHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_NAME_RESOLVER_HOOK: RwLock<Option<PlayerNameResolverHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_TEAM_RESOLVER_HOOK: RwLock<Option<PlayerTeamResolverHook>> = RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+static PLAYER_LANG_RESOLVER_HOOK: RwLock<Option<PlayerLangResolverHook>> = RwLock::new(None);
+
+/// Registers the native backend print dispatcher for host-side `Player::print_*` calls.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_native_print_hook(hook: NativePrintHook) {
+    if let Ok(mut lock) = NATIVE_PRINT_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player resolver for `Player::new(index)` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_resolver_hook(hook: PlayerResolverHook) {
+    if let Ok(mut lock) = PLAYER_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player name resolver for `Player::name()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_name_hook(hook: PlayerNameResolverHook) {
+    if let Ok(mut lock) = PLAYER_NAME_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player team resolver for `Player::team()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_team_hook(hook: PlayerTeamResolverHook) {
+    if let Ok(mut lock) = PLAYER_TEAM_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native engine player lang resolver for `Player::lang()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_lang_hook(hook: PlayerLangResolverHook) {
+    if let Ok(mut lock) = PLAYER_LANG_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
 
 /// Safe wrapper around a player entity.
 ///
@@ -30,16 +101,30 @@ impl Player {
         }
     }
 
+    /// Creates a Player handle from a verified index on native host.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn from_index(index: i32) -> Self {
+        Self {
+            index,
+            inner: EDict::invalid(),
+        }
+    }
+
     /// Creates a `Player` handle for `index`.
     #[cfg(target_arch = "wasm32")]
     pub fn new(index: i32) -> Self {
         Self { index }
     }
 
-    /// Creates a `Player` handle for `index` with an invalid backing edict
-    /// (host-only placeholder; use [`Player::from_raw`] with a real pointer).
+    /// Creates a `Player` handle for `index` with backing edict resolved via host engine if available.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(index: i32) -> Self {
+        if let Ok(lock) = PLAYER_RESOLVER_HOOK.read()
+            && let Some(resolver) = *lock
+            && let Some(player) = resolver(index)
+        {
+            return player;
+        }
         Self {
             index,
             inner: EDict::invalid(),
@@ -76,13 +161,33 @@ impl Player {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
+            if let Ok(lock) = PLAYER_NAME_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+                && let Some(name) = resolver(self.index)
+            {
+                return Some(name);
+            }
             self.inner.netname()
         }
     }
 
     /// Returns the player's preferred language code (e.g. `"ru"`, `"en"`).
     pub fn lang(&self) -> String {
-        self.as_lang_code().to_string()
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_player_lang(self.index)
+                .unwrap_or_else(|| "en".to_string())
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(lock) = PLAYER_LANG_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+                && let Some(lang) = resolver(self.index)
+            {
+                return lang;
+            }
+            "en".to_string()
+        }
     }
 
     /// Returns the entity's class name, if set.
@@ -253,6 +358,37 @@ impl Player {
         }
     }
 
+    /// Returns the player's current game team.
+    pub fn team(&self) -> crate::client::Team {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::client::Team::from(crate::bindings::goldsrc::engine::api::host_player_team(
+                self.index,
+            ))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(lock) = PLAYER_TEAM_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+            {
+                return resolver(self.index).into();
+            }
+            self.inner.team().unwrap_or(0).into()
+        }
+    }
+
+    /// Returns the player's current life state.
+    pub fn life_state(&self) -> crate::client::LifeState {
+        if !self.is_valid() {
+            return crate::client::LifeState::Dead;
+        }
+        if self.health() > 0.0 {
+            crate::client::LifeState::Alive
+        } else {
+            crate::client::LifeState::Dead
+        }
+    }
+
     /// Prints a message to the specified target (console / center / chat).
     ///
     /// This is the single dispatch point; the `print_*` helpers below are
@@ -265,6 +401,7 @@ impl Player {
             match target {
                 crate::client::PrintTarget::Console => host::host_print_console(self.index, msg),
                 crate::client::PrintTarget::Center => host::host_print_center(self.index, msg),
+                crate::client::PrintTarget::Notify => host::host_print_notify(self.index, msg),
                 // Chat and ColoredChat share the SayText transport; the colored
                 // variant only documents that ^1/^3/^4 escapes are meaningful.
                 crate::client::PrintTarget::Chat | crate::client::PrintTarget::ColoredChat => {
@@ -274,13 +411,22 @@ impl Player {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (self.index, target, msg);
+            if let Ok(lock) = NATIVE_PRINT_HOOK.read()
+                && let Some(hook) = *lock
+            {
+                hook(self.index, target, msg);
+            }
         }
     }
 
     /// Prints a message to the player's game console.
     pub fn print_console(&self, msg: &str) {
         self.print(crate::client::PrintTarget::Console, msg);
+    }
+
+    /// Prints a developer notification (top-left screen con_notify area) to the player.
+    pub fn print_notify(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Notify, msg);
     }
 
     /// Prints a chat message to the player.
@@ -297,6 +443,23 @@ impl Player {
     /// Color escapes render in CS 1.6 / CZ clients only.
     pub fn print_color(&self, msg: &str) {
         self.print(crate::client::PrintTarget::ColoredChat, msg);
+    }
+
+    /// Plays a dynamic sound effect to the player (e.g. `"buttons/button10.wav"`).
+    pub fn play_sound(&self, sample: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_emit_sound(
+                self.index, 0, // CHAN_AUTO
+                sample, 1.0, // VOL_NORM
+                1.0, // ATTN_NORM
+                0, 100, // PITCH_NORM
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = sample;
+        }
     }
 
     /// Spawns an item/weapon entity by classname (e.g. `"weapon_m4a1"`) and
@@ -463,6 +626,24 @@ impl From<Player> for crate::Entity {
                 index: player.index,
             }
         }
+    }
+}
+
+impl From<i32> for Player {
+    fn from(index: i32) -> Self {
+        Player::new(index)
+    }
+}
+
+impl From<&Player> for Player {
+    fn from(p: &Player) -> Self {
+        *p
+    }
+}
+
+impl From<&mut Player> for Player {
+    fn from(p: &mut Player) -> Self {
+        *p
     }
 }
 

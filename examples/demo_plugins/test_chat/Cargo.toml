@@ -1,0 +1,13 @@
+[package]
+name = "test_chat"
+version = "0.14.0"
+edition = "2024"
+authors = ["GoldSrc.rs Team"]
+description = "Demonstration plugin showcasing chat middleware, custom prefixing, and placeholders"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+goldsrc = { path = "../../../framework/goldsrc" }
+goldsrc-macros = { path = "../../../framework/goldsrc-macros" }

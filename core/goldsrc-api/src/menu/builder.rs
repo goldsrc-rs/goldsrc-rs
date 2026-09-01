@@ -20,6 +20,7 @@ impl MenuBuilder {
                 exit_behavior: ExitBehavior::PopParent,
                 timeout_seconds: -1,
                 required_capability: None,
+                debounce: None,
             },
         }
     }
@@ -75,6 +76,12 @@ impl MenuBuilder {
         self
     }
 
+    /// Sets the target language code for automatic navigation buttons localization.
+    pub fn lang<S: AsRef<str>>(mut self, lang: S) -> Self {
+        self.menu.style = self.menu.style.with_lang(lang.as_ref());
+        self
+    }
+
     /// Sets the rendering backend (Text or Dhud).
     pub fn renderer(mut self, renderer: MenuRendererKind) -> Self {
         self.menu.renderer = renderer;
@@ -84,6 +91,12 @@ impl MenuBuilder {
     /// Sets auto-close timeout in seconds (-1 for infinite).
     pub fn timeout(mut self, seconds: i32) -> Self {
         self.menu.timeout_seconds = seconds;
+        self
+    }
+
+    /// Sets a minimum duration between consecutive slot selections (anti-flood).
+    pub fn debounce(mut self, duration: std::time::Duration) -> Self {
+        self.menu.debounce = Some(duration);
         self
     }
 

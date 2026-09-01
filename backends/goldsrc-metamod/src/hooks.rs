@@ -40,8 +40,34 @@ impl EntityHooks for MetamodHooks {
         crate::backend().drain_prints();
     }
 
+    fn player_pre_think(&self, _edict: *mut edict_t, index: i32) {
+        goldsrc::hooks::emit_player_event("player_pre_think", index);
+    }
+
     fn player_post_think(&self, _edict: *mut edict_t, index: i32) {
         goldsrc::hooks::emit_player_event("player_post_think", index);
+    }
+
+    fn cmd_start(
+        &self,
+        _player: *const edict_t,
+        index: i32,
+        cmd: *const goldsrc_sys::usercmd_s,
+        _random_seed: u32,
+    ) {
+        if !cmd.is_null() {
+            let buttons = unsafe { (*cmd).buttons };
+            let mut payload = [0u8; 8];
+            payload[0..4].copy_from_slice(&index.to_le_bytes());
+            payload[4..6].copy_from_slice(&buttons.to_le_bytes());
+            goldsrc::hooks::emit_event("cmd_start", &payload);
+        } else {
+            goldsrc::hooks::emit_player_event("cmd_start", index);
+        }
+    }
+
+    fn cmd_end(&self, _player: *const edict_t, index: i32) {
+        goldsrc::hooks::emit_player_event("cmd_end", index);
     }
 
     fn client_kill(&self, _edict: *mut edict_t, index: i32) {
@@ -68,6 +94,10 @@ impl EntityHooks for MetamodHooks {
 
     fn client_disconnect_post(&self, index: i32) {
         goldsrc::hooks::emit_player_event("client_disconnect", index);
+    }
+
+    fn client_user_info_changed_post(&self, index: i32) {
+        goldsrc::hooks::on_client_user_info_changed(index);
     }
 }
 

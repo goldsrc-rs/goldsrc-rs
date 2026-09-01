@@ -5,6 +5,7 @@ use goldsrc_wasm_host::PluginManager;
 use goldsrc_wasm_host::error::HostError;
 
 pub struct HostRuntime {
+    pub backend: BackendType,
     manager: PluginManager,
     engine: std::sync::Arc<dyn goldsrc_api::Engine>,
     pub storage: std::sync::Arc<crate::storage::SqliteStorageEngine>,
@@ -16,6 +17,7 @@ pub struct HostRuntime {
 use std::sync::{Mutex, OnceLock};
 
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
+static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_api::Engine>> = OnceLock::new();
 
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration, storage, i18n and hot reload watchers.
@@ -53,8 +55,145 @@ impl HostRuntime {
             },
         );
 
+        let _ = ENGINE_INSTANCE.set(engine.clone());
+
         goldsrc_wasm_host::set_translate_callback(|caller, dict, lang, key| {
             crate::i18n::I18nEngine::translate_with_caller(caller, dict, lang, key, &[], &[])
+        });
+
+        goldsrc_api::client::player::set_player_resolver_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_handle(index)
+            } else {
+                None
+            }
+        });
+        goldsrc_api::client::player::set_player_name_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_name(index)
+            } else {
+                None
+            }
+        });
+        goldsrc_api::client::player::set_player_team_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_team(index)
+            } else {
+                0
+            }
+        });
+        goldsrc_api::client::player::set_player_lang_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_lang(index)
+            } else {
+                None
+            }
+        });
+        goldsrc_api::client::player::set_native_print_hook(|player_index, target, message| {
+            let Some(engine) = HostRuntime::engine() else {
+                return;
+            };
+            match target {
+                goldsrc_api::PrintTarget::Console
+                | goldsrc_api::PrintTarget::Notify
+                | goldsrc_api::PrintTarget::Center => {
+                    if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+                        return;
+                    }
+                    let (msg_dest, mut formatted) = match target {
+                        goldsrc_api::PrintTarget::Console => (
+                            goldsrc_api::HUD_PRINTCONSOLE,
+                            if message.ends_with('\n') {
+                                message.to_string()
+                            } else {
+                                format!("{message}\n")
+                            },
+                        ),
+                        goldsrc_api::PrintTarget::Notify => (
+                            goldsrc_api::HUD_PRINTNOTIFY,
+                            goldsrc_api::format_notify_text(message),
+                        ),
+                        goldsrc_api::PrintTarget::Center => (
+                            goldsrc_api::HUD_PRINTCENTER,
+                            goldsrc_api::format_center_text(message),
+                        ),
+                        _ => unreachable!(),
+                    };
+
+                    let text_msg_id = engine.reg_user_msg("TextMsg", -1);
+                    if text_msg_id > 0 && text_msg_id < 255 {
+                        // AMX Mod X protocol: if format string is used, double newline is needed for notify/console in cstrike
+                        if (msg_dest == goldsrc_api::HUD_PRINTNOTIFY
+                            || msg_dest == goldsrc_api::HUD_PRINTCONSOLE)
+                            && !formatted.ends_with("\n\n")
+                        {
+                            formatted.push('\n');
+                        }
+
+                        let safe_msg = if formatted.len() > 185 {
+                            let mut end = 185;
+                            while end > 0 && !formatted.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            &formatted[..end]
+                        } else {
+                            &formatted
+                        };
+
+                        engine.message_begin(
+                            goldsrc_api::MessageDest::One as i32,
+                            text_msg_id,
+                            None,
+                            Some(player_index),
+                        );
+                        engine.write_byte(msg_dest);
+                        engine.write_string("%s");
+                        engine.write_string(safe_msg);
+                        engine.message_end();
+                    } else {
+                        // Fallback to direct client_print
+                        engine.client_print(player_index, msg_dest, &formatted);
+                    }
+                }
+                goldsrc_api::PrintTarget::Chat | goldsrc_api::PrintTarget::ColoredChat => {
+                    if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+                        return;
+                    }
+                    let formatted = goldsrc_api::format_say_text(message);
+                    let say_text_id = engine.reg_user_msg("SayText", -1);
+                    if say_text_id > 0 && say_text_id < 255 {
+                        engine.message_begin(
+                            goldsrc_api::MessageDest::One as i32,
+                            say_text_id,
+                            None,
+                            Some(player_index),
+                        );
+                        // 1. Sender entity index for team color ^3 resolution
+                        engine.write_byte(player_index);
+                        // 2. Chat message payload (starts with \x02 / \x01 in CS 1.6 client)
+                        let payload = if !formatted.starts_with(['\x01', '\x02', '\x03', '\x04']) {
+                            format!("\x01{formatted}")
+                        } else {
+                            formatted
+                        };
+                        let safe_msg = if payload.len() > goldsrc_api::consts::SAFE_SAYTEXT_LIMIT {
+                            let mut end = goldsrc_api::consts::SAFE_SAYTEXT_LIMIT;
+                            while end > 0 && !payload.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            &payload[..end]
+                        } else {
+                            &payload
+                        };
+                        engine.write_string(safe_msg);
+                        engine.message_end();
+                    } else {
+                        // Fallback to HUD_PRINTCHAT via ClientPrintf if SayText user message isn't registered yet
+                        let safe_text = format!("{formatted}\n");
+                        engine.client_print(player_index, goldsrc_api::HUD_PRINTCHAT, &safe_text);
+                    }
+                }
+            }
         });
 
         let mut manager = PluginManager::new(engine.clone())
@@ -148,6 +287,11 @@ impl HostRuntime {
         if let Err(e) = manager.enable_config_watcher(&config_dir) {
             log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
         }
+        if let Err(e) = manager.enable_config_watcher(&lang_dir) {
+            log::warn!(target: "wasm", "Failed to enable lang watcher on {:?}: {e}", lang_dir);
+        }
+
+        // config_changed event dispatched via on_server_frame handles hot reloading of plugins.toml and lang files without re-entrant mutex deadlock.
 
         // Load or create plugins.toml configuration template
         let plugins_config_path = config_dir.join("plugins.toml");
@@ -224,6 +368,7 @@ impl HostRuntime {
         let paused_plugins = std::collections::HashMap::new();
 
         let runtime = Self {
+            backend,
             manager,
             engine,
             storage,
@@ -241,9 +386,7 @@ impl HostRuntime {
 
     /// Returns a clone of the Engine reference if initialized.
     pub fn engine() -> Option<std::sync::Arc<dyn goldsrc_api::Engine>> {
-        RUNTIME
-            .get()
-            .and_then(|lock| lock.lock().ok().map(|g| g.engine.clone()))
+        ENGINE_INSTANCE.get().cloned()
     }
 
     /// Returns the currently active map name.
@@ -296,10 +439,13 @@ impl HostRuntime {
             return;
         };
 
+        let backend = lock
+            .lock()
+            .map(|g| g.backend)
+            .unwrap_or(BackendType::Metamod);
+
         // 1. Reload plugins.toml dynamically to pick up any changes made by the server administrator
-        let config_dir = crate::paths::PathResolver::existing_config_dir(
-            goldsrc_api::consts::BackendType::Metamod,
-        );
+        let config_dir = crate::paths::PathResolver::existing_config_dir(backend);
         let plugins_config_path = config_dir.join("plugins.toml");
         let fresh_config =
             crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
@@ -407,11 +553,39 @@ impl HostRuntime {
 
     /// Tick plugins frame event.
     pub fn on_server_frame() {
-        Self::with_manager(|m| {
-            if let Some(manager) = m {
-                manager.on_server_frame();
+        let changed_configs = Self::with_manager(|m| match m {
+            Some(manager) => {
+                let configs = manager.drain_watcher_events();
+                manager.call_on_frame();
+                configs
             }
+            None => Vec::new(),
         });
+
+        for path in changed_configs {
+            let file_name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default();
+            if file_name.eq_ignore_ascii_case("plugins.toml") {
+                log::info!(
+                    target: "wasm",
+                    "Hot-reloaded plugins orchestration config from \"{}\"",
+                    crate::paths::PathResolver::normalize(&path)
+                );
+                Self::evaluate_rules("", 0);
+            } else if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+                && let Ok(count) = crate::i18n::I18nEngine::load_file(stem, &path)
+            {
+                log::info!(
+                    target: "i18n",
+                    "Hot-reloaded {count} keys from \"{}\"",
+                    crate::paths::PathResolver::normalize(&path)
+                );
+                goldsrc_api::menu::refresh_all_menus();
+            }
+        }
+
         crate::logging::flush();
     }
 }
