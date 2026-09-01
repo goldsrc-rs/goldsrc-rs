@@ -448,6 +448,17 @@ pub fn forward_start_frame() {
     }
 }
 
+/// Forward a player pre think call to the real game DLL if loaded.
+pub fn forward_player_pre_think(edict: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnPlayerPreThink
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
 /// Forward a player post think call to the real game DLL if loaded.
 pub fn forward_player_post_think(edict: *mut goldsrc_sys::edict_t) {
     let func = PROXY.get().and_then(|lock| {
@@ -456,6 +467,53 @@ pub fn forward_player_post_think(edict: *mut goldsrc_sys::edict_t) {
     });
     if let Some(f) = func {
         unsafe { f(edict) };
+    }
+}
+
+/// Forward a cmd start call to the real game DLL if loaded.
+pub fn forward_cmd_start(
+    player: *const goldsrc_sys::edict_t,
+    cmd: *const goldsrc_sys::usercmd_s,
+    random_seed: std::os::raw::c_uint,
+) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnCmdStart
+    });
+    if let Some(f) = func {
+        unsafe { f(player, cmd, random_seed) };
+    }
+}
+
+/// Forward a cmd end call to the real game DLL if loaded.
+pub fn forward_cmd_end(player: *const goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnCmdEnd
+    });
+    if let Some(f) = func {
+        unsafe { f(player) };
+    }
+}
+
+/// Forward an add_to_full_pack call to the real game DLL if loaded.
+pub fn forward_add_to_full_pack(
+    state: *mut goldsrc_sys::entity_state_s,
+    e: std::os::raw::c_int,
+    ent: *mut goldsrc_sys::edict_t,
+    host: *mut goldsrc_sys::edict_t,
+    hostflags: std::os::raw::c_int,
+    player: std::os::raw::c_int,
+    pset: *mut u8,
+) -> std::os::raw::c_int {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnAddToFullPack
+    });
+    if let Some(f) = func {
+        unsafe { f(state, e, ent, host, hostflags, player, pset) }
+    } else {
+        -1
     }
 }
 
@@ -492,6 +550,194 @@ pub fn forward_use(pent_used: *mut goldsrc_sys::edict_t, pent_other: *mut goldsr
     });
     if let Some(f) = func {
         unsafe { f(pent_used, pent_other) };
+    }
+}
+
+/// Forward a client put in server call to the real game DLL if loaded.
+pub fn forward_client_put_in_server(edict: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnClientPutInServer
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
+/// Forward a client user info changed call to the real game DLL if loaded.
+pub fn forward_client_user_info_changed(
+    edict: *mut goldsrc_sys::edict_t,
+    infobuffer: *mut std::ffi::c_char,
+) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnClientUserInfoChanged
+    });
+    if let Some(f) = func {
+        unsafe { f(edict, infobuffer) };
+    }
+}
+
+/// Forward a think call to the real game DLL if loaded.
+pub fn forward_think(pent: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnThink
+    });
+    if let Some(f) = func {
+        unsafe { f(pent) };
+    }
+}
+
+/// Forward a blocked call to the real game DLL if loaded.
+pub fn forward_blocked(
+    pent_blocked: *mut goldsrc_sys::edict_t,
+    pent_other: *mut goldsrc_sys::edict_t,
+) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnBlocked
+    });
+    if let Some(f) = func {
+        unsafe { f(pent_blocked, pent_other) };
+    }
+}
+
+/// Forward a key value call to the real game DLL if loaded.
+pub fn forward_key_value(pent: *mut goldsrc_sys::edict_t, pkvd: *mut goldsrc_sys::KeyValueData) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnKeyValue
+    });
+    if let Some(f) = func {
+        unsafe { f(pent, pkvd) };
+    }
+}
+
+/// Forward a set abs box call to the real game DLL if loaded.
+pub fn forward_set_abs_box(pent: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnSetAbsBox
+    });
+    if let Some(f) = func {
+        unsafe { f(pent) };
+    }
+}
+
+/// Forward an update client data call to the real game DLL if loaded.
+pub fn forward_update_client_data(
+    ent: *const goldsrc_sys::edict_t,
+    sendweapons: std::os::raw::c_int,
+    cd: *mut goldsrc_sys::clientdata_s,
+) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnUpdateClientData
+    });
+    if let Some(f) = func {
+        unsafe { f(ent, sendweapons, cd) };
+    }
+}
+
+/// Forward a spectator connect call to the real game DLL if loaded.
+pub fn forward_spectator_connect(edict: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnSpectatorConnect
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
+/// Forward a spectator disconnect call to the real game DLL if loaded.
+pub fn forward_spectator_disconnect(edict: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnSpectatorDisconnect
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
+/// Forward a spectator think call to the real game DLL if loaded.
+pub fn forward_spectator_think(edict: *mut goldsrc_sys::edict_t) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnSpectatorThink
+    });
+    if let Some(f) = func {
+        unsafe { f(edict) };
+    }
+}
+
+/// Forward a sys error call to the real game DLL if loaded.
+pub fn forward_sys_error(error_string: *const std::ffi::c_char) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnSys_Error
+    });
+    if let Some(f) = func {
+        unsafe { f(error_string) };
+    }
+}
+
+/// Forward a pm move call to the real game DLL if loaded.
+pub fn forward_pm_move(ppmove: *mut goldsrc_sys::playermove_s, server: goldsrc_sys::qboolean) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnPM_Move
+    });
+    if let Some(f) = func {
+        unsafe { f(ppmove, server) };
+    }
+}
+
+/// Forward a setup visibility call to the real game DLL if loaded.
+pub fn forward_setup_visibility(
+    view_entity: *mut goldsrc_sys::edict_t,
+    client: *mut goldsrc_sys::edict_t,
+    pvs: *mut *mut u8,
+    pas: *mut *mut u8,
+) {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnSetupVisibility
+    });
+    if let Some(f) = func {
+        unsafe { f(view_entity, client, pvs, pas) };
+    }
+}
+
+/// Forward an inconsistent file call to the real game DLL if loaded.
+pub fn forward_inconsistent_file(
+    player: *const goldsrc_sys::edict_t,
+    filename: *const std::ffi::c_char,
+    disconnect_message: *mut std::ffi::c_char,
+) -> std::os::raw::c_int {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnInconsistentFile
+    });
+    if let Some(f) = func {
+        unsafe { f(player, filename, disconnect_message) }
+    } else {
+        0
+    }
+}
+
+/// Forward an allow lag compensation call to the real game DLL if loaded.
+pub fn forward_allow_lag_compensation() -> std::os::raw::c_int {
+    let func = PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.dll_funcs.pfnAllowLagCompensation
+    });
+    if let Some(f) = func {
+        unsafe { f() }
+    } else {
+        1
     }
 }
 

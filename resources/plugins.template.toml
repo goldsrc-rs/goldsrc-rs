@@ -42,4 +42,3 @@
 # [rules.unpause_on_players]
 # when = { any_of = [{ players = ">= 1" }, { cvar = "mp_force_plugins == 1" }] }
 # action = { unpause = ["test_suite/test_hud"] }
-

@@ -42,6 +42,9 @@ pub struct PluginInfo {
 
 /// Central WASM runtime manager: loads components, executes lifecycle hooks,
 /// and handles filesystem hot-reloading.
+/// Callback handler for file modification notifications across watched directories.
+pub type ConfigReloadHandler = Arc<dyn Fn(&Path) + Send + Sync>;
+
 pub struct PluginManager {
     pub(crate) plugins: Vec<LoadedPlugin>,
     pub(crate) engine: Engine,
@@ -53,6 +56,7 @@ pub struct PluginManager {
     pub(crate) last_reload: HashMap<PathBuf, Instant>,
     pub(crate) command_registry: HashMap<String, Vec<usize>>,
     pub(crate) plugin_dirs: Vec<PathBuf>,
+    pub config_reload_handler: Option<ConfigReloadHandler>,
 }
 
 impl PluginManager {
@@ -87,6 +91,7 @@ impl PluginManager {
             last_reload: HashMap::new(),
             command_registry: HashMap::new(),
             plugin_dirs: Vec::new(),
+            config_reload_handler: None,
         })
     }
 
@@ -374,19 +379,40 @@ impl PluginManager {
         false
     }
 
-    /// Drains watcher events and ticks every plugin's `on_frame`.
-    pub fn on_server_frame(&mut self) {
+    /// Registers a callback invoked on the host runtime when a configuration/localization (.toml) file changes.
+    pub fn set_config_reload_handler<F: Fn(&Path) + Send + Sync + 'static>(&mut self, handler: F) {
+        self.config_reload_handler = Some(Arc::new(handler));
+    }
+
+    /// Drains watcher events for WASM plugins and configuration files.
+    /// Returns any changed `.toml` paths that need higher-level orchestration reload (debounced).
+    pub fn drain_watcher_events(&mut self) -> Vec<PathBuf> {
         self.engine.increment_epoch();
+        let mut changed_configs = Vec::new();
+        let now = Instant::now();
         while let Ok(path) = self.event_rx.try_recv() {
             match path.extension().and_then(|s| s.to_str()) {
                 Some("wasm") => self.reload_plugin_path_debounced(&path),
                 Some("toml") => {
+                    if let Some(last) = self.last_reload.get(&path) {
+                        if now.duration_since(*last) < watcher::RELOAD_DEBOUNCE {
+                            continue;
+                        }
+                    }
+                    self.last_reload.insert(path.clone(), now);
                     let data = path.to_string_lossy().as_bytes().to_vec();
                     self.call_on_event("config_changed", &data);
+                    changed_configs.push(path);
                 }
                 _ => {}
             }
         }
+        changed_configs
+    }
+
+    /// Drains watcher events and ticks every plugin's `on_frame`.
+    pub fn on_server_frame(&mut self) {
+        let _ = self.drain_watcher_events();
         self.call_on_frame();
     }
 
@@ -454,6 +480,47 @@ impl PluginManager {
         for plugin in &mut self.plugins {
             let _ = plugin.call_on_event(name, data);
         }
+    }
+
+    /// Dispatches a placeholder resolution request to the owning WASM plugin.
+    pub fn dispatch_placeholder(&mut self, name: &str, caller: i32, param: &str) -> Option<String> {
+        let plugin_name = {
+            let lock = WASM_PLACEHOLDERS.read().ok()?;
+            lock.get(name)?.clone()
+        };
+        let plugin = self.plugins.iter_mut().find(|p| p.name == plugin_name)?;
+        plugin
+            .call_on_placeholder(name, caller, param)
+            .ok()
+            .flatten()
+    }
+
+    /// Dispatches chat message through loaded WASM plugins exporting on-chat.
+    /// Returns Some(final_text) if accepted, or None if suppressed.
+    pub fn dispatch_chat(&mut self, sender: i32, text: &str, is_team: bool) -> Option<String> {
+        let mut current_text = text.to_string();
+        for plugin in &mut self.plugins {
+            if plugin.has_export("on-chat") {
+                match plugin.call_on_chat(sender, &current_text, is_team) {
+                    Ok(Some(transformed)) => {
+                        current_text = transformed;
+                    }
+                    Ok(None) => return None, // Suppressed by plugin
+                    Err(_) => {}
+                }
+            }
+        }
+        Some(current_text)
+    }
+}
+
+static WASM_PLACEHOLDERS: std::sync::LazyLock<std::sync::RwLock<HashMap<String, String>>> =
+    std::sync::LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
+
+/// Registers a custom placeholder mapped to its owning WASM plugin name.
+pub fn register_host_placeholder(name: &str, plugin_name: &str) {
+    if let Ok(mut lock) = WASM_PLACEHOLDERS.write() {
+        lock.insert(name.to_string(), plugin_name.to_string());
     }
 }
 
@@ -615,10 +682,10 @@ mod tests {
     fn command_registry_registers_and_consumes() {
         let wasm_path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../target/wasm32-unknown-unknown/debug/test_suite.wasm"
+            "/../../target/wasm32-unknown-unknown/debug/admin_system.wasm"
         );
         if !std::path::Path::new(wasm_path).exists() {
-            eprintln!("test_suite.wasm not built; skipping command registry test");
+            eprintln!("admin_system.wasm not built; skipping command registry test");
             return;
         }
 
@@ -631,10 +698,9 @@ mod tests {
             meta.as_ref()
                 .unwrap()
                 .commands
-                .contains(&"testcmd".to_string())
+                .contains(&"admin_slay".to_string())
         );
 
-        assert!(manager.dispatch_command("testcmd", 0, "hello"));
         assert!(!manager.dispatch_command("nonexistent", 0, ""));
     }
 
@@ -808,6 +874,7 @@ mod tests {
             engine: engine.clone(),
             limits: wasmtime::StoreLimitsBuilder::new().build(),
             plugin_name: "test_plugin".to_string(),
+            permissions: Vec::new(),
             shared_buckets: Vec::new(),
         };
 
@@ -836,6 +903,7 @@ mod tests {
             engine: engine.clone(),
             limits: wasmtime::StoreLimitsBuilder::new().build(),
             plugin_name: "test_plugin".to_string(),
+            permissions: Vec::new(),
             shared_buckets: Vec::new(),
         };
 

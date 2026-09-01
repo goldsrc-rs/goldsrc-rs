@@ -1,21 +1,115 @@
 //! Text encoding utilities and chat color escape code converters for GoldSrc engine.
 
-/// Converts formatting color escape sequences (`^1`, `^3`, `^4`) into GoldSrc `SayText` control bytes:
+/// Converts formatting color escape sequences, scoped color macros `@{g(...)}`, and escape codes into GoldSrc `SayText` control bytes:
+/// - `@{g(...)}` / `@{green(...)}` -> `\x04...\x01`
+/// - `@{t(...)}` / `@{team(...)}` -> `\x03...\x01`
+/// - `@{d(...)}` / `@{w(...)}` / `@{default(...)}` -> `\x01...\x01`
 /// - `^1` -> `\x01` (Standard / Yellow)
 /// - `^3` -> `\x03` (Team color: CT=Blue, T=Red, Spec=Grey)
 /// - `^4` -> `\x04` (Green)
+/// - `\t` -> `"    "` (4 spaces)
+/// - `\\`, `\{`, `\}`, `\^` -> literal `\`, `{`, `}`, `^`
 pub fn format_say_text(input: &str) -> String {
     let mut out = String::with_capacity(input.len() + 1);
     let mut chars = input.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if c == '^'
+        if c == '\\' {
+            if let Some(&next) = chars.peek() {
+                match next {
+                    'n' => {
+                        chars.next();
+                        out.push('\n');
+                        continue;
+                    }
+                    't' => {
+                        chars.next();
+                        out.push_str("    ");
+                        continue;
+                    }
+                    '\\' | '{' | '}' | '^' | '@' => {
+                        chars.next();
+                        out.push(next);
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            out.push('\\');
+        } else if c == '@' && chars.peek() == Some(&'{') {
+            chars.next(); // consume '{'
+            let mut name = String::new();
+            while let Some(&nc) = chars.peek() {
+                if nc == '(' || nc == '}' || nc.is_whitespace() {
+                    break;
+                }
+                name.push(nc);
+                chars.next();
+            }
+
+            if chars.peek() == Some(&'(') {
+                chars.next(); // consume '('
+                let mut paren_depth = 1;
+                let mut arg = String::new();
+                for ac in chars.by_ref() {
+                    if ac == '(' {
+                        paren_depth += 1;
+                        arg.push(ac);
+                    } else if ac == ')' {
+                        paren_depth -= 1;
+                        if paren_depth == 0 {
+                            break;
+                        }
+                        arg.push(ac);
+                    } else {
+                        arg.push(ac);
+                    }
+                }
+                // consume closing '}' if present
+                if chars.peek() == Some(&'}') {
+                    chars.next();
+                }
+
+                let clean_arg = arg.trim_matches(['\'', '"']);
+                let formatted_inner = format_say_text(clean_arg);
+                match name.to_lowercase().as_str() {
+                    "g" | "green" => {
+                        out.push('\x04');
+                        out.push_str(&formatted_inner);
+                        out.push('\x01');
+                    }
+                    "t" | "team" | "r" | "red" | "b" | "blue" => {
+                        out.push('\x03');
+                        out.push_str(&formatted_inner);
+                        out.push('\x01');
+                    }
+                    "d" | "w" | "default" | "white" | "yellow" => {
+                        out.push('\x01');
+                        out.push_str(&formatted_inner);
+                        out.push('\x01');
+                    }
+                    _ => {
+                        out.push_str(&formatted_inner);
+                    }
+                }
+                continue;
+            } else {
+                out.push('@');
+                out.push('{');
+                out.push_str(&name);
+            }
+        } else if c == '^'
             && let Some(&next_c) = chars.peek()
         {
             match next_c {
                 '1' => {
                     chars.next();
                     out.push('\x01');
+                    continue;
+                }
+                '2' => {
+                    chars.next();
+                    out.push('\x02');
                     continue;
                 }
                 '3' => {
@@ -35,8 +129,10 @@ pub fn format_say_text(input: &str) -> String {
                 }
                 _ => {}
             }
+            out.push(c);
+        } else {
+            out.push(c);
         }
-        out.push(c);
     }
     out
 }
@@ -69,6 +165,94 @@ pub fn utf8_to_cp1251(input: &str) -> Vec<u8> {
     out
 }
 
+/// Transliterates Cyrillic text to ASCII Latin characters for clean rendering in
+/// legacy GoldSrc monospace HUD / developer notify overlays (`PRINT_NOTIFY`).
+pub fn cyrillic_to_latin(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 2);
+    for c in input.chars() {
+        match c {
+            'А' => out.push('A'),
+            'Б' => out.push('B'),
+            'В' => out.push('V'),
+            'Г' => out.push('G'),
+            'Д' => out.push('D'),
+            'Е' | 'Э' => out.push('E'),
+            'Ё' => out.push_str("Yo"),
+            'Ж' => out.push_str("Zh"),
+            'З' => out.push('Z'),
+            'И' | 'Й' => out.push('I'),
+            'К' => out.push('K'),
+            'Л' => out.push('L'),
+            'М' => out.push('M'),
+            'Н' => out.push('N'),
+            'О' => out.push('O'),
+            'П' => out.push('P'),
+            'Р' => out.push('R'),
+            'С' => out.push('S'),
+            'Т' => out.push('T'),
+            'У' => out.push('U'),
+            'Ф' => out.push('F'),
+            'Х' => out.push_str("Kh"),
+            'Ц' => out.push_str("Ts"),
+            'Ч' => out.push_str("Ch"),
+            'Ш' => out.push_str("Sh"),
+            'Щ' => out.push_str("Shch"),
+            'Ъ' | 'Ь' => {}
+            'Ы' => out.push('Y'),
+            'Ю' => out.push_str("Yu"),
+            'Я' => out.push_str("Ya"),
+            'а' => out.push('a'),
+            'б' => out.push('b'),
+            'в' => out.push('v'),
+            'г' => out.push('g'),
+            'д' => out.push('d'),
+            'е' | 'э' => out.push('e'),
+            'ё' => out.push_str("yo"),
+            'ж' => out.push_str("zh"),
+            'з' => out.push('z'),
+            'и' | 'й' => out.push('i'),
+            'к' => out.push('k'),
+            'л' => out.push('l'),
+            'м' => out.push('m'),
+            'н' => out.push('n'),
+            'о' => out.push('o'),
+            'п' => out.push('p'),
+            'р' => out.push('r'),
+            'с' => out.push('s'),
+            'т' => out.push('t'),
+            'у' => out.push('u'),
+            'ф' => out.push('f'),
+            'х' => out.push_str("kh"),
+            'ц' => out.push_str("ts"),
+            'ч' => out.push_str("ch"),
+            'ш' => out.push_str("sh"),
+            'щ' => out.push_str("shch"),
+            'ъ' | 'ь' => {}
+            'ы' => out.push('y'),
+            'ю' => out.push_str("yu"),
+            'я' => out.push_str("ya"),
+            'І' => out.push('I'),
+            'і' => out.push('i'),
+            'Ї' => out.push_str("Yi"),
+            'ї' => out.push_str("yi"),
+            'Є' => out.push_str("Ye"),
+            'є' => out.push_str("ye"),
+            '«' | '»' => out.push('"'),
+            '—' | '–' => out.push('-'),
+            '№' => out.push('#'),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Formats a developer notify message (`HUD_PRINTNOTIFY` / `con_notify`):
+/// Ensures the message ends with `\n` so the stream buffer terminates and triggers line fading/scrolling.
+pub fn format_notify_text(input: &str) -> String {
+    let trimmed = input.trim_end_matches(['\r', '\n']);
+    format!("{trimmed}\n")
+}
+
 /// Formats a center HUD message following AMX Mod X / HLSDK conventions:
 /// Converts newline characters (`\n`) into carriage returns (`\r`),
 /// which the GoldSrc / Counter-Strike 1.6 HUD renderer requires for multi-line center text.
@@ -95,21 +279,31 @@ mod tests {
     }
 
     #[test]
-    fn test_format_say_text_escape_caret() {
-        let input = "^^4 not green";
+    fn test_format_say_text_scoped_macros() {
+        let input = "@{g([Admin])} Welcome, @{t(Gold-Player)}!";
         let formatted = format_say_text(input);
-        assert_eq!(formatted, "^4 not green");
+        assert_eq!(formatted, "\x04[Admin]\x01 Welcome, \x03Gold-Player\x01!");
+    }
+
+    #[test]
+    fn test_format_say_text_escape_caret_and_brackets() {
+        let input = "Escape ^^4 and \\{tag\\} and \\\\";
+        let formatted = format_say_text(input);
+        assert_eq!(formatted, "Escape ^4 and {tag} and \\");
     }
 
     #[test]
     fn test_utf8_to_cp1251_basic() {
-        let input = "Привет, Мир!";
+        let input = "Привет";
         let bytes = utf8_to_cp1251(input);
-        assert_eq!(bytes[0], 0xCF); // П
-        assert_eq!(bytes[1], 0xF0); // р
-        assert_eq!(bytes[2], 0xE8); // и
-        assert_eq!(bytes[3], 0xE2); // в
-        assert_eq!(bytes[4], 0xE5); // е
-        assert_eq!(bytes[5], 0xF2); // т
+        assert_eq!(bytes, vec![0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2]);
+    }
+
+    #[test]
+    fn test_format_notify_text_preserves_text_and_newline() {
+        let input = "Привет в developer область!";
+        let formatted = format_notify_text(input);
+        assert_eq!(formatted, "Привет в developer область!\n");
+        assert!(formatted.ends_with('\n'));
     }
 }

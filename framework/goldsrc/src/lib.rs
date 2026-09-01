@@ -24,15 +24,18 @@ pub mod host;
 #[cfg(feature = "host")]
 pub mod backend;
 
+/// In-game Chat Interception, Filtering Pipeline, and Safe Packet Chunking.
+pub mod chat;
 /// System (`goldsrc.toml`) and plugins (`plugins.toml`) configuration models.
 pub mod config;
+/// Dynamic Contextual Placeholder Engine, Registry, and String Interpolator.
+pub mod placeholders;
 /// Backward-compatible alias for plugins_config module.
 pub use config::plugins as plugins_config;
 pub use config::{
     HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
 };
-/// Centralized hook dispatching helpers.
-#[cfg(feature = "host")]
+/// Centralized hook dispatching helpers and types.
 pub mod hooks;
 /// Lightweight i18n & Localization Dictionary Engine.
 pub mod i18n;
@@ -46,7 +49,9 @@ pub mod paths;
 pub mod rules;
 /// Unified SQLite WAL storage engine and background batching.
 pub mod storage;
+pub use chat::process_chat_message;
 pub use i18n::I18nEngine;
+pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use storage::{Bucket, JsonFormat, StorageFormat};
 
 #[macro_export]
@@ -105,17 +110,19 @@ pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
+pub use goldsrc_api::bindings;
 pub use goldsrc_api::engine_api as engine;
 pub use goldsrc_api::hud as hud_api;
 pub use goldsrc_api::menu as menu_api;
 pub use goldsrc_api::{
-    Alive, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command, CommandBuilder,
-    CommandContext, CommandError, CommandResult, CommandTarget, Condition, ConnectionState,
-    CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, FromArg, HLTV,
-    HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle,
-    LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind,
-    MenuStyle, Player, PlayerStateFilter, RenderedMenuPage, SlotAction, Spectator, SqlDatabase,
-    StorageError, StorageProvider, Team, Terrorist, Vector3, VisualDeny,
+    Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
+    CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, Condition,
+    ConnectionState, CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior,
+    Feedback, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder,
+    ItemKind, ItemTitle, LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder,
+    MenuRendererKind, MenuStyle, Player, PlayerStateFilter, PrintTarget, RenderedMenuPage,
+    SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team, Terrorist, Vector3,
+    VisualDeny, split_command_args,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
@@ -126,19 +133,23 @@ pub use goldsrc_macros::{
 pub mod prelude {
     pub use crate::ecs::*;
     pub use crate::engine;
+    pub use crate::hooks::{HookResult, HookTiming};
     pub use crate::hud_api as hud;
     pub use crate::menu_api;
     pub use crate::tr;
     pub use crate::{
-        Alive, AsLangCode, Auth, Bot, Bucket, CapExpr, ChatScope, ClientKind, Command,
-        CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, Condition,
-        ConnectionState, CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity,
-        ExitBehavior, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
+        Alive, AntiSpamAction, AsLangCode, Auth, Bot, Bucket, CapExpr, ChatScope, ClientKind,
+        Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget,
+        Condition, ConnectionState, CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity,
+        ExitBehavior, Feedback, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
         HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu, MenuBuilder, MenuContext,
         MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, Player, PlayerStateFilter,
-        RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team,
-        Terrorist, Vector3, VisualDeny,
+        PrintTarget, RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError,
+        StorageProvider, Team, Terrorist, Vector3, VisualDeny,
     };
-    pub use crate::{command, event, menu_action, on_frame, on_load, on_unload, plugin, system};
+    pub use crate::{
+        chat_broadcast, chat_format, chat_print, chat_team, command, event, menu_action, on_frame,
+        on_load, on_unload, plugin, system,
+    };
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }

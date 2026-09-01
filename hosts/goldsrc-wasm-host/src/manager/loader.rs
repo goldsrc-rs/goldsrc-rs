@@ -88,6 +88,7 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
         engine: engine_ops.clone(),
         limits,
         plugin_name: String::new(),
+        permissions: Vec::new(),
         shared_buckets: Vec::new(),
     };
     let mut store = wasmtime::Store::new(engine, state);
@@ -97,8 +98,34 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;
 
     let metadata = match bindings.call_get_metadata(&mut store) {
-        Ok(meta_str) => match toml::from_str::<PluginMetadata>(&meta_str) {
-            Ok(mut meta) => {
+        Ok(meta_str) => {
+            // First try parsing as full PluginManifest (has [plugin] table and [[commands]])
+            let parsed_meta =
+                if let Ok(manifest) = toml::from_str::<crate::plugin::PluginManifest>(&meta_str) {
+                    let mut meta = manifest.plugin;
+                    if !manifest.commands.is_empty() {
+                        for cmd in &manifest.commands {
+                            if !meta.commands.contains(&cmd.name) {
+                                meta.commands.push(cmd.name.clone());
+                            }
+                        }
+                        meta.command_defs = manifest.commands;
+                    }
+                    Some(meta)
+                } else {
+                    match toml::from_str::<PluginMetadata>(&meta_str) {
+                        Ok(meta) => Some(meta),
+                        Err(err) => {
+                            crate::host_log(&format!(
+                                "Warning: Failed to parse metadata for plugin at {:?}: {}",
+                                path, err
+                            ));
+                            None
+                        }
+                    }
+                };
+
+            if let Some(mut meta) = parsed_meta {
                 if let Some(ref b) = meta.bundle {
                     if b.is_empty()
                         || b.contains("..")
@@ -117,15 +144,10 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
                     }
                 }
                 Some(meta)
-            }
-            Err(err) => {
-                crate::host_log(&format!(
-                    "Warning: Failed to parse metadata for plugin at {:?}: {}",
-                    path, err
-                ));
+            } else {
                 None
             }
-        },
+        }
         Err(_) => None,
     };
 
@@ -140,10 +162,16 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
         .map(|m| m.shared_buckets.clone())
         .unwrap_or_default();
 
-    // Update HostState with validated plugin name and shared buckets allowlist
+    let permissions = metadata
+        .as_ref()
+        .map(|m| m.permissions.clone())
+        .unwrap_or_default();
+
+    // Update HostState with validated plugin name, permissions, and shared buckets allowlist
     {
         let data = store.data_mut();
         data.plugin_name = name.clone();
+        data.permissions = permissions;
         data.shared_buckets = shared_buckets;
     }
 

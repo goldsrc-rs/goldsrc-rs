@@ -126,4 +126,163 @@ impl TestMenu {
         player.set_origin(pos);
         player.print_center("[Test Menu] Телепортирован вверх");
     }
+
+    /// Tests developer notification in top-left screen area (HUD_PRINTNOTIFY).
+    #[command(
+        name = "test_notify",
+        aliases = ["/notify", "!notify"],
+        description = "Tests HUD_PRINTNOTIFY (developer notification in top-left screen area)",
+        usage = "test_notify [message]"
+    )]
+    fn handle_test_notify(player: Player, msg: String) {
+        let text = if msg.trim().is_empty() {
+            "[Developer Notify] Test message in top-left screen area!".to_string()
+        } else {
+            msg
+        };
+        player.print_notify(&text);
+        log_info!("[Test Menu] Sent notify message to player: {}", text);
+    }
+
+    /// Opens a localized multilingual test menu integrated with i18n dictionaries.
+    /// Usage: `langmenu [ru|en|es|de]` or chat `/langmenu` / `/langmenu es`.
+    #[command(
+        name = "langmenu",
+        aliases = ["/langmenu", "!langmenu", "test_lang_menu", "lang_menu"],
+        description = "Opens interactive multilingual menu integrated with i18n dictionaries",
+        usage = "langmenu [ru|en|es|de]"
+    )]
+    fn handle_lang_menu(player: Player, lang: String) {
+        let clean_lang = lang.trim();
+        let lang_code = if clean_lang.is_empty() || clean_lang.parse::<i32>().is_ok() {
+            player.lang()
+        } else {
+            clean_lang.to_lowercase()
+        };
+
+        let title = tr!("test_i18n", &lang_code, "menu_title");
+        let item_hp = tr!("test_i18n", &lang_code, "menu_item_hp");
+        let item_ap = tr!("test_i18n", &lang_code, "menu_item_ap");
+        let item_m4a1 = tr!("test_i18n", &lang_code, "menu_item_m4a1");
+        let item_ak47 = tr!("test_i18n", &lang_code, "menu_item_ak47");
+        let item_awp = tr!("test_i18n", &lang_code, "menu_item_awp");
+        let item_deagle = tr!("test_i18n", &lang_code, "menu_item_deagle");
+
+        let menu = Menu::builder(title)
+            .style(MenuStyle::brackets())
+            .lang(&lang_code)
+            .debounce(std::time::Duration::from_millis(200))
+            .item(
+                MenuItem::new(item_hp, 201).keep_open().cooldown_with(
+                    std::time::Duration::from_secs(3),
+                    AntiSpamAction::Feedback(
+                        Feedback::notify("[Cooldown] Подождите перед повторным лечением!")
+                            .sound("buttons/button10.wav"),
+                    ),
+                ),
+            )
+            .item(MenuItem::new(item_ap, 202).keep_open())
+            .item((item_m4a1, 203))
+            .item((item_ak47, 204))
+            .item((item_awp, 205))
+            .item((item_deagle, 206))
+            .build();
+
+        player.open_menu(&menu);
+        let name = player
+            .name()
+            .unwrap_or_else(|| format!("#{}", player.index()));
+        log_info!(
+            "[Test Menu] Opened localized menu (lang='{}') for player '{}' (#{})",
+            lang_code,
+            name,
+            player.index()
+        );
+    }
+
+    #[menu_action(id = 201)]
+    fn on_lang_menu_heal(player: &mut Player) {
+        let cur = player.health();
+        player.set_health(cur + 100.0);
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "+100 HP"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 202)]
+    fn on_lang_menu_armor(player: &mut Player) {
+        let cur = player.armorvalue();
+        player.set_armorvalue(cur + 100.0);
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "+100 AP"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 203)]
+    fn on_lang_menu_m4a1(player: &mut Player) {
+        player.give_item("weapon_m4a1");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "M4A1 Carbine"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 204)]
+    fn on_lang_menu_ak47(player: &mut Player) {
+        player.give_item("weapon_ak47");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "AK-47 Kalashnikov"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 205)]
+    fn on_lang_menu_awp(player: &mut Player) {
+        player.give_item("weapon_awp");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "AWP Sniper"
+        );
+        player.print_chat(&msg);
+    }
+
+    #[menu_action(id = 206)]
+    fn on_lang_menu_deagle(player: &mut Player) {
+        player.give_item("weapon_deagle");
+        let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let msg = tr!(
+            "test_i18n",
+            player,
+            "menu_action_reward",
+            name = name,
+            item = "Desert Eagle"
+        );
+        player.print_chat(&msg);
+    }
 }

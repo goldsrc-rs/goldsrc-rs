@@ -36,7 +36,7 @@ pub fn init_host_cli(backend: HostCliBackend) {
 /// # Safety
 /// Registered as a C server command; the engine provides the argv accessors.
 pub unsafe extern "C" fn handle_host_command() {
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    goldsrc_sys::ffi::catch_ffi_panic("handle_host_command", (), || {
         let Some(backend) = HOST_CLI.get() else {
             return;
         };
@@ -56,22 +56,7 @@ pub unsafe extern "C" fn handle_host_command() {
         crate::host::HostRuntime::with_manager(|manager| {
             dispatch_host_command(raw_args, manager, backend.version, backend.print);
         });
-    }));
-    if let Err(err) = res {
-        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
-            s.to_string()
-        } else if let Some(s) = err.downcast_ref::<String>() {
-            s.clone()
-        } else {
-            "Unknown panic".to_string()
-        };
-        if let Some(backend) = HOST_CLI.get() {
-            (backend.print)(&format!(
-                "[GoldSrc.rs PANIC] Caught panic in CLI Command: {}\n",
-                err_msg
-            ));
-        }
-    }
+    });
 }
 
 /// Shared server-command handler for WASM plugin commands.
@@ -79,7 +64,7 @@ pub unsafe extern "C" fn handle_host_command() {
 /// # Safety
 /// Registered as a C server command via `pfnAddServerCommand`.
 pub unsafe extern "C" fn handle_plugin_server_command() {
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    goldsrc_sys::ffi::catch_ffi_panic("handle_plugin_server_command", (), || {
         let Some(backend) = HOST_CLI.get() else {
             return;
         };
@@ -99,39 +84,21 @@ pub unsafe extern "C" fn handle_plugin_server_command() {
         for i in 1..argc {
             let arg_ptr = (backend.argv)(i);
             if !arg_ptr.is_null()
-                && let Ok(arg_s) = (unsafe { CStr::from_ptr(arg_ptr) }).to_str()
+                && let Ok(cstr) = unsafe { CStr::from_ptr(arg_ptr) }.to_str()
             {
                 if !args.is_empty() {
                     args.push(' ');
                 }
-                args.push_str(arg_s);
+                args.push_str(cstr);
             }
         }
 
-        let handled = crate::hooks::dispatch_command(cmd_name, &args);
-        if !handled {
-            (backend.print)(&format!(
-                "[GoldSrc.rs] Command '{}' was not handled by any active plugin.\n",
-                cmd_name
-            ));
-        }
-        (backend.print)("");
-    }));
-    if let Err(err) = res {
-        let err_msg = if let Some(s) = err.downcast_ref::<&str>() {
-            s.to_string()
-        } else if let Some(s) = err.downcast_ref::<String>() {
-            s.clone()
-        } else {
-            "Unknown panic".to_string()
-        };
-        if let Some(backend) = HOST_CLI.get() {
-            (backend.print)(&format!(
-                "[GoldSrc.rs PANIC] Caught panic in plugin command handler: {}\n",
-                err_msg
-            ));
-        }
-    }
+        crate::host::HostRuntime::with_manager(|manager| {
+            if let Some(m) = manager {
+                m.dispatch_command(cmd_name, 0, &args);
+            }
+        });
+    });
 }
 
 /// Register server commands pointing at the shared host CLI handler.

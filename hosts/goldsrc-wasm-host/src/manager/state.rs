@@ -15,11 +15,34 @@ pub struct HostState {
     pub limits: wasmtime::StoreLimits,
     /// Identifier of the calling plugin.
     pub plugin_name: String,
+    /// Explicitly granted sandbox permissions from metadata.
+    pub permissions: Vec<String>,
     /// Explicitly allowed shared storage buckets from metadata.
     pub shared_buckets: Vec<String>,
 }
 
 impl HostState {
+    /// Checks if the calling plugin has been granted a specific permission.
+    /// If no explicit `permissions` are declared (empty vector), backward-compatible legacy access is permitted with a debug trace.
+    /// If `permissions` is non-empty, checks for explicit match or wildcard (e.g. `cvar:*`, `*`).
+    pub fn check_permission(&self, perm: &str) -> bool {
+        if self.permissions.is_empty() {
+            return true;
+        }
+
+        let has_perm = self.permissions.iter().any(|p| {
+            p == "*" || p == perm || (p.ends_with(":*") && perm.starts_with(&p[..p.len() - 1]))
+        });
+
+        if !has_perm {
+            crate::host_log(&format!(
+                "[Security Warning] Plugin '{}' denied permission '{}' (declared: {:?})",
+                self.plugin_name, perm, self.permissions
+            ));
+        }
+        has_perm
+    }
+
     /// Resolves bucket name enforcing plugin isolation and allowlist sharing.
     pub fn resolve_bucket(&self, bucket: &str) -> Option<String> {
         if bucket.contains('/') {
@@ -81,9 +104,15 @@ impl api::Host for HostState {
             .entity_set_angles(index, [angles.x, angles.y, angles.z]);
     }
     fn host_create_named_entity(&mut self, classname: String) -> Option<i32> {
+        if !self.check_permission(goldsrc_api::consts::permissions::ENTITY_CREATE) {
+            return None;
+        }
         self.engine.create_named_entity(&classname)
     }
     fn host_remove_entity(&mut self, index: i32) {
+        if !self.check_permission(goldsrc_api::consts::permissions::ENTITY_REMOVE) {
+            return;
+        }
         self.engine.remove_entity(index);
     }
     fn host_drop_to_floor(&mut self, index: i32) -> i32 {
@@ -91,12 +120,33 @@ impl api::Host for HostState {
     }
 
     fn host_player_name(&mut self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) {
+            return None;
+        }
         self.engine.player_name(index)
     }
+    fn host_player_lang(&mut self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) {
+            return None;
+        }
+        self.engine.player_lang(index)
+    }
+    fn host_player_team(&mut self, index: i32) -> i32 {
+        if !(1..=32).contains(&index) {
+            return 0;
+        }
+        self.engine.player_team(index)
+    }
     fn host_player_armorvalue(&mut self, index: i32) -> f32 {
+        if !(1..=32).contains(&index) {
+            return 0.0;
+        }
         self.engine.player_armorvalue(index)
     }
     fn host_player_set_armorvalue(&mut self, index: i32, armor: f32) {
+        if !(1..=32).contains(&index) {
+            return;
+        }
         self.engine.player_set_armorvalue(index, armor);
     }
 
@@ -104,12 +154,18 @@ impl api::Host for HostState {
         self.engine.cvar_get_float(&name)
     }
     fn host_cvar_set_float(&mut self, name: String, val: f32) {
+        if !self.check_permission(goldsrc_api::consts::permissions::CVAR_SET) {
+            return;
+        }
         self.engine.cvar_set_float(&name, val);
     }
     fn host_cvar_get_string(&mut self, name: String) -> Option<String> {
         self.engine.cvar_get_string(&name)
     }
     fn host_cvar_set_string(&mut self, name: String, val: String) {
+        if !self.check_permission(goldsrc_api::consts::permissions::CVAR_SET) {
+            return;
+        }
         self.engine.cvar_set_string(&name, &val);
     }
 
@@ -162,8 +218,8 @@ impl api::Host for HostState {
         // In GoldSrc CS 1.6 SayText, first byte is the sender entity index (1..32 for player colors, or 0)
         self.engine.write_byte(player_index);
         // Truncate message if oversized to prevent buffer overflow (SayText payload max 192 bytes)
-        let safe_msg = if formatted.len() > 175 {
-            let mut end = 175;
+        let safe_msg = if formatted.len() > goldsrc_api::consts::SAFE_SAYTEXT_LIMIT {
+            let mut end = goldsrc_api::consts::SAFE_SAYTEXT_LIMIT;
             while end > 0 && !formatted.is_char_boundary(end) {
                 end -= 1;
             }
@@ -230,9 +286,78 @@ impl api::Host for HostState {
                 .server_print(&format!("[Console#{player_index}] {message}\n"));
             return;
         }
-        // 0 = PRINT_CONSOLE in GoldSrc client_printf
-        self.engine
-            .client_print(player_index, goldsrc_api::PRINT_CONSOLE, &message);
+        let formatted = if message.ends_with('\n') {
+            message
+        } else {
+            format!("{message}\n")
+        };
+        let text_msg_id = self.engine.reg_user_msg("TextMsg", -1);
+        if text_msg_id > 0 && text_msg_id < 255 {
+            let mut payload = formatted;
+            if !payload.ends_with("\n\n") {
+                payload.push('\n');
+            }
+            let safe_msg = if payload.len() > 185 {
+                let mut end = 185;
+                while end > 0 && !payload.is_char_boundary(end) {
+                    end -= 1;
+                }
+                &payload[..end]
+            } else {
+                &payload
+            };
+            self.engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                text_msg_id,
+                None,
+                Some(player_index),
+            );
+            self.engine.write_byte(goldsrc_api::HUD_PRINTCONSOLE);
+            self.engine.write_string("%s");
+            self.engine.write_string(safe_msg);
+            self.engine.message_end();
+        } else {
+            self.engine
+                .client_print(player_index, goldsrc_api::HUD_PRINTCONSOLE, &formatted);
+        }
+    }
+
+    fn host_print_notify(&mut self, player_index: i32, message: String) {
+        if player_index <= 0 || !self.engine.entity_is_valid(player_index) {
+            self.engine
+                .server_print(&format!("[Notify#{player_index}] {message}\n"));
+            return;
+        }
+        let formatted = goldsrc_api::format_notify_text(&message);
+        let text_msg_id = self.engine.reg_user_msg("TextMsg", -1);
+        if text_msg_id > 0 && text_msg_id < 255 {
+            let mut payload = formatted;
+            if !payload.ends_with("\n\n") {
+                payload.push('\n');
+            }
+            let safe_msg = if payload.len() > 185 {
+                let mut end = 185;
+                while end > 0 && !payload.is_char_boundary(end) {
+                    end -= 1;
+                }
+                &payload[..end]
+            } else {
+                &payload
+            };
+            self.engine.message_begin(
+                goldsrc_api::MessageDest::One as i32,
+                text_msg_id,
+                None,
+                Some(player_index),
+            );
+            self.engine.write_byte(goldsrc_api::HUD_PRINTNOTIFY);
+            self.engine.write_string("%s");
+            self.engine.write_string(safe_msg);
+            self.engine.message_end();
+        } else {
+            self.engine
+                .client_print(player_index, goldsrc_api::HUD_PRINTNOTIFY, &formatted);
+        }
     }
 
     fn host_dispatch_spawn(&mut self, index: i32) -> i32 {
@@ -473,5 +598,10 @@ impl api::Host for HostState {
             }
         }
         key
+    }
+
+    fn host_register_placeholder(&mut self, name: String, _description: String) -> bool {
+        crate::manager::register_host_placeholder(&name, &self.plugin_name);
+        true
     }
 }

@@ -61,20 +61,113 @@ impl std::fmt::Debug for VisualDeny {
     }
 }
 
+/// Unified user feedback notification (message directed to a PrintTarget and/or audio sound).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Feedback {
+    pub message: Option<(crate::client::PrintTarget, String)>,
+    pub sound: Option<String>,
+}
+
+impl Feedback {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn center(msg: impl Into<String>) -> Self {
+        Self {
+            message: Some((crate::client::PrintTarget::Center, msg.into())),
+            sound: None,
+        }
+    }
+
+    pub fn chat(msg: impl Into<String>) -> Self {
+        Self {
+            message: Some((crate::client::PrintTarget::ColoredChat, msg.into())),
+            sound: None,
+        }
+    }
+
+    pub fn console(msg: impl Into<String>) -> Self {
+        Self {
+            message: Some((crate::client::PrintTarget::Console, msg.into())),
+            sound: None,
+        }
+    }
+
+    pub fn notify(msg: impl Into<String>) -> Self {
+        Self {
+            message: Some((crate::client::PrintTarget::Notify, msg.into())),
+            sound: None,
+        }
+    }
+
+    pub fn sound(mut self, sound_path: impl Into<String>) -> Self {
+        self.sound = Some(sound_path.into());
+        self
+    }
+
+    pub fn message(mut self, target: crate::client::PrintTarget, text: impl Into<String>) -> Self {
+        self.message = Some((target, text.into()));
+        self
+    }
+}
+
+impl From<&str> for Feedback {
+    fn from(s: &str) -> Self {
+        Self::center(s)
+    }
+}
+
+impl From<String> for Feedback {
+    fn from(s: String) -> Self {
+        Self::center(s)
+    }
+}
+
+/// Action taken when a player activates a menu item that is currently on cooldown.
+#[derive(Debug, Clone, Default)]
+pub enum AntiSpamAction {
+    /// Silently ignore key press. Default.
+    #[default]
+    Ignore,
+    /// Keep the item visually inactive / disabled while cooldown is active.
+    MakeInactive,
+    /// Deliver custom feedback to the player (center, chat, console, notify and/or sound).
+    Feedback(Feedback),
+    /// Close the menu immediately.
+    CloseMenu,
+}
+
+impl From<Feedback> for AntiSpamAction {
+    fn from(fb: Feedback) -> Self {
+        Self::Feedback(fb)
+    }
+}
+
 /// Behavioral response when an unauthorized/denied menu slot is pressed.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub enum DenyAction {
     /// Slot is excluded from `ShowMenu` keys mask; pressing key is ignored by engine.
+    #[default]
     Disabled,
     /// Slot is included in keys mask; pressing key triggers no-op and keeps menu open.
     Noop,
     /// Slot is included in keys mask; pressing key dispatches custom feedback message/sound.
-    Feedback {
-        message: Option<String>,
-        sound: Option<String>,
-    },
+    Feedback(Feedback),
     /// Custom callback function executed when player presses the denied slot.
     Custom(DenyActionFn),
+}
+
+impl DenyAction {
+    pub fn feedback(feedback: impl Into<Feedback>) -> Self {
+        Self::Feedback(feedback.into())
+    }
+}
+
+impl From<Feedback> for DenyAction {
+    fn from(fb: Feedback) -> Self {
+        Self::Feedback(fb)
+    }
 }
 
 impl std::fmt::Debug for DenyAction {
@@ -82,12 +175,7 @@ impl std::fmt::Debug for DenyAction {
         match self {
             Self::Disabled => write!(f, "DenyAction::Disabled"),
             Self::Noop => write!(f, "DenyAction::Noop"),
-            Self::Feedback { message, sound } => {
-                write!(
-                    f,
-                    "DenyAction::Feedback {{ message: {message:?}, sound: {sound:?} }}"
-                )
-            }
+            Self::Feedback(fb) => write!(f, "DenyAction::Feedback({fb:?})"),
             Self::Custom(_) => write!(f, "DenyAction::Custom(<fn>)"),
         }
     }
@@ -129,10 +217,10 @@ impl DenyPolicy {
     pub fn feedback<S: Into<String>>(title: S, feedback_msg: S, sound: Option<String>) -> Self {
         Self {
             visual: VisualDeny::Replace(title.into()),
-            action: DenyAction::Feedback {
-                message: Some(feedback_msg.into()),
+            action: DenyAction::Feedback(Feedback {
+                message: Some((crate::client::PrintTarget::Center, feedback_msg.into())),
                 sound,
-            },
+            }),
         }
     }
 }
@@ -294,6 +382,7 @@ pub struct MenuItem {
     pub conditions: Vec<Condition>,
     pub deny_policy: DenyPolicy,
     pub keep_open: bool,
+    pub cooldown: Option<(std::time::Duration, AntiSpamAction)>,
 }
 
 impl MenuItem {
@@ -308,6 +397,7 @@ impl MenuItem {
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
             keep_open: false,
+            cooldown: None,
         }
     }
 
@@ -322,7 +412,20 @@ impl MenuItem {
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
             keep_open: false,
+            cooldown: None,
         }
+    }
+
+    /// Sets a cooldown duration for this menu item with default silent ignore behavior.
+    pub fn cooldown(mut self, duration: std::time::Duration) -> Self {
+        self.cooldown = Some((duration, AntiSpamAction::Ignore));
+        self
+    }
+
+    /// Sets a cooldown duration and anti-spam behavioral response for this menu item.
+    pub fn cooldown_with(mut self, duration: std::time::Duration, on_spam: AntiSpamAction) -> Self {
+        self.cooldown = Some((duration, on_spam));
+        self
     }
 
     /// Creates a static text element.
@@ -333,6 +436,7 @@ impl MenuItem {
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
             keep_open: false,
+            cooldown: None,
         }
     }
 
@@ -344,6 +448,7 @@ impl MenuItem {
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
             keep_open: false,
+            cooldown: None,
         }
     }
 
@@ -355,6 +460,7 @@ impl MenuItem {
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
             keep_open: false,
+            cooldown: None,
         }
     }
 
@@ -506,6 +612,36 @@ impl MenuStyle {
         }
     }
 
+    /// Returns localized navigation labels (back, next, exit) for the given language code.
+    pub fn localized_nav_labels(lang: &str) -> (&'static str, &'static str, &'static str) {
+        match lang.to_lowercase().as_str() {
+            "ru" => ("Назад", "Вперед", "Выход"),
+            "es" => ("Atrás", "Siguiente", "Salir"),
+            "de" => ("Zurück", "Weiter", "Beenden"),
+            _ => ("Back", "Next", "Exit"),
+        }
+    }
+
+    /// Adapts the style navigation texts to the specified language code.
+    pub fn with_lang(mut self, lang: &str) -> Self {
+        let (back, next, exit) = Self::localized_nav_labels(lang);
+        let is_brackets = self.exit_text.contains('[');
+        if is_brackets {
+            self.back_text = format!("\\y[8] {back}\n");
+            self.next_text = format!("\\y[9] {next}\n");
+            self.exit_text = format!("\\r[0] {exit}\n");
+        } else if self.exit_text.contains("\\r0.") || self.exit_text.contains("\\y8.") {
+            self.back_text = format!("\\y8. {back}\n");
+            self.next_text = format!("\\y9. {next}\n");
+            self.exit_text = format!("\\r0. {exit}\n");
+        } else {
+            self.back_text = format!("8. {back}\n");
+            self.next_text = format!("9. {next}\n");
+            self.exit_text = format!("0. {exit}\n");
+        }
+        self
+    }
+
     /// Sets whether the "Back" button should shift to slot 9 on the last page.
     pub fn with_dynamic_back(mut self, enabled: bool) -> Self {
         self.dynamic_back_slot = enabled;
@@ -596,6 +732,7 @@ pub struct Menu {
     pub exit_behavior: ExitBehavior,
     pub timeout_seconds: i32,
     pub required_capability: Option<String>,
+    pub debounce: Option<std::time::Duration>,
 }
 
 impl Menu {

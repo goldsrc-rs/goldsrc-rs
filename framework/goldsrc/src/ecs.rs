@@ -216,6 +216,18 @@ pub enum Stage {
     PlayerConnect = 40,
     /// Triggered when a player disconnects (`client_disconnect`).
     PlayerDisconnect = 50,
+    /// Triggered when an entity spawns (`entity_spawn`).
+    EntitySpawn = 60,
+    /// Triggered when an entity takes damage (`entity_take_damage`).
+    TakeDamage = 70,
+    /// Triggered when an entity is killed (`entity_killed`).
+    EntityKilled = 80,
+    /// Triggered when a new round starts (`round_start`).
+    RoundStart = 90,
+    /// Triggered when a round ends (`round_end`).
+    RoundEnd = 100,
+    /// Triggered when the freeze period ends and players can move (`round_freeze_end`).
+    RoundFreezeEnd = 110,
 }
 
 impl std::str::FromStr for Stage {
@@ -229,8 +241,14 @@ impl std::str::FromStr for Stage {
             "post_think" => Ok(Stage::PostThink),
             "player_connect" => Ok(Stage::PlayerConnect),
             "player_disconnect" => Ok(Stage::PlayerDisconnect),
+            "entity_spawn" => Ok(Stage::EntitySpawn),
+            "take_damage" => Ok(Stage::TakeDamage),
+            "entity_killed" => Ok(Stage::EntityKilled),
+            "round_start" => Ok(Stage::RoundStart),
+            "round_end" => Ok(Stage::RoundEnd),
+            "round_freeze_end" => Ok(Stage::RoundFreezeEnd),
             _ => Err(format!(
-                "Unknown stage: '{s}'. Expected: startup, server_activate, frame, post_think, player_connect, player_disconnect"
+                "Unknown stage: '{s}'. Expected: startup, server_activate, frame, post_think, player_connect, player_disconnect, entity_spawn, take_damage, entity_killed, round_start, round_end, round_freeze_end"
             )),
         }
     }

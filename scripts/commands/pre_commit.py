@@ -26,7 +26,14 @@ def main(argv=None):
     # 1. Format check / auto-format
     t_fmt = time.perf_counter()
     print("\n[1/4] Running cargo fmt...")
-    fmt_res = subprocess.run(["cargo", "fmt", "--all"], cwd=repo_root, capture_output=True, text=True)
+    fmt_res = subprocess.run(
+        ["cargo", "fmt", "--all"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     if fmt_res.returncode != 0:
         print(f"cargo fmt failed:\n{fmt_res.stderr}", file=sys.stderr)
         return 1

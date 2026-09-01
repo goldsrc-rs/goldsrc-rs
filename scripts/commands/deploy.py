@@ -470,13 +470,11 @@ def deploy_lang_dictionaries(repo_root: Path, game_path: Path, backend: str = "m
 
     lang_target_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Standard search roots
     sources: list[Path] = [
         repo_root / "resources" / "lang",
         repo_root / "data" / "lang",
     ]
 
-    # 2. Automatically discover any 'lang' folders inside examples/
     examples_dir = repo_root / "examples"
     if examples_dir.exists():
         for lang_folder in examples_dir.glob("**/lang"):
@@ -499,6 +497,44 @@ def deploy_lang_dictionaries(repo_root: Path, game_path: Path, backend: str = "m
                     shutil.copytree(item, dest)
                     if item.name not in copied_files:
                         print(f"Copied localization directory: {dest}")
+                        copied_files.add(item.name)
+
+
+def deploy_gamedata(repo_root: Path, game_path: Path, backend: str = "metamod") -> None:
+    """Copy gamedata definitions (resources/gamedata, data/gamedata) to data/gamedata/ directory."""
+    if backend == "standalone":
+        mod_dir = game_path / DEFAULT_MOD
+        if not mod_dir.exists():
+            mod_dir = game_path
+        gamedata_target_dir = mod_dir / FRAMEWORK_NAME / "data" / "gamedata"
+    else:
+        addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
+        if not addons_dir.exists():
+            addons_dir = game_path / ADDONS_DIR_NAME
+        gamedata_target_dir = addons_dir / FRAMEWORK_NAME / "data" / "gamedata"
+
+    gamedata_target_dir.mkdir(parents=True, exist_ok=True)
+
+    sources: list[Path] = [
+        repo_root / "resources" / "gamedata",
+    ]
+
+    copied_files: set[str] = set()
+    for src_dir in sources:
+        if src_dir.exists() and src_dir.is_dir():
+            for item in src_dir.iterdir():
+                dest = gamedata_target_dir / item.name
+                if item.is_file() and item.suffix.lower() == ".toml":
+                    shutil.copy2(item, dest)
+                    if item.name not in copied_files:
+                        print(f"Copied gamedata file: {dest}")
+                        copied_files.add(item.name)
+                elif item.is_dir():
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                    shutil.copytree(item, dest)
+                    if item.name not in copied_files:
+                        print(f"Copied gamedata directory: {dest}")
                         copied_files.add(item.name)
 
 
@@ -644,6 +680,7 @@ def main(argv=None):
     deploy_plugin(dll_path, game_path, backend=args.backend, target=args.target)
     deploy_wasm_plugins(wasm_plugins, game_path, backend=args.backend)
     deploy_lang_dictionaries(repo_root, game_path, backend=args.backend)
+    deploy_gamedata(repo_root, game_path, backend=args.backend)
     copy_time = time.perf_counter() - t_copy_start
 
     print(f"\nVerifying {args.backend} deployment...")
