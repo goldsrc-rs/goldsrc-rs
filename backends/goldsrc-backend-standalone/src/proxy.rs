@@ -270,6 +270,13 @@ unsafe fn try_load_game_dll(path: &PathBuf) -> Result<GameDllProxy, Box<dyn std:
             false
         };
 
+        // Query ReGameDLL CreateInterface factory if exported
+        let create_iface: Result<libloading::Symbol<goldsrc_sys::reapi::CreateInterfaceFn>, _> =
+            lib.get(b"CreateInterface\0");
+        if let Ok(factory) = create_iface {
+            goldsrc_core::reapi::ReApiBridge::try_init_regamedll_factory(*factory);
+        }
+
         Ok(GameDllProxy {
             _lib: lib,
             dll_funcs,

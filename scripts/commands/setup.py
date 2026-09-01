@@ -214,6 +214,45 @@ def cleanup_amxmodx(amxmodx_dir: Path) -> None:
                 pass
 
 
+def cleanup_regamedll(regamedll_dir: Path) -> None:
+    """Remove regamedll files not needed for reference."""
+    if not regamedll_dir.exists():
+        return
+    dirs_to_remove = [".git", ".github", "dep", "build"]
+    files_to_remove = ["build.sh", "version_script.lds"]
+    for d in dirs_to_remove:
+        full_path = regamedll_dir / d
+        if full_path.exists():
+            try:
+                shutil.rmtree(full_path, onexc=remove_readonly)
+                print(f"  [REMOVED] regamedll/{d}")
+            except Exception:
+                pass
+    for f in files_to_remove:
+        full_path = regamedll_dir / f
+        if full_path.exists():
+            try:
+                full_path.unlink()
+                print(f"  [REMOVED] regamedll/{f}")
+            except Exception:
+                pass
+
+
+def cleanup_reapi(reapi_dir: Path) -> None:
+    """Remove reapi files not needed for reference."""
+    if not reapi_dir.exists():
+        return
+    dirs_to_remove = [".git", ".github"]
+    for d in dirs_to_remove:
+        full_path = reapi_dir / d
+        if full_path.exists():
+            try:
+                shutil.rmtree(full_path, onexc=remove_readonly)
+                print(f"  [REMOVED] reapi/{d}")
+            except Exception:
+                pass
+
+
 REDUNDANT_FILES = {
     ".gitignore", ".gitattributes", ".gitmodules", ".editorconfig",
     ".travis.yml", ".appveyor.yml", ".circleci", ".github",
@@ -626,7 +665,7 @@ def main(argv=None):
         nargs="*",
         default=None,
         metavar="NAME",
-        help="Target specific repositories: hlsdk metamod-r rehlds goldsrcmod-net amxmodx crash-analyzer",
+        help="Target specific repositories: hlsdk metamod-r rehlds goldsrcmod-net amxmodx regamedll reapi crash-analyzer",
     )
     args = parser.parse_args(argv)
 
@@ -651,6 +690,8 @@ def main(argv=None):
             "sparse_paths": ["metamod/extra/example/include/metamod", "metamod/extra/example/include"],
         },
         {"name": "rehlds", "url": "https://github.com/s1lentq/ReHLDS.git", "path": refs_dir / "rehlds", "is_ref": True},
+        {"name": "regamedll", "url": "https://github.com/s1lentq/ReGameDLL_CS.git", "path": refs_dir / "regamedll", "is_ref": True, "sparse_paths": ["regamedll"]},
+        {"name": "reapi", "url": "https://github.com/s1lentq/reapi.git", "path": refs_dir / "reapi", "is_ref": True, "sparse_paths": ["reapi/include"]},
         {"name": "goldsrcmod-net", "url": "https://github.com/DrAbcOfficial/GoldSrcMod.Net.git", "path": refs_dir / "goldsrcmod-net", "is_ref": True},
         {"name": "amxmodx", "url": "https://github.com/alliedmodders/amxmodx.git", "path": refs_dir / "amxmodx", "is_ref": True},
         {"name": "crash-analyzer", "url": "https://github.com/ulquiorracode/crash-analyzer.git", "path": scripts_dir / "crash-analyzer", "is_ref": False},
@@ -721,6 +762,8 @@ def main(argv=None):
         cleanup_hlsdk(refs_dir / "hlsdk")
         cleanup_metamod(refs_dir / "metamod-r")
         cleanup_rehlds(refs_dir / "rehlds")
+        cleanup_regamedll(refs_dir / "regamedll")
+        cleanup_reapi(refs_dir / "reapi")
         cleanup_goldsrcmod_net(refs_dir / "goldsrcmod-net")
         cleanup_amxmodx(refs_dir / "amxmodx")
         cleanup_redundant_files(refs_dir)
