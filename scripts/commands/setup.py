@@ -412,6 +412,33 @@ def uninstall_python_tools(tools: list[dict]) -> None:
             print(f"  [OK] {tool['name']} uninstalled")
 
 
+def detect_and_setup_build_tools(force: bool = False) -> None:
+    """Check for sccache and wasm-opt in environment and suggest/perform installation if missing."""
+    print("Checking build acceleration tools (sccache, wasm-opt)...")
+    
+    # 1. sccache
+    sccache_path = shutil.which("sccache")
+    if sccache_path:
+        print(f"  [FOUND] sccache -> {sccache_path}")
+    else:
+        print("  [WARN] 'sccache' not found in PATH! Installing sccache via cargo...")
+        try:
+            res = subprocess.run(["cargo", "install", "sccache", "--locked"], capture_output=True, text=True)
+            if res.returncode == 0:
+                print("  [OK]   sccache installed successfully via cargo!")
+            else:
+                print(f"  [INFO] Could not auto-install sccache: {res.stderr.strip()[:100]}... (run manually: cargo install sccache)")
+        except Exception as e:
+            print(f"  [INFO] cargo install sccache skipped: {e}")
+
+    # 2. wasm-opt
+    wasm_opt_path = shutil.which("wasm-opt")
+    if wasm_opt_path:
+        print(f"  [FOUND] wasm-opt -> {wasm_opt_path}")
+    else:
+        print("  [INFO] 'wasm-opt' is optional for WASM size optimization. (Install: npm install -g wasm-opt or cargo install wasm-opt)")
+
+
 def verify_setup(repo_root: Path, all_repos: list[dict], args) -> bool:
     """Verify state of references, SDK config, python tools, and git hooks selectively or fully."""
     print("=== GoldSrc.rs Environment & Reference Verification ===\n")
@@ -437,12 +464,14 @@ def verify_setup(repo_root: Path, all_repos: list[dict], args) -> bool:
 
     # 2. Build configuration verification
     if args.sdk or (not has_specific):
-        print("\n[2] Build & Local Configuration (goldsrc.local.toml):")
-        config_path = repo_root / "goldsrc.local.toml"
+        print("\n[2] Build & Local Configuration (.goldsrc.local.toml):")
+        config_path = repo_root / ".goldsrc.local.toml"
+        if not config_path.exists():
+            config_path = repo_root / "goldsrc.local.toml"
         if config_path.exists():
             print(f"    [OK]   Found: {config_path.name}")
         else:
-            print(f"    [FAIL] Missing: goldsrc.local.toml (Run: python -m scripts setup --sdk)")
+            print(f"    [FAIL] Missing: .goldsrc.local.toml (Run: python -m scripts setup --sdk)")
             all_ok = False
 
     # 3. Python tools verification
@@ -476,6 +505,19 @@ def verify_setup(repo_root: Path, all_repos: list[dict], args) -> bool:
                     status = "[OK]  " if target.exists() else "[INFO]"
                     state = "installed" if target.exists() else "not installed (optional: python -m scripts setup --hooks)"
                 print(f"    {status} {h.name:<18} is {state}")
+
+    # 5. Build Tools (sccache, wasm-opt)
+    if not has_specific:
+        print("\n[5] Build Tools:")
+        sccache_bin = shutil.which("sccache")
+        status_sccache = "[OK]  " if sccache_bin else "[WARN]"
+        desc_sccache = sccache_bin if sccache_bin else "NOT in PATH (run: cargo install sccache)"
+        print(f"    {status_sccache} {'sccache':<18} -> {desc_sccache}")
+
+        wasm_opt_bin = shutil.which("wasm-opt")
+        status_wasm_opt = "[OK]  " if wasm_opt_bin else "[INFO]"
+        desc_wasm_opt = wasm_opt_bin if wasm_opt_bin else "NOT in PATH (optional: npm i -g wasm-opt)"
+        print(f"    {status_wasm_opt} {'wasm-opt':<18} -> {desc_wasm_opt}")
 
     print("\n" + ("=" * 55))
     if all_ok:
@@ -620,7 +662,12 @@ def main(argv=None):
         )
         write_build_config(repo_root, include_paths, llvm_path, server_path=args.server)
 
-    # 5. Git Hooks Installation (Only if explicitly requested)
+    # 5. Build Acceleration Tools (sccache, wasm-opt)
+    if not has_selective_action or args.tools:
+        print()
+        detect_and_setup_build_tools(force=args.force)
+
+    # 6. Git Hooks Installation (Only if explicitly requested)
     if args.hooks:
         print()
         install_git_hooks(repo_root)

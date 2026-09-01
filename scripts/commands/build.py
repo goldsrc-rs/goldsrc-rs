@@ -211,9 +211,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Build GoldSrc.rs backend plugin")
     parser.add_argument(
         "--backend",
-        choices=["metamod", "standalone"],
+        choices=["metamod", "standalone", "both", "all"],
         default=default_backend,
-        help=f"Backend type to build (default: {default_backend} from .goldsrc.local.toml)",
+        help=f"Backend type to build (metamod, standalone, or both, default: {default_backend} from .goldsrc.local.toml)",
     )
     parser.add_argument("--target", default="i686-pc-windows-msvc", help="Build target")
     parser.add_argument("--debug", action="store_true", help="Build in debug mode")
@@ -221,13 +221,17 @@ def main(argv=None):
     parser.add_argument("--all", action="store_true", help="Build both backend DLL and WASM plugins")
     args = parser.parse_args(argv)
 
+    backends_to_build = ["standalone", "metamod"] if args.backend in ["both", "all"] else [args.backend]
+
     if args.wasm:
         build_wasm_plugins(release=not args.debug)
     elif args.all:
-        build_plugin(backend=args.backend, target=args.target, release=not args.debug)
+        for b in backends_to_build:
+            build_plugin(backend=b, target=args.target, release=not args.debug)
         build_wasm_plugins(release=not args.debug)
     else:
-        build_plugin(backend=args.backend, target=args.target, release=not args.debug)
+        for b in backends_to_build:
+            build_plugin(backend=b, target=args.target, release=not args.debug)
 
 
 if __name__ == "__main__":

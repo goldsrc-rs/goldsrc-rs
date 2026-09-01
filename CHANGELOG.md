@@ -17,11 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Renamed `hosts/goldsrc-wasm-host` -> `hosts/goldsrc-host-wasm` (`goldsrc-host-wasm`).
   - Renamed `backends/goldsrc-standalone` -> `backends/goldsrc-backend-standalone` (`goldsrc-backend-standalone`).
   - Renamed `backends/goldsrc-metamod` -> `backends/goldsrc-backend-metamod` (`goldsrc-backend-metamod`).
-- **Unified Workspace Versioning**:
+- **Unified Workspace Versioning & Core Enumeration Enhancements**:
   - Bumped all crates and workspace members to `0.15.0`.
   - Migrated demo plugins to `version.workspace = true` and workspace dependency inheritance.
-- **Python Deployment & Tooling Integration**:
-  - Updated `scripts/commands/build.py` and `scripts/commands/deploy.py` to seamlessly target new crate names and structure.
+  - Added `pub const fn as_str(&self)`, `ALL` constants, and `Display` trait implementations for `Stage`, `SystemPhase`, `LifeState`, `Team`, and `CsWeapon`.
+- **Build Tooling & Acceleration Enhancements**:
+  - Added `--backend both` (and `--backend all`) support to `scripts/commands/build.py` to compile both `goldsrc-backend-standalone` and `goldsrc-backend-metamod` in a single command.
+  - Added `sccache` and `wasm-opt` environment detection, status reporting, and automatic installation helper to `scripts/commands/setup.py`.
 
 ## [0.14.0] - 2026-09-01
 
