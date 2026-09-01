@@ -1,0 +1,20 @@
+[package]
+name = "goldsrc-backend-metamod"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Metamod backend implementation for GoldSrc.rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+goldsrc-sys = { workspace = true }
+goldsrc-api = { workspace = true }
+goldsrc-core = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Memory", "Win32_Foundation"] }
+
+[target.'cfg(not(windows))'.dependencies]
+libc = "0.2"

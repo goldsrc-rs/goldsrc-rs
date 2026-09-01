@@ -52,8 +52,14 @@ def delete_directory(path: Path) -> bool:
         return False
 
 
-def clone_repo(url: str, dest: Path, force: bool = False, shallow: bool = True) -> bool:
-    """Clone a git repository."""
+def clone_repo(
+    url: str,
+    dest: Path,
+    force: bool = False,
+    shallow: bool = True,
+    sparse_paths: list[str] | None = None,
+) -> bool:
+    """Clone a git repository, optionally using sparse-checkout for minimal download."""
     if dest.exists():
         if force:
             print(f"  [FORCE] Removing existing {dest.name}...")
@@ -63,15 +69,42 @@ def clone_repo(url: str, dest: Path, force: bool = False, shallow: bool = True) 
             return False
 
     print(f"  [CLONE] {dest.name} from {url}...")
-    cmd = ["git", "clone"]
-    if shallow:
-        cmd += ["--depth", "1"]
-    cmd += [url, str(dest)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Error: Failed to clone {dest.name}", file=sys.stderr)
-        print(result.stderr, file=sys.stderr)
-        sys.exit(1)
+    if sparse_paths:
+        cmd = ["git", "clone", "--filter=blob:none", "--no-checkout"]
+        if shallow:
+            cmd += ["--depth", "1"]
+        cmd += [url, str(dest)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Error: Failed to clone {dest.name}", file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            sys.exit(1)
+
+        # Set up sparse checkout
+        sparse_cmd = ["git", "-C", str(dest), "sparse-checkout", "set", "--no-cone"] + sparse_paths
+        result = subprocess.run(sparse_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Error: Failed to set sparse-checkout for {dest.name}", file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            sys.exit(1)
+
+        checkout_cmd = ["git", "-C", str(dest), "checkout"]
+        result = subprocess.run(checkout_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Error: Failed to checkout files for {dest.name}", file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            sys.exit(1)
+    else:
+        cmd = ["git", "clone"]
+        if shallow:
+            cmd += ["--depth", "1"]
+        cmd += [url, str(dest)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Error: Failed to clone {dest.name}", file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            sys.exit(1)
+
     print(f"  [OK] {dest.name} cloned successfully")
     return True
 
@@ -412,6 +445,33 @@ def uninstall_python_tools(tools: list[dict]) -> None:
             print(f"  [OK] {tool['name']} uninstalled")
 
 
+def detect_and_setup_build_tools(force: bool = False) -> None:
+    """Check for sccache and wasm-opt in environment and suggest/perform installation if missing."""
+    print("Checking build acceleration tools (sccache, wasm-opt)...")
+    
+    # 1. sccache
+    sccache_path = shutil.which("sccache")
+    if sccache_path:
+        print(f"  [FOUND] sccache -> {sccache_path}")
+    else:
+        print("  [WARN] 'sccache' not found in PATH! Installing sccache via cargo...")
+        try:
+            res = subprocess.run(["cargo", "install", "sccache", "--locked"], capture_output=True, text=True)
+            if res.returncode == 0:
+                print("  [OK]   sccache installed successfully via cargo!")
+            else:
+                print(f"  [INFO] Could not auto-install sccache: {res.stderr.strip()[:100]}... (run manually: cargo install sccache)")
+        except Exception as e:
+            print(f"  [INFO] cargo install sccache skipped: {e}")
+
+    # 2. wasm-opt
+    wasm_opt_path = shutil.which("wasm-opt")
+    if wasm_opt_path:
+        print(f"  [FOUND] wasm-opt -> {wasm_opt_path}")
+    else:
+        print("  [INFO] 'wasm-opt' is optional for WASM size optimization. (Install: npm install -g wasm-opt or cargo install wasm-opt)")
+
+
 def verify_setup(repo_root: Path, all_repos: list[dict], args) -> bool:
     """Verify state of references, SDK config, python tools, and git hooks selectively or fully."""
     print("=== GoldSrc.rs Environment & Reference Verification ===\n")
@@ -437,12 +497,14 @@ def verify_setup(repo_root: Path, all_repos: list[dict], args) -> bool:
 
     # 2. Build configuration verification
     if args.sdk or (not has_specific):
-        print("\n[2] Build & Local Configuration (goldsrc.local.toml):")
-        config_path = repo_root / "goldsrc.local.toml"
+        print("\n[2] Build & Local Configuration (.goldsrc.local.toml):")
+        config_path = repo_root / ".goldsrc.local.toml"
+        if not config_path.exists():
+            config_path = repo_root / "goldsrc.local.toml"
         if config_path.exists():
             print(f"    [OK]   Found: {config_path.name}")
         else:
-            print(f"    [FAIL] Missing: goldsrc.local.toml (Run: python -m scripts setup --sdk)")
+            print(f"    [FAIL] Missing: .goldsrc.local.toml (Run: python -m scripts setup --sdk)")
             all_ok = False
 
     # 3. Python tools verification
@@ -476,6 +538,19 @@ def verify_setup(repo_root: Path, all_repos: list[dict], args) -> bool:
                     status = "[OK]  " if target.exists() else "[INFO]"
                     state = "installed" if target.exists() else "not installed (optional: python -m scripts setup --hooks)"
                 print(f"    {status} {h.name:<18} is {state}")
+
+    # 5. Build Tools (sccache, wasm-opt)
+    if not has_specific:
+        print("\n[5] Build Tools:")
+        sccache_bin = shutil.which("sccache")
+        status_sccache = "[OK]  " if sccache_bin else "[WARN]"
+        desc_sccache = sccache_bin if sccache_bin else "NOT in PATH (run: cargo install sccache)"
+        print(f"    {status_sccache} {'sccache':<18} -> {desc_sccache}")
+
+        wasm_opt_bin = shutil.which("wasm-opt")
+        status_wasm_opt = "[OK]  " if wasm_opt_bin else "[INFO]"
+        desc_wasm_opt = wasm_opt_bin if wasm_opt_bin else "NOT in PATH (optional: npm i -g wasm-opt)"
+        print(f"    {status_wasm_opt} {'wasm-opt':<18} -> {desc_wasm_opt}")
 
     print("\n" + ("=" * 55))
     if all_ok:
@@ -542,6 +617,11 @@ def main(argv=None):
     parser.add_argument("--cleanup", action="store_true", help="Run cleanup on reference directories")
     parser.add_argument("--skip-cleanup", action="store_true", help="Skip reference cleanup during setup")
     parser.add_argument(
+        "--ci",
+        action="store_true",
+        help="Ultra-fast CI setup: minimal sparse-checkout of only required C headers (hlsdk + metamod-r), skip optional repos and python tools",
+    )
+    parser.add_argument(
         "--repos",
         nargs="*",
         default=None,
@@ -554,10 +634,22 @@ def main(argv=None):
     refs_dir = repo_root / "references"
     scripts_dir = repo_root / "scripts"
 
-    # Define all managed repositories
+    # Define all managed repositories with optional sparse checkout paths
     all_repos = [
-        {"name": "hlsdk", "url": "https://github.com/alliedmodders/hlsdk.git", "path": refs_dir / "hlsdk", "is_ref": True},
-        {"name": "metamod-r", "url": "https://github.com/theAsmodai/metamod-r.git", "path": refs_dir / "metamod-r", "is_ref": True},
+        {
+            "name": "hlsdk",
+            "url": "https://github.com/alliedmodders/hlsdk.git",
+            "path": refs_dir / "hlsdk",
+            "is_ref": True,
+            "sparse_paths": ["public", "engine", "common", "dlls"],
+        },
+        {
+            "name": "metamod-r",
+            "url": "https://github.com/theAsmodai/metamod-r.git",
+            "path": refs_dir / "metamod-r",
+            "is_ref": True,
+            "sparse_paths": ["metamod/extra/example/include/metamod", "metamod/extra/example/include"],
+        },
         {"name": "rehlds", "url": "https://github.com/s1lentq/ReHLDS.git", "path": refs_dir / "rehlds", "is_ref": True},
         {"name": "goldsrcmod-net", "url": "https://github.com/DrAbcOfficial/GoldSrcMod.Net.git", "path": refs_dir / "goldsrcmod-net", "is_ref": True},
         {"name": "amxmodx", "url": "https://github.com/alliedmodders/amxmodx.git", "path": refs_dir / "amxmodx", "is_ref": True},
@@ -574,7 +666,32 @@ def main(argv=None):
         revert_setup(repo_root, all_repos, args)
         return
 
-    # Operation: Setup (Standard or Selective)
+    # Operation: Setup (CI, Standard, or Selective)
+    if args.ci:
+        print("Running ultra-fast CI setup (sparse-checkout of minimal headers)...")
+        refs_dir.mkdir(exist_ok=True)
+        ci_target_names = ["hlsdk", "metamod-r"]
+        ci_repos = [r for r in all_repos if r["name"].lower() in ci_target_names]
+        for repo in ci_repos:
+            clone_repo(
+                repo["url"],
+                repo["path"],
+                force=args.force,
+                shallow=not args.no_shallow,
+                sparse_paths=repo.get("sparse_paths"),
+            )
+
+        print("\nDetecting system SDK paths...")
+        system = platform.system()
+        include_paths, llvm_path = (
+            detect_windows_sdk() if system == "Windows" else
+            detect_linux_paths() if system == "Linux" else
+            detect_macos_paths() if system == "Darwin" else ([], "")
+        )
+        write_build_config(repo_root, include_paths, llvm_path, server_path=args.server)
+        print("\n[SUCCESS] CI setup complete.")
+        return
+
     has_selective_action = bool(args.hooks or args.sdk or args.tools or args.cleanup or args.repos is not None)
 
     # 1. Repositories Cloning
@@ -589,7 +706,13 @@ def main(argv=None):
         refs_dir.mkdir(exist_ok=True)
         print("Cloning repositories...")
         for repo in repos_to_clone:
-            clone_repo(repo["url"], repo["path"], force=args.force, shallow=not args.no_shallow)
+            clone_repo(
+                repo["url"],
+                repo["path"],
+                force=args.force,
+                shallow=not args.no_shallow,
+                sparse_paths=repo.get("sparse_paths") if args.repos else None,
+            )
 
     # 2. Cleanup of Reference Directories
     should_cleanup = args.cleanup or (should_clone and not args.skip_cleanup)
@@ -620,7 +743,12 @@ def main(argv=None):
         )
         write_build_config(repo_root, include_paths, llvm_path, server_path=args.server)
 
-    # 5. Git Hooks Installation (Only if explicitly requested)
+    # 5. Build Acceleration Tools (sccache, wasm-opt)
+    if not has_selective_action or args.tools:
+        print()
+        detect_and_setup_build_tools(force=args.force)
+
+    # 6. Git Hooks Installation (Only if explicitly requested)
     if args.hooks:
         print()
         install_git_hooks(repo_root)

@@ -6,6 +6,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-09-01
+
+### Added
+
+- **Architectural Layer Decomposition & `goldsrc-core` Extraction**:
+  - Extracted all host-side runtime orchestration (`HostRuntime`), engine bridge, CLI router, SQLite storage runtime, i18n engine, placeholder registry, and hook dispatchers from `framework/goldsrc` into dedicated `core/goldsrc-core` crate.
+  - Purified `framework/goldsrc` as a pure, lightweight guest SDK (Flat ECS, `tr!`, `chat_print!`, `chat_broadcast!`, macro re-exports, transparent guest logger) without heavy dependencies (`wasmtime`, `rusqlite`, `libloading`).
+- **Standardized Workspace Member Naming Scheme (`goldsrc-<category>-<name>`)**:
+  - Renamed `hosts/goldsrc-wasm-host` -> `hosts/goldsrc-host-wasm` (`goldsrc-host-wasm`).
+  - Renamed `backends/goldsrc-standalone` -> `backends/goldsrc-backend-standalone` (`goldsrc-backend-standalone`).
+  - Renamed `backends/goldsrc-metamod` -> `backends/goldsrc-backend-metamod` (`goldsrc-backend-metamod`).
+- **Unified Workspace Versioning & Core Enumeration Enhancements**:
+  - Bumped all crates and workspace members to `0.15.0`.
+  - Migrated demo plugins to `version.workspace = true` and workspace dependency inheritance.
+  - Added `pub const fn as_str(&self)`, `ALL` constants, and `Display` trait implementations for `Stage`, `SystemPhase`, `LifeState`, `Team`, and `CsWeapon`.
+- **Build Tooling & Acceleration Enhancements**:
+  - Added `--backend both` (and `--backend all`) support to `scripts/commands/build.py` to compile both `goldsrc-backend-standalone` and `goldsrc-backend-metamod` in a single command.
+  - Added `sccache` and `wasm-opt` environment detection, status reporting, and automatic installation helper to `scripts/commands/setup.py`.
+  - Added `--ci` mode to `scripts/commands/setup.py` utilizing Git `sparse-checkout` (`--filter=blob:none`) to download only required C headers for `bindgen` (`hlsdk` and `metamod-r`), reducing CI setup duration from ~30s to 2s.
+
 ## [0.14.0] - 2026-09-01
 
 ### Added
