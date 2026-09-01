@@ -238,20 +238,21 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Structured language dictionaries (`data/lang/*.toml`) with lexical variable scoping, color/macro expansions, and access controls.
   - `AsLangCode` trait, `player.lang()`, `I18nEngine::server_lang()`, and zero-boilerplate `tr!` macro.
 
-## v0.15.0 — Architectural Layer Decomposition & Naming Standardization 📝 Next
+## v0.15.0 — Architectural Layer Decomposition & Naming Standardization ✅
 
 **Goal:** Cleanly decompose monolithic crates into layered generic architecture (`goldsrc-core`, `goldsrc-api`, `goldsrc-host-wasm`, `goldsrc-backend-standalone`, `goldsrc-backend-metamod`), eliminate Cargo feature entanglement across host/guest, and extract game-specific implementations into external crates.
 
-- [ ] **Unified Workspace Member Naming Scheme (`goldsrc-<category>-<name>`)**:
+- [x] **Unified Workspace Member Naming Scheme (`goldsrc-<category>-<name>`)**:
   - Rename `hosts/goldsrc-wasm-host` -> `hosts/goldsrc-host-wasm`.
   - Rename `backends/goldsrc-standalone` -> `backends/goldsrc-backend-standalone`.
   - Rename `backends/goldsrc-metamod` -> `backends/goldsrc-backend-metamod`.
-- [ ] **Pure Layer Separation (`core` / `hosts` / `backends` / `framework`)**:
+- [x] **Pure Layer Separation (`core` / `hosts` / `backends` / `framework`)**:
   - Extract host orchestration from `framework/goldsrc` (`#[cfg(feature = "host")]`) into `core/goldsrc-core`.
   - Make `framework/goldsrc` a pure, lightweight SDK re-export for plugin developers without heavy engine dependencies.
   - Zero mod-specific logic in engine bridge (100% agnostic GoldSrc engine core).
-- [ ] **External Game Crate (`goldsrc-game-cstrike`)**:
-  - Standalone game-specific domain crate containing CS 1.6 VTable offsets, weapon tables, CS teams, and round event decoders usable by both WASM and Native plugins.
+- [x] **Standardized Workspace Dependencies & Version 0.15.0**:
+  - Bump all crates to `0.15.0` with workspace inheritance.
+  - Update deploy script and python tools to seamlessly compile and verify new targets.
 
 ## v0.16.0 — ReAPI Direct Bridge & Advanced Physics 📝 Planned
 

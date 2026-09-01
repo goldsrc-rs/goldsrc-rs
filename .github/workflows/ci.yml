@@ -48,8 +48,8 @@ jobs:
       - name: Install LLVM
         run: choco install llvm --no-progress -y
 
-      - name: Setup references
-        run: python -m scripts setup
+      - name: Setup references (minimal CI)
+        run: python -m scripts setup --ci
         env:
           LIBCLANG_PATH: C:\Program Files\LLVM\lib
 
@@ -92,8 +92,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-multilib libclang-dev mold
 
-      - name: Setup references
-        run: python -m scripts setup
+      - name: Setup references (minimal CI)
+        run: python -m scripts setup --ci
 
       - name: Run clippy
         run: cargo clippy --target i686-unknown-linux-gnu --workspace --locked -- -D warnings

@@ -4,7 +4,7 @@ pub struct TestI18n;
 
 #[plugin(
     name = "test_i18n",
-    version = "0.14.0",
+    version = "0.15.0",
     author = "GoldSrc.rs Team",
     description = "Multilingual i18n & Localization verification plugin for GoldSrc.rs",
     url = "https://github.com/goldsrc-rs/goldsrc-rs"
@@ -12,7 +12,7 @@ pub struct TestI18n;
 impl TestI18n {
     #[on_load]
     fn init() {
-        log_info!("[test_i18n] Localization verification plugin v0.14.0 loaded.");
+        log_info!("[test_i18n] Localization verification plugin v0.15.0 loaded.");
     }
 
     /// Sends localized multi-language messages to a player.

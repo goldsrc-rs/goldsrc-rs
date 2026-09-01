@@ -184,6 +184,34 @@ pub enum SystemPhase {
     Monitor = 40,
 }
 
+impl SystemPhase {
+    /// List of all system phases in deterministic execution order.
+    pub const ALL: &'static [SystemPhase] = &[
+        SystemPhase::Validate,
+        SystemPhase::Modify,
+        SystemPhase::Execute,
+        SystemPhase::React,
+        SystemPhase::Monitor,
+    ];
+
+    /// Returns the static string representation of this phase.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            SystemPhase::Validate => "validate",
+            SystemPhase::Modify => "modify",
+            SystemPhase::Execute => "execute",
+            SystemPhase::React => "react",
+            SystemPhase::Monitor => "monitor",
+        }
+    }
+}
+
+impl std::fmt::Display for SystemPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl std::str::FromStr for SystemPhase {
     type Err = String;
 
@@ -228,6 +256,48 @@ pub enum Stage {
     RoundEnd = 100,
     /// Triggered when the freeze period ends and players can move (`round_freeze_end`).
     RoundFreezeEnd = 110,
+}
+
+impl Stage {
+    /// List of all lifecycle stages in order of declaration.
+    pub const ALL: &'static [Stage] = &[
+        Stage::Startup,
+        Stage::ServerActivate,
+        Stage::Frame,
+        Stage::PostThink,
+        Stage::PlayerConnect,
+        Stage::PlayerDisconnect,
+        Stage::EntitySpawn,
+        Stage::TakeDamage,
+        Stage::EntityKilled,
+        Stage::RoundStart,
+        Stage::RoundEnd,
+        Stage::RoundFreezeEnd,
+    ];
+
+    /// Returns the static string representation of this stage.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Stage::Startup => "startup",
+            Stage::ServerActivate => "server_activate",
+            Stage::Frame => "frame",
+            Stage::PostThink => "post_think",
+            Stage::PlayerConnect => "player_connect",
+            Stage::PlayerDisconnect => "player_disconnect",
+            Stage::EntitySpawn => "entity_spawn",
+            Stage::TakeDamage => "take_damage",
+            Stage::EntityKilled => "entity_killed",
+            Stage::RoundStart => "round_start",
+            Stage::RoundEnd => "round_end",
+            Stage::RoundFreezeEnd => "round_freeze_end",
+        }
+    }
+}
+
+impl std::fmt::Display for Stage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 impl std::str::FromStr for Stage {

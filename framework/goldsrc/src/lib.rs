@@ -1,58 +1,14 @@
 //! Public framework (SDK) for GoldSrc.rs plugin developers.
 //!
-//! This is the main entry point for plugin developers. It re-exports
-//! everything you need from the other crates.
-
-/// Unified FFI registration point for engine function tables (single source
-/// of truth for `DLL_FUNCTIONS` hooks). Enabled by the `host` feature.
-#[cfg(feature = "host")]
-pub mod api_registry;
+//! This is the main entry point for plugin developers. It provides
+//! ergonomic abstractions, macros, ECS, and helpers for writing plugins.
 
 /// Flat ECS for plugin state storage.
 pub mod ecs;
 
-/// Shared host CLI (`meta-rs`/`mrs`). Enabled by the `host-cli` feature.
-#[cfg(feature = "host-cli")]
-pub mod cli;
-
-/// Host runtime orchestrator. Enabled by the `host` feature.
-#[cfg(feature = "host")]
-pub mod host;
-
-/// Shared backend plumbing (engine access, print queue, engfunc macros).
-/// Enabled by the `host` feature.
-#[cfg(feature = "host")]
-pub mod backend;
-
-/// In-game Chat Interception, Filtering Pipeline, and Safe Packet Chunking.
-pub mod chat;
-/// System (`goldsrc.toml`) and plugins (`plugins.toml`) configuration models.
-pub mod config;
-/// Dynamic Contextual Placeholder Engine, Registry, and String Interpolator.
-pub mod placeholders;
-/// Backward-compatible alias for plugins_config module.
-pub use config::plugins as plugins_config;
-pub use config::{
-    HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
-};
-/// Centralized hook dispatching helpers and types.
-pub mod hooks;
-/// Lightweight i18n & Localization Dictionary Engine.
-pub mod i18n;
-/// Unified structured logger for backends and transparent WASM guest logger.
+/// Unified structured logger for plugins and transparent WASM guest logger.
 pub mod logging;
 pub use logging::init_guest_logger;
-/// Filesystem path resolution helpers.
-pub mod paths;
-/// Built-in server reactive rule providers and executors.
-#[cfg(feature = "host")]
-pub mod rules;
-/// Unified SQLite WAL storage engine and background batching.
-pub mod storage;
-pub use chat::process_chat_message;
-pub use i18n::I18nEngine;
-pub use placeholders::{PlaceholderRegistry, format_placeholders};
-pub use storage::{Bucket, JsonFormat, StorageFormat};
 
 #[macro_export]
 macro_rules! log_info {
@@ -98,15 +54,92 @@ macro_rules! log_debug {
     };
 }
 
-/// Screen HUD and DHUD message serialization and formatting.
-#[cfg(feature = "host")]
-pub mod hud;
-/// Runtime menu session manager and pagination.
-#[cfg(feature = "host")]
-pub mod menu;
+/// Macro for translating keys from dictionaries in WASM plugins.
+#[macro_export]
+macro_rules! tr {
+    ($dict:expr, $lang:expr, $key:expr) => {{
+        use $crate::AsLangCode as _;
+        $crate::api::bindings::goldsrc::engine::api::host_translate($dict, (&$lang).as_lang_code().as_ref(), $key)
+    }};
+    ($dict:expr, $lang:expr, $key:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
+        use $crate::AsLangCode as _;
+        let raw = $crate::api::bindings::goldsrc::engine::api::host_translate($dict, (&$lang).as_lang_code().as_ref(), $key);
+        let mut __res = raw;
+        $(
+            let __pat = concat!("{", stringify!($k), "}");
+            __res = __res.replace(__pat, &$v.to_string());
+        )*
+        __res
+    }};
+    ($dict:expr, $lang:expr, $key:expr, $( $pos:expr ),* $(,)?) => {{
+        use $crate::AsLangCode as _;
+        let raw = $crate::api::bindings::goldsrc::engine::api::host_translate($dict, (&$lang).as_lang_code().as_ref(), $key);
+        let mut __res = raw;
+        let mut __idx = 1;
+        $(
+            let __pat = format!("{{{}}}", __idx);
+            __res = __res.replace(&__pat, &$pos.to_string());
+            __idx += 1;
+        )*
+        __res
+    }};
+}
+
+/// Macro for printing chat message to a specific player with formatting and placeholders.
+#[macro_export]
+macro_rules! chat_print {
+    ($player:expr, $fmt:expr) => {
+        $player.print($crate::PrintTarget::Chat, $fmt)
+    };
+    ($player:expr, $fmt:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
+        let mut __s = $fmt.to_string();
+        $(
+            let __pat = concat!("{", stringify!($k), "}");
+            __s = __s.replace(__pat, &$v.to_string());
+        )*
+        $player.print($crate::PrintTarget::Chat, &__s)
+    }};
+}
+
+/// Macro for broadcasting chat message to all players with formatting and placeholders.
+#[macro_export]
+macro_rules! chat_broadcast {
+    ($fmt:expr) => {
+        $crate::engine::client_print(0, $crate::engine::PRINT_CHAT, $fmt)
+    };
+    ($fmt:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
+        let mut __s = $fmt.to_string();
+        $(
+            let __pat = concat!("{", stringify!($k), "}");
+            __s = __s.replace(__pat, &$v.to_string());
+        )*
+        $crate::engine::client_print(0, $crate::engine::PRINT_CHAT, &__s)
+    }};
+}
+
+pub mod chat {
+    pub use goldsrc_api::chat::*;
+
+    /// Registers a local chat middleware inside a WASM plugin.
+    pub fn register_chat_middleware<F>(_middleware: F)
+    where
+        F: Fn(&mut ChatMessage) -> bool + Send + Sync + 'static,
+    {
+        // Handled transparently by runtime dispatcher
+    }
+}
+
+pub mod placeholders {
+    /// Registers a dynamic placeholder inside a WASM plugin.
+    pub fn register_placeholder<F>(name: &str, description: &str, _handler: F)
+    where
+        F: Fn(goldsrc_api::Player, Option<&str>) -> String + 'static,
+    {
+        goldsrc_api::bindings::goldsrc::engine::api::host_register_placeholder(name, description);
+    }
+}
 
 pub use ::log;
-pub use config::*;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
@@ -133,14 +166,13 @@ pub use goldsrc_macros::{
 pub mod prelude {
     pub use crate::ecs::*;
     pub use crate::engine;
-    pub use crate::hooks::{HookResult, HookTiming};
     pub use crate::hud_api as hud;
     pub use crate::menu_api;
     pub use crate::tr;
     pub use crate::{
-        Alive, AntiSpamAction, AsLangCode, Auth, Bot, Bucket, CapExpr, ChatScope, ClientKind,
-        Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget,
-        Condition, ConnectionState, CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity,
+        Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
+        CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, Condition,
+        ConnectionState, CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity,
         ExitBehavior, Feedback, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
         HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu, MenuBuilder, MenuContext,
         MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, Player, PlayerStateFilter,
@@ -148,8 +180,8 @@ pub mod prelude {
         StorageProvider, Team, Terrorist, Vector3, VisualDeny,
     };
     pub use crate::{
-        chat_broadcast, chat_format, chat_print, chat_team, command, event, menu_action, on_frame,
-        on_load, on_unload, plugin, system,
+        chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,
+        plugin, system,
     };
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }

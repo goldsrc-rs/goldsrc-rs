@@ -37,7 +37,7 @@ pub enum CsWeapon {
 
 impl CsWeapon {
     /// Returns the canonical entity classname for spawning (e.g. `"weapon_m4a1"`).
-    pub fn classname(&self) -> &'static str {
+    pub const fn classname(&self) -> &'static str {
         match self {
             CsWeapon::P228 => "weapon_p228",
             CsWeapon::Scout => "weapon_scout",
@@ -66,6 +66,12 @@ impl CsWeapon {
             CsWeapon::P90 => "weapon_p90",
             CsWeapon::None => "",
         }
+    }
+}
+
+impl std::fmt::Display for CsWeapon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.classname())
     }
 }
 

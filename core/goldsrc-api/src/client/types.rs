@@ -58,6 +58,27 @@ pub enum LifeState {
     Spectating,
 }
 
+impl LifeState {
+    /// List of all possible player life states.
+    pub const ALL: &'static [LifeState] =
+        &[LifeState::Alive, LifeState::Dead, LifeState::Spectating];
+
+    /// Returns the static string representation of this life state.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            LifeState::Alive => "alive",
+            LifeState::Dead => "dead",
+            LifeState::Spectating => "spectating",
+        }
+    }
+}
+
+impl std::fmt::Display for LifeState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Game team identifiers (compatible with Counter-Strike 1.6 team slots).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
@@ -70,6 +91,32 @@ pub enum Team {
     CounterTerrorist = 2,
     /// Spectator team (SPEC).
     Spectator = 3,
+}
+
+impl Team {
+    /// List of all possible teams.
+    pub const ALL: &'static [Team] = &[
+        Team::Unassigned,
+        Team::Terrorist,
+        Team::CounterTerrorist,
+        Team::Spectator,
+    ];
+
+    /// Returns the canonical lowercase string identifier of this team.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Team::Unassigned => "unassigned",
+            Team::Terrorist => "terrorist",
+            Team::CounterTerrorist => "ct",
+            Team::Spectator => "spectator",
+        }
+    }
+}
+
+impl std::fmt::Display for Team {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 impl From<i32> for Team {

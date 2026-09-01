@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "admin_system"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
 ]
@@ -529,16 +529,12 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "goldsrc"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
- "crossbeam-channel",
  "goldsrc-api",
  "goldsrc-macros",
  "goldsrc-sys",
- "goldsrc-wasm-host",
- "lexopt",
  "log",
- "rusqlite",
  "serde",
  "serde_json",
  "toml",
@@ -546,7 +542,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-api"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc-sys",
  "serde",
@@ -555,49 +551,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "goldsrc-macros"
-version = "0.14.0"
+name = "goldsrc-backend-metamod"
+version = "0.15.0"
 dependencies = [
  "goldsrc-api",
- "proc-macro2",
- "quote",
- "syn 3.0.3",
-]
-
-[[package]]
-name = "goldsrc-metamod"
-version = "0.14.0"
-dependencies = [
- "goldsrc",
- "goldsrc-api",
+ "goldsrc-core",
  "goldsrc-sys",
- "goldsrc-wasm-host",
  "libc",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
-name = "goldsrc-standalone"
-version = "0.14.0"
+name = "goldsrc-backend-standalone"
+version = "0.15.0"
 dependencies = [
- "goldsrc",
  "goldsrc-api",
+ "goldsrc-core",
  "goldsrc-sys",
- "goldsrc-wasm-host",
  "libloading 0.9.0",
 ]
 
 [[package]]
-name = "goldsrc-sys"
-version = "0.14.0"
+name = "goldsrc-core"
+version = "0.15.0"
 dependencies = [
- "bindgen",
- "cc",
+ "crossbeam-channel",
+ "goldsrc-api",
+ "goldsrc-host-wasm",
+ "goldsrc-sys",
+ "lexopt",
+ "libloading 0.9.0",
+ "log",
+ "notify",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]
-name = "goldsrc-wasm-host"
-version = "0.14.0"
+name = "goldsrc-host-wasm"
+version = "0.15.0"
 dependencies = [
  "goldsrc-api",
  "log",
@@ -608,6 +602,24 @@ dependencies = [
  "wasmtime",
  "wit-component 0.258.0",
  "wit-parser 0.258.0",
+]
+
+[[package]]
+name = "goldsrc-macros"
+version = "0.15.0"
+dependencies = [
+ "goldsrc-api",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
+]
+
+[[package]]
+name = "goldsrc-sys"
+version = "0.15.0"
+dependencies = [
+ "bindgen",
+ "cc",
 ]
 
 [[package]]
@@ -1250,7 +1262,7 @@ dependencies = [
 
 [[package]]
 name = "test_chat"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
  "goldsrc-macros",
@@ -1258,28 +1270,28 @@ dependencies = [
 
 [[package]]
 name = "test_ecs"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_hud"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_i18n"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_menu"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
 ]
@@ -1369,14 +1381,14 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vip_core"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "vip_menu"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "goldsrc",
 ]
