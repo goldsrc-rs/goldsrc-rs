@@ -127,6 +127,23 @@ impl TestMenu {
         player.print_center("[Test Menu] Телепортирован вверх");
     }
 
+    /// Tests developer notification in top-left screen area (HUD_PRINTNOTIFY).
+    #[command(
+        name = "test_notify",
+        aliases = ["/notify", "!notify"],
+        description = "Tests HUD_PRINTNOTIFY (developer notification in top-left screen area)",
+        usage = "test_notify [message]"
+    )]
+    fn handle_test_notify(player: Player, msg: String) {
+        let text = if msg.trim().is_empty() {
+            "[Developer Notify] Test message in top-left screen area!".to_string()
+        } else {
+            msg
+        };
+        player.print_notify(&text);
+        log_info!("[Test Menu] Sent notify message to player: {}", text);
+    }
+
     /// Opens a localized multilingual test menu integrated with i18n dictionaries.
     /// Usage: `langmenu [ru|en|es|de]` or chat `/langmenu` / `/langmenu es`.
     #[command(
@@ -154,7 +171,16 @@ impl TestMenu {
         let menu = Menu::builder(title)
             .style(MenuStyle::brackets())
             .lang(&lang_code)
-            .item(MenuItem::new(item_hp, 201).keep_open())
+            .debounce(std::time::Duration::from_millis(200))
+            .item(
+                MenuItem::new(item_hp, 201).keep_open().cooldown_with(
+                    std::time::Duration::from_secs(3),
+                    AntiSpamAction::Feedback(
+                        Feedback::notify("[Cooldown] Подождите перед повторным лечением!")
+                            .sound("buttons/button10.wav"),
+                    ),
+                ),
+            )
             .item(MenuItem::new(item_ap, 202).keep_open())
             .item((item_m4a1, 203))
             .item((item_ak47, 204))

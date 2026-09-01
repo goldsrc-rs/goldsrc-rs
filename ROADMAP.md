@@ -238,56 +238,45 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Structured language dictionaries (`data/lang/*.toml`) with lexical variable scoping, color/macro expansions, and access controls.
   - `AsLangCode` trait, `player.lang()`, `I18nEngine::server_lang()`, and zero-boilerplate `tr!` macro.
 
-## v0.15.0 — Gameplay Engine, Game-Specific SDK (`goldsrc-cstrike`) & Unified DSL / Chat ✅
+## v0.15.0 — Architectural Layer Decomposition & Naming Standardization 📝 Next
 
-**Goal:** Provide core gameplay hooks (`TakeDamage`, `Spawn`, `Killed`, `TraceAttack`), automated `gamedata.toml` offset generation, `goldsrc-cstrike` framework (Money, CS Teams, Defuse, Bomb), and unified Expression DSL / Placeholder engine with rich chat interception.
+**Goal:** Cleanly decompose monolithic crates into layered generic architecture (`goldsrc-core`, `goldsrc-api`, `goldsrc-host-wasm`, `goldsrc-backend-standalone`, `goldsrc-backend-metamod`), eliminate Cargo feature entanglement across host/guest, and extract game-specific implementations into external crates.
 
-- [x] **Unified GoldSrc Expression DSL & Placeholder Engine (`goldsrc_api::dsl`)**:
-  - Unified zero-allocation AST/lexer powering Requirements, Capabilities, and Placeholders.
-  - Procedural macro `#[placeholder(name = "...", usage = "...")]` with typed arguments (`{ip(target='Player')}`).
-  - Built-in diagnostic suggestions and server CLI introspection (`python -m scripts placeholders`).
-- [x] **Chat Processing & Multi-Chunk SayText Router (`goldsrc_api::chat`)**:
-  - Interceptor pipeline for `say` / `say_team` with dynamic color formatting and safe multi-chunk packet splitting exceeding 180 bytes.
-  - Multi-recipient multicast routing based on orthogonal `ChatScope` (`TeamTarget` and `LifeStateFilter`).
-- [x] **Automated Gamedata Pipeline (`data/gamedata/*.toml`)**:
-  - Structured TOML gamedata definitions for VTable offsets and binary memory signature scanning.
-- [x] **VTable & Entity Hooking Engine (`TakeDamage`, `Spawn`, `Killed`)**:
-  - Safe interceptors and method mappings for `CBasePlayer` / `CBaseEntity` virtual tables.
-- [x] **Game-Specific Framework (`goldsrc-cstrike`)**:
-  - High-level abstractions for Counter-Strike 1.6: `CsWeapon`, `CsPlayerExt` (`give_weapon`, `cs_team_str`, `has_defuse_kit`).
+- [ ] **Unified Workspace Member Naming Scheme (`goldsrc-<category>-<name>`)**:
+  - Rename `hosts/goldsrc-wasm-host` -> `hosts/goldsrc-host-wasm`.
+  - Rename `backends/goldsrc-standalone` -> `backends/goldsrc-backend-standalone`.
+  - Rename `backends/goldsrc-metamod` -> `backends/goldsrc-backend-metamod`.
+- [ ] **Pure Layer Separation (`core` / `hosts` / `backends` / `framework`)**:
+  - Extract host orchestration from `framework/goldsrc` (`#[cfg(feature = "host")]`) into `core/goldsrc-core`.
+  - Make `framework/goldsrc` a pure, lightweight SDK re-export for plugin developers without heavy engine dependencies.
+  - Zero mod-specific logic in engine bridge (100% agnostic GoldSrc engine core).
+- [ ] **External Game Crate (`goldsrc-game-cstrike`)**:
+  - Standalone game-specific domain crate containing CS 1.6 VTable offsets, weapon tables, CS teams, and round event decoders usable by both WASM and Native plugins.
 
 ## v0.16.0 — ReAPI Direct Bridge & Advanced Physics 📝 Planned
 
-**Goal:** Native zero-overhead integration with ReHLDS & ReGameDLL API, round events (`RoundStart`, `RoundEnd`), and raytracing physics.
+**Goal:** Native zero-overhead integration with ReHLDS & ReGameDLL API, engine-level capability detection, raytracing, and custom physics simulation.
 
 - [ ] **ReAPI Dynamic Capability & Feature Detection**:
   - Direct C-ABI bridge to ReHLDS and ReGameDLL with graceful fallback on Vanilla HLDS.
+  - Expose extended ReGameDLL interfaces and direct memory structures where available.
 - [ ] **Advanced Raytracing & World Geometry (`RayTrace`, `Hull`, `DropToFloor`)**:
-  - Line-of-sight checks, custom entity physics, and hitbox intersections.
+  - Line-of-sight checks, custom entity physics, BSP hull tracing, and hitbox intersections.
+- [ ] **Comprehensive 5-Phase ECS Verification & Pipeline Hardening**:
+  - Multi-system integration tests covering `Validate` -> `Modify` -> `Execute` -> `React` -> `Monitor` execution sequences and topological ordering.
 
-## v0.17.0 — Multi-Host Ecosystem (C#, Python, Dynamic DLLs) 📝 Planned
+## v0.17.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
 
-**Goal:** Support polyglot plugin development by dynamically loading external language runtimes (C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
+**Goal:** Support polyglot plugin development by dynamically loading external language runtimes (Native Rust/C plugins via `goldsrc-host-native`, C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 
+- [ ] **Native Dynamic Host (`goldsrc-host-native`)**:
+  - Direct dynamic loading of compiled `.dll`/`.so` plugins via `libloading` with zero sandbox overhead.
 - [ ] **Dynamic Host Runtime Architecture**:
   - Modular `cstrike/goldsrc/hosts/` discovery directory with configurable resolution policy (`prefer_builtin` vs `prefer_external`).
   - C-ABI `PluginHostFactory` handshake with version validation.
-- [ ] **C# Plugin Host (`goldsrc-csharp-host`)**:
+- [ ] **C# Plugin Host (`goldsrc-host-csharp`)**:
   - Native AOT / .NET runtime embedding for high-performance C# GoldSrc plugins.
-- [ ] **Python Plugin Host (`goldsrc-python-host`)**:
+- [ ] **Python Plugin Host (`goldsrc-host-python`)**:
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
-
-## Future Milestones & Ecosystem Tools
-
-### Ecosystem Plugins & Developer Tooling
-
-- [ ] **`goldsrc-coreutils` (POSIX Shell & Diagnostic Tools for ReHLDS)**:
-  - Integration of modular `uutils/coreutils` Rust crates (`uu_ls`, `uu_cat`, `uu_head`, `uu_tail`, `uu_wc`, `uu_grep`, `uu_sort`).
-  - Sandboxed execution within the `cstrike/` root directory (Path Traversal protection & capability checks `admin.shell`).
-  - Native console I/O streaming directly into server console, RCON, and client admin chat.
-- [ ] **`grs` Dedicated CLI Tool (`cargo-goldsrc`)**:
-  - Scaffolding commands: `grs new <plugin> [--bundle <bundle>] [--multi-bin]`.
-  - Packaging & verification: `grs build`, `grs pack` (`.gsp` bundle format), and `grs lint`.
-  - Plugin registry integration: `grs install <plugin>`, `grs update`.

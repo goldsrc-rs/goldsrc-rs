@@ -9,7 +9,7 @@
 
 > A modern, memory-safe Rust framework and WebAssembly plugin runtime for GoldSrc engine modding.
 
-**GoldSrc.rs** is a next-generation framework written in Rust for developing server-side plugins, extensions, and modifications for the GoldSrc engine (Half-Life 1, Counter-Strike 1.6, and other GoldSrc games).
+**GoldSrc.rs** is a next-generation framework written in Rust for developing server-side plugins, extensions, and modifications for the GoldSrc engine, with first-class (Tier-1) specialization for **Counter-Strike 1.6 (ReHLDS / ReGameDLL / GoldClient)** as well as broader GoldSrc games.
 
 It replaces the legacy C++ / Metamod / AMX Mod X (Pawn) stack with memory-safe Rust, WebAssembly (WASM)
 sandboxing, zero-overhead FFI, ergonomic ECS abstractions, and dynamic hot-reloading.

@@ -109,6 +109,9 @@ interface api {
     /// Prints a console message to a player's game console.
     host-print-console: func(player-index: s32, message: string);
 
+    /// Prints a developer notification message to a player (top-left developer/con_notify area).
+    host-print-notify: func(player-index: s32, message: string);
+
     /// Runs the real GameDLL's DispatchSpawn for an entity by index.
     host-dispatch-spawn: func(index: s32) -> s32;
 

@@ -229,6 +229,10 @@ pub fn register_user_msg_id(name: &str, id: i32) {
     }
 }
 
+static ACTIVE_MSG_TYPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static ACTIVE_MSG_STRINGS: std::sync::LazyLock<std::sync::Mutex<Vec<String>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
+
 impl goldsrc_api::EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
         if let Ok(map) = USER_MSG_REGISTRY.read()
@@ -270,6 +274,11 @@ impl goldsrc_api::EngineMessages for EngineBackend {
         origin: Option<[f32; 3]>,
         edict_index: Option<i32>,
     ) {
+        ACTIVE_MSG_TYPE.store(msg_type, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut list) = ACTIVE_MSG_STRINGS.lock() {
+            list.clear();
+        }
+
         unsafe {
             let porigin = match origin {
                 Some(ref pos) => pos.as_ptr(),
@@ -293,6 +302,18 @@ impl goldsrc_api::EngineMessages for EngineBackend {
     }
 
     fn message_end(&self) {
+        let _msg_type = ACTIVE_MSG_TYPE.swap(0, std::sync::atomic::Ordering::Relaxed);
+        let strings = ACTIVE_MSG_STRINGS
+            .lock()
+            .map(|mut l| std::mem::take(&mut *l))
+            .unwrap_or_default();
+
+        if !strings.is_empty() {
+            // Emit generic user message strings event for subscribers and game plugins
+            let combined = strings.join("\t");
+            crate::hooks::dispatcher::emit_event("user_msg", combined.as_bytes());
+        }
+
         unsafe {
             call_engfunc!((self.engfuncs)().pfnMessageEnd);
         }
@@ -335,6 +356,12 @@ impl goldsrc_api::EngineMessages for EngineBackend {
     }
 
     fn write_string(&self, val: &str) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_STRINGS.lock()
+        {
+            list.push(val.to_string());
+        }
+
         unsafe {
             let clean = val.replace('\0', "");
             let safe = if clean.len() > 500 {
@@ -520,6 +547,9 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     }
 
     fn player_name(&self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return None;
+        }
         unsafe {
             let funcs = (self.engfuncs)();
             let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
@@ -532,11 +562,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 let buffer = get_infokey(pedict);
                 let key = std::ffi::CString::new("name").unwrap_or_default();
                 let val_ptr = infokey_val(buffer, key.as_ptr());
-                if !val_ptr.is_null()
-                    && let Ok(name_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
-                    && !name_str.is_empty()
-                {
-                    return Some(name_str.to_string());
+                if let Some(name) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 64) {
+                    return Some(name);
                 }
             }
             let netname_offset = (*pedict).v.netname;
@@ -544,11 +571,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 && let Some(sz_from_idx) = funcs.pfnSzFromIndex
             {
                 let str_ptr = sz_from_idx(netname_offset as i32);
-                if !str_ptr.is_null()
-                    && let Ok(name_str) = std::ffi::CStr::from_ptr(str_ptr).to_str()
-                    && !name_str.is_empty()
-                {
-                    return Some(name_str.to_string());
+                if let Some(name) = goldsrc_sys::ffi::cstr_to_string_bounded(str_ptr, 64) {
+                    return Some(name);
                 }
             }
             None
@@ -556,6 +580,9 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     }
 
     fn player_lang(&self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return None;
+        }
         unsafe {
             let funcs = (self.engfuncs)();
             let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
@@ -569,11 +596,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 for key_name in ["_lang", "_cl_lang", "lang", "cl_lang"] {
                     let key = std::ffi::CString::new(key_name).unwrap_or_default();
                     let val_ptr = infokey_val(buffer, key.as_ptr());
-                    if !val_ptr.is_null()
-                        && let Ok(lang_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
-                        && !lang_str.trim().is_empty()
-                    {
-                        return Some(lang_str.trim().to_lowercase());
+                    if let Some(lang) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 16) {
+                        return Some(lang.to_lowercase());
                     }
                 }
             }
@@ -582,6 +606,9 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     }
 
     fn player_team(&self, index: i32) -> i32 {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return 0;
+        }
         unsafe {
             let funcs = (self.engfuncs)();
             let pedict = match funcs.pfnPEntityOfEntIndex {
@@ -592,33 +619,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 return 0;
             }
 
-            // 1. Direct edict team offset (CS 1.6 / CZ team slot: 1=T, 2=CT, 3=Spectator)
-            let edict_team = (*pedict).v.team;
-            if (1..=3).contains(&edict_team) {
-                return edict_team;
-            }
-
-            // 2. Query infobuffer for "model" (e.g. "terror", "leet", "urban", "gign", "gsg9", "sas")
-            if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
-                && let Some(infokey_val) = funcs.pfnInfoKeyValue
-            {
-                let buffer = get_infokey(pedict);
-                let model_key = std::ffi::CString::new("model").unwrap_or_default();
-                let val_ptr = infokey_val(buffer, model_key.as_ptr());
-                if !val_ptr.is_null()
-                    && let Ok(model_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
-                {
-                    let m = model_str.to_ascii_lowercase();
-                    if m == "terror" || m == "leet" || m == "arctic" || m == "guerilla" {
-                        return 1; // Terrorist
-                    } else if m == "urban" || m == "gsg9" || m == "gign" || m == "sas" || m == "vip"
-                    {
-                        return 2; // Counter-Terrorist
-                    }
-                }
-            }
-
-            0 // Unassigned
+            // Universal GoldSrc entity team index
+            (*pedict).v.team
         }
     }
 
@@ -646,7 +648,6 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             if pent.is_null() {
                 return None;
             }
-            (*pent).v.spawnflags |= 1 << 30;
 
             let idx = crate::api_registry::edict_index(pent);
             if idx > 0 { Some(idx) } else { None }

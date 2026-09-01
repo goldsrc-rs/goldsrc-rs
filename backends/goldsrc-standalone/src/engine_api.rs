@@ -35,6 +35,11 @@ pub fn engfuncs() -> &'static enginefuncs_t {
         .expect("[GoldSrc.rs Standalone] Engine not initialized")
 }
 
+/// Tries to return the engine functions table without panicking.
+pub fn try_engfuncs() -> Option<&'static enginefuncs_t> {
+    G_ENGFUNCS.get().map(|w| **w)
+}
+
 /// Returns the global variables table.
 ///
 /// # Panics
@@ -44,4 +49,9 @@ pub fn globals() -> &'static goldsrc_sys::globalvars_t {
     G_GLOBALS
         .get()
         .expect("[GoldSrc.rs Standalone] Globals not initialized")
+}
+
+/// Tries to return the global variables table without panicking.
+pub fn try_globals() -> Option<&'static goldsrc_sys::globalvars_t> {
+    G_GLOBALS.get().map(|w| **w)
 }

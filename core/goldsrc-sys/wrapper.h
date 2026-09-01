@@ -11,4 +11,5 @@ typedef vec_t vec3_t[3];
 #include "const.h"
 #include "progdefs.h"
 #include "edict.h"
+#include "usercmd.h"
 #include "eiface.h"

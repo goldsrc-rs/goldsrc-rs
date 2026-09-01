@@ -165,6 +165,94 @@ pub fn utf8_to_cp1251(input: &str) -> Vec<u8> {
     out
 }
 
+/// Transliterates Cyrillic text to ASCII Latin characters for clean rendering in
+/// legacy GoldSrc monospace HUD / developer notify overlays (`PRINT_NOTIFY`).
+pub fn cyrillic_to_latin(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 2);
+    for c in input.chars() {
+        match c {
+            'А' => out.push('A'),
+            'Б' => out.push('B'),
+            'В' => out.push('V'),
+            'Г' => out.push('G'),
+            'Д' => out.push('D'),
+            'Е' | 'Э' => out.push('E'),
+            'Ё' => out.push_str("Yo"),
+            'Ж' => out.push_str("Zh"),
+            'З' => out.push('Z'),
+            'И' | 'Й' => out.push('I'),
+            'К' => out.push('K'),
+            'Л' => out.push('L'),
+            'М' => out.push('M'),
+            'Н' => out.push('N'),
+            'О' => out.push('O'),
+            'П' => out.push('P'),
+            'Р' => out.push('R'),
+            'С' => out.push('S'),
+            'Т' => out.push('T'),
+            'У' => out.push('U'),
+            'Ф' => out.push('F'),
+            'Х' => out.push_str("Kh"),
+            'Ц' => out.push_str("Ts"),
+            'Ч' => out.push_str("Ch"),
+            'Ш' => out.push_str("Sh"),
+            'Щ' => out.push_str("Shch"),
+            'Ъ' | 'Ь' => {}
+            'Ы' => out.push('Y'),
+            'Ю' => out.push_str("Yu"),
+            'Я' => out.push_str("Ya"),
+            'а' => out.push('a'),
+            'б' => out.push('b'),
+            'в' => out.push('v'),
+            'г' => out.push('g'),
+            'д' => out.push('d'),
+            'е' | 'э' => out.push('e'),
+            'ё' => out.push_str("yo"),
+            'ж' => out.push_str("zh"),
+            'з' => out.push('z'),
+            'и' | 'й' => out.push('i'),
+            'к' => out.push('k'),
+            'л' => out.push('l'),
+            'м' => out.push('m'),
+            'н' => out.push('n'),
+            'о' => out.push('o'),
+            'п' => out.push('p'),
+            'р' => out.push('r'),
+            'с' => out.push('s'),
+            'т' => out.push('t'),
+            'у' => out.push('u'),
+            'ф' => out.push('f'),
+            'х' => out.push_str("kh"),
+            'ц' => out.push_str("ts"),
+            'ч' => out.push_str("ch"),
+            'ш' => out.push_str("sh"),
+            'щ' => out.push_str("shch"),
+            'ъ' | 'ь' => {}
+            'ы' => out.push('y'),
+            'ю' => out.push_str("yu"),
+            'я' => out.push_str("ya"),
+            'І' => out.push('I'),
+            'і' => out.push('i'),
+            'Ї' => out.push_str("Yi"),
+            'ї' => out.push_str("yi"),
+            'Є' => out.push_str("Ye"),
+            'є' => out.push_str("ye"),
+            '«' | '»' => out.push('"'),
+            '—' | '–' => out.push('-'),
+            '№' => out.push('#'),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Formats a developer notify message (`HUD_PRINTNOTIFY` / `con_notify`):
+/// Ensures the message ends with `\n` so the stream buffer terminates and triggers line fading/scrolling.
+pub fn format_notify_text(input: &str) -> String {
+    let trimmed = input.trim_end_matches(['\r', '\n']);
+    format!("{trimmed}\n")
+}
+
 /// Formats a center HUD message following AMX Mod X / HLSDK conventions:
 /// Converts newline characters (`\n`) into carriage returns (`\r`),
 /// which the GoldSrc / Counter-Strike 1.6 HUD renderer requires for multi-line center text.
@@ -209,5 +297,13 @@ mod tests {
         let input = "Привет";
         let bytes = utf8_to_cp1251(input);
         assert_eq!(bytes, vec![0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2]);
+    }
+
+    #[test]
+    fn test_format_notify_text_preserves_text_and_newline() {
+        let input = "Привет в developer область!";
+        let formatted = format_notify_text(input);
+        assert_eq!(formatted, "Привет в developer область!\n");
+        assert!(formatted.ends_with('\n'));
     }
 }

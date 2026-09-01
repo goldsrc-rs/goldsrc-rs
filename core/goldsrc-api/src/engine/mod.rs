@@ -19,8 +19,9 @@ pub use physics::{EnginePhysics, TraceResult};
 pub use precache::EnginePrecache;
 pub use sound::EngineSound;
 /// Backward-compatible alias for text formatting.
-pub use text as codec;
-pub use text::{format_center_text, format_say_text, utf8_to_cp1251};
+pub use text::{
+    cyrillic_to_latin, format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
+};
 
 /// Maximum number of players supported by the GoldSrc engine.
 pub const MAX_PLAYERS: u16 = 32;
@@ -30,6 +31,12 @@ pub const MAX_EDICTS: u16 = 2048;
 
 /// Maximum payload size in bytes for a single user network message.
 pub const MAX_USER_MSG_DATA_LEN: usize = 192;
+
+/// Maximum payload size for SayText user messages (192 - 12 bytes header/sender/NUL).
+pub const MAX_SAYTEXT_PAYLOAD_LEN: usize = 180;
+
+/// Safe payload limit for single-chunk chat messages (180 - 5 bytes safety margin).
+pub const SAFE_SAYTEXT_LIMIT: usize = MAX_SAYTEXT_PAYLOAD_LEN - 5;
 
 /// Standard engine interface version (`DLL_FUNCTIONS`).
 pub const ENGINE_INTERFACE_VERSION: i32 = 140;

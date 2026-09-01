@@ -2,8 +2,9 @@
 
 pub use crate::engine::{
     ENGINE_INTERFACE_VERSION, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
-    HUD_PRINTRADIO, MAX_EDICTS, MAX_PLAYERS, MAX_USER_MSG_DATA_LEN, NEW_DLL_INTERFACE_VERSION,
-    PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE, PRINT_NOTIFY,
+    HUD_PRINTRADIO, MAX_EDICTS, MAX_PLAYERS, MAX_SAYTEXT_PAYLOAD_LEN, MAX_USER_MSG_DATA_LEN,
+    NEW_DLL_INTERFACE_VERSION, PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE, PRINT_NOTIFY,
+    SAFE_SAYTEXT_LIMIT,
 };
 pub use crate::hud::{
     DRC_CMD_MESSAGE, HUD_COORD_CENTER, MAX_HUD_CHANNELS, SVC_DIRECTOR, SVC_TEMPENTITY,
@@ -103,3 +104,39 @@ pub const DEFAULT_PLUGIN_SYSTEMS: &str = "none";
 
 /// Fallback plugin require string if none are specified.
 pub const DEFAULT_PLUGIN_REQUIRE: &str = "none";
+
+// ----------------------------------------------------------------------------
+// Sandbox Permissions Constants
+// ----------------------------------------------------------------------------
+
+pub mod permissions {
+    /// Grants all permissions without restriction.
+    pub const ALL: &str = "*";
+
+    /// Grants all cvar capabilities.
+    pub const CVAR_ALL: &str = "cvar:*";
+    /// Allows reading engine cvars.
+    pub const CVAR_GET: &str = "cvar:get";
+    /// Allows modifying engine cvars.
+    pub const CVAR_SET: &str = "cvar:set";
+
+    /// Grants all filesystem and storage capabilities.
+    pub const FS_ALL: &str = "fs:*";
+    /// Allows reading files from storage.
+    pub const FS_READ: &str = "fs:read";
+    /// Allows writing files or persistent data to storage.
+    pub const FS_WRITE: &str = "fs:write";
+    /// Allows accessing shared storage buckets across plugins.
+    pub const STORAGE_SHARED: &str = "storage:shared";
+
+    /// Allows creating new world entities.
+    pub const ENTITY_CREATE: &str = "entity:create";
+    /// Allows removing or deleting entities from the world.
+    pub const ENTITY_REMOVE: &str = "entity:remove";
+
+    /// Allows broadcasting chat messages to all players on the server.
+    pub const CHAT_BROADCAST: &str = "chat:broadcast";
+
+    /// Allows issuing raw console commands to the server engine.
+    pub const SERVER_COMMAND: &str = "server:command";
+}

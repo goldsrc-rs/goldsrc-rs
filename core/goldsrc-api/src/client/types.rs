@@ -5,7 +5,7 @@
 /// Wire values match the engine's `PRINT_TYPE` enum consumed by
 /// `pfnClientPrintf` (`print_console = 0`, ...). Note these differ from the
 /// AMX Mod X `print_*` numbering — never pass AMXX constants here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]
 pub enum PrintTarget {
     /// Player's game console. No color codes supported in any mod.
@@ -14,10 +14,13 @@ pub enum PrintTarget {
     Center = 1,
     /// Chat area via the `SayText` user message.
     Chat = 2,
+    /// Top-left developer notification area (print_notify = 3).
+    Notify = 3,
     /// Chat area with color escapes: `^1` default, `^3` team, `^4` green.
     /// Colors render only in mods whose client parses SayText markup
     /// (CS 1.6 / CZ); elsewhere codes appear as literal text.
-    ColoredChat = 3,
+    #[default]
+    ColoredChat = 4,
 }
 
 /// Client classification kind.

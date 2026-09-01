@@ -6,10 +6,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.14.0] - 2026-08-30
+## [0.14.0] - 2026-09-01
 
 ### Added
 
+- **100% HLSDK & GameDLL Hook Coverage (`api_registry.rs` & `DLL_FUNCTIONS`)**:
+  - Implemented complete trampolines and pro-forwarding for all 44 `DLL_FUNCTIONS` slots: `pfnPlayerPreThink`, `pfnCmdStart`/`pfnCmdEnd`, `pfnAddToFullPack`, `pfnUpdateClientData`, `pfnPM_Move`, `pfnClientPutInServer`, `pfnClientUserInfoChanged`, `pfnThink`, `pfnTouch`, `pfnUse`, `pfnBlocked`, `pfnKeyValue`, `pfnSetAbsBox`, `pfnSpectatorConnect`/`Disconnect`/`Think`, `pfnSys_Error`, `pfnSetupVisibility`, `pfnInconsistentFile`, `pfnAllowLagCompensation`.
+- **Complete Entity VTable Hooking Subsystem (`core/goldsrc-api` & `framework`)**:
+  - Expanded `VTableFunc` enum with 60+ virtual functions across `CBaseEntity`, `CBasePlayer`, `CBasePlayerItem`, and `CBasePlayerWeapon`.
+  - Added ECS stages `Stage::TakeDamage`, `Stage::EntityKilled`, `Stage::EntitySpawn`, `Stage::RoundStart`, `Stage::RoundEnd`, `Stage::RoundFreezeEnd`.
+- **WASM Sandbox Permissions Guard (`goldsrc-wasm-host`)**:
+  - Enforced runtime capability checking in `HostState` based on plugin `permissions = [...]` metadata.
+  - Added typed permissions constants in `goldsrc_api::consts::permissions` (`CVAR_SET`, `ENTITY_CREATE`, `ENTITY_REMOVE`, `FS_WRITE`, `CHAT_BROADCAST`, `SERVER_COMMAND`, etc.).
+  - Defense-in-depth bounds checking on player indices (`1..=32`) across all host functions.
+- **Generic Engine User Message Interception**:
+  - Engine bridge generates generic `user_msg` event on `pfnMessageEnd` with payload strings for mod plugins and event subscribers.
 - **Lightweight i18n & Localization Dictionary Engine (`framework/goldsrc/src/i18n`)**:
   - Modular TOML dictionary parser with lexical variable scoping (`$vars.name`), template macros (`@{tag('VIP')}`, `@{g('{name}')}`), and per-player fallback chains.
   - Access control policies (`DictAccess::Public`, `Private`, `Shared`) with fallback to global `common.toml`.

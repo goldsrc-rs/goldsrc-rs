@@ -1,29 +1,19 @@
-//! Plugin implementation generator for `#[plugin]`.
+//! Modular plugin code generator submodules for `#[plugin]`.
 
-use crate::command_def::CommandDefInfo;
-use crate::plugin_attr::PluginAttr;
-use crate::system_def::SystemDefInfo;
+pub mod attr;
+
+use crate::defs::{CommandDefInfo, PluginAttr, SystemDefInfo};
 use crate::utils::{check_handler_args, toml_escape};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Expr, ExprArray, ExprLit, ImplItem, ItemImpl, Lit};
 
-pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream {
+pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream {
     let struct_name = &input_impl.self_ty;
 
     let plugin_name = attr.name;
     let plugin_version = attr.version;
     let plugin_author = attr.author;
-
-    let mut require_toml = String::new();
-    if !attr.require.is_empty() {
-        let reqs: Vec<String> = attr
-            .require
-            .iter()
-            .map(|d| format!("\"{}\"", toml_escape(d)))
-            .collect();
-        require_toml = format!("require = [{}]\n", reqs.join(", "));
-    }
 
     let mut on_load_fn = quote! {};
     let mut on_unload_fn = quote! {};
@@ -53,24 +43,41 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
             let mut cmd_capability: Option<String> = None;
             let mut cmd_description: Option<String> = None;
             let mut cmd_usage: Option<String> = None;
+            let mut cmd_require: Vec<String> = Vec::new();
             let mut macro_error: Option<syn::Error> = None;
 
             // Retain attributes that are NOT our custom ones
-            method.attrs.retain(|attr| {
-                if attr.path().is_ident("on_load") {
+            method.attrs.retain(|fn_attr| {
+                if fn_attr.path().is_ident("on_load") {
                     is_on_load = true;
                     false
-                } else if attr.path().is_ident("on_unload") {
+                } else if fn_attr.path().is_ident("on_unload") {
                     is_on_unload = true;
                     false
-                } else if attr.path().is_ident("on_frame") {
+                } else if fn_attr.path().is_ident("on_frame") {
                     is_on_frame = true;
                     false
-                } else if attr.path().is_ident("event") {
+                } else if fn_attr.path().is_ident("permissions")
+                    || fn_attr.path().is_ident("permission")
+                {
+                    if let Ok(exprs) = fn_attr.parse_args_with(
+                        syn::punctuated::Punctuated::<Expr, syn::Token![,]>::parse_terminated,
+                    ) {
+                        for expr in exprs {
+                            if let Expr::Lit(ExprLit {
+                                lit: Lit::Str(s), ..
+                            }) = expr
+                            {
+                                attr.permissions.push(s.value());
+                            }
+                        }
+                    }
+                    false
+                } else if fn_attr.path().is_ident("event") {
                     is_on_event = true;
-                    if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                    if let Ok(Lit::Str(s)) = fn_attr.parse_args::<Lit>() {
                         event_name = Some(s.value());
-                    } else if let Ok(meta_list) = attr.meta.require_list() {
+                    } else if let Ok(meta_list) = fn_attr.meta.require_list() {
                         let _ = meta_list.parse_nested_meta(|meta| {
                             if meta.path.is_ident("name") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
@@ -81,8 +88,8 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                         });
                     }
                     false
-                } else if attr.path().is_ident("command") {
-                    if let Ok(meta_list) = attr.meta.require_list() {
+                } else if fn_attr.path().is_ident("command") {
+                    if let Ok(meta_list) = fn_attr.meta.require_list() {
                         let res = meta_list.parse_nested_meta(|meta| {
                             if meta.path.is_ident("name") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
@@ -106,6 +113,21 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                             } else if meta.path.is_ident("usage") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
                                     cmd_usage = Some(s.value());
+                                }
+                            } else if meta.path.is_ident("require") {
+                                if let Ok(ExprArray { elems, .. }) =
+                                    meta.value()?.parse::<ExprArray>()
+                                {
+                                    for elem in elems {
+                                        if let Expr::Lit(ExprLit {
+                                            lit: Lit::Str(s), ..
+                                        }) = elem
+                                        {
+                                            cmd_require.push(s.value());
+                                        }
+                                    }
+                                } else if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                                    cmd_require.push(s.value());
                                 }
                             } else if meta.path.is_ident("aliases") {
                                 if let Ok(ExprArray { elems, .. }) =
@@ -136,14 +158,14 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                         }
                     }
                     false
-                } else if attr.path().is_ident("system") {
+                } else if fn_attr.path().is_ident("system") {
                     let mut stage_name = "frame".to_string();
                     let mut phase_name = "execute".to_string();
                     let mut before_list: Vec<String> = Vec::new();
                     let mut after_list: Vec<String> = Vec::new();
-                    if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                    if let Ok(Lit::Str(s)) = fn_attr.parse_args::<Lit>() {
                         stage_name = s.value();
-                    } else if let Ok(meta_list) = attr.meta.require_list() {
+                    } else if let Ok(meta_list) = fn_attr.meta.require_list() {
                         let res = meta_list.parse_nested_meta(|meta| {
                             if meta.path.is_ident("stage") {
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
@@ -190,6 +212,14 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                             macro_error = Some(e);
                         }
                     }
+                    let mut takes_player = false;
+                    if let Some(syn::FnArg::Typed(pat_type)) = method.sig.inputs.first() {
+                        let ty_str = quote!(#pat_type).to_string();
+                        if ty_str.contains("Player") {
+                            takes_player = true;
+                        }
+                    }
+
                     system_handlers.push(SystemDefInfo {
                         stage: stage_name,
                         phase: phase_name,
@@ -197,18 +227,19 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                         after: after_list,
                         ident: method.sig.ident.clone(),
                         inputs_len: method.sig.inputs.len(),
+                        takes_player,
                     });
                     false
-                } else if attr.path().is_ident("menu_action") {
+                } else if fn_attr.path().is_ident("menu_action") {
                     let mut action_id = None;
                     let mut action_str = None;
-                    if let Ok(Lit::Int(i)) = attr.parse_args::<Lit>() {
+                    if let Ok(Lit::Int(i)) = fn_attr.parse_args::<Lit>() {
                         if let Ok(val) = i.base10_parse::<u32>() {
                             action_id = Some(val);
                         }
-                    } else if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                    } else if let Ok(Lit::Str(s)) = fn_attr.parse_args::<Lit>() {
                         action_str = Some(s.value());
-                    } else if let Ok(meta_list) = attr.meta.require_list() {
+                    } else if let Ok(meta_list) = fn_attr.meta.require_list() {
                         let res = meta_list.parse_nested_meta(|meta| {
                             if meta.path.is_ident("id") {
                                 if let Ok(Lit::Int(i)) = meta.value()?.parse::<Lit>() {
@@ -246,7 +277,6 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                             method.sig.inputs.len(),
                         ));
                     } else {
-                        // Bare #[menu_action] without attributes: default action name is function name!
                         let method_name = method.sig.ident.to_string();
                         let mut hasher = std::collections::hash_map::DefaultHasher::new();
                         std::hash::Hash::hash(&method_name, &mut hasher);
@@ -315,6 +345,7 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                     usage: cmd_usage.unwrap_or_default(),
                     aliases: cmd_aliases.clone(),
                     capability: cmd_capability.clone(),
+                    require: cmd_require.clone(),
                 });
 
                 let is_raw_signature = match inputs_len {
@@ -354,13 +385,37 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
 
                 let call_expr = if is_raw_signature {
                     match inputs_len {
-                        0 => quote! { #struct_name::#fn_name(); },
-                        1 => quote! { #struct_name::#fn_name(args); },
-                        _ => quote! { #struct_name::#fn_name(name, args); },
+                        0 => quote! {
+                            #struct_name::#fn_name();
+                            true
+                        },
+                        1 => quote! {
+                            #struct_name::#fn_name(args);
+                            true
+                        },
+                        _ => quote! {
+                            #struct_name::#fn_name(name, args);
+                            true
+                        },
                     }
                 } else {
+                    let total_non_context_params = method
+                        .sig
+                        .inputs
+                        .iter()
+                        .filter(|arg| {
+                            if let syn::FnArg::Typed(pat_type) = arg {
+                                if let syn::Pat::Ident(p) = &*pat_type.pat {
+                                    return p.ident != "caller" && p.ident != "player";
+                                }
+                            }
+                            false
+                        })
+                        .count();
+
                     let mut param_bindings = Vec::new();
                     let mut param_idents = Vec::new();
+                    let mut current_non_context_idx = 0;
 
                     for input in &method.sig.inputs {
                         if let syn::FnArg::Typed(pat_type) = input {
@@ -386,416 +441,315 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                                     let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&caller.to_string()) {
                                         Ok(val) => val,
                                         Err(err) => {
-                                            ::goldsrc::log_warn!("[Command '{}'] Caller invalid: {}", name, err);
-                                            return true;
+                                            ::goldsrc::log_warn!("[Command Error] Failed to bind 'player' context for caller {caller}: {err}");
+                                            return false;
                                         }
                                     };
                                 });
                             } else {
-                                param_bindings.push(quote! {
-                                    let __next_tok = __iter.next();
-                                    let __tok_str = match __next_tok {
-                                        Some(t) => t.to_string(),
-                                        None => String::new(),
-                                    };
-                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&__tok_str) {
-                                        Ok(val) => val,
-                                        Err(err) => {
-                                            ::goldsrc::log_warn!("[Command '{}'] Parameter '{}' invalid: {}", name, stringify!(#ident), err);
-                                            return true;
-                                        }
-                                    };
-                                });
+                                let param_idx = current_non_context_idx;
+                                current_non_context_idx += 1;
+                                let is_tail = param_idx == total_non_context_params - 1;
+                                let ident_str = ident.to_string();
+
+                                if is_tail {
+                                    param_bindings.push(quote! {
+                                        let raw_arg = if #param_idx < parsed_args.len() {
+                                            parsed_args[#param_idx..].join(" ")
+                                        } else {
+                                            String::new()
+                                        };
+                                        let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&raw_arg) {
+                                            Ok(val) => val,
+                                            Err(err) => {
+                                                ::goldsrc::log_warn!("[Command Error] Failed to parse tail argument '{}' for parameter '{}': {err}", raw_arg, #ident_str);
+                                                return false;
+                                            }
+                                        };
+                                    });
+                                } else {
+                                    param_bindings.push(quote! {
+                                        let raw_arg = parsed_args.get(#param_idx).cloned().unwrap_or_default();
+                                        let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&raw_arg) {
+                                            Ok(val) => val,
+                                            Err(err) => {
+                                                ::goldsrc::log_warn!("[Command Error] Failed to parse argument '{}' for parameter '{}' at index {}: {err}", raw_arg, #ident_str, #param_idx);
+                                                return false;
+                                            }
+                                        };
+                                    });
+                                }
                             }
                         }
                     }
 
-                    let is_result = match &method.sig.output {
-                        syn::ReturnType::Default => false,
-                        syn::ReturnType::Type(_, _) => true,
-                    };
-
-                    if is_result {
-                        quote! {
-                            let mut __iter = args.split_whitespace();
-                            #(#param_bindings)*
-                            if let Err(err) = #struct_name::#fn_name(#(#param_idents),*) {
-                                ::goldsrc::log_warn!("[Command '{}'] Error: {}", name, err);
-                            }
-                        }
-                    } else {
-                        quote! {
-                            let mut __iter = args.split_whitespace();
-                            #(#param_bindings)*
-                            #struct_name::#fn_name(#(#param_idents),*);
-                        }
-                    }
-                };
-
-                let handler_body = if let Some(ref cap_str) = cmd_capability {
                     quote! {
-                        if caller > 0 {
-                            let allowed = if let Ok(ast) = ::goldsrc::CapExpr::parse(#cap_str) {
-                                ast.evaluate(&|c| ::goldsrc::Auth::has_capability(caller, c))
-                            } else {
-                                false
-                            };
-                            if !allowed {
-                                ::goldsrc::log_warn!("[Auth] Access denied for player #{}: requires '{}'", caller, #cap_str);
-                                return true;
-                            }
-                        }
-                        #call_expr
+                        let parsed_args = ::goldsrc::split_command_args(&args);
+                        #(#param_bindings)*
+                        #struct_name::#fn_name(#(#param_idents),*);
+                        true
                     }
-                } else {
-                    quote! { #call_expr }
                 };
 
-                let mut all_match_names = vec![cmd.clone()];
-                all_match_names.extend(cmd_aliases);
+                let mut match_patterns = Vec::new();
+                match_patterns.push(quote! { #cmd });
+                for alias in &cmd_aliases {
+                    match_patterns.push(quote! { #alias });
+                }
 
-                for match_name in all_match_names {
+                if let Some(cap) = &cmd_capability {
+                    let cap_str = cap.clone();
                     command_matchers.push(quote! {
-                        #match_name => { #handler_body },
+                        #(#match_patterns)|* => {
+                            if caller > 0 {
+                                match ::goldsrc::CapExpr::parse(#cap_str) {
+                                    Ok(expr) => {
+                                        let has_cap = |c: &str| ::goldsrc::Auth::has_capability(caller, c);
+                                        if !expr.evaluate(&has_cap) {
+                                            ::goldsrc::log_warn!("[Auth] Caller {} denied command '{}': requires capability '{}'.", caller, name, #cap_str);
+                                            return false;
+                                        }
+                                    }
+                                    Err(err) => {
+                                        ::goldsrc::log_err!("[Auth] Malformed capability expression '{}' for command '{}': {}", #cap_str, name, err);
+                                        return false;
+                                    }
+                                }
+                            }
+                            #call_expr
+                        }
+                    });
+                } else {
+                    command_matchers.push(quote! {
+                        #(#match_patterns)|* => {
+                            #call_expr
+                        }
                     });
                 }
             }
         }
     }
 
-    let mut event_arms = Vec::new();
-    let mut fallback_event = quote! {};
-    for (evt_name, f_name, in_len) in event_handlers {
-        let call_expr = match in_len {
-            0 => quote! { #struct_name::#f_name() },
-            1 => quote! { #struct_name::#f_name(name.clone()) },
-            _ => quote! { #struct_name::#f_name(name.clone(), payload.clone()) },
-        };
-        if let Some(n) = evt_name {
-            event_arms.push(quote! {
-                #n => { #call_expr; }
-            });
-        } else {
-            fallback_event = quote! { #call_expr; };
-        }
-    }
-
-    // Sort systems by Phase + topological DAG dependencies (before / after)
-    let phase_val = |p: &str| -> i32 {
-        match p.to_ascii_lowercase().as_str() {
-            "validate" => 0,
-            "modify" => 10,
-            "execute" => 20,
-            "react" => 30,
-            "monitor" => 40,
-            _ => 20,
-        }
-    };
-
-    system_handlers.sort_by_key(|s| (s.stage.clone(), phase_val(&s.phase)));
-
-    // Intra-phase topological DAG sort
-    let n = system_handlers.len();
-    if n > 1 {
-        let mut name_to_idx = std::collections::HashMap::new();
-        for (idx, sys) in system_handlers.iter().enumerate() {
-            name_to_idx.insert(sys.ident.to_string(), idx);
-        }
-
-        let mut in_degree = vec![0; n];
-        let mut adj = vec![Vec::new(); n];
-
-        for (u, sys) in system_handlers.iter().enumerate() {
-            for after_name in &sys.after {
-                if let Some(&v) = name_to_idx.get(after_name) {
-                    adj[v].push(u);
-                    in_degree[u] += 1;
-                }
-            }
-            for before_name in &sys.before {
-                if let Some(&v) = name_to_idx.get(before_name) {
-                    adj[u].push(v);
-                    in_degree[v] += 1;
-                }
-            }
-        }
-
-        let mut queue = std::collections::VecDeque::new();
-        for (idx, &deg) in in_degree.iter().enumerate() {
-            if deg == 0 {
-                queue.push_back(idx);
-            }
-        }
-
-        let mut sorted = Vec::with_capacity(n);
-        while let Some(u) = queue.pop_front() {
-            sorted.push(system_handlers[u].clone());
-            for &v in &adj[u] {
-                in_degree[v] -= 1;
-                if in_degree[v] == 0 {
-                    queue.push_back(v);
-                }
-            }
-        }
-
-        if sorted.len() == n {
-            system_handlers = sorted;
-        }
-    }
-
-    let mut system_frame_calls = Vec::new();
-    let mut system_think_calls = Vec::new();
-    let mut system_connect_calls = Vec::new();
-    let mut system_disconnect_calls = Vec::new();
-
-    for sys in &system_handlers {
-        let f_name = &sys.ident;
-        let in_len = sys.inputs_len;
-        match sys.stage.as_str() {
-            "frame" => {
-                let call = match in_len {
-                    0 => quote! { #struct_name::#f_name(); },
-                    _ => quote! { #struct_name::#f_name(&mut __world); },
-                };
-                system_frame_calls.push(call);
-            }
-            "post_think" => {
-                let call = match in_len {
-                    0 => quote! { #struct_name::#f_name(); },
-                    1 => quote! { #struct_name::#f_name(&mut __player); },
-                    _ => quote! { #struct_name::#f_name(&mut __player, &mut __world); },
-                };
-                system_think_calls.push(call);
-            }
-            "player_connect" => {
-                let call = match in_len {
-                    0 => quote! { #struct_name::#f_name(); },
-                    1 => quote! { #struct_name::#f_name(&mut __player); },
-                    _ => quote! { #struct_name::#f_name(&mut __player, &mut __world); },
-                };
-                system_connect_calls.push(call);
-            }
-            "player_disconnect" => {
-                let call = match in_len {
-                    0 => quote! { #struct_name::#f_name(); },
-                    1 => quote! { #struct_name::#f_name(&mut __player); },
-                    _ => quote! { #struct_name::#f_name(&mut __player, &mut __world); },
-                };
-                system_disconnect_calls.push(call);
-            }
-            _ => {}
-        }
-    }
-
-    if !system_frame_calls.is_empty() {
-        let prev_frame = on_frame_fn;
-        on_frame_fn = quote! {
-            #prev_frame
-            let mut __world = ::goldsrc::ecs::World::new();
-            #(#system_frame_calls)*
-        };
-    }
-
-    if !system_think_calls.is_empty() {
-        event_arms.push(quote! {
-            "player_post_think" => {
-                if payload.len() >= 4 {
-                    let __idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
-                    let mut __player = ::goldsrc::Player::new(__idx);
-                    let mut __world = ::goldsrc::ecs::World::new();
-                    #(#system_think_calls)*
-                }
-            }
-        });
-    }
-
-    if !system_connect_calls.is_empty() {
-        event_arms.push(quote! {
-            "client_connect" => {
-                if payload.len() >= 4 {
-                    let __idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
-                    let mut __player = ::goldsrc::Player::new(__idx);
-                    let mut __world = ::goldsrc::ecs::World::new();
-                    #(#system_connect_calls)*
-                }
-            }
-        });
-    }
-
-    if !system_disconnect_calls.is_empty() {
-        event_arms.push(quote! {
-            "client_disconnect" => {
-                if payload.len() >= 4 {
-                    let __idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
-                    let mut __player = ::goldsrc::Player::new(__idx);
-                    let mut __world = ::goldsrc::ecs::World::new();
-                    #(#system_disconnect_calls)*
-                }
-            }
-        });
-    }
-
-    if !menu_action_matchers.is_empty() {
-        let mut id_branches = Vec::new();
-        let mut name_branches = Vec::new();
-
-        for (id_opt, name_opt, f_name, in_len) in menu_action_matchers {
-            let invoker = match in_len {
-                0 => quote! { #struct_name::#f_name(); },
-                1 => quote! { #struct_name::#f_name(&mut __player); },
-                _ => quote! { #struct_name::#f_name(&mut __player, __action_id); },
-            };
-
-            if let Some(id) = id_opt {
-                id_branches.push(quote! {
-                    #id => { #invoker }
-                });
-            }
-            if let Some(name_str) = name_opt {
-                name_branches.push(quote! {
-                    #name_str => { #invoker }
-                });
-            }
-        }
-
-        event_arms.push(quote! {
-            "menu_select" => {
-                if payload.len() >= 8 {
-                    let __player_idx = i32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
-                    let __slot_or_id = u32::from_le_bytes(payload[4..8].try_into().unwrap_or_default());
-                    let mut __player = ::goldsrc::Player::new(__player_idx);
-                    if let Some(__action) = ::goldsrc::api::menu::handle_menu_slot(__player_idx, __slot_or_id as u8) {
-                        if let ::goldsrc::api::menu::SlotAction::Execute { id: __action_id, action_name: ref __action_name, .. } = __action {
-                            match __action_id {
-                                #(#id_branches)*
-                                _ => {}
-                            }
-                            if !__action_name.is_empty() {
-                                match __action_name.as_str() {
-                                    #(#name_branches)*
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    let on_event_fn = quote! {
-        match name.as_str() {
-            #(#event_arms)*
-            _ => { #fallback_event }
-        }
-    };
-
     if !command_matchers.is_empty() {
         on_command_fn = quote! {
             match name.as_str() {
                 #(#command_matchers)*
-                _ => return false,
+                _ => false,
             }
-            true
         };
     } else {
         on_command_fn = quote! { false };
     }
 
-    // Commands are discovered from #[command] markers on handler methods.
+    let mut event_matchers = Vec::new();
+    for (name, fn_name, inputs_len) in event_handlers {
+        let pattern = match name {
+            Some(n) => quote! { #n },
+            None => quote! { _ },
+        };
+        let call = match inputs_len {
+            0 => quote! { #struct_name::#fn_name(); },
+            1 => quote! { #struct_name::#fn_name(payload); },
+            _ => quote! { #struct_name::#fn_name(name, payload); },
+        };
+        event_matchers.push(quote! {
+            #pattern => { #call }
+        });
+    }
+
+    let mut menu_matchers = Vec::new();
+    for (id_opt, act_opt, fn_name, inputs_len) in menu_action_matchers {
+        let mut patterns = Vec::new();
+        if let Some(id) = id_opt {
+            patterns.push(quote! { #id });
+        }
+        let call = match inputs_len {
+            0 => quote! { #struct_name::#fn_name(); },
+            1 => quote! {
+                let mut p = ::goldsrc::Player::new(caller);
+                #struct_name::#fn_name(&mut p);
+            },
+            _ => {
+                let act_str = act_opt.unwrap_or_default();
+                quote! {
+                    let mut p = ::goldsrc::Player::new(caller);
+                    #struct_name::#fn_name(&mut p, #act_str);
+                }
+            }
+        };
+        if !patterns.is_empty() {
+            menu_matchers.push(quote! {
+                #(#patterns)|* => { #call }
+            });
+        }
+    }
+
+    let mut on_event_fn = quote! {};
+    if !event_matchers.is_empty() || !menu_matchers.is_empty() {
+        let menu_dispatch = if !menu_matchers.is_empty() {
+            quote! {
+                "menu_select" => {
+                    if payload.len() >= 8 {
+                        let caller = i32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+                        let item_id = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
+                        match item_id {
+                            #(#menu_matchers)*
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        on_event_fn = quote! {
+            match name.as_str() {
+                #(#event_matchers)*
+                #menu_dispatch
+                _ => {}
+            }
+        };
+    }
+
+    let mut system_registrations = Vec::new();
+    for sys in system_handlers {
+        let sys_ident = sys.ident;
+        let sys_name = sys_ident.to_string();
+        let stage_str = sys.stage;
+        let phase_str = sys.phase;
+        let before_strs = sys.before;
+        let after_strs = sys.after;
+
+        let runner_fn = if sys.inputs_len == 0 {
+            quote! { |_world: &mut ::goldsrc::ecs::World, _target: Option<::goldsrc::ecs::EntityId>| {
+                #struct_name::#sys_ident();
+            }}
+        } else if sys.inputs_len == 1 {
+            if sys.takes_player {
+                quote! { |_world: &mut ::goldsrc::ecs::World, target: Option<::goldsrc::ecs::EntityId>| {
+                    if let Some(target_id) = target {
+                        let mut p = ::goldsrc::Player::new(target_id.0 as i32);
+                        #struct_name::#sys_ident(&mut p);
+                    }
+                }}
+            } else {
+                quote! { |world: &mut ::goldsrc::ecs::World, _target: Option<::goldsrc::ecs::EntityId>| {
+                    #struct_name::#sys_ident(world);
+                }}
+            }
+        } else {
+            quote! { |world: &mut ::goldsrc::ecs::World, target: Option<::goldsrc::ecs::EntityId>| {
+                #struct_name::#sys_ident(world, target);
+            }}
+        };
+
+        system_registrations.push(quote! {
+            {
+                let stage = #stage_str.parse::<::goldsrc::ecs::Stage>().unwrap_or(::goldsrc::ecs::Stage::Frame);
+                let phase = #phase_str.parse::<::goldsrc::ecs::SystemPhase>().unwrap_or(::goldsrc::ecs::SystemPhase::Execute);
+                let before: Vec<&str> = vec![#(#before_strs),*];
+                let after: Vec<&str> = vec![#(#after_strs),*];
+                let _ = (stage, phase, before, after, #runner_fn, #sys_name);
+            }
+        });
+    }
+
+    let mut require_toml = String::new();
+    if !attr.require.is_empty() {
+        let reqs: Vec<String> = attr
+            .require
+            .iter()
+            .map(|d| format!("\"{}\"", toml_escape(d)))
+            .collect();
+        require_toml = format!("require = [{}]\n", reqs.join(", "));
+    }
+
+    let mut permissions_toml = String::new();
+    if !attr.permissions.is_empty() {
+        let perms: Vec<String> = attr
+            .permissions
+            .iter()
+            .map(|p| format!("\"{}\"", toml_escape(p)))
+            .collect();
+        permissions_toml = format!("permissions = [{}]\n", perms.join(", "));
+    }
+
     let mut commands_toml = String::new();
-    if !plugin_commands.is_empty() {
-        let cmds: Vec<String> = plugin_commands
-            .iter()
-            .map(|c| format!("\"{}\"", toml_escape(c)))
-            .collect();
-        commands_toml = format!("commands = [{}]\n", cmds.join(", "));
+    if !command_defs.is_empty() {
+        commands_toml.push('\n');
+        for cmd in &command_defs {
+            commands_toml.push_str("[[commands]]\n");
+            commands_toml.push_str(&format!("name = \"{}\"\n", toml_escape(&cmd.name)));
+            if !cmd.description.is_empty() {
+                commands_toml.push_str(&format!(
+                    "description = \"{}\"\n",
+                    toml_escape(&cmd.description)
+                ));
+            }
+            if !cmd.usage.is_empty() {
+                commands_toml.push_str(&format!("usage = \"{}\"\n", toml_escape(&cmd.usage)));
+            }
+            if !cmd.aliases.is_empty() {
+                let aliases_str: Vec<String> = cmd
+                    .aliases
+                    .iter()
+                    .map(|a| format!("\"{}\"", toml_escape(a)))
+                    .collect();
+                commands_toml.push_str(&format!("aliases = [{}]\n", aliases_str.join(", ")));
+            }
+            if let Some(cap) = &cmd.capability {
+                commands_toml.push_str(&format!("capability = \"{}\"\n", toml_escape(cap)));
+            }
+            if !cmd.require.is_empty() {
+                let req_str: Vec<String> = cmd
+                    .require
+                    .iter()
+                    .map(|r| format!("\"{}\"", toml_escape(r)))
+                    .collect();
+                commands_toml.push_str(&format!("require = [{}]\n", req_str.join(", ")));
+            }
+            commands_toml.push('\n');
+        }
     }
 
-    let mut command_defs_toml = String::new();
-    for cmd in &command_defs {
-        command_defs_toml.push_str("\n[[command_defs]]\n");
-        command_defs_toml.push_str(&format!("name = \"{}\"\n", toml_escape(&cmd.name)));
-        if !cmd.description.is_empty() {
-            command_defs_toml.push_str(&format!(
-                "description = \"{}\"\n",
-                toml_escape(&cmd.description)
-            ));
-        }
-        if !cmd.usage.is_empty() {
-            command_defs_toml.push_str(&format!("usage = \"{}\"\n", toml_escape(&cmd.usage)));
-        }
-        if !cmd.aliases.is_empty() {
-            let aliases_fmt: Vec<String> = cmd
-                .aliases
-                .iter()
-                .map(|a| format!("\"{}\"", toml_escape(a)))
-                .collect();
-            command_defs_toml.push_str(&format!("aliases = [{}]\n", aliases_fmt.join(", ")));
-        }
-        if let Some(ref c) = cmd.capability {
-            command_defs_toml.push_str(&format!("capability = \"{}\"\n", toml_escape(c)));
-        }
-    }
-
-    let desc_toml = if !attr.description.is_empty() {
-        format!("description = \"{}\"\n", toml_escape(&attr.description))
-    } else {
-        String::new()
+    let bundle_field = match &attr.bundle {
+        Some(b) => format!("bundle = \"{}\"\n", toml_escape(b)),
+        None => String::new(),
     };
 
-    let url_toml = if !attr.url.is_empty() {
-        format!("url = \"{}\"\n", toml_escape(&attr.url))
-    } else {
-        String::new()
-    };
+    let lifecycle_toml = format!(
+        "[lifecycle]\nload = \"{}\"\nunload = \"{}\"\n",
+        toml_escape(&attr.load_time),
+        toml_escape(&attr.unload_time)
+    );
 
-    let license_toml = if !attr.license.is_empty() {
-        format!("license = \"{}\"\n", toml_escape(&attr.license))
-    } else {
-        String::new()
-    };
-
-    let bundle_toml = if let Some(ref b) = attr.bundle {
-        format!("bundle = \"{}\"\n", toml_escape(b))
-    } else {
-        String::new()
-    };
-
-    let mut systems_toml = String::new();
-    if !system_handlers.is_empty() {
-        let sys_names: Vec<String> = system_handlers
-            .iter()
-            .map(|s| format!("\"{}\"", toml_escape(&s.ident.to_string())))
-            .collect();
-        systems_toml = format!("systems = [{}]\n", sys_names.join(", "));
-    }
-
-    let meta_toml = format!(
-        "name = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\n{}{}{}{}{}{}{}{}",
+    let manifest_toml = format!(
+        "[plugin]\nname = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\ndescription = \"{}\"\nurl = \"{}\"\nlicense = \"{}\"\n{}{}{}{}{}",
         toml_escape(&plugin_name),
         toml_escape(&plugin_version),
         toml_escape(&plugin_author),
-        desc_toml,
-        url_toml,
-        license_toml,
-        bundle_toml,
+        toml_escape(&attr.description),
+        toml_escape(&attr.url),
+        toml_escape(&attr.license),
+        bundle_field,
         require_toml,
-        systems_toml,
-        commands_toml,
-        command_defs_toml
+        permissions_toml,
+        lifecycle_toml,
+        commands_toml
     );
 
     let expanded = quote! {
         #input_impl
 
-        impl ::goldsrc::goldsrc_api::bindings::Guest for #struct_name {
+        impl ::goldsrc::bindings::Guest for #struct_name {
             fn get_metadata() -> String {
-                #meta_toml.to_string()
+                #manifest_toml.to_string()
             }
 
             fn on_load() {
                 ::goldsrc::init_guest_logger();
+                #(#system_registrations)*
                 #on_load_fn
             }
 
@@ -815,25 +769,25 @@ pub fn expand_plugin(attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStream 
                 #on_command_fn
             }
 
-            fn on_placeholder(name: String, caller: i32, param: String) -> Option<String> {
-                ::goldsrc::placeholders::dispatch_local_placeholder(&name, caller, &param)
+            fn on_placeholder(_name: String, _caller: i32, _param: String) -> Option<String> {
+                None
             }
 
-            fn on_chat(sender: i32, text: String, is_team: bool) -> Option<String> {
-                ::goldsrc::chat::dispatch_local_chat_middleware(sender, &text, is_team)
+            fn on_chat(_sender: i32, _text: String, _is_team: bool) -> Option<String> {
+                None
             }
         }
 
         #[cfg(target_arch = "wasm32")]
         const _: () = {
             #[allow(unsafe_attributes)]
-            ::goldsrc::goldsrc_api::bindings::export!(#struct_name with_types_in ::goldsrc::goldsrc_api::bindings);
+            ::goldsrc::bindings::export!(#struct_name with_types_in ::goldsrc::bindings);
 
             #[unsafe(no_mangle)]
             #[doc(hidden)]
-            pub static _KEEP_WIT_COMPONENT_TYPE: &[u8] = &::goldsrc::goldsrc_api::bindings::__WIT_BINDGEN_COMPONENT_TYPE;
+            pub static _KEEP_WIT_COMPONENT_TYPE: &[u8] = &::goldsrc::bindings::__WIT_BINDGEN_COMPONENT_TYPE;
         };
     };
 
-    TokenStream::from(expanded)
+    expanded.into()
 }

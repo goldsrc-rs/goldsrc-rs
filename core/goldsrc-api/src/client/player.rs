@@ -401,6 +401,7 @@ impl Player {
             match target {
                 crate::client::PrintTarget::Console => host::host_print_console(self.index, msg),
                 crate::client::PrintTarget::Center => host::host_print_center(self.index, msg),
+                crate::client::PrintTarget::Notify => host::host_print_notify(self.index, msg),
                 // Chat and ColoredChat share the SayText transport; the colored
                 // variant only documents that ^1/^3/^4 escapes are meaningful.
                 crate::client::PrintTarget::Chat | crate::client::PrintTarget::ColoredChat => {
@@ -423,6 +424,11 @@ impl Player {
         self.print(crate::client::PrintTarget::Console, msg);
     }
 
+    /// Prints a developer notification (top-left screen con_notify area) to the player.
+    pub fn print_notify(&self, msg: &str) {
+        self.print(crate::client::PrintTarget::Notify, msg);
+    }
+
     /// Prints a chat message to the player.
     pub fn print_chat(&self, msg: &str) {
         self.print(crate::client::PrintTarget::Chat, msg);
@@ -437,6 +443,23 @@ impl Player {
     /// Color escapes render in CS 1.6 / CZ clients only.
     pub fn print_color(&self, msg: &str) {
         self.print(crate::client::PrintTarget::ColoredChat, msg);
+    }
+
+    /// Plays a dynamic sound effect to the player (e.g. `"buttons/button10.wav"`).
+    pub fn play_sound(&self, sample: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_emit_sound(
+                self.index, 0, // CHAN_AUTO
+                sample, 1.0, // VOL_NORM
+                1.0, // ATTN_NORM
+                0, 100, // PITCH_NORM
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = sample;
+        }
     }
 
     /// Spawns an item/weapon entity by classname (e.g. `"weapon_m4a1"`) and

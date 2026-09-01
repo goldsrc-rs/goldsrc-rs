@@ -42,6 +42,9 @@ pub struct PluginInfo {
 
 /// Central WASM runtime manager: loads components, executes lifecycle hooks,
 /// and handles filesystem hot-reloading.
+/// Callback handler for file modification notifications across watched directories.
+pub type ConfigReloadHandler = Arc<dyn Fn(&Path) + Send + Sync>;
+
 pub struct PluginManager {
     pub(crate) plugins: Vec<LoadedPlugin>,
     pub(crate) engine: Engine,
@@ -53,6 +56,7 @@ pub struct PluginManager {
     pub(crate) last_reload: HashMap<PathBuf, Instant>,
     pub(crate) command_registry: HashMap<String, Vec<usize>>,
     pub(crate) plugin_dirs: Vec<PathBuf>,
+    pub config_reload_handler: Option<ConfigReloadHandler>,
 }
 
 impl PluginManager {
@@ -87,6 +91,7 @@ impl PluginManager {
             last_reload: HashMap::new(),
             command_registry: HashMap::new(),
             plugin_dirs: Vec::new(),
+            config_reload_handler: None,
         })
     }
 
@@ -374,19 +379,40 @@ impl PluginManager {
         false
     }
 
-    /// Drains watcher events and ticks every plugin's `on_frame`.
-    pub fn on_server_frame(&mut self) {
+    /// Registers a callback invoked on the host runtime when a configuration/localization (.toml) file changes.
+    pub fn set_config_reload_handler<F: Fn(&Path) + Send + Sync + 'static>(&mut self, handler: F) {
+        self.config_reload_handler = Some(Arc::new(handler));
+    }
+
+    /// Drains watcher events for WASM plugins and configuration files.
+    /// Returns any changed `.toml` paths that need higher-level orchestration reload (debounced).
+    pub fn drain_watcher_events(&mut self) -> Vec<PathBuf> {
         self.engine.increment_epoch();
+        let mut changed_configs = Vec::new();
+        let now = Instant::now();
         while let Ok(path) = self.event_rx.try_recv() {
             match path.extension().and_then(|s| s.to_str()) {
                 Some("wasm") => self.reload_plugin_path_debounced(&path),
                 Some("toml") => {
+                    if let Some(last) = self.last_reload.get(&path) {
+                        if now.duration_since(*last) < watcher::RELOAD_DEBOUNCE {
+                            continue;
+                        }
+                    }
+                    self.last_reload.insert(path.clone(), now);
                     let data = path.to_string_lossy().as_bytes().to_vec();
                     self.call_on_event("config_changed", &data);
+                    changed_configs.push(path);
                 }
                 _ => {}
             }
         }
+        changed_configs
+    }
+
+    /// Drains watcher events and ticks every plugin's `on_frame`.
+    pub fn on_server_frame(&mut self) {
+        let _ = self.drain_watcher_events();
         self.call_on_frame();
     }
 
@@ -848,6 +874,7 @@ mod tests {
             engine: engine.clone(),
             limits: wasmtime::StoreLimitsBuilder::new().build(),
             plugin_name: "test_plugin".to_string(),
+            permissions: Vec::new(),
             shared_buckets: Vec::new(),
         };
 
@@ -876,6 +903,7 @@ mod tests {
             engine: engine.clone(),
             limits: wasmtime::StoreLimitsBuilder::new().build(),
             plugin_name: "test_plugin".to_string(),
+            permissions: Vec::new(),
             shared_buckets: Vec::new(),
         };
 

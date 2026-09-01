@@ -146,8 +146,8 @@ pub enum WrapStyle {
 impl Default for WrapStyle {
     fn default() -> Self {
         WrapStyle::Tree {
-            middle_prefix: "├── ".to_string(),
-            last_prefix: "└── ".to_string(),
+            middle_prefix: "|-- ".to_string(),
+            last_prefix: "\\-- ".to_string(),
         }
     }
 }
@@ -168,6 +168,17 @@ pub fn split_chat_chunks_with_style(message: &str, style: &WrapStyle) -> Vec<Str
         return Vec::new();
     }
 
+    // Determine maximum prefix overhead across continuation chunks
+    let max_prefix_len = match style {
+        WrapStyle::Single(p) => p.len() + 2, // +2 for ^X
+        WrapStyle::Tree {
+            middle_prefix,
+            last_prefix,
+        } => middle_prefix.len().max(last_prefix.len()) + 2,
+        WrapStyle::None => 0,
+    };
+    let chunk_limit = MAX_SAYTEXT_PAYLOAD_LEN.saturating_sub(max_prefix_len);
+
     // 1. First split raw message by explicit newlines `\n` or `\r\n`
     let raw_lines: Vec<&str> = message.split('\n').collect();
     let mut raw_chunks = Vec::new();
@@ -183,11 +194,15 @@ pub fn split_chat_chunks_with_style(message: &str, style: &WrapStyle) -> Vec<Str
         let mut chars = clean_line.chars().peekable();
 
         while let Some(ch) = chars.next() {
+            let mut seq = String::new();
+            seq.push(ch);
+
             if ch == '^' {
                 if let Some(&next_c) = chars.peek()
                     && ('1'..='4').contains(&next_c)
                 {
                     active_color = next_c;
+                    seq.push(chars.next().unwrap());
                 }
             } else if ('\x01'..='\x04').contains(&ch) {
                 active_color = match ch {
@@ -199,12 +214,12 @@ pub fn split_chat_chunks_with_style(message: &str, style: &WrapStyle) -> Vec<Str
                 };
             }
 
-            if current_chunk.len() + ch.len_utf8() > MAX_SAYTEXT_PAYLOAD_LEN {
+            if current_chunk.len() + seq.len() > chunk_limit && !current_chunk.is_empty() {
                 raw_chunks.push((current_chunk.clone(), active_color));
                 current_chunk.clear();
             }
 
-            current_chunk.push(ch);
+            current_chunk.push_str(&seq);
         }
 
         if !current_chunk.is_empty() {
@@ -280,8 +295,8 @@ mod tests {
         let chunks = split_chat_chunks(lines);
         assert_eq!(chunks.len(), 3);
         assert_eq!(chunks[0], "Line 1");
-        assert_eq!(chunks[1], "^1├── Line 2");
-        assert_eq!(chunks[2], "^1└── Line 3");
+        assert_eq!(chunks[1], "^1|-- Line 2");
+        assert_eq!(chunks[2], "^1\\-- Line 3");
     }
 
     #[test]
@@ -290,7 +305,7 @@ mod tests {
         let chunks = split_chat_chunks(&long_msg);
         assert!(chunks.len() >= 2);
         assert!(chunks[0].starts_with("^4[Server]^3"));
-        assert!(chunks[1].starts_with("^3├── "));
-        assert!(chunks.last().unwrap().starts_with("^3└── "));
+        assert!(chunks[1].starts_with("^3|-- "));
+        assert!(chunks.last().unwrap().starts_with("^3\\-- "));
     }
 }

@@ -50,7 +50,7 @@ pub use client::{
 };
 pub use command::{
     Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, FromArg,
-    PlayerStateFilter,
+    PlayerStateFilter, split_command_args,
 };
 pub use cvar::{Cvar, CvarFlags};
 pub use dsl::{Lexer, Token};
@@ -59,7 +59,8 @@ pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
     EnginePrecache, EngineSound, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
     HUD_PRINTRADIO, MessageBuilder, MessageDest, PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE,
-    PRINT_NOTIFY, TraceResult, engine_api, format_center_text, format_say_text, utf8_to_cp1251,
+    PRINT_NOTIFY, TraceResult, cyrillic_to_latin, engine_api, format_center_text,
+    format_notify_text, format_say_text, utf8_to_cp1251,
 };
 pub use hud::{
     FadeFlags, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ScreenFade,
@@ -67,9 +68,9 @@ pub use hud::{
 };
 pub use liblist::{LIBLIST_FILENAME, LibList};
 pub use menu::{
-    Condition, DenyAction, DenyPolicy, ExitBehavior, ItemKind, ItemTitle, Menu, MenuBuilder,
-    MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, RenderedMenuPage,
-    SlotAction, VisualDeny,
+    AntiSpamAction, Condition, DenyAction, DenyPolicy, ExitBehavior, Feedback, ItemKind, ItemTitle,
+    Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle,
+    RenderedMenuPage, SlotAction, VisualDeny,
 };
 pub use placeholders::{
     CallArg, PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, PlayerTarget,

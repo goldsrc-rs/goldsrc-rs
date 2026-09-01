@@ -1,25 +1,10 @@
-//! Centralized hook dispatcher and safe event emission for backends.
+//! Centralized event and command dispatcher for backends and WASM plugins.
 
 use crate::host::HostRuntime;
 
 /// Dispatches an event with an optional payload to all loaded WASM plugins.
 /// Returns `true` if the host runtime is active and processed the event.
 pub fn emit_event(name: &str, payload: &[u8]) -> bool {
-    if name == "config_changed"
-        && let Ok(path_str) = std::str::from_utf8(payload)
-    {
-        let path = std::path::Path::new(path_str);
-        if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
-            && let Ok(count) = crate::i18n::I18nEngine::load_file(stem, path)
-        {
-            log::info!(
-                target: "i18n",
-                "Hot-reloaded {count} keys from \"{}\"",
-                crate::paths::PathResolver::normalize(path)
-            );
-            goldsrc_api::menu::refresh_all_menus();
-        }
-    }
     HostRuntime::with_manager(|m| match m {
         Some(manager) => {
             manager.call_on_event(name, payload);
@@ -37,11 +22,9 @@ pub fn emit_event(name: &str, payload: &[u8]) -> bool {
 pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
         goldsrc_api::auth::Auth::remove_player(index);
+        goldsrc_api::menu::close_player_menu(index);
         if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
             mgr.on_disconnect(index);
-        }
-        if let Some(storage) = HostRuntime::storage() {
-            let _ = storage.flush();
         }
     }
     let res = emit_event(name, &index.to_le_bytes());
@@ -154,6 +137,7 @@ pub fn on_server_activate() {
 pub fn on_server_deactivate() {
     goldsrc_api::edict::bump_map_generation();
     goldsrc_api::auth::Auth::clear_all_players();
+    goldsrc_api::menu::clear_all_menus();
     if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
         mgr.on_map_change();
     }

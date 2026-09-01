@@ -43,30 +43,24 @@ pub fn init_wasm_host() {
             let mapname_str_offset = globals.mapname;
             if mapname_str_offset != 0 {
                 // 1. Direct memory resolution via pStringBase (standard HLSDK STRING() macro)
-                if !globals.pStringBase.is_null() {
+                if !globals.pStringBase.is_null()
+                    && (mapname_str_offset as usize) <= goldsrc_sys::ffi::STRING_POOL_MASK
+                {
                     let ptr = unsafe {
                         (globals.pStringBase as *const u8).add(mapname_str_offset as usize)
                             as *const std::os::raw::c_char
                     };
-                    if !ptr.is_null()
-                        && let Ok(s) = unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str()
+                    if let Some(name) = unsafe { goldsrc_sys::ffi::cstr_to_string_bounded(ptr, 64) }
                     {
-                        let clean = s.trim();
-                        if !clean.is_empty() {
-                            return Some(clean.to_string());
-                        }
+                        return Some(name);
                     }
                 }
                 // 2. Engine string table resolver via pfnSzFromIndex
                 if let Some(sz_fn) = engfuncs().pfnSzFromIndex {
                     let ptr = unsafe { sz_fn(mapname_str_offset as i32) };
-                    if !ptr.is_null()
-                        && let Ok(s) = unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str()
+                    if let Some(name) = unsafe { goldsrc_sys::ffi::cstr_to_string_bounded(ptr, 64) }
                     {
-                        let clean = s.trim();
-                        if !clean.is_empty() {
-                            return Some(clean.to_string());
-                        }
+                        return Some(name);
                     }
                 }
             }

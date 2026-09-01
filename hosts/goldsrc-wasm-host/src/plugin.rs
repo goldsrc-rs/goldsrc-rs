@@ -23,6 +23,28 @@ pub struct CommandMetadata {
     pub capability: Option<String>,
 }
 
+/// Top-level plugin manifest structure exported by WASM plugins.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct PluginManifest {
+    /// Inner plugin details.
+    pub plugin: PluginMetadata,
+    /// Lifecycle configuration.
+    #[serde(default)]
+    pub lifecycle: Option<LifecycleMetadata>,
+    /// Structured command definitions with descriptions, usage, aliases, and permissions.
+    #[serde(default)]
+    pub commands: Vec<CommandMetadata>,
+}
+
+/// Lifecycle timing configuration.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct LifecycleMetadata {
+    #[serde(default)]
+    pub load: String,
+    #[serde(default)]
+    pub unload: String,
+}
+
 /// Metadata structure exported by WASM plugins generated via the `#[plugin]` macro.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct PluginMetadata {
@@ -58,6 +80,9 @@ pub struct PluginMetadata {
     /// Unified requirements DSL expressions (e.g. `["plugin:vip_core", "cvar:vip_enabled!=0"]`).
     #[serde(default)]
     pub require: Vec<String>,
+    /// Explicitly allowed permissions (e.g. `["fs:read", "cvar:set"]`).
+    #[serde(default)]
+    pub permissions: Vec<String>,
     /// Explicitly allowed shared storage buckets (e.g. `["global/ranks"]`).
     #[serde(default)]
     pub shared_buckets: Vec<String>,
