@@ -254,16 +254,16 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Bump all crates to `0.15.0` with workspace inheritance.
   - Update deploy script and python tools to seamlessly compile and verify new targets.
 
-## v0.16.0 — ReAPI Direct Bridge & Advanced Physics 📝 Planned
+## v0.16.0 — ReAPI Direct Bridge & Advanced Physics ✅
 
 **Goal:** Native zero-overhead integration with ReHLDS & ReGameDLL API, engine-level capability detection, raytracing, and custom physics simulation.
 
-- [ ] **ReAPI Dynamic Capability & Feature Detection**:
+- [x] **ReAPI Dynamic Capability & Feature Detection**:
   - Direct C-ABI bridge to ReHLDS and ReGameDLL with graceful fallback on Vanilla HLDS.
   - Expose extended ReGameDLL interfaces and direct memory structures where available.
-- [ ] **Advanced Raytracing & World Geometry (`RayTrace`, `Hull`, `DropToFloor`)**:
+- [x] **Advanced Raytracing & World Geometry (`RayTrace`, `Hull`, `DropToFloor`)**:
   - Line-of-sight checks, custom entity physics, BSP hull tracing, and hitbox intersections.
-- [ ] **Comprehensive 5-Phase ECS Verification & Pipeline Hardening**:
+- [x] **Comprehensive 5-Phase ECS Verification & Pipeline Hardening**:
   - Multi-system integration tests covering `Validate` -> `Modify` -> `Execute` -> `React` -> `Monitor` execution sequences and topological ordering.
 
 ## v0.17.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned

@@ -35,6 +35,8 @@ pub mod liblist;
 pub mod menu;
 /// Dynamic contextual placeholders and function calls.
 pub mod placeholders;
+/// High-level ReAPI capability flags, detection, and queries.
+pub mod reapi;
 /// Unified requirements DSL.
 pub mod requirements;
 /// Generic Reactive Rule & Provider Engine.
@@ -58,10 +60,11 @@ pub use edict::EDict;
 pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
     EnginePrecache, EngineSound, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
-    HUD_PRINTRADIO, MessageBuilder, MessageDest, PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE,
-    PRINT_NOTIFY, TraceResult, cyrillic_to_latin, engine_api, format_center_text,
-    format_notify_text, format_say_text, utf8_to_cp1251,
+    HUD_PRINTRADIO, MAX_EDICTS, MAX_PLAYERS, MessageBuilder, MessageDest, PRINT_CENTER, PRINT_CHAT,
+    PRINT_CONSOLE, PRINT_NOTIFY, SAFE_SAYTEXT_LIMIT, TraceResult, cyrillic_to_latin, engine_api,
+    format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
 };
+pub use gamedata::{GameData, MemorySignature, VTableFunc};
 pub use hud::{
     FadeFlags, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ScreenFade,
     ScreenFadeBuilder, ScreenShake, ScreenShakeBuilder,
@@ -76,6 +79,7 @@ pub use placeholders::{
     CallArg, PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, PlayerTarget,
     parse_placeholder_call,
 };
+pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
