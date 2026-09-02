@@ -150,12 +150,12 @@ pub use goldsrc_api::menu as menu_api;
 pub use goldsrc_api::{
     Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
     CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, Condition,
-    ConnectionState, CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior,
-    Feedback, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder,
-    ItemKind, ItemTitle, LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder,
+    ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, Feedback, FromArg,
+    HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind,
+    ItemTitle, LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder,
     MenuRendererKind, MenuStyle, Player, PlayerStateFilter, PrintTarget, RenderedMenuPage,
-    SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team, Terrorist, Vector3,
-    VisualDeny, split_command_args,
+    SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team, Vector3, VisualDeny,
+    split_command_args,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
@@ -172,12 +172,12 @@ pub mod prelude {
     pub use crate::{
         Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
         CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, Condition,
-        ConnectionState, CounterTerrorist, Dead, DenyAction, DenyPolicy, Engine, Entity,
-        ExitBehavior, Feedback, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
-        HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu, MenuBuilder, MenuContext,
-        MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, Player, PlayerStateFilter,
-        PrintTarget, RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError,
-        StorageProvider, Team, Terrorist, Vector3, VisualDeny,
+        ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, Feedback,
+        FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder,
+        ItemKind, ItemTitle, LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder,
+        MenuRendererKind, MenuStyle, Player, PlayerStateFilter, PrintTarget, RenderedMenuPage,
+        SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team, Vector3,
+        VisualDeny,
     };
     pub use crate::{
         chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,

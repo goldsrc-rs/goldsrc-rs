@@ -590,16 +590,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "goldsrc-game-cstrike"
-version = "0.16.0"
-dependencies = [
- "goldsrc",
- "goldsrc-api",
- "goldsrc-core",
- "goldsrc-sys",
-]
-
-[[package]]
 name = "goldsrc-host-wasm"
 version = "0.16.0"
 dependencies = [

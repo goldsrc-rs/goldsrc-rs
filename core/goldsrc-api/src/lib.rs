@@ -15,8 +15,6 @@ pub mod client;
 pub mod command;
 /// Global constants for the engine and framework.
 pub mod consts;
-/// Counter-Strike 1.6 game domain abstractions, weapon constants, and rules.
-pub mod cstrike;
 /// Typed CVar bindings and flags.
 pub mod cvar;
 /// Unified Expression DSL lexer, parser, and grammar primitives.
@@ -47,8 +45,8 @@ pub mod storage;
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
-    Alive, AsLangCode, Bot, ClientKind, ConnectionState, CounterTerrorist, Dead, HLTV, LifeState,
-    Player, PrintTarget, Spectator, Team, Terrorist,
+    Alive, AsLangCode, Bot, ClientKind, ConnectionState, Dead, HLTV, LifeState, Player,
+    PrintTarget, Spectator, Team,
 };
 pub use command::{
     Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, FromArg,

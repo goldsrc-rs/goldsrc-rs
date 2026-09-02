@@ -19,9 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `trace_hull_box` for arbitrary axis-aligned bounding box collision queries.
   - Added `trace_model` for entity bounding box / studio model raycasting.
   - Added `check_visibility` helper for direct line-of-sight verification between world points.
-- **Counter-Strike Game Data & Constants Subsystem (`games/goldsrc-game-cstrike`)**:
-  - Extracted game-specific CS 1.6 logic into dedicated `goldsrc-game-cstrike` crate.
-  - Implemented type-safe `CsWeapon` properties, `CsTeam` helpers, max clip sizes, and ammo types.
+- **Game-Agnostic Core Architecture & External Game Crates**:
+  - Extracted game-specific CS 1.6 logic out of core workspace into dedicated external repository (`goldsrc-game-cstrike`).
+  - Refactored `Team` into a generic `Team(pub i32)` identifier with zero assumptions about underlying game mods.
+  - Made core chat engine and engine bridge 100% game-agnostic with clean fallbacks.
 - **Comprehensive 5-Phase ECS Verification (`framework/goldsrc`)**:
   - Added multi-phase integration tests ensuring deterministic execution order: `Validate` -> `Modify` -> `Execute` -> `React` -> `Monitor` across all engine stages.
 

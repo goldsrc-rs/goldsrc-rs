@@ -79,54 +79,53 @@ impl std::fmt::Display for LifeState {
     }
 }
 
-/// Game team identifiers (compatible with Counter-Strike 1.6 team slots).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum Team {
-    /// Unassigned / choosing team.
-    Unassigned = 0,
-    /// Terrorist team (T).
-    Terrorist = 1,
-    /// Counter-Terrorist team (CT).
-    CounterTerrorist = 2,
-    /// Spectator team (SPEC).
-    Spectator = 3,
-}
+/// Game-agnostic team identifier (transparent wrapper over integer team slot).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[repr(transparent)]
+pub struct Team(pub i32);
 
 impl Team {
-    /// List of all possible teams.
-    pub const ALL: &'static [Team] = &[
-        Team::Unassigned,
-        Team::Terrorist,
-        Team::CounterTerrorist,
-        Team::Spectator,
-    ];
+    /// Unassigned / choosing team.
+    pub const UNASSIGNED: Team = Team(0);
+    /// Spectator team slot (common GoldSrc convention: 3).
+    pub const SPECTATOR: Team = Team(3);
 
-    /// Returns the canonical lowercase string identifier of this team.
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Team::Unassigned => "unassigned",
-            Team::Terrorist => "terrorist",
-            Team::CounterTerrorist => "ct",
-            Team::Spectator => "spectator",
-        }
+    /// Creates a new team identifier from a raw integer ID.
+    pub const fn new(id: i32) -> Self {
+        Self(id)
+    }
+
+    /// Returns the raw integer value of the team.
+    pub const fn raw(&self) -> i32 {
+        self.0
+    }
+
+    /// Returns `true` if this is the unassigned team slot (0).
+    pub const fn is_unassigned(&self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns `true` if this is the spectator team slot (3).
+    pub const fn is_spectator(&self) -> bool {
+        self.0 == 3
     }
 }
 
 impl std::fmt::Display for Team {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
+        write!(f, "Team({})", self.0)
     }
 }
 
 impl From<i32> for Team {
     fn from(val: i32) -> Self {
-        match val {
-            1 => Team::Terrorist,
-            2 => Team::CounterTerrorist,
-            3 => Team::Spectator,
-            _ => Team::Unassigned,
-        }
+        Team(val)
+    }
+}
+
+impl From<Team> for i32 {
+    fn from(team: Team) -> Self {
+        team.0
     }
 }
 
@@ -181,18 +180,6 @@ impl<T: AsLangCode> AsLangCode for crate::client::Alive<T> {
 }
 
 impl<T: AsLangCode> AsLangCode for crate::client::Dead<T> {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::Terrorist {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::CounterTerrorist {
     fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }
