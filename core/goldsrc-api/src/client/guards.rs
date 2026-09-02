@@ -37,40 +37,6 @@ impl<T> DerefMut for Dead<T> {
     }
 }
 
-/// Typestate extractor guaranteeing that the caller is on the Terrorist team.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Terrorist(pub Player);
-
-impl Deref for Terrorist {
-    type Target = Player;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Terrorist {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-/// Typestate extractor guaranteeing that the caller is on the Counter-Terrorist team.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CounterTerrorist(pub Player);
-
-impl Deref for CounterTerrorist {
-    type Target = Player;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for CounterTerrorist {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 /// Typestate extractor guaranteeing that the caller is on the Spectator team.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Spectator(pub Player);

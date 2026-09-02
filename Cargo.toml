@@ -3,7 +3,6 @@ members = [
     "core/goldsrc-sys",
     "core/goldsrc-api",
     "core/goldsrc-core",
-    "games/goldsrc-game-cstrike",
     "backends/goldsrc-backend-metamod",
     "backends/goldsrc-backend-standalone",
     "hosts/goldsrc-host-wasm",
@@ -22,7 +21,6 @@ default-members = [
     "core/goldsrc-sys",
     "core/goldsrc-api",
     "core/goldsrc-core",
-    "games/goldsrc-game-cstrike",
     "backends/goldsrc-backend-metamod",
     "backends/goldsrc-backend-standalone",
     "hosts/goldsrc-host-wasm",
@@ -35,7 +33,7 @@ resolver = "3"
 version = "0.16.0"
 edition = "2024"
 authors = ["GoldSrc.rs Team"]
-description = "High-performance modular Rust framework for GoldSrc / Counter-Strike 1.6 engine"
+description = "High-performance modular Rust framework for GoldSrc / Half-Life engine"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/goldsrc-rs/goldsrc-rs"
 
@@ -43,7 +41,6 @@ repository = "https://github.com/goldsrc-rs/goldsrc-rs"
 goldsrc-sys = { path = "core/goldsrc-sys", version = "0.16.0" }
 goldsrc-api = { path = "core/goldsrc-api", version = "0.16.0" }
 goldsrc-core = { path = "core/goldsrc-core", version = "0.16.0" }
-goldsrc-game-cstrike = { path = "games/goldsrc-game-cstrike", version = "0.16.0" }
 goldsrc-backend-metamod = { path = "backends/goldsrc-backend-metamod", version = "0.16.0" }
 goldsrc-backend-standalone = { path = "backends/goldsrc-backend-standalone", version = "0.16.0" }
 goldsrc-host-wasm = { path = "hosts/goldsrc-host-wasm", version = "0.16.0" }
