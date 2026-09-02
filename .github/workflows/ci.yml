@@ -87,7 +87,11 @@ jobs:
 
       - name: Set LIBCLANG_PATH dynamically
         run: |
-          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> $GITHUB_ENV
+          LLVM_LIB=$(llvm-config --libdir 2>/dev/null || echo "")
+          CLANG_PATH=$(find /usr/lib/llvm* /usr/lib/x86_64-linux-gnu -name "libclang.so*" -exec dirname {} \; 2>/dev/null | head -n 1)
+          TARGET_LIB="${CLANG_PATH:-$LLVM_LIB}"
+          echo "Found libclang path: $TARGET_LIB"
+          echo "LIBCLANG_PATH=$TARGET_LIB" >> $GITHUB_ENV
 
       - name: Setup references (minimal CI)
         run: python -m scripts setup --ci
