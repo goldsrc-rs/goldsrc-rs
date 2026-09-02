@@ -206,10 +206,7 @@ fn matches_lifestate(player: Player, filter: LifeStateFilter) -> bool {
 }
 
 fn is_opposite_team(a: Team, b: Team) -> bool {
-    matches!(
-        (a, b),
-        (Team::Terrorist, Team::CounterTerrorist) | (Team::CounterTerrorist, Team::Terrorist)
-    )
+    !a.is_unassigned() && !b.is_unassigned() && !a.is_spectator() && !b.is_spectator() && a != b
 }
 
 /// Formats a chat string with placeholder evaluation and arguments.
