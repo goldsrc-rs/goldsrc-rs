@@ -6,11 +6,11 @@ license.workspace = true
 description = "Pure Rust traits (interfaces) for GoldSrc engine interaction"
 
 [dependencies]
-goldsrc-sys = { workspace = true }
+goldsrc-sys = { workspace = true, optional = true }
 wit-bindgen = { workspace = true }
 toml = { workspace = true }
 serde = { workspace = true }
 
 [features]
 default = []
-unsafe-sys = []
+unsafe-sys = ["dep:goldsrc-sys"]
