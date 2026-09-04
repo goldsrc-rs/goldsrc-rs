@@ -9,6 +9,7 @@ description = "Interactive VIP weapon and equipment menu"
 
 [lib]
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc = { workspace = true }

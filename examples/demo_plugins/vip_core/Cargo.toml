@@ -9,6 +9,7 @@ description = "VIP capabilities & privileges core manager"
 
 [lib]
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc = { workspace = true }
