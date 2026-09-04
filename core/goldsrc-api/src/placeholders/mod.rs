@@ -3,6 +3,12 @@
 use crate::client::Player;
 use crate::dsl::{Lexer, Token};
 
+pub mod registry;
+pub use registry::{
+    Placeholder, PlaceholderBuilder, PlaceholderRegistry, clear_placeholders,
+    dispatch_local_placeholder, register_placeholder,
+};
+
 /// Represents an argument in a function-like placeholder call: `{name(arg1, key='val')}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallArg {
