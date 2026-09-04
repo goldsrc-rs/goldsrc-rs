@@ -9,7 +9,6 @@ members = [
     "framework/goldsrc",
     "framework/goldsrc-macros",
     "examples/demo_plugins/vip_core",
-    "examples/demo_plugins/vip_menu",
     "examples/demo_plugins/test_hud",
     "examples/demo_plugins/test_menu",
     "examples/demo_plugins/test_ecs",
