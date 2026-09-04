@@ -153,8 +153,6 @@ pub use ::log;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
-#[allow(deprecated)]
-pub use goldsrc_api::EventPriority;
 pub use goldsrc_api::bindings;
 pub use goldsrc_api::engine_api as engine;
 pub use goldsrc_api::hud as hud_api;

@@ -70,8 +70,6 @@ pub use engine::{
     PRINT_CONSOLE, PRINT_NOTIFY, SAFE_SAYTEXT_LIMIT, TraceResult, cyrillic_to_latin, engine_api,
     format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
 };
-#[allow(deprecated)]
-pub use event::EventPriority;
 pub use event::{
     Event, EventHandler, EventRegistry, EventSubscriberBuilder, EventSubscription, clear_events,
     dispatch_event, subscribe_event,

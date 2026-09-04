@@ -4,39 +4,6 @@ use crate::dag::{EventPhase, PhasedDag};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 
-/// Legacy execution priority for event subscribers.
-#[deprecated(
-    since = "0.17.0",
-    note = "Use `EventPhase` instead of numeric `EventPriority`"
-)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum EventPriority {
-    /// Executed first before normal listeners (maps to `EventPhase::Filter`).
-    First = 0,
-    /// Standard execution priority (maps to `EventPhase::Handle`).
-    Normal = 10,
-    /// Executed after normal listeners (maps to `EventPhase::Observe`).
-    Last = 20,
-}
-
-#[allow(deprecated, clippy::derivable_impls)]
-impl Default for EventPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
-#[allow(deprecated)]
-impl From<EventPriority> for EventPhase {
-    fn from(p: EventPriority) -> Self {
-        match p {
-            EventPriority::First => EventPhase::Filter,
-            EventPriority::Normal => EventPhase::Handle,
-            EventPriority::Last => EventPhase::Observe,
-        }
-    }
-}
-
 /// Dynamic event handler closure receiving the raw event payload.
 pub type EventHandler = Arc<dyn Fn(&[u8]) + Send + Sync + 'static>;
 
@@ -204,14 +171,6 @@ impl EventSubscriberBuilder {
     /// Sets the semantic phase of event execution.
     pub fn phase(mut self, phase: EventPhase) -> Self {
         self.phase = phase;
-        self
-    }
-
-    /// Legacy method for priority (maps to `EventPhase`).
-    #[allow(deprecated)]
-    #[deprecated(since = "0.17.0", note = "Use `.phase(EventPhase)` instead")]
-    pub fn priority(mut self, priority: EventPriority) -> Self {
-        self.phase = priority.into();
         self
     }
 
