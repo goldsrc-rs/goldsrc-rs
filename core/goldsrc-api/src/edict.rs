@@ -97,11 +97,19 @@ impl EDict {
         if self.ptr == 0 || self.generation != current_map_generation() {
             return false;
         }
-        // SAFETY: We check ptr != 0 and generation match above.
-        // We only read `serialnumber` and `free` — plain i32 fields.
-        let current_serial = unsafe { (*(self.ptr as *const goldsrc_sys::edict_t)).serialnumber };
-        current_serial == self.serial
-            && !(unsafe { (*(self.ptr as *const goldsrc_sys::edict_t)).free } != 0)
+        #[cfg(feature = "unsafe-sys")]
+        {
+            // SAFETY: We check ptr != 0 and generation match above.
+            // We only read `serialnumber` and `free` — plain i32 fields.
+            let current_serial =
+                unsafe { (*(self.ptr as *const goldsrc_sys::edict_t)).serialnumber };
+            current_serial == self.serial
+                && !(unsafe { (*(self.ptr as *const goldsrc_sys::edict_t)).free } != 0)
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            true
+        }
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -122,7 +130,7 @@ impl EDict {
     ///
     /// Internal variant used by the safe accessors below; callers must treat
     /// the pointer as valid only for the current engine call.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "unsafe-sys"))]
     fn raw_ptr(self) -> Option<*mut goldsrc_sys::edict_t> {
         if self.is_valid() {
             Some(self.ptr as *mut goldsrc_sys::edict_t)
@@ -137,23 +145,28 @@ impl EDict {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn classname(self) -> Option<String> {
-        let _ptr = self.raw_ptr()?;
-        // String offset requires engine pfnSzFromIndex / pStringBase resolver;
-        // fallback returns None if called directly on raw handle without engine context.
         None
     }
 
     /// Entity origin (world position).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn origin(self) -> Option<[f32; 3]> {
-        let ptr = self.raw_ptr()?;
-        // SAFETY: ptr validated; origin is a plain [f32; 3] field.
-        Some(unsafe { (*ptr).v.origin })
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            // SAFETY: ptr validated; origin is a plain [f32; 3] field.
+            Some(unsafe { (*ptr).v.origin })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
     }
 
     /// Set entity origin.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_origin(self, origin: [f32; 3]) -> bool {
+        #[cfg(feature = "unsafe-sys")]
         match self.raw_ptr() {
             Some(ptr) => {
                 // SAFETY: ptr validated above.
@@ -162,24 +175,42 @@ impl EDict {
             }
             None => false,
         }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = origin;
+            false
+        }
     }
 
     /// Entity health points.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn health(self) -> Option<f32> {
-        let ptr = self.raw_ptr()?;
-        Some(unsafe { (*ptr).v.health })
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.health })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
     }
 
     /// Set entity health. Returns `false` if entity is no longer valid.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_health(self, health: f32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
         match self.raw_ptr() {
             Some(ptr) => {
                 unsafe { (*ptr).v.health = health };
                 true
             }
             None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = health;
+            false
         }
     }
 
@@ -191,22 +222,27 @@ impl EDict {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn netname(self) -> Option<String> {
-        let _ptr = self.raw_ptr()?;
-        // String offset requires engine pfnSzFromIndex / pStringBase resolver;
-        // fallback returns None if called directly on raw handle without engine context.
         None
     }
 
     /// Player armor value. Only meaningful for player entities.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn armorvalue(self) -> Option<f32> {
-        let ptr = self.raw_ptr()?;
-        Some(unsafe { (*ptr).v.armorvalue })
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.armorvalue })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
     }
 
     /// Set player armor. Returns `false` if entity no longer valid.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_armorvalue(self, armor: f32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
         match self.raw_ptr() {
             Some(ptr) => {
                 unsafe { (*ptr).v.armorvalue = armor };
@@ -214,18 +250,31 @@ impl EDict {
             }
             None => false,
         }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = armor;
+            false
+        }
     }
 
     /// Entity velocity.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn velocity(self) -> Option<[f32; 3]> {
-        let ptr = self.raw_ptr()?;
-        Some(unsafe { (*ptr).v.velocity })
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.velocity })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
     }
 
     /// Set entity velocity.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_velocity(self, velocity: [f32; 3]) -> bool {
+        #[cfg(feature = "unsafe-sys")]
         match self.raw_ptr() {
             Some(ptr) => {
                 unsafe { (*ptr).v.velocity = velocity };
@@ -233,31 +282,56 @@ impl EDict {
             }
             None => false,
         }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = velocity;
+            false
+        }
     }
 
     /// Entity team (CS 1.6 / CZ team slot).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn team(self) -> Option<i32> {
-        let ptr = self.raw_ptr()?;
-        Some(unsafe { (*ptr).v.team })
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.team })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
     }
 
     /// Entity angles (pitch, yaw, roll).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn angles(self) -> Option<[f32; 3]> {
-        let ptr = self.raw_ptr()?;
-        Some(unsafe { (*ptr).v.angles })
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.angles })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
     }
 
     /// Set entity angles.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_angles(self, angles: [f32; 3]) -> bool {
+        #[cfg(feature = "unsafe-sys")]
         match self.raw_ptr() {
             Some(ptr) => {
                 unsafe { (*ptr).v.angles = angles };
                 true
             }
             None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = angles;
+            false
         }
     }
 }
