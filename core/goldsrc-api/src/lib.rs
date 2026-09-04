@@ -23,6 +23,8 @@ pub mod dsl;
 pub mod edict;
 /// Modular engine sub-system traits, unified engine bridge, and API facade.
 pub mod engine;
+/// Event subscription, priority ordering, and local guest event dispatching.
+pub mod event;
 /// Gamedata definitions, signature scanning, and VTable offset configurations.
 pub mod gamedata;
 /// Screen HUD and DHUD message builders and styling.
@@ -49,8 +51,9 @@ pub use client::{
     PrintTarget, Spectator, Team,
 };
 pub use command::{
-    Command, CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, FromArg,
-    PlayerStateFilter, split_command_args,
+    Command, CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry,
+    CommandResult, CommandTarget, FromArg, PlayerStateFilter, clear_commands, dispatch_command,
+    register_command, split_command_args,
 };
 pub use cvar::{Cvar, CvarFlags};
 pub use dsl::{Lexer, Token};
@@ -62,6 +65,10 @@ pub use engine::{
     PRINT_CONSOLE, PRINT_NOTIFY, SAFE_SAYTEXT_LIMIT, TraceResult, cyrillic_to_latin, engine_api,
     format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
 };
+pub use event::{
+    Event, EventHandler, EventPriority, EventRegistry, EventSubscriberBuilder, EventSubscription,
+    clear_events, dispatch_event, subscribe_event,
+};
 pub use gamedata::{GameData, MemorySignature, VTableFunc};
 pub use hud::{
     FadeFlags, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ScreenFade,
@@ -70,12 +77,14 @@ pub use hud::{
 pub use liblist::{LIBLIST_FILENAME, LibList};
 pub use menu::{
     AntiSpamAction, Condition, DenyAction, DenyPolicy, ExitBehavior, Feedback, ItemKind, ItemTitle,
-    Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle,
-    RenderedMenuPage, SlotAction, VisualDeny,
+    Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext, MenuItem,
+    MenuPageBuilder, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,
+    clear_menu_actions, dispatch_menu_action, register_menu_action_id, register_menu_action_name,
 };
 pub use placeholders::{
-    CallArg, PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, PlayerTarget,
-    parse_placeholder_call,
+    CallArg, Placeholder, PlaceholderBuilder, PlaceholderCall, PlaceholderHandler,
+    PlaceholderMetadata, PlaceholderRegistry, PlayerTarget, clear_placeholders,
+    dispatch_local_placeholder, parse_placeholder_call, register_placeholder,
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};

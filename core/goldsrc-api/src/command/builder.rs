@@ -24,6 +24,14 @@ impl Command {
     pub fn builder(name: impl Into<String>) -> CommandBuilder {
         CommandBuilder::new(name)
     }
+
+    /// Registers this command with an execution handler in the runtime command registry.
+    pub fn register<F>(self, handler: F)
+    where
+        F: Fn(i32, &str) -> bool + Send + Sync + 'static,
+    {
+        crate::command::register_command(self, handler);
+    }
 }
 
 /// Fluent builder for constructing [`Command`] definitions.
@@ -96,6 +104,14 @@ impl CommandBuilder {
             description: self.description,
             usage: self.usage,
         }
+    }
+
+    /// Finalizes the builder into a [`Command`] instance and registers it immediately.
+    pub fn register<F>(self, handler: F)
+    where
+        F: Fn(i32, &str) -> bool + Send + Sync + 'static,
+    {
+        self.build().register(handler);
     }
 }
 
