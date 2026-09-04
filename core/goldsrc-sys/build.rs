@@ -53,25 +53,23 @@ fn main() {
                 .join("metamod")
         });
 
-    // Check that references exist. If missing, fall back to bundled pregenerated bindings.
-    let pregenerated = manifest_dir.join("src").join("bindings_pregenerated.rs");
-    if !hlsdk.join("engine").join("eiface.h").exists() || !metamod.join("meta_api.h").exists() {
-        if pregenerated.exists() {
-            println!(
-                "cargo:warning=HLSDK references not found; using bundled pregenerated bindings."
-            );
-            let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-            std::fs::copy(&pregenerated, out_path.join("bindings.rs"))
-                .expect("Failed to copy pregenerated bindings");
-            return;
-        } else {
-            panic!(
-                "\n\nERROR: HLSDK not found at {}\n\
-                 Run the setup script first:\n\
-                   python3 scripts/setup.py\n\n",
-                hlsdk.display()
-            );
-        }
+    // Check that references exist
+    if !hlsdk.join("engine").join("eiface.h").exists() {
+        panic!(
+            "\n\nERROR: HLSDK not found at {}\n\
+             Run the setup script first:\n\
+               python3 scripts/setup.py\n\n",
+            hlsdk.display()
+        );
+    }
+
+    if !metamod.join("meta_api.h").exists() {
+        panic!(
+            "\n\nERROR: metamod-r not found at {}\n\
+             Run the setup script first:\n\
+               python3 scripts/setup.py\n\n",
+            metamod.display()
+        );
     }
 
     // Read local configuration (.goldsrc.local.toml / .goldsrc.toml / goldsrc.local.toml)
