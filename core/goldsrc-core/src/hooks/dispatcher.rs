@@ -23,6 +23,7 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
         goldsrc_api::auth::Auth::remove_player(index);
         goldsrc_api::menu::close_player_menu(index);
+        goldsrc_host_wasm::clear_active_menu_owner(index);
         if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
             mgr.on_disconnect(index);
         }
@@ -68,7 +69,22 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         let mut payload = Vec::with_capacity(8);
         payload.extend_from_slice(&player_idx.to_le_bytes());
         payload.extend_from_slice(&(slot as u32).to_le_bytes());
-        emit_event("menu_select", &payload);
+
+        let targeted = if let Some(owner) = goldsrc_host_wasm::get_active_menu_owner(player_idx) {
+            HostRuntime::with_manager(|m| {
+                if let Some(manager) = m {
+                    manager.call_plugin_event(&owner, "menu_select", &payload)
+                } else {
+                    false
+                }
+            })
+        } else {
+            false
+        };
+
+        if !targeted {
+            emit_event("menu_select", &payload);
+        }
 
         return true;
     }
@@ -138,6 +154,7 @@ pub fn on_server_deactivate() {
     goldsrc_api::edict::bump_map_generation();
     goldsrc_api::auth::Auth::clear_all_players();
     goldsrc_api::menu::clear_all_menus();
+    goldsrc_host_wasm::clear_all_active_menu_owners();
     if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
         mgr.on_map_change();
     }

@@ -728,8 +728,19 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             fn on_event(name: String, payload: Vec<u8>) {
                 if name == "menu_select" && payload.len() >= 8 {
                     let caller = i32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-                    let item_id = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
-                    ::goldsrc::menu::dispatch_menu_action(::goldsrc::Player::new(caller), Some(item_id), None);
+                    let slot = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as u8;
+                    if let Some(action) = ::goldsrc::menu::handle_menu_slot(caller, slot) {
+                        match action {
+                            ::goldsrc::menu::SlotAction::Execute { id, action_name, .. } => {
+                                ::goldsrc::menu::dispatch_menu_action(
+                                    ::goldsrc::Player::new(caller),
+                                    Some(id),
+                                    if action_name.is_empty() { None } else { Some(&action_name) },
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
                 }
                 ::goldsrc::event::dispatch_event(&name, &payload);
             }

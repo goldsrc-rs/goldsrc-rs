@@ -336,3 +336,57 @@ fn render_and_send(player_idx: i32, session: &mut PlayerMenuSession) {
         session.rendered_page = Some(rendered);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::menu::{Menu, MenuItem, SlotAction};
+
+    #[test]
+    fn test_handle_menu_slot_without_session_returns_none() {
+        assert!(handle_menu_slot(9999, 1).is_none());
+        assert!(handle_menu_slot(9999, 3).is_none());
+    }
+
+    #[test]
+    fn test_handle_menu_slot_with_active_session_resolves_action_and_navigation() {
+        let player_id = 8888;
+        close_menu(player_id);
+
+        let menu = Menu::builder("Test Menu")
+            .item(MenuItem::new("Action 101", 101).keep_open())
+            .item(MenuItem::new("Action 102", 102))
+            .page(|page| page.item(MenuItem::new("Action 103", 103)))
+            .build();
+
+        open_menu(player_id, menu);
+
+        // Slot 1 is item 101 (keep_open: true)
+        let act1 = handle_menu_slot(player_id, 1);
+        match act1 {
+            Some(SlotAction::Execute { id, keep_open, .. }) => {
+                assert_eq!(id, 101);
+                assert!(keep_open);
+            }
+            other => panic!("Expected Execute for slot 1, got {:?}", other),
+        }
+
+        // Slot 9 is NextPage
+        let next_act = handle_menu_slot(player_id, 9);
+        assert!(next_act.is_none());
+
+        // On page 2, Slot 1 is item 103
+        let act2 = handle_menu_slot(player_id, 1);
+        match act2 {
+            Some(SlotAction::Execute { id, keep_open, .. }) => {
+                assert_eq!(id, 103);
+                assert!(!keep_open);
+            }
+            other => panic!("Expected Execute for slot 1 on page 2, got {:?}", other),
+        }
+
+        // Since item 103 is not keep_open, menu is now closed
+        assert!(handle_menu_slot(player_id, 1).is_none());
+        close_menu(player_id);
+    }
+}

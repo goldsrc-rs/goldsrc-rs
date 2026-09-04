@@ -482,6 +482,16 @@ impl PluginManager {
         }
     }
 
+    /// Calls `on_event` on a specific target plugin by name. Returns `true` if plugin was found and called.
+    pub fn call_plugin_event(&mut self, target: &str, name: &str, data: &[u8]) -> bool {
+        if let Some(plugin) = self.plugins.iter_mut().find(|p| p.name == target) {
+            let _ = plugin.call_on_event(name, data);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Dispatches a placeholder resolution request to the owning WASM plugin.
     pub fn dispatch_placeholder(&mut self, name: &str, caller: i32, param: &str) -> Option<String> {
         let plugin_name = {
@@ -923,5 +933,45 @@ mod tests {
         assert_eq!(strings, vec!["%s", "Global center notice"]);
 
         assert_eq!(*engine.ended.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_active_menu_owner_tracking_and_lifecycle() {
+        let engine = Arc::new(MockMessageEngine::default());
+        let mut host_state = HostState {
+            engine: engine.clone(),
+            limits: wasmtime::StoreLimitsBuilder::new().build(),
+            plugin_name: "test_menu".to_string(),
+            permissions: Vec::new(),
+            shared_buckets: Vec::new(),
+        };
+
+        crate::clear_all_active_menu_owners();
+        assert_eq!(crate::get_active_menu_owner(1), None);
+
+        // Opening menu sets owner
+        host_state.host_show_menu(1, 0x3FF, -1, "Test Menu".to_string());
+        assert_eq!(
+            crate::get_active_menu_owner(1),
+            Some("test_menu".to_string())
+        );
+
+        // Another plugin opening menu overrides owner
+        let mut vip_state = HostState {
+            engine: engine.clone(),
+            limits: wasmtime::StoreLimitsBuilder::new().build(),
+            plugin_name: "vip_menu".to_string(),
+            permissions: Vec::new(),
+            shared_buckets: Vec::new(),
+        };
+        vip_state.host_show_menu(1, 0x1F, -1, "VIP Menu".to_string());
+        assert_eq!(
+            crate::get_active_menu_owner(1),
+            Some("vip_menu".to_string())
+        );
+
+        // Closing menu (keys_mask == 0) removes owner
+        vip_state.host_show_menu(1, 0, 0, "".to_string());
+        assert_eq!(crate::get_active_menu_owner(1), None);
     }
 }

@@ -379,6 +379,12 @@ impl api::Host for HostState {
 
         crate::notify_show_menu(player_index, keys_mask, timeout, &text);
 
+        if keys_mask == 0 {
+            crate::clear_active_menu_owner(player_index);
+        } else {
+            crate::set_active_menu_owner(player_index, self.plugin_name.clone());
+        }
+
         if text.is_empty() {
             self.engine.message_begin(
                 goldsrc_api::MessageDest::One as i32,

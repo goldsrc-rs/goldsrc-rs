@@ -86,6 +86,39 @@ pub(crate) fn notify_show_menu(player_idx: i32, keys_mask: i32, timeout: i32, te
     }
 }
 
+static ACTIVE_MENU_OWNERS: std::sync::LazyLock<
+    std::sync::RwLock<std::collections::HashMap<i32, String>>,
+> = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+
+/// Registers the owning WASM plugin for an active player menu.
+pub fn set_active_menu_owner(player_index: i32, owner: String) {
+    if let Ok(mut lock) = ACTIVE_MENU_OWNERS.write() {
+        lock.insert(player_index, owner);
+    }
+}
+
+/// Clears the active menu owner for a player when their menu closes.
+pub fn clear_active_menu_owner(player_index: i32) {
+    if let Ok(mut lock) = ACTIVE_MENU_OWNERS.write() {
+        lock.remove(&player_index);
+    }
+}
+
+/// Retrieves the owning WASM plugin name for the player's active menu, if any.
+pub fn get_active_menu_owner(player_index: i32) -> Option<String> {
+    ACTIVE_MENU_OWNERS
+        .read()
+        .ok()
+        .and_then(|lock| lock.get(&player_index).cloned())
+}
+
+/// Clears all active menu owners (e.g. on map change / server deactivate).
+pub fn clear_all_active_menu_owners() {
+    if let Ok(mut lock) = ACTIVE_MENU_OWNERS.write() {
+        lock.clear();
+    }
+}
+
 /// Print log message via host callback (engine server_print and unified logger).
 pub fn host_log(msg: &str) {
     let bounded = if msg.len() > 4096 {
