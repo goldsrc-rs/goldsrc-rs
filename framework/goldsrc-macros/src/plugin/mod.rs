@@ -41,7 +41,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             let mut cmd_capability: Option<String> = None;
             let mut cmd_description: Option<String> = None;
             let mut cmd_usage: Option<String> = None;
-            let mut cmd_require: Vec<String> = Vec::new();
+            let mut cmd_requires: Vec<String> = Vec::new();
             let mut macro_error: Option<syn::Error> = None;
 
             // Retain attributes that are NOT our custom ones
@@ -112,7 +112,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
                                     cmd_usage = Some(s.value());
                                 }
-                            } else if meta.path.is_ident("require") {
+                            } else if meta.path.is_ident("requires") {
                                 if let Ok(ExprArray { elems, .. }) =
                                     meta.value()?.parse::<ExprArray>()
                                 {
@@ -121,11 +121,11 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                                             lit: Lit::Str(s), ..
                                         }) = elem
                                         {
-                                            cmd_require.push(s.value());
+                                            cmd_requires.push(s.value());
                                         }
                                     }
                                 } else if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
-                                    cmd_require.push(s.value());
+                                    cmd_requires.push(s.value());
                                 }
                             } else if meta.path.is_ident("aliases") {
                                 if let Ok(ExprArray { elems, .. }) =
@@ -339,7 +339,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                     usage: cmd_usage.clone().unwrap_or_default(),
                     aliases: cmd_aliases.clone(),
                     capability: cmd_capability.clone(),
-                    require: cmd_require.clone(),
+                    requires: cmd_requires.clone(),
                 });
 
                 let is_raw_signature = match inputs_len {
@@ -605,14 +605,14 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
         });
     }
 
-    let mut require_toml = String::new();
-    if !attr.require.is_empty() {
+    let mut requires_toml = String::new();
+    if !attr.requires.is_empty() {
         let reqs: Vec<String> = attr
-            .require
+            .requires
             .iter()
             .map(|d| format!("\"{}\"", toml_escape(d)))
             .collect();
-        require_toml = format!("require = [{}]\n", reqs.join(", "));
+        requires_toml = format!("requires = [{}]\n", reqs.join(", "));
     }
 
     let mut permissions_toml = String::new();
@@ -651,13 +651,13 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             if let Some(cap) = &cmd.capability {
                 commands_toml.push_str(&format!("capability = \"{}\"\n", toml_escape(cap)));
             }
-            if !cmd.require.is_empty() {
+            if !cmd.requires.is_empty() {
                 let req_str: Vec<String> = cmd
-                    .require
+                    .requires
                     .iter()
                     .map(|r| format!("\"{}\"", toml_escape(r)))
                     .collect();
-                commands_toml.push_str(&format!("require = [{}]\n", req_str.join(", ")));
+                commands_toml.push_str(&format!("requires = [{}]\n", req_str.join(", ")));
             }
             commands_toml.push('\n');
         }
@@ -683,7 +683,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
         toml_escape(&attr.url),
         toml_escape(&attr.license),
         bundle_field,
-        require_toml,
+        requires_toml,
         permissions_toml,
         lifecycle_toml,
         commands_toml

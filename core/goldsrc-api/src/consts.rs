@@ -102,8 +102,12 @@ pub const DEFAULT_PLUGIN_URL: &str = "N/A";
 /// Fallback plugin registered systems string if none are registered.
 pub const DEFAULT_PLUGIN_SYSTEMS: &str = "none";
 
+/// Fallback plugin requires string if none are specified.
+pub const DEFAULT_PLUGIN_REQUIRES: &str = "none";
+
 /// Fallback plugin require string if none are specified.
-pub const DEFAULT_PLUGIN_REQUIRE: &str = "none";
+#[deprecated(note = "Use DEFAULT_PLUGIN_REQUIRES instead")]
+pub const DEFAULT_PLUGIN_REQUIRE: &str = DEFAULT_PLUGIN_REQUIRES;
 
 // ----------------------------------------------------------------------------
 // Sandbox Permissions Constants

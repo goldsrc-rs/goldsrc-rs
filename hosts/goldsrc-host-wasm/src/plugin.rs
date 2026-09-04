@@ -78,8 +78,8 @@ pub struct PluginMetadata {
     #[serde(default)]
     pub command_defs: Vec<CommandMetadata>,
     /// Unified requirements DSL expressions (e.g. `["plugin:vip_core", "cvar:vip_enabled!=0"]`).
-    #[serde(default)]
-    pub require: Vec<String>,
+    #[serde(default, alias = "require")]
+    pub requires: Vec<String>,
     /// Explicitly allowed permissions (e.g. `["fs:read", "cvar:set"]`).
     #[serde(default)]
     pub permissions: Vec<String>,

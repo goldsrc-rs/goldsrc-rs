@@ -305,17 +305,19 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                             }
                         })
                         .unwrap_or_else(|| goldsrc_api::consts::DEFAULT_PLUGIN_SYSTEMS.to_string());
-                    let meta_require = info
+                    let meta_requires = info
                         .metadata
                         .as_ref()
                         .map(|m| {
-                            if m.require.is_empty() {
-                                goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRE.to_string()
+                            if m.requires.is_empty() {
+                                goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRES.to_string()
                             } else {
-                                m.require.join(", ")
+                                m.requires.join(", ")
                             }
                         })
-                        .unwrap_or_else(|| goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRE.to_string());
+                        .unwrap_or_else(|| {
+                            goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRES.to_string()
+                        });
 
                     if let Some(ref field) = requested_field {
                         let value = match field.as_str() {
@@ -328,14 +330,14 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                             "path" => &clean_path,
                             "status" => &status_str,
                             "systems" => &meta_systems,
-                            "require" => &meta_require,
+                            "requires" | "require" => &meta_requires,
                             "index" => {
                                 out(&format!("{}\n", info.index));
                                 continue;
                             }
                             other => {
                                 out(&format!(
-                                    "[GoldSrc.rs] Unknown field '{}'. Supported: name, version, author, description, license, url, path, status, systems, require, index.\n",
+                                    "[GoldSrc.rs] Unknown field '{}'. Supported: name, version, author, description, license, url, path, status, systems, requires, index.\n",
                                     other
                                 ));
                                 continue;
@@ -356,7 +358,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     out(&format!("  License:      {}\n", meta_license));
                     out(&format!("  URL:          {}\n", meta_url));
                     out(&format!("  Systems:      {}\n", meta_systems));
-                    out(&format!("  Require:      {}\n", meta_require));
+                    out(&format!("  Requires:     {}\n", meta_requires));
                 } else {
                     out(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", t));
                 }

@@ -40,7 +40,7 @@ pub fn recalculate_dependency_states(
         let mut paused_dep = None;
 
         if let Some(meta) = &plugin.metadata {
-            for req_str in &meta.require {
+            for req_str in &meta.requires {
                 if let Ok(req) = goldsrc_api::Requirement::from_str(req_str) {
                     match req {
                         goldsrc_api::Requirement::Plugin { name, optional, .. } => {

@@ -266,7 +266,29 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Comprehensive 5-Phase ECS Verification & Pipeline Hardening**:
   - Multi-system integration tests covering `Validate` -> `Modify` -> `Execute` -> `React` -> `Monitor` execution sequences and topological ordering.
 
-## v0.17.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
+## v0.17.0 — Declarative Orchestration, Unified Layering & Phased DAG 🚧 In Progress
+
+**Goal:** Eliminate magic priority numbers across the ecosystem, establish a deterministic phased topological dependency engine (`PhasedDag`), unify macros/builders/imperative registries, and enforce pure game-agnostic layer separation.
+
+- [x] **Unified 3-Tier Layering Architecture (`macros -> builders -> imperative registries`)**:
+  - Implemented runtime thread-safe registries for `CommandRegistry`, `EventRegistry`, `PlaceholderRegistry`, and `MenuActionRegistry`.
+  - Added fluent builders with terminal `.register()` and `.subscribe()` methods.
+  - Procedural macros (`#[command]`, `#[event]`, `#[menu_action]`, `#[system]`) desugar into dynamic registrations executed during `Guest::on_load()`.
+- [x] **Pure Game-Agnostic Core Decoupling**:
+  - Decoupled CS 1.6 domain layer into external `goldsrc-game-cstrike` repository.
+  - Decoupled `goldsrc-api` and `goldsrc` framework from `goldsrc-sys` via optional `unsafe-sys` feature flag.
+  - Extracted `vip_menu` demo plugin into `goldsrc-game-cstrike`.
+- [ ] **Universal Phased DAG Ordering Engine (`PhasedDag<P, Id, T>`)**:
+  - Linear phase stratification with deterministic Kahn topological ordering and stable tie-breaking (`Phase` -> `Declaration Order` -> `Alphabetical ID`).
+  - Compiler-grade diagnostics for cycle detection (`CycleDetected`), phase ordering conflicts (`PhaseConflict`), and missing dependencies (`MissingDependency`).
+- [ ] **Declarative Plugin Orchestration (`plugins.toml`)**:
+  - Complete elimination of integer `priority: i32`.
+  - Introduction of architectural layers (`tier = "core" | "service" | "gameplay" | "addon" | "analytics"`) and canonical dependency declarations (`requires = [...]`).
+- [ ] **Semantic Event Phases & Commutative State Contexts**:
+  - Transition event subscriptions from numeric priorities to semantic phases: `EventPhase::Filter` -> `EventPhase::Handle` -> `EventPhase::Observe`.
+  - Commutative accumulators (`add_bonus`, `add_multiplier`, `add_reduction`, `cancel`) and typed blackboard property bags preventing mutation conflicts across independent plugins.
+
+## v0.18.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
 
 **Goal:** Support polyglot plugin development by dynamically loading external language runtimes (Native Rust/C plugins via `goldsrc-host-native`, C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 
@@ -281,3 +303,4 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
+

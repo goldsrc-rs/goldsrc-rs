@@ -229,6 +229,16 @@ impl std::str::FromStr for SystemPhase {
     }
 }
 
+impl goldsrc_api::dag::Phase for SystemPhase {
+    fn name(&self) -> &'static str {
+        self.as_str()
+    }
+
+    fn default_phase() -> Self {
+        Self::Execute
+    }
+}
+
 /// Execution stage for ECS systems in the GoldSrc lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Stage {
@@ -358,93 +368,45 @@ impl SystemRegistry {
         self.sort_systems();
     }
 
-    /// Sorts systems deterministically using (Stage, Phase) buckets + intra-phase DAG resolution.
+    /// Sorts systems deterministically using Stage buckets + PhasedDag intra-stage resolution.
     fn sort_systems(&mut self) {
-        self.systems.sort_by_key(|s| (s.stage, s.phase));
+        let mut by_stage: HashMap<Stage, Vec<SystemDescriptor>> = HashMap::new();
+        for sys in self.systems.drain(..) {
+            by_stage.entry(sys.stage).or_default().push(sys);
+        }
 
-        // Group by stage and phase to resolve intra-phase DAG dependencies (before/after)
-        let mut resolved = Vec::with_capacity(self.systems.len());
-        let mut i = 0;
-        while i < self.systems.len() {
-            let stage = self.systems[i].stage;
-            let phase = self.systems[i].phase;
-            let mut j = i;
-            while j < self.systems.len()
-                && self.systems[j].stage == stage
-                && self.systems[j].phase == phase
-            {
-                j += 1;
+        let mut stages = Stage::ALL.to_vec();
+        stages.sort();
+
+        let mut resolved = Vec::new();
+        for stage in stages {
+            if let Some(stage_systems) = by_stage.remove(&stage) {
+                let mut dag = goldsrc_api::dag::PhasedDag::<
+                    SystemPhase,
+                    &'static str,
+                    SystemDescriptor,
+                >::new();
+                for sys in stage_systems {
+                    dag.add(sys.name, sys.clone())
+                        .phase(sys.phase)
+                        .befores(sys.before.clone())
+                        .afters(sys.after.clone())
+                        .register();
+                }
+
+                match dag.resolve_data() {
+                    Ok(systems) => resolved.extend(systems),
+                    Err(err) => {
+                        log::error!(
+                            target: "ecs",
+                            "[SystemRegistry] Dependency resolution error in stage '{stage}': {err}"
+                        );
+                    }
+                }
             }
-
-            let mut bucket = self.systems[i..j].to_vec();
-            bucket = Self::topological_sort_bucket(bucket);
-            resolved.extend(bucket);
-            i = j;
         }
 
         self.systems = resolved;
-    }
-
-    /// Topologically sorts systems within the same (Stage, Phase) bucket.
-    fn topological_sort_bucket(bucket: Vec<SystemDescriptor>) -> Vec<SystemDescriptor> {
-        let n = bucket.len();
-        if n <= 1 {
-            return bucket;
-        }
-
-        let mut name_to_idx = HashMap::new();
-        for (idx, sys) in bucket.iter().enumerate() {
-            name_to_idx.insert(sys.name, idx);
-        }
-
-        let mut in_degree = vec![0; n];
-        let mut adj = vec![Vec::new(); n];
-
-        for (u, sys) in bucket.iter().enumerate() {
-            // 'after = "foo"' means foo -> u (foo runs before u)
-            for after_name in &sys.after {
-                if let Some(&v) = name_to_idx.get(after_name) {
-                    adj[v].push(u);
-                    in_degree[u] += 1;
-                }
-            }
-            // 'before = "bar"' means u -> bar (u runs before bar)
-            for before_name in &sys.before {
-                if let Some(&v) = name_to_idx.get(before_name) {
-                    adj[u].push(v);
-                    in_degree[v] += 1;
-                }
-            }
-        }
-
-        let mut queue = std::collections::VecDeque::new();
-        for (idx, &deg) in in_degree.iter().enumerate() {
-            if deg == 0 {
-                queue.push_back(idx);
-            }
-        }
-
-        let mut sorted = Vec::with_capacity(n);
-        while let Some(u) = queue.pop_front() {
-            sorted.push(bucket[u].clone());
-            for &v in &adj[u] {
-                in_degree[v] -= 1;
-                if in_degree[v] == 0 {
-                    queue.push_back(v);
-                }
-            }
-        }
-
-        // If cycle or unvisited remainder, append remaining deterministically
-        if sorted.len() < n {
-            for (idx, sys) in bucket.into_iter().enumerate() {
-                if in_degree[idx] > 0 {
-                    sorted.push(sys);
-                }
-            }
-        }
-
-        sorted
     }
 
     /// Runs all systems registered for the specified `stage`.

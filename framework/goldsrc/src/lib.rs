@@ -145,29 +145,37 @@ pub mod menu {
     pub use goldsrc_api::menu::*;
 }
 
+pub mod modifiers {
+    pub use goldsrc_api::modifiers::*;
+}
+
 pub use ::log;
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
+#[allow(deprecated)]
+pub use goldsrc_api::EventPriority;
 pub use goldsrc_api::bindings;
 pub use goldsrc_api::engine_api as engine;
 pub use goldsrc_api::hud as hud_api;
 pub use goldsrc_api::menu as menu_api;
+pub use goldsrc_api::modifiers as modifiers_api;
 pub use goldsrc_api::{
-    Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
-    CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry, CommandResult,
-    CommandTarget, Condition, ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, Event,
-    EventHandler, EventPriority, EventRegistry, EventSubscriberBuilder, EventSubscription,
-    ExitBehavior, Feedback, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
-    HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu, MenuActionHandler, MenuActionRegistry,
-    MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, Placeholder,
-    PlaceholderBuilder, PlaceholderCall, PlaceholderHandler, PlaceholderMetadata,
-    PlaceholderRegistry, Player, PlayerStateFilter, PrintTarget, RenderedMenuPage, SlotAction,
-    Spectator, SqlDatabase, StorageError, StorageProvider, Team, Vector3, VisualDeny,
-    clear_commands, clear_events, clear_menu_actions, clear_placeholders, dispatch_command,
-    dispatch_event, dispatch_local_placeholder, dispatch_menu_action, register_command,
-    register_menu_action_id, register_menu_action_name, register_placeholder, split_command_args,
-    subscribe_event,
+    Alive, AntiSpamAction, AsLangCode, Auth, BlackboardValue, Bot, CapExpr, ChatScope, ClientKind,
+    Command, CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry,
+    CommandResult, CommandTarget, CommutativeModifier, Condition, ConnectionState, DagError, Dead,
+    DenyAction, DenyPolicy, Engine, Entity, Event, EventHandler, EventPhase, EventRegistry,
+    EventSubscriberBuilder, EventSubscription, ExitBehavior, Feedback, FromArg, HLTV, HudColor,
+    HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle, LifeState,
+    Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext, MenuItem,
+    MenuPageBuilder, MenuRendererKind, MenuStyle, ModifierContribution, NodeBuilder, OrderNode,
+    Phase, PhasedDag, Placeholder, PlaceholderBuilder, PlaceholderCall, PlaceholderHandler,
+    PlaceholderMetadata, PlaceholderRegistry, Player, PlayerStateFilter, PluginTier, PrintTarget,
+    RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team,
+    TypedBlackboard, Vector3, VisualDeny, clear_commands, clear_events, clear_menu_actions,
+    clear_placeholders, dispatch_command, dispatch_event, dispatch_local_placeholder,
+    dispatch_menu_action, register_command, register_menu_action_id, register_menu_action_name,
+    register_placeholder, split_command_args, subscribe_event,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
@@ -180,17 +188,19 @@ pub mod prelude {
     pub use crate::engine;
     pub use crate::hud_api as hud;
     pub use crate::menu_api;
+    pub use crate::modifiers_api as modifiers;
     pub use crate::tr;
     pub use crate::{
-        Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
-        CommandBuilder, CommandContext, CommandError, CommandHandler, CommandResult, CommandTarget,
-        Condition, ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, Event,
-        EventHandler, EventPriority, EventSubscriberBuilder, ExitBehavior, Feedback, FromArg, HLTV,
-        HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle,
-        LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind,
-        MenuStyle, Placeholder, PlaceholderBuilder, Player, PlayerStateFilter, PrintTarget,
-        RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider,
-        System, SystemBuilder, Team, Vector3, VisualDeny,
+        Alive, AntiSpamAction, AsLangCode, Auth, BlackboardValue, Bot, CapExpr, ChatScope,
+        ClientKind, Command, CommandBuilder, CommandContext, CommandError, CommandHandler,
+        CommandResult, CommandTarget, CommutativeModifier, Condition, ConnectionState, Dead,
+        DenyAction, DenyPolicy, Engine, Entity, Event, EventHandler, EventPhase,
+        EventSubscriberBuilder, ExitBehavior, Feedback, FromArg, HLTV, HudColor, HudCoord,
+        HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu,
+        MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle,
+        ModifierContribution, Placeholder, PlaceholderBuilder, Player, PlayerStateFilter,
+        PrintTarget, RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError,
+        StorageProvider, System, SystemBuilder, Team, TypedBlackboard, Vector3, VisualDeny,
     };
     pub use crate::{
         chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,

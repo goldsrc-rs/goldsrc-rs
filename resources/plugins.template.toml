@@ -1,21 +1,22 @@
 # ==============================================================================
 # GoldSrc.rs Plugin Orchestration Configuration (plugins.toml)
 # ==============================================================================
-# This file controls plugin execution priority, profile groups, granular
-# debugging, and reactive server lifecycle rules.
+# This file controls plugin execution tiers, topological dependencies, profile groups,
+# granular debugging, and reactive server lifecycle rules.
 # Both Named-Map format ([plugins.<name>]) and Array-of-Tables ([[plugins]]) are supported.
 
 # ------------------------------------------------------------------------------
-# 1. Plugin Declarations & Priorities (Named Table Map)
+# 1. Plugin Declarations & Architectural Tiers (Named Table Map)
 # ------------------------------------------------------------------------------
 # [plugins.admin_system]
 # enabled = true
-# priority = 150
+# tier = "core"
 # debug = true
-
+#
 # [plugins.vip_menu]
 # enabled = true
-# priority = 110
+# tier = "addon"
+# requires = ["vip_core"]
 # [plugins.vip_menu.debug]
 # level = "debug"
 # profile = true

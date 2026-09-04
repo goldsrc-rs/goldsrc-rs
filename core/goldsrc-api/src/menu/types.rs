@@ -465,9 +465,15 @@ impl MenuItem {
     }
 
     /// Attaches an access condition.
-    pub fn require(mut self, condition: Condition) -> Self {
+    pub fn requires(mut self, condition: Condition) -> Self {
         self.conditions.push(condition);
         self
+    }
+
+    /// Attaches an access condition (deprecated, use `requires`).
+    #[deprecated(note = "Use .requires() instead")]
+    pub fn require(self, condition: Condition) -> Self {
+        self.requires(condition)
     }
 
     /// Configures the deny policy on condition failure.

@@ -328,19 +328,53 @@ impl HostRuntime {
         let plugin_dir = crate::paths::PathResolver::existing_plugin_dir(backend);
         discover_wasm_plugins(&plugin_dir, &plugin_dir, &mut discovered_plugins);
 
-        // Sort discovered plugins by priority from plugins.toml (higher priority loads first)
-        discovered_plugins.sort_by_key(|(name, _)| {
-            let priority = plugins_config
+        // Resolve plugin load order deterministically using PhasedDag:
+        // Tier (Core -> Service -> Gameplay -> Addon -> Analytics) -> Topological Dependencies (`requires`) -> Discovery Order
+        let mut dag = goldsrc_api::dag::PhasedDag::<
+            goldsrc_api::dag::PluginTier,
+            String,
+            std::path::PathBuf,
+        >::new();
+        for (rel_name, path) in &discovered_plugins {
+            let base_name = rel_name
+                .rsplit_once('/')
+                .map(|(_, b)| b)
+                .unwrap_or(rel_name);
+            let entry = plugins_config
                 .plugins
                 .iter()
-                .find(|p| p.name == *name)
-                .map(|p| p.priority)
-                .unwrap_or(100);
-            std::cmp::Reverse(priority)
-        });
+                .find(|p| p.name == *rel_name || p.name == base_name);
+            let tier = entry.map(|p| p.tier).unwrap_or_default();
+            let mut builder = dag.add(rel_name.clone(), path.clone()).phase(tier);
+            if let Some(e) = entry {
+                for req in &e.requires {
+                    let target_rel = discovered_plugins
+                        .iter()
+                        .find(|(d_name, _)| {
+                            d_name == req
+                                || d_name.rsplit_once('/').map(|(_, b)| b).unwrap_or(d_name) == req
+                        })
+                        .map(|(d_name, _)| d_name.clone())
+                        .unwrap_or_else(|| req.clone());
+                    builder = builder.after(target_rel);
+                }
+            }
+            builder.register();
+        }
+
+        let sorted_plugins: Vec<(String, std::path::PathBuf)> = match dag.resolve() {
+            Ok(resolved) => resolved.into_iter().map(|n| (n.id, n.data)).collect(),
+            Err(e) => {
+                log::error!(
+                    target: "wasm",
+                    "Plugin topological resolution encountered conflict: {e}. Falling back to default discovery order."
+                );
+                discovered_plugins
+            }
+        };
 
         // Load plugins based on plugins.toml activation status
-        for (rel_name, path) in discovered_plugins {
+        for (rel_name, path) in sorted_plugins {
             let is_enabled = plugins_config.is_plugin_enabled(&rel_name);
             match manager.load_plugin(&path) {
                 Ok(plugin_name) => {
