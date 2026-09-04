@@ -6,10 +6,14 @@ license.workspace = true
 description = "Public framework (SDK) for GoldSrc.rs plugin developers"
 
 [dependencies]
-goldsrc-sys = { workspace = true }
-goldsrc-api = { workspace = true, features = ["unsafe-sys"] }
+goldsrc-sys = { workspace = true, optional = true }
+goldsrc-api = { workspace = true }
 goldsrc-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 log = { workspace = true }
+
+[features]
+default = []
+unsafe-sys = ["dep:goldsrc-sys", "goldsrc-api/unsafe-sys"]

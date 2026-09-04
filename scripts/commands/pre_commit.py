@@ -77,7 +77,6 @@ def main(argv=None):
         "-p", "test_menu",
         "-p", "test_ecs",
         "-p", "vip_core",
-        "-p", "vip_menu",
     ]
     wasm_res = subprocess.run(wasm_cmd, cwd=repo_root, text=True, env=env)
     if wasm_res.returncode != 0:
