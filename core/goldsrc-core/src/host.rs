@@ -457,9 +457,30 @@ impl HostRuntime {
     }
 
     /// Run `f` with exclusive access to the `PluginManager`, if initialized.
+    /// Protects against re-entrant mutex deadlock if called recursively on the same thread.
     pub fn with_manager<R>(f: impl FnOnce(Option<&mut PluginManager>) -> R) -> R {
+        thread_local! {
+            static IN_MANAGER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        }
+
+        if IN_MANAGER.get() {
+            log::warn!(
+                target: "core",
+                "Re-entrant call to HostRuntime::with_manager detected and suppressed to prevent deadlock"
+            );
+            return f(None);
+        }
+
         if let Some(lock) = RUNTIME.get() {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            IN_MANAGER.set(true);
+            struct ResetGuard;
+            impl Drop for ResetGuard {
+                fn drop(&mut self) {
+                    IN_MANAGER.set(false);
+                }
+            }
+            let _reset = ResetGuard;
             f(Some(&mut guard.manager))
         } else {
             f(None)

@@ -70,6 +70,7 @@ pub unsafe extern "C" fn Meta_Attach(
             crate::set_meta_globals(meta_globals);
             if !gamedll_funcs.is_null() {
                 crate::set_gamedll_funcs(gamedll_funcs);
+                crate::ensure_game_dll_hooks();
             }
 
             // Fill the META_FUNCTIONS table with our hook functions.

@@ -2,7 +2,7 @@
 
 use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
 use crate::{call_engfunc, call_engfunc_ret};
-use goldsrc_api::EngineCvars;
+use goldsrc_api::{EngineCvars, EngineMessages};
 use goldsrc_sys::enginefuncs_t;
 
 /// Standard `Engine` implementation parameterized by the engfunc source.
@@ -303,15 +303,8 @@ impl goldsrc_api::EngineMessages for EngineBackend {
 
     fn message_end(&self) {
         let _msg_type = ACTIVE_MSG_TYPE.swap(0, std::sync::atomic::Ordering::Relaxed);
-        let strings = ACTIVE_MSG_STRINGS
-            .lock()
-            .map(|mut l| std::mem::take(&mut *l))
-            .unwrap_or_default();
-
-        if !strings.is_empty() {
-            // Emit generic user message strings event for subscribers and game plugins
-            let combined = strings.join("\t");
-            crate::hooks::dispatcher::emit_event("user_msg", combined.as_bytes());
+        if let Ok(mut list) = ACTIVE_MSG_STRINGS.lock() {
+            list.clear();
         }
 
         unsafe {
@@ -503,6 +496,20 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     fn entity_set_health(&self, index: i32, health: f32) {
         if let Some(mut e) = self.get_player(index) {
             e.set_health(health);
+            // Synchronize HUD health display for human and bot players
+            if (1..=32).contains(&index) {
+                let health_msg_id = self.reg_user_msg("Health", 1);
+                if health_msg_id > 0 && health_msg_id != 255 {
+                    self.message_begin(
+                        goldsrc_api::MessageDest::One as i32,
+                        health_msg_id,
+                        None,
+                        Some(index),
+                    );
+                    self.write_byte(health.clamp(0.0, 255.0) as i32);
+                    self.message_end();
+                }
+            }
         }
     }
 
@@ -633,6 +640,20 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     fn player_set_armorvalue(&self, index: i32, armor: f32) {
         if let Some(mut p) = self.get_player(index) {
             p.set_armorvalue(armor);
+            // Synchronize HUD armor display for human and bot players
+            if (1..=32).contains(&index) {
+                let battery_msg_id = self.reg_user_msg("Battery", 2);
+                if battery_msg_id > 0 && battery_msg_id != 255 {
+                    self.message_begin(
+                        goldsrc_api::MessageDest::One as i32,
+                        battery_msg_id,
+                        None,
+                        Some(index),
+                    );
+                    self.write_short(armor.clamp(0.0, 255.0) as i32);
+                    self.message_end();
+                }
+            }
         }
     }
 

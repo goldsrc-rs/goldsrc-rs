@@ -432,10 +432,20 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                                 });
                             } else if ident == "player" {
                                 param_bindings.push(quote! {
-                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&caller.to_string()) {
+                                    let caller_token = caller.to_string();
+                                    let target_token = if #total_non_context_params == 0 {
+                                        if let Some(arg) = parsed_args.first().filter(|s| !s.is_empty()) {
+                                            arg.as_str()
+                                        } else {
+                                            &caller_token
+                                        }
+                                    } else {
+                                        &caller_token
+                                    };
+                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(target_token) {
                                         Ok(val) => val,
                                         Err(err) => {
-                                            ::goldsrc::log_warn!("[Command Error] Failed to bind 'player' context for caller {caller}: {err}");
+                                            ::goldsrc::log_warn!("[Command Error] Failed to bind 'player' context for '{target_token}' (caller {caller}): {err}");
                                             return false;
                                         }
                                     };
