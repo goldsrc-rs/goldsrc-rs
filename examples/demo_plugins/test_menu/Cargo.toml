@@ -9,6 +9,7 @@ description = "Declarative multi-page and DHUD menu verification plugin"
 
 [lib]
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc = { workspace = true }

@@ -8,6 +8,7 @@ description = "Metamod backend implementation for GoldSrc.rs"
 [lib]
 name = "goldsrc_metamod"
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc-sys = { workspace = true }

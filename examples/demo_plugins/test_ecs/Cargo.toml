@@ -9,6 +9,7 @@ description = "Flat ECS state storage and system stages verification plugin"
 
 [lib]
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc = { workspace = true }

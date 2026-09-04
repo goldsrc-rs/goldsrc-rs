@@ -9,6 +9,7 @@ description = "HUD, DHUD, and Screen Effects verification plugin"
 
 [lib]
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc = { workspace = true }

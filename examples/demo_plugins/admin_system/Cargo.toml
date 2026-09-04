@@ -9,6 +9,7 @@ description = "Admin capabilities & permissions manager"
 
 [lib]
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc = { path = "../../../framework/goldsrc" }

@@ -8,6 +8,7 @@ description = "Multilingual i18n & Localization verification plugin for GoldSrc.
 
 [lib]
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc = { workspace = true }
