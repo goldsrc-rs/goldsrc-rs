@@ -8,6 +8,7 @@ description = "Standalone backend for GoldSrc.rs — direct engine integration w
 [lib]
 name = "goldsrc_standalone"
 crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
 goldsrc-sys = { workspace = true }
