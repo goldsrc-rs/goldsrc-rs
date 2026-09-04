@@ -485,7 +485,15 @@ mod tests {
 
     #[test]
     fn test_sqlite_storage_engine_crud() {
-        let temp_dir = std::env::temp_dir().join(format!("goldsrc_test_db_{}", std::process::id()));
+        let unique_id = format!(
+            "goldsrc_test_db_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let temp_dir = std::env::temp_dir().join(unique_id);
         let db_file = temp_dir.join("test.db");
 
         let engine = SqliteStorageEngine::open(&db_file).unwrap();

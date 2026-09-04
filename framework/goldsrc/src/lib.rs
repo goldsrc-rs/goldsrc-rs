@@ -130,13 +130,19 @@ pub mod chat {
 }
 
 pub mod placeholders {
-    /// Registers a dynamic placeholder inside a WASM plugin.
-    pub fn register_placeholder<F>(name: &str, description: &str, _handler: F)
-    where
-        F: Fn(goldsrc_api::Player, Option<&str>) -> String + 'static,
-    {
-        goldsrc_api::bindings::goldsrc::engine::api::host_register_placeholder(name, description);
-    }
+    pub use goldsrc_api::placeholders::*;
+}
+
+pub mod command {
+    pub use goldsrc_api::command::*;
+}
+
+pub mod event {
+    pub use goldsrc_api::event::*;
+}
+
+pub mod menu {
+    pub use goldsrc_api::menu::*;
 }
 
 pub use ::log;
@@ -149,13 +155,19 @@ pub use goldsrc_api::hud as hud_api;
 pub use goldsrc_api::menu as menu_api;
 pub use goldsrc_api::{
     Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
-    CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, Condition,
-    ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, Feedback, FromArg,
-    HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind,
-    ItemTitle, LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder,
-    MenuRendererKind, MenuStyle, Player, PlayerStateFilter, PrintTarget, RenderedMenuPage,
-    SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team, Vector3, VisualDeny,
-    split_command_args,
+    CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry, CommandResult,
+    CommandTarget, Condition, ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, Event,
+    EventHandler, EventPriority, EventRegistry, EventSubscriberBuilder, EventSubscription,
+    ExitBehavior, Feedback, FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
+    HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu, MenuActionHandler, MenuActionRegistry,
+    MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, Placeholder,
+    PlaceholderBuilder, PlaceholderCall, PlaceholderHandler, PlaceholderMetadata,
+    PlaceholderRegistry, Player, PlayerStateFilter, PrintTarget, RenderedMenuPage, SlotAction,
+    Spectator, SqlDatabase, StorageError, StorageProvider, Team, Vector3, VisualDeny,
+    clear_commands, clear_events, clear_menu_actions, clear_placeholders, dispatch_command,
+    dispatch_event, dispatch_local_placeholder, dispatch_menu_action, register_command,
+    register_menu_action_id, register_menu_action_name, register_placeholder, split_command_args,
+    subscribe_event,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
@@ -171,13 +183,14 @@ pub mod prelude {
     pub use crate::tr;
     pub use crate::{
         Alive, AntiSpamAction, AsLangCode, Auth, Bot, CapExpr, ChatScope, ClientKind, Command,
-        CommandBuilder, CommandContext, CommandError, CommandResult, CommandTarget, Condition,
-        ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, ExitBehavior, Feedback,
-        FromArg, HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder,
-        ItemKind, ItemTitle, LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder,
-        MenuRendererKind, MenuStyle, Player, PlayerStateFilter, PrintTarget, RenderedMenuPage,
-        SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team, Vector3,
-        VisualDeny,
+        CommandBuilder, CommandContext, CommandError, CommandHandler, CommandResult, CommandTarget,
+        Condition, ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, Event,
+        EventHandler, EventPriority, EventSubscriberBuilder, ExitBehavior, Feedback, FromArg, HLTV,
+        HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle,
+        LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind,
+        MenuStyle, Placeholder, PlaceholderBuilder, Player, PlayerStateFilter, PrintTarget,
+        RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider,
+        System, SystemBuilder, Team, Vector3, VisualDeny,
     };
     pub use crate::{
         chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,

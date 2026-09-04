@@ -18,13 +18,11 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
     let mut on_load_fn = quote! {};
     let mut on_unload_fn = quote! {};
     let mut on_frame_fn = quote! {};
-    let mut on_command_fn = quote! {};
     let mut event_handlers: Vec<(Option<String>, syn::Ident, usize)> = Vec::new();
     let mut registered_events: std::collections::HashSet<Option<String>> =
         std::collections::HashSet::new();
 
-    let mut command_matchers = Vec::new();
-    let mut plugin_commands: Vec<String> = Vec::new();
+    let mut command_registrations = Vec::new();
     let mut command_defs: Vec<CommandDefInfo> = Vec::new();
     let mut menu_action_matchers: Vec<(Option<u32>, Option<String>, syn::Ident, usize)> =
         Vec::new();
@@ -335,14 +333,10 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                 event_handlers.push((event_name, fn_name.clone(), inputs_len));
             }
             if let Some(cmd) = cmd_name {
-                plugin_commands.push(cmd.clone());
-                for alias in &cmd_aliases {
-                    plugin_commands.push(alias.clone());
-                }
                 command_defs.push(CommandDefInfo {
                     name: cmd.clone(),
-                    description: cmd_description.unwrap_or_default(),
-                    usage: cmd_usage.unwrap_or_default(),
+                    description: cmd_description.clone().unwrap_or_default(),
+                    usage: cmd_usage.clone().unwrap_or_default(),
                     aliases: cmd_aliases.clone(),
                     capability: cmd_capability.clone(),
                     require: cmd_require.clone(),
@@ -390,11 +384,11 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                             true
                         },
                         1 => quote! {
-                            #struct_name::#fn_name(args);
+                            #struct_name::#fn_name(args.to_string());
                             true
                         },
                         _ => quote! {
-                            #struct_name::#fn_name(name, args);
+                            #struct_name::#fn_name(#cmd.to_string(), args.to_string());
                             true
                         },
                     }
@@ -484,132 +478,89 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                     }
 
                     quote! {
-                        let parsed_args = ::goldsrc::split_command_args(&args);
+                        let parsed_args = ::goldsrc::split_command_args(args.as_ref());
                         #(#param_bindings)*
                         #struct_name::#fn_name(#(#param_idents),*);
                         true
                     }
                 };
 
-                let mut match_patterns = Vec::new();
-                match_patterns.push(quote! { #cmd });
-                for alias in &cmd_aliases {
-                    match_patterns.push(quote! { #alias });
-                }
-
-                if let Some(cap) = &cmd_capability {
-                    let cap_str = cap.clone();
-                    command_matchers.push(quote! {
-                        #(#match_patterns)|* => {
-                            if caller > 0 {
-                                match ::goldsrc::CapExpr::parse(#cap_str) {
-                                    Ok(expr) => {
-                                        let has_cap = |c: &str| ::goldsrc::Auth::has_capability(caller, c);
-                                        if !expr.evaluate(&has_cap) {
-                                            ::goldsrc::log_warn!("[Auth] Caller {} denied command '{}': requires capability '{}'.", caller, name, #cap_str);
-                                            return false;
-                                        }
-                                    }
-                                    Err(err) => {
-                                        ::goldsrc::log_err!("[Auth] Malformed capability expression '{}' for command '{}': {}", #cap_str, name, err);
-                                        return false;
-                                    }
-                                }
-                            }
-                            #call_expr
-                        }
-                    });
+                let cap_builder = if let Some(cap) = &cmd_capability {
+                    quote! { .capability(#cap) }
                 } else {
-                    command_matchers.push(quote! {
-                        #(#match_patterns)|* => {
-                            #call_expr
-                        }
-                    });
-                }
+                    quote! {}
+                };
+                let desc_builder = if !cmd_description.as_deref().unwrap_or_default().is_empty() {
+                    let d = cmd_description.as_deref().unwrap();
+                    quote! { .description(#d) }
+                } else {
+                    quote! {}
+                };
+                let usage_builder = if !cmd_usage.as_deref().unwrap_or_default().is_empty() {
+                    let u = cmd_usage.as_deref().unwrap();
+                    quote! { .usage(#u) }
+                } else {
+                    quote! {}
+                };
+
+                command_registrations.push(quote! {
+                    {
+                        let aliases: Vec<&'static str> = vec![#(#cmd_aliases),*];
+                        ::goldsrc::Command::builder(#cmd)
+                            .aliases(aliases)
+                            #cap_builder
+                            #desc_builder
+                            #usage_builder
+                            .register(|caller, args| {
+                                #call_expr
+                            });
+                    }
+                });
             }
         }
     }
 
-    if !command_matchers.is_empty() {
-        on_command_fn = quote! {
-            match name.as_str() {
-                #(#command_matchers)*
-                _ => false,
+    let on_command_fn = quote! {
+        ::goldsrc::command::dispatch_command(&name, caller, &args)
+    };
+
+    let mut event_registrations = Vec::new();
+    for (name, fn_name, inputs_len) in event_handlers {
+        let call = match inputs_len {
+            0 => quote! { |_payload| { #struct_name::#fn_name(); } },
+            1 => quote! { |payload| { #struct_name::#fn_name(payload.to_vec()); } },
+            _ => {
+                let n_str = name.clone().unwrap_or_default();
+                quote! { |payload| { #struct_name::#fn_name(#n_str.to_string(), payload.to_vec()); } }
             }
         };
-    } else {
-        on_command_fn = quote! { false };
-    }
-
-    let mut event_matchers = Vec::new();
-    for (name, fn_name, inputs_len) in event_handlers {
-        let pattern = match name {
-            Some(n) => quote! { #n },
-            None => quote! { _ },
-        };
-        let call = match inputs_len {
-            0 => quote! { #struct_name::#fn_name(); },
-            1 => quote! { #struct_name::#fn_name(payload); },
-            _ => quote! { #struct_name::#fn_name(name, payload); },
-        };
-        event_matchers.push(quote! {
-            #pattern => { #call }
+        let ev_name = name.unwrap_or_default();
+        event_registrations.push(quote! {
+            ::goldsrc::event::Event::subscriber(#ev_name)
+                .subscribe(#call);
         });
     }
 
-    let mut menu_matchers = Vec::new();
+    let mut menu_registrations = Vec::new();
     for (id_opt, act_opt, fn_name, inputs_len) in menu_action_matchers {
-        let mut patterns = Vec::new();
-        if let Some(id) = id_opt {
-            patterns.push(quote! { #id });
-        }
         let call = match inputs_len {
-            0 => quote! { #struct_name::#fn_name(); },
-            1 => quote! {
-                let mut p = ::goldsrc::Player::new(caller);
-                #struct_name::#fn_name(&mut p);
-            },
+            0 => quote! { |_player, _action| { #struct_name::#fn_name(); } },
+            1 => quote! { |mut player, _action| { #struct_name::#fn_name(&mut player); } },
             _ => {
-                let act_str = act_opt.unwrap_or_default();
-                quote! {
-                    let mut p = ::goldsrc::Player::new(caller);
-                    #struct_name::#fn_name(&mut p, #act_str);
-                }
+                let act_str = act_opt.clone().unwrap_or_default();
+                quote! { |mut player, _action| { #struct_name::#fn_name(&mut player, #act_str); } }
             }
         };
-        if !patterns.is_empty() {
-            menu_matchers.push(quote! {
-                #(#patterns)|* => { #call }
+        if let Some(id) = id_opt {
+            menu_registrations.push(quote! {
+                ::goldsrc::menu::register_menu_action_id(#id, #call);
             });
         }
-    }
-
-    let mut on_event_fn = quote! {};
-    if !event_matchers.is_empty() || !menu_matchers.is_empty() {
-        let menu_dispatch = if !menu_matchers.is_empty() {
-            quote! {
-                "menu_select" => {
-                    if payload.len() >= 8 {
-                        let caller = i32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-                        let item_id = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
-                        match item_id {
-                            #(#menu_matchers)*
-                            _ => {}
-                        }
-                    }
-                }
-            }
-        } else {
-            quote! {}
-        };
-
-        on_event_fn = quote! {
-            match name.as_str() {
-                #(#event_matchers)*
-                #menu_dispatch
-                _ => {}
-            }
-        };
+        if let Some(act) = act_opt {
+            menu_registrations.push(quote! {
+                ::goldsrc::menu::register_menu_action_name(#act, #call);
+            });
+        }
     }
 
     let mut system_registrations = Vec::new();
@@ -645,13 +596,12 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
         };
 
         system_registrations.push(quote! {
-            {
-                let stage = #stage_str.parse::<::goldsrc::ecs::Stage>().unwrap_or(::goldsrc::ecs::Stage::Frame);
-                let phase = #phase_str.parse::<::goldsrc::ecs::SystemPhase>().unwrap_or(::goldsrc::ecs::SystemPhase::Execute);
-                let before: Vec<&str> = vec![#(#before_strs),*];
-                let after: Vec<&str> = vec![#(#after_strs),*];
-                let _ = (stage, phase, before, after, #runner_fn, #sys_name);
-            }
+            ::goldsrc::ecs::System::builder(#sys_name)
+                .stage(#stage_str.parse::<::goldsrc::ecs::Stage>().unwrap_or(::goldsrc::ecs::Stage::Frame))
+                .phase(#phase_str.parse::<::goldsrc::ecs::SystemPhase>().unwrap_or(::goldsrc::ecs::SystemPhase::Execute))
+                .before(vec![#(#before_strs),*])
+                .after(vec![#(#after_strs),*])
+                .register(#runner_fn);
         });
     }
 
@@ -750,6 +700,9 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             fn on_load() {
                 ::goldsrc::init_guest_logger();
                 #(#system_registrations)*
+                #(#command_registrations)*
+                #(#event_registrations)*
+                #(#menu_registrations)*
                 #on_load_fn
             }
 
@@ -758,19 +711,25 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             }
 
             fn on_frame() {
+                ::goldsrc::ecs::run_frame_systems();
                 #on_frame_fn
             }
 
             fn on_event(name: String, payload: Vec<u8>) {
-                #on_event_fn
+                if name == "menu_select" && payload.len() >= 8 {
+                    let caller = i32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+                    let item_id = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
+                    ::goldsrc::menu::dispatch_menu_action(::goldsrc::Player::new(caller), Some(item_id), None);
+                }
+                ::goldsrc::event::dispatch_event(&name, &payload);
             }
 
             fn on_command(name: String, caller: i32, args: String) -> bool {
                 #on_command_fn
             }
 
-            fn on_placeholder(_name: String, _caller: i32, _param: String) -> Option<String> {
-                None
+            fn on_placeholder(name: String, caller: i32, param: String) -> Option<String> {
+                ::goldsrc::placeholders::dispatch_local_placeholder(&name, caller, &param)
             }
 
             fn on_chat(_sender: i32, _text: String, _is_team: bool) -> Option<String> {

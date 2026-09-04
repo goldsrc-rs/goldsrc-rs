@@ -455,6 +455,127 @@ impl SystemRegistry {
     }
 }
 
+/// Fluent builder for ECS system descriptors.
+#[derive(Clone)]
+pub struct SystemBuilder {
+    name: &'static str,
+    stage: Stage,
+    phase: SystemPhase,
+    before: Vec<&'static str>,
+    after: Vec<&'static str>,
+}
+
+impl SystemBuilder {
+    /// Creates a new system builder with the given name.
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            stage: Stage::Frame,
+            phase: SystemPhase::Execute,
+            before: Vec::new(),
+            after: Vec::new(),
+        }
+    }
+
+    /// Sets the execution lifecycle stage.
+    pub fn stage(mut self, stage: Stage) -> Self {
+        self.stage = stage;
+        self
+    }
+
+    /// Sets the intra-stage execution phase.
+    pub fn phase(mut self, phase: SystemPhase) -> Self {
+        self.phase = phase;
+        self
+    }
+
+    /// Declares systems that must execute AFTER this system.
+    pub fn before(mut self, before: impl IntoIterator<Item = &'static str>) -> Self {
+        self.before.extend(before);
+        self
+    }
+
+    /// Declares systems that must execute BEFORE this system.
+    pub fn after(mut self, after: impl IntoIterator<Item = &'static str>) -> Self {
+        self.after.extend(after);
+        self
+    }
+
+    /// Builds the system descriptor.
+    pub fn build(self, run: SystemFn) -> SystemDescriptor {
+        SystemDescriptor {
+            name: self.name,
+            stage: self.stage,
+            phase: self.phase,
+            before: self.before,
+            after: self.after,
+            run,
+        }
+    }
+
+    /// Builds and immediately registers the system in the global registry.
+    pub fn register(self, run: SystemFn) {
+        let desc = self.build(run);
+        register_system(desc);
+    }
+}
+
+/// Helper entry point for ECS system builder and registration.
+pub struct System;
+
+impl System {
+    /// Creates a new [`SystemBuilder`] for the given system name.
+    pub fn builder(name: &'static str) -> SystemBuilder {
+        SystemBuilder::new(name)
+    }
+
+    /// Registers a system descriptor in the global registry.
+    pub fn register(desc: SystemDescriptor) {
+        register_system(desc);
+    }
+}
+
+static SYSTEM_REGISTRY: std::sync::LazyLock<std::sync::RwLock<SystemRegistry>> =
+    std::sync::LazyLock::new(|| std::sync::RwLock::new(SystemRegistry::new()));
+static ECS_WORLD: std::sync::LazyLock<std::sync::RwLock<World>> =
+    std::sync::LazyLock::new(|| std::sync::RwLock::new(World::new()));
+
+/// Registers an ECS system descriptor in the global plugin registry.
+pub fn register_system(descriptor: SystemDescriptor) {
+    SYSTEM_REGISTRY
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .register(descriptor);
+}
+
+/// Runs all systems registered for the specified stage using the global ECS World.
+pub fn run_stage(stage: Stage, target: Option<EntityId>) {
+    let reg = SYSTEM_REGISTRY.read().unwrap_or_else(|e| e.into_inner());
+    let mut world = ECS_WORLD.write().unwrap_or_else(|e| e.into_inner());
+    reg.run_stage(stage, &mut world, target);
+}
+
+/// Runs all systems registered for the `Frame` stage.
+pub fn run_frame_systems() {
+    run_stage(Stage::Frame, None);
+}
+
+/// Accesses the global plugin ECS World with a closure.
+pub fn with_world<R>(f: impl FnOnce(&mut World) -> R) -> R {
+    let mut world = ECS_WORLD.write().unwrap_or_else(|e| e.into_inner());
+    f(&mut world)
+}
+
+/// Clears all systems and entities from the global ECS state.
+pub fn clear_ecs() {
+    SYSTEM_REGISTRY
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .systems
+        .clear();
+    *ECS_WORLD.write().unwrap_or_else(|e| e.into_inner()) = World::new();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

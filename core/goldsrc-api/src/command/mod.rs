@@ -2,9 +2,14 @@
 
 pub mod builder;
 pub mod error;
+pub mod registry;
 
 pub use builder::{Command, CommandBuilder};
 pub use error::{CommandContext, CommandError, CommandResult};
+pub use registry::{
+    CommandHandler, CommandRegistry, RegisteredCommand, clear_commands, dispatch_command,
+    register_command,
+};
 
 use crate::client::{Alive, Dead, Player};
 

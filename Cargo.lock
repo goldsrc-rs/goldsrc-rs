@@ -545,6 +545,7 @@ name = "goldsrc-api"
 version = "0.16.0"
 dependencies = [
  "goldsrc-sys",
+ "log",
  "serde",
  "toml",
  "wit-bindgen",
