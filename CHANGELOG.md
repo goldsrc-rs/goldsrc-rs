@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Unified 3-Tier Layering Architecture (`macros -> builders -> imperative registries`)**:
+  - Implemented thread-safe runtime registries in `core/goldsrc-api`: `CommandRegistry`, `EventRegistry`, `PlaceholderRegistry`, and `MenuActionRegistry`.
+  - Added fluent builders with terminal `.register()` and `.subscribe()` methods (`CommandBuilder`, `EventSubscriberBuilder`, `PlaceholderBuilder`, `SystemBuilder`).
+  - Refactored `framework/goldsrc-macros` to desugar `#[command]`, `#[event]`, `#[menu_action]`, and `#[system]` into builder registrations executed within `Guest::on_load()`.
+  - Connected `Guest` interface hooks (`on_command`, `on_event`, `on_placeholder`, `on_frame`) to centralized dynamic dispatchers.
+- **Pure Game-Agnostic Core Architecture & External Game Crates**:
+  - Extracted CS 1.6 specific game logic and entities into external `goldsrc-game-cstrike` repository.
+  - Made `Team(pub i32)` mod-agnostic with zero assumptions about underlying game rules.
+  - Decoupled `goldsrc-api` and `goldsrc` framework crate from `goldsrc-sys` via optional `unsafe-sys` feature flag.
+  - Extracted `vip_menu` demo plugin into `goldsrc-game-cstrike`.
+
 ## [0.16.0] - 2026-09-01
 
 ### Added
