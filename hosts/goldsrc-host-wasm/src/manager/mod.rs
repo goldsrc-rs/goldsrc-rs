@@ -137,12 +137,15 @@ pub struct PluginManager {
 
 impl PluginManager {
     /// Initialises the Wasmtime engine with the Component Model, epoch interruption,
-    /// and guest DWARF debug info / backtrace formatting enabled.
+    /// and guest backtrace formatting enabled.
     pub fn new(engine_ops: Arc<dyn GoldsrcEngine>) -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
-        config.debug_info(true);
+        // Note: Do NOT enable `config.debug_info(true)`. Cranelift cannot emit native host DWARF
+        // information on 32-bit Windows MSVC (COFF/PE) targets, causing component compilation
+        // to fail immediately with "failed to emit DWARF debug information".
+        // Backtrace symbolication (file & line numbers) is handled by `wasm_backtrace_details(Enable)`.
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         let engine = Engine::new(&config)?;
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
@@ -1132,5 +1135,19 @@ mod tests {
             pause: false,
         };
         assert_eq!(all_resumed.to_string(), "Resumed 4 plugin(s).");
+    }
+
+    #[test]
+    fn test_component_compilation_and_loading() {
+        let wasm_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/wasm32-unknown-unknown/release/admin_system.wasm");
+        if wasm_path.exists() {
+            let engine = Arc::new(MockMessageEngine::default());
+            let mut manager = PluginManager::new(engine).expect("failed to create PluginManager");
+            let result = manager.load_plugin(&wasm_path);
+            assert!(result.is_ok(), "Failed to load plugin: {:?}", result.err());
+            assert_eq!(manager.plugins.len(), 1);
+            assert_eq!(manager.plugins[0].name, "admin_system");
+        }
     }
 }
