@@ -302,6 +302,10 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Scoped Edge-Triggered Rule Orchestration (`RuleOrchestrator`)**:
   - Decouple reactive rule evaluation into `RuleOrchestrator` with open `RuleScope` trigger tagging.
   - Edge-triggered transition detection (`rule_states`) and `manual_overrides` tracking preventing automatic re-evaluation from overriding intentional admin commands.
+- [x] **Centralized Watcher Subsystem & Hierarchical CLI Reorganization**:
+  - Extract centralized `WatcherService` into `core/goldsrc-core`, completely freeing `goldsrc-host-wasm` from `notify` dependency.
+  - Implement `WatchTarget` Value Object (`File` vs `Directory`), multi-strategy `WatcherFilter` (`Any`, `Extension`, `Stem`, `ExactName`, `Pattern`), and per-watcher debounce windows.
+  - Reorganize CLI under clean hierarchical namespaces: `grs plugins <list|info|load|unload|reload|pause|unpause|cmds>` and `grs watchers <list|pause|resume>` with zero legacy aliases.
 
 ## v0.18.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
 

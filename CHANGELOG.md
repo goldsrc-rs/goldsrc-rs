@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Centralized `WatcherService` Subsystem (`core/goldsrc-core`)**:
+  - Extracted centralized filesystem watcher engine into `goldsrc-core`, decoupling `goldsrc-host-wasm` from the `notify` crate entirely.
+  - Implemented `WatchTarget` Value Object distinguishing single `File(PathBuf)` from `Directory { path, recursive, filter }`.
+  - Added multi-criteria matching filters via `WatcherFilter`: `Any`, `Extension(&'static str)`, `Stem(&'static str)`, `ExactName(&'static str)`, and `Pattern(String)`.
+  - Added per-target debouncing, pause/resume capability, and telemetry inspection (`WatcherStatus`, `WatcherOverview`).
+  - Standardized all system watchers under canonical IDs: `core:plugins`, `core:configs`, and `i18n:dicts`.
+- **Strict Hierarchical Host Management CLI Reorganization (`grs`)**:
+  - Reorganized all CLI commands under clean domain namespaces: `grs plugins <subcommand>` and `grs watchers <subcommand>`.
+  - Added `grs watchers list [--json]`, `grs watchers pause <id>`, and `grs watchers resume <id>`.
+  - Grouped plugin lifecycle under `grs plugins <list|info|load|unload|reload|pause|unpause|cmds>`.
+  - Completely purged legacy flat top-level commands (`list`, `info`, `pause`, etc.) for strict structural consistency.
 - **Universal `PhasedDag` Topological Ordering Engine (`core/goldsrc-api`)**:
   - Implemented `PhasedDag<P, Id, T>` with Kahn's topological sort algorithm, macro-phase stratification (`Phase` trait), and deterministic tie-breaking (`Phase` $\to$ `Declaration Order` $\to$ `Alphabetical ID`).
   - Added cycle detection (`DagError::CycleDetected`), missing dependency validation (`DagError::MissingDependency`), and cross-phase violation reporting (`DagError::PhaseConflict`).

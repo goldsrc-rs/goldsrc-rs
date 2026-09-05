@@ -18,6 +18,7 @@ rusqlite = { workspace = true }
 crossbeam-channel = { workspace = true }
 notify = { workspace = true }
 libloading = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
 default = ["cli"]

@@ -13,6 +13,7 @@ pub struct HostRuntime {
     pub paused_plugins: std::collections::HashMap<String, bool>,
     pub current_map: String,
     pub rule_orchestrator: crate::rules::RuleOrchestrator,
+    pub watcher_service: crate::watcher::WatcherService,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -174,29 +175,49 @@ impl HostRuntime {
             PathResolver::normalize(&lang_dir)
         );
 
-        // Try to enable hot-reload watcher if enabled in config
+        // 3. Initialize watcher service and register default watchers
+        let mut watcher_service = crate::watcher::WatcherService::new();
+
         let existing_plugin_dir = crate::paths::PathResolver::existing_plugin_dir(backend);
-        let mut watcher_enabled = false;
-        if existing_plugin_dir.exists() {
-            if let Err(e) = manager.enable_hot_reload(&existing_plugin_dir) {
-                log::warn!(target: "wasm", "Failed to enable hot-reload on {:?}: {e}", existing_plugin_dir);
-            } else {
-                watcher_enabled = true;
-            }
-        }
-        if watcher_enabled {
-            log::info!(target: "wasm", "Hot-reload watcher is ACTIVE for plugins");
+        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec {
+            id: "core:plugins".into(),
+            target: crate::watcher::WatchTarget::Directory {
+                path: existing_plugin_dir.clone(),
+                recursive: true,
+                filter: crate::watcher::WatcherFilter::Extension("wasm"),
+            },
+            debounce: std::time::Duration::from_millis(500),
+        }) {
+            log::warn!(target: "core", "Failed to register plugin watcher on {:?}: {e}", existing_plugin_dir);
+        } else {
+            log::info!(target: "core", "Watcher registered: 'core:plugins' on {:?}", existing_plugin_dir);
         }
 
         let config_dir = crate::paths::PathResolver::existing_config_dir(backend);
-        if let Err(e) = manager.enable_config_watcher(&config_dir) {
-            log::warn!(target: "wasm", "Failed to enable config watcher on {:?}: {e}", config_dir);
-        }
-        if let Err(e) = manager.enable_config_watcher(&lang_dir) {
-            log::warn!(target: "wasm", "Failed to enable lang watcher on {:?}: {e}", lang_dir);
+        let plugins_config_path = config_dir.join("plugins.toml");
+        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec {
+            id: "core:configs".into(),
+            target: crate::watcher::WatchTarget::File(plugins_config_path.clone()),
+            debounce: std::time::Duration::from_millis(500),
+        }) {
+            log::warn!(target: "core", "Failed to register config watcher on {:?}: {e}", plugins_config_path);
+        } else {
+            log::info!(target: "core", "Watcher registered: 'core:configs' on {:?}", plugins_config_path);
         }
 
-        // config_changed event dispatched via on_server_frame handles hot reloading of plugins.toml and lang files without re-entrant mutex deadlock.
+        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec {
+            id: "i18n:dicts".into(),
+            target: crate::watcher::WatchTarget::Directory {
+                path: lang_dir.clone(),
+                recursive: true,
+                filter: crate::watcher::WatcherFilter::Extension("toml"),
+            },
+            debounce: std::time::Duration::from_millis(500),
+        }) {
+            log::warn!(target: "core", "Failed to register i18n watcher on {:?}: {e}", lang_dir);
+        } else {
+            log::info!(target: "core", "Watcher registered: 'i18n:dicts' on {:?}", lang_dir);
+        }
 
         // Load or create plugins.toml configuration template
         let plugins_config_path = config_dir.join("plugins.toml");
@@ -318,6 +339,7 @@ impl HostRuntime {
             paused_plugins,
             current_map: String::new(),
             rule_orchestrator,
+            watcher_service,
         };
         let _ = RUNTIME.set(Mutex::new(runtime));
 
@@ -421,6 +443,18 @@ impl HostRuntime {
             }
             let _reset = ResetGuard;
             f(Some(&mut guard.manager))
+        } else {
+            f(None)
+        }
+    }
+
+    /// Run `f` with exclusive access to the host runtime's [`WatcherService`], if initialized.
+    pub fn with_watcher_service<R>(
+        f: impl FnOnce(Option<&mut crate::watcher::WatcherService>) -> R,
+    ) -> R {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            f(Some(&mut guard.watcher_service))
         } else {
             f(None)
         }
@@ -566,40 +600,85 @@ impl HostRuntime {
         }
     }
 
-    /// Tick plugins frame event.
+    /// Tick plugins frame event and drain debounced watcher events.
     pub fn on_server_frame() {
-        let changed_configs = Self::with_manager(|m| match m {
-            Some(manager) => {
-                let configs = manager.drain_watcher_events();
-                manager.call_on_frame();
-                configs
-            }
-            None => Vec::new(),
-        });
+        let events = if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.watcher_service.drain_events()
+        } else {
+            Vec::new()
+        };
 
-        for path in changed_configs {
-            let file_name = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or_default();
-            if file_name.eq_ignore_ascii_case("plugins.toml") {
-                log::info!(
-                    target: "wasm",
-                    "Hot-reloaded plugins orchestration config from \"{}\"",
-                    crate::paths::PathResolver::normalize(&path)
-                );
-                Self::evaluate_rules("", 0);
-            } else if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
-                && let Ok(count) = crate::i18n::I18nService::load_file(stem, &path)
-            {
-                log::info!(
-                    target: "i18n",
-                    "Hot-reloaded {count} keys from \"{}\"",
-                    crate::paths::PathResolver::normalize(&path)
-                );
-                goldsrc_api::menu::refresh_all_menus();
+        for event in events {
+            match event.watcher_id.as_str() {
+                "core:plugins" => {
+                    log::info!(
+                        target: "wasm",
+                        "Detected change in plugin file \"{}\", reloading...",
+                        crate::paths::PathResolver::normalize(&event.path)
+                    );
+                    Self::with_manager(|m| {
+                        if let Some(manager) = m {
+                            manager.reload_plugin_path(&event.path);
+                        }
+                    });
+                }
+                "core:configs" => {
+                    let path = &event.path;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or_default();
+                    if file_name.eq_ignore_ascii_case("plugins.toml") {
+                        log::info!(
+                            target: "wasm",
+                            "Hot-reloaded plugins orchestration config from \"{}\"",
+                            crate::paths::PathResolver::normalize(path)
+                        );
+                        let data = path.to_string_lossy().as_bytes().to_vec();
+                        Self::with_manager(|m| {
+                            if let Some(manager) = m {
+                                manager.call_on_event("config_changed", &data);
+                            }
+                        });
+                        Self::evaluate_rules("", 0);
+                    }
+                }
+                "i18n:dicts" => {
+                    let path = &event.path;
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+                        && let Ok(count) = crate::i18n::I18nService::load_file(stem, path)
+                    {
+                        log::info!(
+                            target: "i18n",
+                            "Hot-reloaded {count} keys from \"{}\"",
+                            crate::paths::PathResolver::normalize(path)
+                        );
+                        let data = path.to_string_lossy().as_bytes().to_vec();
+                        Self::with_manager(|m| {
+                            if let Some(manager) = m {
+                                manager.call_on_event("config_changed", &data);
+                            }
+                        });
+                        goldsrc_api::menu::refresh_all_menus();
+                    }
+                }
+                _ => {
+                    log::debug!(
+                        target: "watcher",
+                        "Unhandled watcher event '{}' for path {:?}",
+                        event.watcher_id,
+                        event.path
+                    );
+                }
             }
         }
+
+        Self::with_manager(|m| {
+            if let Some(manager) = m {
+                manager.call_on_frame();
+            }
+        });
 
         // Throttle disk flushing to at most once every second to prevent per-frame I/O stalls
         static LAST_LOG_FLUSH: std::sync::OnceLock<std::sync::Mutex<std::time::Instant>> =

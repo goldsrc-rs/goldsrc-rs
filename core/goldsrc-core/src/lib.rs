@@ -19,6 +19,7 @@ pub mod plugins;
 pub mod reapi;
 pub mod rules;
 pub mod storage;
+pub mod watcher;
 
 pub use ::log;
 pub use chat::process_chat_message;
@@ -34,3 +35,6 @@ pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use plugins::PluginOrchestrator;
 pub use reapi::ReApiBridge;
 pub use storage::{Bucket, JsonFormat, SqliteStorageEngine, StorageFormat};
+pub use watcher::{
+    WatchTarget, WatcherEvent, WatcherFilter, WatcherService, WatcherSpec, WatcherStatus,
+};

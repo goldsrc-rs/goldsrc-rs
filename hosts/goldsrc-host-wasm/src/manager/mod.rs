@@ -7,7 +7,6 @@ pub mod commands;
 pub mod lifecycle;
 pub mod loader;
 pub mod state;
-pub mod watcher;
 
 pub use commands::CommandRegistry;
 pub use state::HostState;
@@ -18,8 +17,7 @@ use goldsrc_api::Engine as GoldsrcEngine;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use wasmtime::{Config, Engine};
 
 /// Read-only snapshot of a loaded plugin, used for CLI listing/info.
@@ -119,22 +117,12 @@ impl std::fmt::Display for PauseAllOutcome {
 }
 
 /// Central WASM runtime manager: loads components, executes lifecycle hooks,
-/// and handles filesystem hot-reloading.
-/// Callback handler for file modification notifications across watched directories.
-pub type ConfigReloadHandler = Arc<dyn Fn(&Path) + Send + Sync>;
-
 pub struct PluginManager {
     pub(crate) plugins: Vec<LoadedPlugin>,
     pub(crate) engine: Engine,
     pub(crate) engine_ops: Arc<dyn GoldsrcEngine>,
-    pub(crate) event_rx: Receiver<PathBuf>,
-    pub(crate) event_tx: Sender<PathBuf>,
-    pub(crate) watchers: Vec<notify::RecommendedWatcher>,
-    pub(crate) watcher_count: usize,
-    pub(crate) last_reload: HashMap<PathBuf, Instant>,
     pub command_registry: CommandRegistry,
     pub(crate) plugin_dirs: Vec<PathBuf>,
-    pub config_reload_handler: Option<ConfigReloadHandler>,
 }
 
 impl PluginManager {
@@ -150,7 +138,6 @@ impl PluginManager {
         // Backtrace symbolication (file & line numbers) is handled by `wasm_backtrace_details(Enable)`.
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         let engine = Engine::new(&config)?;
-        let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
 
         // Spawn background epoch timer thread to advance epochs every 2ms.
         let engine_clone = engine.clone();
@@ -168,14 +155,8 @@ impl PluginManager {
             plugins: Vec::new(),
             engine,
             engine_ops,
-            event_rx,
-            event_tx,
-            watchers: Vec::new(),
-            watcher_count: 0,
-            last_reload: HashMap::new(),
             command_registry: CommandRegistry::new(),
             plugin_dirs: Vec::new(),
-            config_reload_handler: None,
         })
     }
 
@@ -397,8 +378,8 @@ impl PluginManager {
             .map_err(|source| CommandError::Load { name, source })
     }
 
-    /// Reloads the plugin whose recorded path matches `path`.
-    fn reload_plugin_path(&mut self, path: &Path) {
+    /// Reloads the plugin whose recorded path matches `path`, or loads it if newly discovered.
+    pub fn reload_plugin_path(&mut self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if let Some(idx) = self
             .plugins
@@ -430,35 +411,12 @@ impl PluginManager {
                     ));
                 }
             }
-        }
-    }
-
-    /// Debounced wrapper around [`reload_plugin_path`].
-    fn reload_plugin_path_debounced(&mut self, path: &Path) {
-        let now = Instant::now();
-        if let Some(last) = self.last_reload.get(path) {
-            if now.duration_since(*last) < watcher::RELOAD_DEBOUNCE {
-                return;
+        } else {
+            match self.load_plugin(path) {
+                Ok(msg) => crate::host_log(&format!("Discovered and loaded new plugin: {msg}")),
+                Err(e) => crate::host_log(&format!("Failed to load new plugin at {:?}: {e}", path)),
             }
         }
-        self.last_reload.insert(path.to_path_buf(), now);
-        self.reload_plugin_path(path);
-    }
-
-    /// Watches `dir` for changed `.wasm` files and reloads matching plugins on next frame.
-    pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), CommandError> {
-        let w = watcher::spawn_watcher(dir, "wasm", self.event_tx.clone())?;
-        self.watchers.push(w);
-        self.watcher_count += 1;
-        Ok(())
-    }
-
-    /// Watches `dir` for changed `.toml` config files.
-    pub fn enable_config_watcher<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), CommandError> {
-        let w = watcher::spawn_watcher(dir, "toml", self.event_tx.clone())?;
-        self.watchers.push(w);
-        self.watcher_count += 1;
-        Ok(())
     }
 
     /// Returns all registered command names across all loaded plugins.
@@ -482,40 +440,8 @@ impl PluginManager {
         false
     }
 
-    /// Registers a callback invoked on the host runtime when a configuration/localization (.toml) file changes.
-    pub fn set_config_reload_handler<F: Fn(&Path) + Send + Sync + 'static>(&mut self, handler: F) {
-        self.config_reload_handler = Some(Arc::new(handler));
-    }
-
-    /// Drains watcher events for WASM plugins and configuration files.
-    /// Returns any changed `.toml` paths that need higher-level orchestration reload (debounced).
-    pub fn drain_watcher_events(&mut self) -> Vec<PathBuf> {
-        self.engine.increment_epoch();
-        let mut changed_configs = Vec::new();
-        let now = Instant::now();
-        while let Ok(path) = self.event_rx.try_recv() {
-            match path.extension().and_then(|s| s.to_str()) {
-                Some("wasm") => self.reload_plugin_path_debounced(&path),
-                Some("toml") => {
-                    if let Some(last) = self.last_reload.get(&path) {
-                        if now.duration_since(*last) < watcher::RELOAD_DEBOUNCE {
-                            continue;
-                        }
-                    }
-                    self.last_reload.insert(path.clone(), now);
-                    let data = path.to_string_lossy().as_bytes().to_vec();
-                    self.call_on_event("config_changed", &data);
-                    changed_configs.push(path);
-                }
-                _ => {}
-            }
-        }
-        changed_configs
-    }
-
-    /// Drains watcher events and ticks every plugin's `on_frame`.
+    /// Ticks every plugin's `on_frame`.
     pub fn on_server_frame(&mut self) {
-        let _ = self.drain_watcher_events();
         self.call_on_frame();
     }
 
@@ -564,9 +490,9 @@ impl PluginManager {
         Ok(format!("Unloaded '{}'", plugin.name))
     }
 
-    /// Returns `(loaded_plugins, active_watchers)` for status displays.
-    pub fn get_status_info(&self) -> (usize, usize) {
-        (self.plugins.len(), self.watcher_count)
+    /// Returns the number of loaded plugins.
+    pub fn loaded_count(&self) -> usize {
+        self.plugins.len()
     }
 
     /// Calls `on_frame` on every (non-paused) plugin.

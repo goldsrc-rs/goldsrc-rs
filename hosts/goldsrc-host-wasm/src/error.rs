@@ -44,8 +44,6 @@ pub enum CommandError {
         #[source]
         source: LoadError,
     },
-    #[error("failed to spawn file watcher: {0}")]
-    Watcher(String),
 }
 
 /// Errors raised by the host runtime during init.

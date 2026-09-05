@@ -215,3 +215,77 @@ pub fn handle_list<F: FnMut(&str)>(
         ));
     }
 }
+
+/// Handles `grs watchers list` inspection command.
+pub fn handle_watchers_list<F: FnMut(&str)>(
+    spec: &CommandSpec,
+    mut parser: lexopt::Parser,
+    mut out: F,
+) {
+    let mut as_json = false;
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Long("json") => as_json = true,
+            _ => {}
+        }
+    }
+
+    let watchers = crate::HostRuntime::with_watcher_service(|w| {
+        w.map(|service| service.list_watchers()).unwrap_or_default()
+    });
+
+    if as_json {
+        let json = serde_json::to_string_pretty(&watchers).unwrap_or_else(|_| "[]".into());
+        out(&json);
+        out("\n");
+        return;
+    }
+
+    if watchers.is_empty() {
+        out("[GoldSrc.rs] Watchers (0):\n  (No registered filesystem watchers)\n");
+        return;
+    }
+
+    out(&format!(
+        "[GoldSrc.rs] Filesystem Watchers ({} registered):\n",
+        watchers.len()
+    ));
+    for w in &watchers {
+        let status_str = if w.is_paused { "[PAUSED]" } else { "[ACTIVE]" };
+        let rec_str = if w.recursive { " (recursive)" } else { "" };
+        out(&format!(
+            "  - {:<16} {:<8} debounce: {}ms\n      target: {} \"{}\"{} (filter: {})\n",
+            w.id,
+            status_str,
+            w.debounce_ms,
+            w.target_type,
+            w.path.display(),
+            rec_str,
+            w.filter_desc
+        ));
+    }
+}
+
+/// Handles `grs watchers pause <id>` command.
+pub fn handle_watchers_pause<F: FnMut(&str)>(id: &str, mut out: F) {
+    let res = crate::HostRuntime::with_watcher_service(|w| w.map(|s| s.pause(id)));
+    match res {
+        Some(true) => out(&format!("[GoldSrc.rs] Watcher '{id}' is now PAUSED.\n")),
+        Some(false) => out(&format!("[GoldSrc.rs] Error: Watcher '{id}' not found.\n")),
+        None => out("[GoldSrc.rs] Error: Watcher service not available.\n"),
+    }
+}
+
+/// Handles `grs watchers resume <id>` command.
+pub fn handle_watchers_resume<F: FnMut(&str)>(id: &str, mut out: F) {
+    let res = crate::HostRuntime::with_watcher_service(|w| w.map(|s| s.resume(id)));
+    match res {
+        Some(true) => out(&format!("[GoldSrc.rs] Watcher '{id}' is now ACTIVE.\n")),
+        Some(false) => out(&format!("[GoldSrc.rs] Error: Watcher '{id}' not found.\n")),
+        None => out("[GoldSrc.rs] Error: Watcher service not available.\n"),
+    }
+}

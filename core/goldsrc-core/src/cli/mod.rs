@@ -135,21 +135,36 @@ mod tests {
 
     #[test]
     fn test_find_command_spec() {
-        assert!(find_command_spec("list").is_some());
-        assert!(find_command_spec("ls").is_some());
-        assert!(find_command_spec("ps").is_some());
-        assert!(find_command_spec("reload").is_some());
+        assert!(find_command_spec("plugins").is_some());
+        assert!(find_command_spec("watchers").is_some());
+        assert!(find_command_spec("cmd").is_some());
+        assert!(find_command_spec("exec").is_some());
+        assert!(find_command_spec("status").is_some());
+        assert!(find_command_spec("version").is_some());
+        assert!(find_command_spec("ver").is_some());
+        assert!(find_command_spec("help").is_some());
+        assert!(find_command_spec("list").is_none());
+        assert!(find_command_spec("reload").is_none());
         assert!(find_command_spec("nonexistent").is_none());
     }
 
     #[test]
     fn test_print_command_help() {
-        let spec = find_command_spec("list").unwrap();
+        let spec = find_command_spec("plugins").unwrap();
         let mut output = String::new();
         print_command_help(spec, |s| output.push_str(s));
-        assert!(output.contains("grs list"));
+        assert!(output.contains("grs plugins"));
+        assert!(output.contains("list"));
         assert!(output.contains("--flat"));
         assert!(output.contains("--paused"));
+
+        let watcher_spec = find_command_spec("watchers").unwrap();
+        let mut watcher_output = String::new();
+        print_command_help(watcher_spec, |s| watcher_output.push_str(s));
+        assert!(watcher_output.contains("grs watchers"));
+        assert!(watcher_output.contains("list"));
+        assert!(watcher_output.contains("pause"));
+        assert!(watcher_output.contains("resume"));
     }
 
     #[test]
@@ -157,9 +172,9 @@ mod tests {
         let mut output = String::new();
         print_host_help(|s| output.push_str(s));
         assert!(output.contains("GoldSrc.rs Management CLI"));
-        assert!(output.contains("Plugin Lifecycle:"));
+        assert!(output.contains("Plugins:"));
+        assert!(output.contains("Watchers:"));
         assert!(output.contains("Execution Control:"));
-        assert!(output.contains("Inspection & Debugging:"));
         assert!(output.contains("System:"));
     }
 
@@ -174,11 +189,11 @@ mod tests {
         let args_cmd = vec![
             OsString::from("grs"),
             OsString::from("help"),
-            OsString::from("reload"),
+            OsString::from("plugins"),
         ];
         dispatch_host_command(args_cmd, None, ("0.10.0", "abc", "x86"), |s| {
             output_cmd.push_str(s)
         });
-        assert!(output_cmd.contains("grs reload"));
+        assert!(output_cmd.contains("grs plugins"));
     }
 }
