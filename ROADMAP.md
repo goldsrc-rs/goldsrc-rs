@@ -278,28 +278,28 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Decoupled CS 1.6 domain layer into external `goldsrc-game-cstrike` repository.
   - Decoupled `goldsrc-api` and `goldsrc` framework from `goldsrc-sys` via optional `unsafe-sys` feature flag.
   - Extracted `vip_menu` demo plugin into `goldsrc-game-cstrike`.
-- [ ] **Universal Phased DAG Ordering Engine (`PhasedDag<P, Id, T>`)**:
+- [x] **Universal Phased DAG Ordering Engine (`PhasedDag<P, Id, T>`)**:
   - Linear phase stratification with deterministic Kahn topological ordering and stable tie-breaking (`Phase` -> `Declaration Order` -> `Alphabetical ID`).
   - Compiler-grade diagnostics for cycle detection (`CycleDetected`), phase ordering conflicts (`PhaseConflict`), and missing dependencies (`MissingDependency`).
-- [ ] **Declarative Plugin Orchestration (`plugins.toml`)**:
+- [x] **Declarative Plugin Orchestration (`plugins.toml`)**:
   - Complete elimination of integer `priority: i32`.
   - Introduction of architectural layers (`tier = "core" | "service" | "gameplay" | "addon" | "analytics"`) and canonical dependency declarations (`requires = [...]`).
-- [ ] **Semantic Event Phases & Commutative State Contexts**:
+- [x] **Semantic Event Phases & Commutative State Contexts**:
   - Transition event subscriptions from numeric priorities to semantic phases: `EventPhase::Filter` -> `EventPhase::Handle` -> `EventPhase::Observe`.
   - Commutative accumulators (`add_bonus`, `add_multiplier`, `add_reduction`, `cancel`) and typed blackboard property bags preventing mutation conflicts across independent plugins.
 - [ ] **System Taxonomy & Architectural Role Standardization (`ARCHITECTURE.md`)**:
   - Formalize canonical component roles (`Engine`, `Orchestrator`, `Manager`, `Registry`, `Service`, `Dispatcher`, `Router`, `Bridge`) in `ARCHITECTURE.md`.
-  - Decouple `HostRuntime` by extracting `RuleOrchestrator`, `NetworkMessageDispatcher`, and `PluginOrchestrator`.
+  - Decouple `HostRuntime` by extracting `RuleOrchestrator` (done), `NetworkMessageDispatcher`, and `PluginOrchestrator`.
   - Extract dedicated `CommandRegistry` from `goldsrc-host-wasm::PluginManager`.
   - Rename `I18nEngine` -> `I18nService` across workspace.
-- [ ] **CLI UX Modernization & Operation Status Protocol**:
+- [x] **CLI UX Modernization & Operation Status Protocol**:
   - Humanize all CLI messages in `grs` (`successfully paused`, `resumed`, `already active/paused` idempotency warnings, bounded index validation).
   - Introduce structured status markers (`Success`, `Notice`, `Warning`, `Error`) across interactive CLI responses and audit logs.
   - Informative command dispatch feedback when target plugin is in `Paused` or `Poisoned` status.
-- [ ] **Unified Template & Placeholder Formatting Engine**:
+- [x] **Unified Template & Placeholder Formatting Engine**:
   - Configurable logging format in `goldsrc.toml` utilizing strict `<source>:<placeholder>` notation (e.g. `format = "[{log:date-time}][{log:level}][{log:target}] {log:message}"`).
   - Core foundation: provide `PlaceholderRegistry` and `NetworkMessageDispatcher` primitives for guest plugins; delegate high-level chat templating, HUD overlays, and external Discord webhooks to modular plugins (`chat_manager.wasm`, `hud_display.wasm`, `discord_notifier.wasm`).
-- [ ] **Scoped Edge-Triggered Rule Orchestration (`RuleOrchestrator`)**:
+- [x] **Scoped Edge-Triggered Rule Orchestration (`RuleOrchestrator`)**:
   - Decouple reactive rule evaluation into `RuleOrchestrator` with open `RuleScope` trigger tagging.
   - Edge-triggered transition detection (`rule_states`) and `manual_overrides` tracking preventing automatic re-evaluation from overriding intentional admin commands.
 

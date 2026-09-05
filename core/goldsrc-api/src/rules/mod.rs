@@ -30,10 +30,10 @@ impl RuleScope {
     pub fn parse(s: &str) -> Self {
         let trimmed = s.trim();
         match trimmed.to_ascii_lowercase().as_str() {
-            "all" | "*" => Self::All,
-            "map" | "map_change" | "mapchange" => Self::MapChange,
-            "player" | "players" | "player_count" | "playercount" => Self::PlayerCount,
-            "time" | "schedule" | "time_schedule" | "timeschedule" => Self::TimeSchedule,
+            "all" => Self::All,
+            "map_change" => Self::MapChange,
+            "player_count" => Self::PlayerCount,
+            "time_schedule" => Self::TimeSchedule,
             _ => {
                 if let Some(cvar) = trimmed.strip_prefix("cvar:") {
                     Self::CvarChange(cvar.trim().to_string())
@@ -59,7 +59,14 @@ impl RuleScope {
 
 impl std::fmt::Display for RuleScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
+        match self {
+            Self::All => write!(f, "all"),
+            Self::MapChange => write!(f, "map_change"),
+            Self::PlayerCount => write!(f, "player_count"),
+            Self::TimeSchedule => write!(f, "time_schedule"),
+            Self::CvarChange(c) => write!(f, "cvar:{}", c),
+            Self::Custom(c) => write!(f, "{}", c),
+        }
     }
 }
 
@@ -515,5 +522,28 @@ mod tests {
         assert_eq!(results_map[0].0, "auto_pause_dust2");
         assert_eq!(ctx.gravity, 500);
         assert!(ctx.messages.is_empty());
+    }
+
+    #[test]
+    fn test_rule_scope_canonical_roundtrip() {
+        let cases = [
+            ("all", RuleScope::All),
+            ("map_change", RuleScope::MapChange),
+            ("player_count", RuleScope::PlayerCount),
+            ("time_schedule", RuleScope::TimeSchedule),
+            (
+                "cvar:mp_roundtime",
+                RuleScope::CvarChange("mp_roundtime".to_string()),
+            ),
+            (
+                "custom_scope",
+                RuleScope::Custom("custom_scope".to_string()),
+            ),
+        ];
+
+        for (str_val, expected_scope) in cases {
+            assert_eq!(RuleScope::parse(str_val), expected_scope);
+            assert_eq!(expected_scope.to_string(), str_val);
+        }
     }
 }
