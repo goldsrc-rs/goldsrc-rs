@@ -392,6 +392,7 @@ impl HostRuntime {
             guard.current_map.clear();
             guard.rule_orchestrator.on_map_change();
         }
+        crate::logging::flush();
     }
 
     /// Run `f` with exclusive access to the `PluginManager`, if initialized.
@@ -600,6 +601,16 @@ impl HostRuntime {
             }
         }
 
-        crate::logging::flush();
+        // Throttle disk flushing to at most once every second to prevent per-frame I/O stalls
+        static LAST_LOG_FLUSH: std::sync::OnceLock<std::sync::Mutex<std::time::Instant>> =
+            std::sync::OnceLock::new();
+        let tracker =
+            LAST_LOG_FLUSH.get_or_init(|| std::sync::Mutex::new(std::time::Instant::now()));
+        if let Ok(mut last) = tracker.try_lock()
+            && last.elapsed() >= std::time::Duration::from_millis(1000)
+        {
+            *last = std::time::Instant::now();
+            crate::logging::flush();
+        }
     }
 }

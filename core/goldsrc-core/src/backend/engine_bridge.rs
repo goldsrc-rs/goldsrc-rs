@@ -455,10 +455,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                     let buffer = get_infokey(pedict);
                     let key = std::ffi::CString::new("name").unwrap_or_default();
                     let val_ptr = infokey_val(buffer, key.as_ptr());
-                    if !val_ptr.is_null()
-                        && let Ok(name_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
-                    {
-                        return !name_str.trim().is_empty();
+                    if let Some(name_str) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 64) {
+                        return !name_str.is_empty();
                     }
                 }
                 return true;
@@ -479,10 +477,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 && let Some(sz_from_idx) = funcs.pfnSzFromIndex
             {
                 let str_ptr = sz_from_idx(classname_offset as i32);
-                if !str_ptr.is_null()
-                    && let Ok(s) = std::ffi::CStr::from_ptr(str_ptr).to_str()
-                {
-                    return Some(s.to_string());
+                if let Some(s) = goldsrc_sys::ffi::cstr_to_string_bounded(str_ptr, 64) {
+                    return Some(s);
                 }
             }
             None
@@ -760,22 +756,17 @@ impl goldsrc_api::EngineCvars for EngineBackend {
             let funcs = (self.engfuncs)();
             if let Some(pfn) = funcs.pfnCVarGetString {
                 let ptr = pfn(cname.as_ptr());
-                if !ptr.is_null() {
-                    let val = std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned();
-                    if !val.is_empty() {
-                        return Some(val);
-                    }
+                if let Some(val) = goldsrc_sys::ffi::cstr_to_string_bounded(ptr, 256) {
+                    return Some(val);
                 }
             }
             if let Some(pfn_ptr) = funcs.pfnCVarGetPointer {
                 let cvar_ptr = pfn_ptr(cname.as_ptr());
-                if !cvar_ptr.is_null() && !(*cvar_ptr).string.is_null() {
-                    let val = std::ffi::CStr::from_ptr((*cvar_ptr).string)
-                        .to_string_lossy()
-                        .into_owned();
-                    if !val.is_empty() {
-                        return Some(val);
-                    }
+                if !cvar_ptr.is_null()
+                    && let Some(val) =
+                        goldsrc_sys::ffi::cstr_to_string_bounded((*cvar_ptr).string, 256)
+                {
+                    return Some(val);
                 }
             }
             if name == "mapname"

@@ -257,7 +257,17 @@ impl SqliteStorageEngine {
         }
     }
 
+    /// Asynchronously requests a flush of pending in-flight writes to disk without blocking the caller.
+    pub fn try_flush_async(&self) -> Result<(), StorageError> {
+        let (ack_tx, _) = crossbeam_channel::bounded(1);
+        self.tx
+            .try_send(StorageOp::Flush(ack_tx))
+            .map_err(|e| StorageError::Backend(format!("Async flush send failed: {e}")))?;
+        Ok(())
+    }
+
     /// Synchronously flushes all pending in-flight writes to disk.
+    /// Reserved for server shutdown and map transitions (`ServerDeactivate`).
     pub fn flush(&self) -> Result<(), StorageError> {
         let (ack_tx, ack_rx) = crossbeam_channel::bounded(1);
         self.tx
@@ -265,7 +275,7 @@ impl SqliteStorageEngine {
             .map_err(|e| StorageError::Backend(format!("Flush send failed: {e}")))?;
 
         ack_rx
-            .recv_timeout(Duration::from_secs(5))
+            .recv_timeout(Duration::from_secs(2))
             .map_err(|e| StorageError::Backend(format!("Flush timeout or error: {e}")))?;
         Ok(())
     }

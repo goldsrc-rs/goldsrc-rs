@@ -144,6 +144,7 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
 
 /// Invoked when a new server map is activated (ServerActivate).
 pub fn on_server_activate() {
+    goldsrc_api::menu::on_round_start(1);
     emit_event("server_activate", &[]);
     if let Some(engine) = HostRuntime::engine() {
         let map_name = engine.cvar_get_string("mapname").unwrap_or_default();
