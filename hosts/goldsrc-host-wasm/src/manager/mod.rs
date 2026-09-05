@@ -3,11 +3,13 @@
 //! Handles loading, lifecycle, tick dispatch, capability tracking, storage sandbox,
 //! and hot-reloading of WebAssembly plugins via Wasmtime Component Model.
 
+pub mod commands;
 pub mod lifecycle;
 pub mod loader;
 pub mod state;
 pub mod watcher;
 
+pub use commands::CommandRegistry;
 pub use state::HostState;
 
 use crate::error::{CommandError, LoadError};
@@ -130,7 +132,7 @@ pub struct PluginManager {
     pub(crate) watchers: Vec<notify::RecommendedWatcher>,
     pub(crate) watcher_count: usize,
     pub(crate) last_reload: HashMap<PathBuf, Instant>,
-    pub(crate) command_registry: HashMap<String, Vec<usize>>,
+    pub command_registry: CommandRegistry,
     pub(crate) plugin_dirs: Vec<PathBuf>,
     pub config_reload_handler: Option<ConfigReloadHandler>,
 }
@@ -171,7 +173,7 @@ impl PluginManager {
             watchers: Vec::new(),
             watcher_count: 0,
             last_reload: HashMap::new(),
-            command_registry: HashMap::new(),
+            command_registry: CommandRegistry::new(),
             plugin_dirs: Vec::new(),
             config_reload_handler: None,
         })
@@ -225,12 +227,7 @@ impl PluginManager {
         crate::host_log(&format!("Loaded component plugin: {}", plugin.name));
         let idx = self.plugins.len();
         if let Some(meta) = &plugin.metadata {
-            for cmd in &meta.commands {
-                self.command_registry
-                    .entry(cmd.clone())
-                    .or_default()
-                    .push(idx);
-            }
+            self.command_registry.register_commands(idx, &meta.commands);
         }
         let name = plugin.name.clone();
         self.plugins.push(plugin);
@@ -272,25 +269,15 @@ impl PluginManager {
     /// Calls `on_unload` (if exported) and removes the plugin at `idx`.
     fn unload_plugin_at(&mut self, idx: usize) -> LoadedPlugin {
         let meta = self.plugins[idx].metadata.clone();
-        for cmd in meta.iter().flat_map(|m| &m.commands) {
-            if let Some(owners) = self.command_registry.get_mut(cmd) {
-                owners.retain(|i| *i != idx);
-                if owners.is_empty() {
-                    self.command_registry.remove(cmd);
-                }
-            }
+        if let Some(meta) = &meta {
+            self.command_registry
+                .unregister_commands(idx, &meta.commands);
         }
         let mut plugin = self.plugins.remove(idx);
         if plugin.has_export("on-unload") {
             let _ = plugin.call_on_unload();
         }
-        for owners in self.command_registry.values_mut() {
-            for i in owners.iter_mut() {
-                if *i > idx {
-                    *i -= 1;
-                }
-            }
-        }
+        self.command_registry.reindex_after_removal(idx);
         self.recalculate_dependency_states();
         plugin
     }
@@ -430,12 +417,8 @@ impl PluginManager {
                     self.unload_plugin_at(idx);
                     let new_idx = self.plugins.len();
                     if let Some(meta) = &new_plugin.metadata {
-                        for cmd in &meta.commands {
-                            self.command_registry
-                                .entry(cmd.clone())
-                                .or_default()
-                                .push(new_idx);
-                        }
+                        self.command_registry
+                            .register_commands(new_idx, &meta.commands);
                     }
                     self.plugins.push(new_plugin);
                     crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
@@ -480,14 +463,15 @@ impl PluginManager {
 
     /// Returns all registered command names across all loaded plugins.
     pub fn registered_commands(&self) -> Vec<String> {
-        self.command_registry.keys().cloned().collect()
+        self.command_registry.command_names()
     }
 
     /// Dispatches a server command to the plugins that registered it.
     pub fn dispatch_command(&mut self, cmd: &str, caller: i32, args: &str) -> bool {
-        let Some(owners) = self.command_registry.get(cmd).cloned() else {
+        let Some(owners) = self.command_registry.get_handlers(cmd) else {
             return false;
         };
+        let owners = owners.to_vec();
         for idx in owners {
             if let Some(plugin) = self.plugins.get_mut(idx) {
                 if plugin.call_on_command(cmd, caller, args).unwrap_or(false) {

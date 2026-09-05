@@ -236,7 +236,7 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Refactor `framework/goldsrc/src/backend.rs` into modular engine domain adapters (`engine_bridge.rs`, `print_queue.rs`).
 - [x] **Per-Player Localization & i18n Dictionary Engine (`framework/goldsrc/src/i18n`)**:
   - Structured language dictionaries (`data/lang/*.toml`) with lexical variable scoping, color/macro expansions, and access controls.
-  - `AsLangCode` trait, `player.lang()`, `I18nEngine::server_lang()`, and zero-boilerplate `tr!` macro.
+  - `AsLangCode` trait, `player.lang()`, `I18nService::server_lang()`, and zero-boilerplate `tr!` macro.
 
 ## v0.15.0 — Architectural Layer Decomposition & Naming Standardization ✅
 
@@ -266,7 +266,7 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Comprehensive 5-Phase ECS Verification & Pipeline Hardening**:
   - Multi-system integration tests covering `Validate` -> `Modify` -> `Execute` -> `React` -> `Monitor` execution sequences and topological ordering.
 
-## v0.17.0 — Declarative Orchestration, Unified Layering & Phased DAG 🚧 In Progress
+## v0.17.0 — Declarative Orchestration, Unified Layering & Phased DAG ✅
 
 **Goal:** Eliminate magic priority numbers across the ecosystem, establish a deterministic phased topological dependency engine (`PhasedDag`), unify macros/builders/imperative registries, and enforce pure game-agnostic layer separation.
 
@@ -287,9 +287,9 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Semantic Event Phases & Commutative State Contexts**:
   - Transition event subscriptions from numeric priorities to semantic phases: `EventPhase::Filter` -> `EventPhase::Handle` -> `EventPhase::Observe`.
   - Commutative accumulators (`add_bonus`, `add_multiplier`, `add_reduction`, `cancel`) and typed blackboard property bags preventing mutation conflicts across independent plugins.
-- [ ] **System Taxonomy & Architectural Role Standardization (`ARCHITECTURE.md`)**:
+- [x] **System Taxonomy & Architectural Role Standardization (`ARCHITECTURE.md`)**:
   - Formalize canonical component roles (`Engine`, `Orchestrator`, `Manager`, `Registry`, `Service`, `Dispatcher`, `Router`, `Bridge`) in `ARCHITECTURE.md`.
-  - Decouple `HostRuntime` by extracting `RuleOrchestrator` (done), `NetworkMessageDispatcher`, and `PluginOrchestrator`.
+  - Decouple `HostRuntime` by extracting `RuleOrchestrator`, `NetworkMessageDispatcher`, and `PluginOrchestrator`.
   - Extract dedicated `CommandRegistry` from `goldsrc-host-wasm::PluginManager`.
   - Rename `I18nEngine` -> `I18nService` across workspace.
 - [x] **CLI UX Modernization & Operation Status Protocol**:

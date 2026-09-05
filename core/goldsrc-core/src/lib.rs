@@ -12,8 +12,10 @@ pub mod hud;
 pub mod i18n;
 pub mod logging;
 pub mod menu;
+pub mod net;
 pub mod paths;
 pub mod placeholders;
+pub mod plugins;
 pub mod reapi;
 pub mod rules;
 pub mod storage;
@@ -25,8 +27,10 @@ pub use config::{
     HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
 };
 pub use host::HostRuntime;
-pub use i18n::{I18nEngine, I18nService};
+pub use i18n::I18nService;
+pub use net::NetworkMessageDispatcher;
 pub use paths::PathResolver;
 pub use placeholders::{PlaceholderRegistry, format_placeholders};
+pub use plugins::PluginOrchestrator;
 pub use reapi::ReApiBridge;
 pub use storage::{Bucket, JsonFormat, SqliteStorageEngine, StorageFormat};

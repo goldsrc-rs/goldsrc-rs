@@ -36,9 +36,6 @@ static DICT_ACCESS: LazyLock<RwLock<AccessStore>> = LazyLock::new(|| RwLock::new
 /// Centralized i18n service for loading and translating game messages.
 pub struct I18nService;
 
-/// Backward-compatible type alias for `I18nService`.
-pub type I18nEngine = I18nService;
-
 impl I18nService {
     /// Loads a dictionary TOML file from disk (e.g. `data/lang/vip_menu.toml`).
     pub fn load_file(dict_name: &str, file_path: impl AsRef<Path>) -> Result<usize, String> {
@@ -356,7 +353,7 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Global test lock to serialize tests that mutate global `I18nEngine` state.
+    /// Global test lock to serialize tests that mutate global `I18nService` state.
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
@@ -408,20 +405,20 @@ mod tests {
             LangDict::from_toml(&toml_str).expect("Parsing from TOML should succeed");
         assert_eq!(parsed, dict);
 
-        // Test loading into I18nEngine
-        I18nEngine::clear();
-        let count = I18nEngine::load_toml_string("vip_menu", &toml_str).unwrap();
+        // Test loading into I18nService
+        I18nService::clear();
+        let count = I18nService::load_toml_string("vip_menu", &toml_str).unwrap();
         assert_eq!(count, 4);
 
         let ru_reward =
-            I18nEngine::translate("vip_menu", "ru", "money_reward", &[("amount", "5000")], &[]);
+            I18nService::translate("vip_menu", "ru", "money_reward", &[("amount", "5000")], &[]);
         assert_eq!(
             ru_reward,
             "^3[\x04VIP System^3]^1 Вам выдано: \x045000 ₽\x01!"
         );
 
         let en_reward =
-            I18nEngine::translate("vip_menu", "en", "money_reward", &[("amount", "5000")], &[]);
+            I18nService::translate("vip_menu", "en", "money_reward", &[("amount", "5000")], &[]);
         assert_eq!(
             en_reward,
             "^3[\x04VIP System^3]^1 Вам выдано: \x045000 $\x01!"
@@ -468,13 +465,13 @@ mod tests {
             info = "@{templates.box('Server rules updated.')}"
         "#;
 
-        I18nEngine::clear();
-        let count = I18nEngine::load_toml_string("vip_menu", toml_content).unwrap();
+        I18nService::clear();
+        let count = I18nService::load_toml_string("vip_menu", toml_content).unwrap();
         assert_eq!(count, 6); // 3 ru + 3 en
 
         // 1. Test Russian currency scoping (₽)
         let ru_reward =
-            I18nEngine::translate("vip_menu", "ru", "money_reward", &[("amount", "5000")], &[]);
+            I18nService::translate("vip_menu", "ru", "money_reward", &[("amount", "5000")], &[]);
         assert_eq!(
             ru_reward,
             "^3[\x04VIP System^3]^1 Вам выдано: \x045000 ₽\x01!"
@@ -482,21 +479,21 @@ mod tests {
 
         // 2. Test English currency ($)
         let en_reward =
-            I18nEngine::translate("vip_menu", "en", "money_reward", &[("amount", "5000")], &[]);
+            I18nService::translate("vip_menu", "en", "money_reward", &[("amount", "5000")], &[]);
         assert_eq!(
             en_reward,
             "^3[\x04VIP System^3]^1 Вам выдано: \x045000 $\x01!"
         );
 
         // 3. Test template macro expansion with positional arg & support url
-        let ru_info = I18nEngine::translate("vip_menu", "ru", "info", &[], &[]);
+        let ru_info = I18nService::translate("vip_menu", "ru", "info", &[], &[]);
         assert_eq!(
             ru_info,
             "^3[\x04VIP System^3]^1 Правила сервера обновлены. \x01(Info: discord.gg/server)\x01"
         );
 
         // 4. Test fallback to config.fallback ("ru") when asking for German
-        let de_title = I18nEngine::translate("vip_menu", "de", "menu_title", &[], &[]);
+        let de_title = I18nService::translate("vip_menu", "de", "menu_title", &[], &[]);
         assert_eq!(de_title, "^3[\x04VIP System^3]^1 Выберите комплект:");
     }
 
@@ -526,23 +523,23 @@ mod tests {
             password = "SecretPassword123"
         "#;
 
-        I18nEngine::clear();
-        I18nEngine::load_toml_string("common", common_toml).unwrap();
-        I18nEngine::load_toml_string("vip_core", vip_toml).unwrap();
-        I18nEngine::load_toml_string("secret_system", secret_toml).unwrap();
+        I18nService::clear();
+        I18nService::load_toml_string("common", common_toml).unwrap();
+        I18nService::load_toml_string("vip_core", vip_toml).unwrap();
+        I18nService::load_toml_string("secret_system", secret_toml).unwrap();
 
         // 1. Owner can access its own private/shared dictionary
         let owner_tag =
-            I18nEngine::translate_with_caller("vip_core", "vip_core", "ru", "tag", &[], &[]);
+            I18nService::translate_with_caller("vip_core", "vip_core", "ru", "tag", &[], &[]);
         assert_eq!(owner_tag, "[VIP Core]");
 
         // 2. Shared plugin can access shared dictionary
         let shared_tag =
-            I18nEngine::translate_with_caller("vip_menu", "vip_core", "ru", "tag", &[], &[]);
+            I18nService::translate_with_caller("vip_menu", "vip_core", "ru", "tag", &[], &[]);
         assert_eq!(shared_tag, "[VIP Core]");
 
         // 3. Unauthorized plugin is denied and falls back to common (or raw key)
-        let denied = I18nEngine::translate_with_caller(
+        let denied = I18nService::translate_with_caller(
             "random_plugin",
             "secret_system",
             "ru",
@@ -554,13 +551,13 @@ mod tests {
 
         // 4. Any plugin can access common phrases even when calling another dict that lacks the key
         let common_btn =
-            I18nEngine::translate_with_caller("vip_menu", "vip_core", "ru", "btn_yes", &[], &[]);
+            I18nService::translate_with_caller("vip_menu", "vip_core", "ru", "btn_yes", &[], &[]);
         assert_eq!(common_btn, "Да");
 
         // 5. Common dictionary cannot be locked down to private
-        I18nEngine::set_access("common", DictAccess::Simple("private".to_string()), true);
+        I18nService::set_access("common", DictAccess::Simple("private".to_string()), true);
         let common_allowed =
-            I18nEngine::translate_with_caller("any_plugin", "common", "ru", "btn_back", &[], &[]);
+            I18nService::translate_with_caller("any_plugin", "common", "ru", "btn_back", &[], &[]);
         assert_eq!(common_allowed, "Назад");
     }
 
@@ -594,11 +591,11 @@ mod tests {
         "#;
         std::fs::write(&sub_file, sub_content).unwrap();
 
-        I18nEngine::clear();
-        let count = I18nEngine::load_dir(&temp_dir);
+        I18nService::clear();
+        let count = I18nService::load_dir(&temp_dir);
         assert_eq!(count, 3);
 
-        let title = I18nEngine::translate_with_caller(
+        let title = I18nService::translate_with_caller(
             "admin_system",
             "admin_system",
             "ru",
@@ -606,7 +603,7 @@ mod tests {
             &[],
             &[],
         );
-        let kick = I18nEngine::translate_with_caller(
+        let kick = I18nService::translate_with_caller(
             "admin_system",
             "admin_system",
             "ru",
@@ -614,7 +611,7 @@ mod tests {
             &[],
             &[],
         );
-        let ban = I18nEngine::translate_with_caller(
+        let ban = I18nService::translate_with_caller(
             "admin_system",
             "admin_system",
             "ru",
@@ -646,8 +643,8 @@ mod tests {
             reward_msg = "$vars.tag Bonus: @{g('{amount='1000'}')} $ and @{g('{xp='50'}')} XP!"
         "#;
 
-        I18nEngine::clear();
-        let count = I18nEngine::load_toml_string("demo_i18n", toml_content).unwrap();
+        I18nService::clear();
+        let count = I18nService::load_toml_string("demo_i18n", toml_content).unwrap();
         assert_eq!(count, 4);
 
         // 1. Interpolation with provided named values
@@ -681,6 +678,6 @@ mod tests {
         );
 
         // 5. Test server_lang()
-        assert_eq!(I18nEngine::server_lang(), "en");
+        assert_eq!(I18nService::server_lang(), "en");
     }
 }

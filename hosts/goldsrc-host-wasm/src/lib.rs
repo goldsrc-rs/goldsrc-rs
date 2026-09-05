@@ -15,7 +15,7 @@ pub mod manager;
 pub mod plugin;
 
 pub use error::{CommandError, HostError, LoadError};
-pub use manager::{PauseAllOutcome, PauseOutcome, PluginInfo, PluginManager};
+pub use manager::{CommandRegistry, PauseAllOutcome, PauseOutcome, PluginInfo, PluginManager};
 pub use plugin::PluginStatus;
 
 pub type PrintCallback = fn(&str);
