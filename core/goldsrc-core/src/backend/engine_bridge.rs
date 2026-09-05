@@ -2,7 +2,7 @@
 
 use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
 use crate::{call_engfunc, call_engfunc_ret};
-use goldsrc_api::EngineCvars;
+use goldsrc_api::{EngineCvars, EngineMessages};
 use goldsrc_sys::enginefuncs_t;
 
 /// Standard `Engine` implementation parameterized by the engfunc source.
@@ -303,15 +303,8 @@ impl goldsrc_api::EngineMessages for EngineBackend {
 
     fn message_end(&self) {
         let _msg_type = ACTIVE_MSG_TYPE.swap(0, std::sync::atomic::Ordering::Relaxed);
-        let strings = ACTIVE_MSG_STRINGS
-            .lock()
-            .map(|mut l| std::mem::take(&mut *l))
-            .unwrap_or_default();
-
-        if !strings.is_empty() {
-            // Emit generic user message strings event for subscribers and game plugins
-            let combined = strings.join("\t");
-            crate::hooks::dispatcher::emit_event("user_msg", combined.as_bytes());
+        if let Ok(mut list) = ACTIVE_MSG_STRINGS.lock() {
+            list.clear();
         }
 
         unsafe {
@@ -462,10 +455,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                     let buffer = get_infokey(pedict);
                     let key = std::ffi::CString::new("name").unwrap_or_default();
                     let val_ptr = infokey_val(buffer, key.as_ptr());
-                    if !val_ptr.is_null()
-                        && let Ok(name_str) = std::ffi::CStr::from_ptr(val_ptr).to_str()
-                    {
-                        return !name_str.trim().is_empty();
+                    if let Some(name_str) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 64) {
+                        return !name_str.is_empty();
                     }
                 }
                 return true;
@@ -486,10 +477,8 @@ impl goldsrc_api::EngineEntities for EngineBackend {
                 && let Some(sz_from_idx) = funcs.pfnSzFromIndex
             {
                 let str_ptr = sz_from_idx(classname_offset as i32);
-                if !str_ptr.is_null()
-                    && let Ok(s) = std::ffi::CStr::from_ptr(str_ptr).to_str()
-                {
-                    return Some(s.to_string());
+                if let Some(s) = goldsrc_sys::ffi::cstr_to_string_bounded(str_ptr, 64) {
+                    return Some(s);
                 }
             }
             None
@@ -503,6 +492,20 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     fn entity_set_health(&self, index: i32, health: f32) {
         if let Some(mut e) = self.get_player(index) {
             e.set_health(health);
+            // Synchronize HUD health display for human and bot players
+            if (1..=32).contains(&index) {
+                let health_msg_id = self.reg_user_msg("Health", 1);
+                if health_msg_id > 0 && health_msg_id != 255 {
+                    self.message_begin(
+                        goldsrc_api::MessageDest::One as i32,
+                        health_msg_id,
+                        None,
+                        Some(index),
+                    );
+                    self.write_byte(health.clamp(0.0, 255.0) as i32);
+                    self.message_end();
+                }
+            }
         }
     }
 
@@ -633,6 +636,20 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     fn player_set_armorvalue(&self, index: i32, armor: f32) {
         if let Some(mut p) = self.get_player(index) {
             p.set_armorvalue(armor);
+            // Synchronize HUD armor display for human and bot players
+            if (1..=32).contains(&index) {
+                let battery_msg_id = self.reg_user_msg("Battery", 2);
+                if battery_msg_id > 0 && battery_msg_id != 255 {
+                    self.message_begin(
+                        goldsrc_api::MessageDest::One as i32,
+                        battery_msg_id,
+                        None,
+                        Some(index),
+                    );
+                    self.write_short(armor.clamp(0.0, 255.0) as i32);
+                    self.message_end();
+                }
+            }
         }
     }
 
@@ -739,22 +756,17 @@ impl goldsrc_api::EngineCvars for EngineBackend {
             let funcs = (self.engfuncs)();
             if let Some(pfn) = funcs.pfnCVarGetString {
                 let ptr = pfn(cname.as_ptr());
-                if !ptr.is_null() {
-                    let val = std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned();
-                    if !val.is_empty() {
-                        return Some(val);
-                    }
+                if let Some(val) = goldsrc_sys::ffi::cstr_to_string_bounded(ptr, 256) {
+                    return Some(val);
                 }
             }
             if let Some(pfn_ptr) = funcs.pfnCVarGetPointer {
                 let cvar_ptr = pfn_ptr(cname.as_ptr());
-                if !cvar_ptr.is_null() && !(*cvar_ptr).string.is_null() {
-                    let val = std::ffi::CStr::from_ptr((*cvar_ptr).string)
-                        .to_string_lossy()
-                        .into_owned();
-                    if !val.is_empty() {
-                        return Some(val);
-                    }
+                if !cvar_ptr.is_null()
+                    && let Some(val) =
+                        goldsrc_sys::ffi::cstr_to_string_bounded((*cvar_ptr).string, 256)
+                {
+                    return Some(val);
                 }
             }
             if name == "mapname"

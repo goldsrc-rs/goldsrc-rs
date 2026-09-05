@@ -30,6 +30,16 @@ static MENU_DEBOUNCE_TRACKER: std::sync::LazyLock<Mutex<HashMap<i32, std::time::
 static ITEM_COOLDOWN_TRACKER: std::sync::LazyLock<Mutex<HashMap<(i32, u32), std::time::Instant>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
+static ROUND_STATE: std::sync::LazyLock<Mutex<(u32, std::time::Instant)>> =
+    std::sync::LazyLock::new(|| Mutex::new((1, std::time::Instant::now())));
+
+/// Updates active round number and resets elapsed round timer for menu condition checks.
+pub fn on_round_start(round_number: u32) {
+    if let Ok(mut state) = ROUND_STATE.lock() {
+        *state = (round_number, std::time::Instant::now());
+    }
+}
+
 /// Opens a declarative `Menu` for a player and registers its navigation session.
 pub fn open_menu(player_idx: i32, menu: Menu) {
     let mut sessions = MENU_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
@@ -83,6 +93,11 @@ pub fn handle_menu_slot(player_idx: i32, slot: u8) -> Option<SlotAction> {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner());
                 let now = std::time::Instant::now();
+                if last_presses.len() > 64 {
+                    last_presses.retain(|_, last| {
+                        now.duration_since(*last) < std::time::Duration::from_secs(10)
+                    });
+                }
                 if let Some(last) = last_presses.get(&player_idx)
                     && now.duration_since(*last) < debounce_dur
                 {
@@ -102,6 +117,11 @@ pub fn handle_menu_slot(player_idx: i32, slot: u8) -> Option<SlotAction> {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner());
                 let now = std::time::Instant::now();
+                if cooldowns.len() > 64 {
+                    cooldowns.retain(|_, last| {
+                        now.duration_since(*last) < std::time::Duration::from_secs(60)
+                    });
+                }
                 if let Some(last) = cooldowns.get(&(player_idx, id))
                     && now.duration_since(*last) < cooldown_dur
                 {
@@ -277,6 +297,9 @@ pub fn clear_all_menus() {
     if let Ok(mut cooldowns) = ITEM_COOLDOWN_TRACKER.lock() {
         cooldowns.clear();
     }
+    if let Ok(mut state) = ROUND_STATE.lock() {
+        *state = (1, std::time::Instant::now());
+    }
 }
 
 /// Re-renders and sends the currently open menu for `player_idx` if present, updating navigation text for their active language.
@@ -303,12 +326,22 @@ pub fn refresh_all_menus() {
 
 fn render_and_send(player_idx: i32, session: &mut PlayerMenuSession) {
     let player = crate::client::Player::new(player_idx);
+    let (round_number, elapsed) = if let Ok(state) = ROUND_STATE.lock() {
+        (state.0, state.1.elapsed().as_secs_f32())
+    } else {
+        (1, 0.0)
+    };
+    let total_players = crate::auth::Auth::total_players();
     let ctx = MenuContext {
         player_index: player_idx,
-        round_number: 1,
-        round_time_elapsed: 0.0,
+        round_number,
+        round_time_elapsed: elapsed,
         is_alive: player.health() > 0.0,
-        players_count: 1,
+        players_count: if total_players > 0 {
+            total_players as u32
+        } else {
+            1
+        },
     };
 
     if let Some(rendered) = session.menu.render_page(&ctx, session.current_page) {
@@ -334,5 +367,59 @@ fn render_and_send(player_idx: i32, session: &mut PlayerMenuSession) {
             }
         }
         session.rendered_page = Some(rendered);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::menu::{Menu, MenuItem, SlotAction};
+
+    #[test]
+    fn test_handle_menu_slot_without_session_returns_none() {
+        assert!(handle_menu_slot(9999, 1).is_none());
+        assert!(handle_menu_slot(9999, 3).is_none());
+    }
+
+    #[test]
+    fn test_handle_menu_slot_with_active_session_resolves_action_and_navigation() {
+        let player_id = 8888;
+        close_menu(player_id);
+
+        let menu = Menu::builder("Test Menu")
+            .item(MenuItem::new("Action 101", 101).keep_open())
+            .item(MenuItem::new("Action 102", 102))
+            .page(|page| page.item(MenuItem::new("Action 103", 103)))
+            .build();
+
+        open_menu(player_id, menu);
+
+        // Slot 1 is item 101 (keep_open: true)
+        let act1 = handle_menu_slot(player_id, 1);
+        match act1 {
+            Some(SlotAction::Execute { id, keep_open, .. }) => {
+                assert_eq!(id, 101);
+                assert!(keep_open);
+            }
+            other => panic!("Expected Execute for slot 1, got {:?}", other),
+        }
+
+        // Slot 9 is NextPage
+        let next_act = handle_menu_slot(player_id, 9);
+        assert!(next_act.is_none());
+
+        // On page 2, Slot 1 is item 103
+        let act2 = handle_menu_slot(player_id, 1);
+        match act2 {
+            Some(SlotAction::Execute { id, keep_open, .. }) => {
+                assert_eq!(id, 103);
+                assert!(!keep_open);
+            }
+            other => panic!("Expected Execute for slot 1 on page 2, got {:?}", other),
+        }
+
+        // Since item 103 is not keep_open, menu is now closed
+        assert!(handle_menu_slot(player_id, 1).is_none());
+        close_menu(player_id);
     }
 }

@@ -3,11 +3,12 @@
 //! Handles loading, lifecycle, tick dispatch, capability tracking, storage sandbox,
 //! and hot-reloading of WebAssembly plugins via Wasmtime Component Model.
 
+pub mod commands;
 pub mod lifecycle;
 pub mod loader;
 pub mod state;
-pub mod watcher;
 
+pub use commands::CommandRegistry;
 pub use state::HostState;
 
 use crate::error::{CommandError, LoadError};
@@ -16,8 +17,7 @@ use goldsrc_api::Engine as GoldsrcEngine;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use wasmtime::{Config, Engine};
 
 /// Read-only snapshot of a loaded plugin, used for CLI listing/info.
@@ -40,33 +40,104 @@ pub struct PluginInfo {
     pub has_on_frame: bool,
 }
 
-/// Central WASM runtime manager: loads components, executes lifecycle hooks,
-/// and handles filesystem hot-reloading.
-/// Callback handler for file modification notifications across watched directories.
-pub type ConfigReloadHandler = Arc<dyn Fn(&Path) + Send + Sync>;
+/// Outcome of a pause/unpause operation on a plugin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PauseOutcome {
+    /// The plugin was successfully paused.
+    Paused { name: String },
+    /// The plugin was already paused.
+    AlreadyPaused { name: String },
+    /// The plugin was successfully resumed (unpaused).
+    Resumed { name: String },
+    /// The plugin was already running (not paused).
+    AlreadyRunning { name: String },
+}
 
+impl PauseOutcome {
+    /// Returns the target plugin's name.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Paused { name }
+            | Self::AlreadyPaused { name }
+            | Self::Resumed { name }
+            | Self::AlreadyRunning { name } => name,
+        }
+    }
+
+    /// Returns `true` if an actual lifecycle state transition occurred.
+    pub fn changed(&self) -> bool {
+        matches!(self, Self::Paused { .. } | Self::Resumed { .. })
+    }
+}
+
+impl std::fmt::Display for PauseOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Paused { name } => write!(f, "Plugin '{name}' paused successfully."),
+            Self::AlreadyPaused { name } => write!(f, "Plugin '{name}' is already paused."),
+            Self::Resumed { name } => write!(f, "Plugin '{name}' resumed successfully."),
+            Self::AlreadyRunning { name } => write!(f, "Plugin '{name}' is already active."),
+        }
+    }
+}
+
+/// Aggregate outcome of pausing or resuming all loaded plugins.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PauseAllOutcome {
+    /// Number of plugins whose pause state actually changed.
+    pub changed: usize,
+    /// Number of plugins that were already in the requested state.
+    pub already_in_state: usize,
+    /// Target pause state (`true` = paused, `false` = resumed).
+    pub pause: bool,
+}
+
+impl std::fmt::Display for PauseAllOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.pause {
+            if self.already_in_state > 0 {
+                write!(
+                    f,
+                    "Paused {} plugin(s) ({} were already paused).",
+                    self.changed, self.already_in_state
+                )
+            } else {
+                write!(f, "Paused {} plugin(s).", self.changed)
+            }
+        } else if self.already_in_state > 0 {
+            write!(
+                f,
+                "Resumed {} plugin(s) ({} were already active).",
+                self.changed, self.already_in_state
+            )
+        } else {
+            write!(f, "Resumed {} plugin(s).", self.changed)
+        }
+    }
+}
+
+/// Central WASM runtime manager: loads components, executes lifecycle hooks,
 pub struct PluginManager {
     pub(crate) plugins: Vec<LoadedPlugin>,
     pub(crate) engine: Engine,
     pub(crate) engine_ops: Arc<dyn GoldsrcEngine>,
-    pub(crate) event_rx: Receiver<PathBuf>,
-    pub(crate) event_tx: Sender<PathBuf>,
-    pub(crate) watchers: Vec<notify::RecommendedWatcher>,
-    pub(crate) watcher_count: usize,
-    pub(crate) last_reload: HashMap<PathBuf, Instant>,
-    pub(crate) command_registry: HashMap<String, Vec<usize>>,
+    pub command_registry: CommandRegistry,
     pub(crate) plugin_dirs: Vec<PathBuf>,
-    pub config_reload_handler: Option<ConfigReloadHandler>,
 }
 
 impl PluginManager {
-    /// Initialises the Wasmtime engine with the Component Model and epoch interruption enabled.
+    /// Initialises the Wasmtime engine with the Component Model, epoch interruption,
+    /// and guest backtrace formatting enabled.
     pub fn new(engine_ops: Arc<dyn GoldsrcEngine>) -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
+        // Note: Do NOT enable `config.debug_info(true)`. Cranelift cannot emit native host DWARF
+        // information on 32-bit Windows MSVC (COFF/PE) targets, causing component compilation
+        // to fail immediately with "failed to emit DWARF debug information".
+        // Backtrace symbolication (file & line numbers) is handled by `wasm_backtrace_details(Enable)`.
+        config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         let engine = Engine::new(&config)?;
-        let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
 
         // Spawn background epoch timer thread to advance epochs every 2ms.
         let engine_clone = engine.clone();
@@ -84,14 +155,8 @@ impl PluginManager {
             plugins: Vec::new(),
             engine,
             engine_ops,
-            event_rx,
-            event_tx,
-            watchers: Vec::new(),
-            watcher_count: 0,
-            last_reload: HashMap::new(),
-            command_registry: HashMap::new(),
+            command_registry: CommandRegistry::new(),
             plugin_dirs: Vec::new(),
-            config_reload_handler: None,
         })
     }
 
@@ -143,12 +208,7 @@ impl PluginManager {
         crate::host_log(&format!("Loaded component plugin: {}", plugin.name));
         let idx = self.plugins.len();
         if let Some(meta) = &plugin.metadata {
-            for cmd in &meta.commands {
-                self.command_registry
-                    .entry(cmd.clone())
-                    .or_default()
-                    .push(idx);
-            }
+            self.command_registry.register_commands(idx, &meta.commands);
         }
         let name = plugin.name.clone();
         self.plugins.push(plugin);
@@ -156,12 +216,30 @@ impl PluginManager {
         Ok(name)
     }
 
-    /// Resolves a plugin query (either numeric index or name) to a plugin index.
-    pub fn find_plugin(&self, query: &str) -> Option<usize> {
+    /// Resolves a plugin query (either numeric index or name) to a plugin index with strict bounds checking.
+    ///
+    /// If the query parses as an integer but is out of bounds, returns `CommandError::IndexOutOfBounds`.
+    /// If the query does not match any plugin name, returns `CommandError::NotFound`.
+    pub fn resolve_plugin_index(&self, query: &str) -> Result<usize, CommandError> {
         if let Ok(idx) = query.parse::<usize>() {
-            return (idx < self.plugins.len()).then_some(idx);
+            if idx < self.plugins.len() {
+                return Ok(idx);
+            } else {
+                return Err(CommandError::IndexOutOfBounds {
+                    index: idx,
+                    total: self.plugins.len(),
+                });
+            }
         }
-        self.plugins.iter().position(|p| p.name == query)
+        self.plugins
+            .iter()
+            .position(|p| p.name == query)
+            .ok_or_else(|| CommandError::NotFound(query.to_string()))
+    }
+
+    /// Resolves a plugin query (either numeric index or name) to an optional plugin index.
+    pub fn find_plugin(&self, query: &str) -> Option<usize> {
+        self.resolve_plugin_index(query).ok()
     }
 
     /// Recalculates `status` across all loaded plugins according to dependency states.
@@ -172,25 +250,15 @@ impl PluginManager {
     /// Calls `on_unload` (if exported) and removes the plugin at `idx`.
     fn unload_plugin_at(&mut self, idx: usize) -> LoadedPlugin {
         let meta = self.plugins[idx].metadata.clone();
-        for cmd in meta.iter().flat_map(|m| &m.commands) {
-            if let Some(owners) = self.command_registry.get_mut(cmd) {
-                owners.retain(|i| *i != idx);
-                if owners.is_empty() {
-                    self.command_registry.remove(cmd);
-                }
-            }
+        if let Some(meta) = &meta {
+            self.command_registry
+                .unregister_commands(idx, &meta.commands);
         }
         let mut plugin = self.plugins.remove(idx);
         if plugin.has_export("on-unload") {
             let _ = plugin.call_on_unload();
         }
-        for owners in self.command_registry.values_mut() {
-            for i in owners.iter_mut() {
-                if *i > idx {
-                    *i -= 1;
-                }
-            }
-        }
+        self.command_registry.reindex_after_removal(idx);
         self.recalculate_dependency_states();
         plugin
     }
@@ -205,7 +273,7 @@ impl PluginManager {
     }
 
     /// Sets or clears the pause flag on a plugin by name or index query.
-    pub fn pause_plugin(&mut self, query: &str, pause: bool) -> Result<String, CommandError> {
+    pub fn pause_plugin(&mut self, query: &str, pause: bool) -> Result<PauseOutcome, CommandError> {
         self.pause_plugin_with_reason(query, pause, None)
     }
 
@@ -215,33 +283,54 @@ impl PluginManager {
         query: &str,
         pause: bool,
         reason: Option<String>,
-    ) -> Result<String, CommandError> {
-        let idx = self
-            .find_plugin(query)
-            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
-        if pause {
-            self.plugins[idx].status = PluginStatus::Paused { reason };
+    ) -> Result<PauseOutcome, CommandError> {
+        let idx = self.resolve_plugin_index(query)?;
+        let name = self.plugins[idx].name.clone();
+        let outcome = if pause {
+            if matches!(self.plugins[idx].status, PluginStatus::Paused { .. }) {
+                PauseOutcome::AlreadyPaused { name }
+            } else {
+                self.plugins[idx].status = PluginStatus::Paused { reason };
+                self.recalculate_dependency_states();
+                PauseOutcome::Paused { name }
+            }
         } else if matches!(self.plugins[idx].status, PluginStatus::Paused { .. }) {
             self.plugins[idx].status = PluginStatus::Running;
-        }
-        self.recalculate_dependency_states();
-        Ok(format!(
-            "Plugin '{}' pause state set to {}",
-            self.plugins[idx].name, pause
-        ))
+            self.recalculate_dependency_states();
+            PauseOutcome::Resumed { name }
+        } else {
+            PauseOutcome::AlreadyRunning { name }
+        };
+        Ok(outcome)
     }
 
     /// Sets or clears the pause flag on every loaded plugin.
-    pub fn pause_all_plugins(&mut self, pause: bool) -> String {
+    pub fn pause_all_plugins(&mut self, pause: bool) -> PauseAllOutcome {
+        let mut changed = 0;
+        let mut already_in_state = 0;
         for p in &mut self.plugins {
             if pause {
-                p.status = PluginStatus::Paused { reason: None };
+                if matches!(p.status, PluginStatus::Paused { .. }) {
+                    already_in_state += 1;
+                } else {
+                    p.status = PluginStatus::Paused { reason: None };
+                    changed += 1;
+                }
             } else if matches!(p.status, PluginStatus::Paused { .. }) {
                 p.status = PluginStatus::Running;
+                changed += 1;
+            } else {
+                already_in_state += 1;
             }
         }
-        self.recalculate_dependency_states();
-        format!("All plugins pause state set to {}", pause)
+        if changed > 0 {
+            self.recalculate_dependency_states();
+        }
+        PauseAllOutcome {
+            changed,
+            already_in_state,
+            pause,
+        }
     }
 
     /// Returns a snapshot of metadata for all loaded plugins.
@@ -280,9 +369,7 @@ impl PluginManager {
 
     /// Reloads a single plugin by name or index.
     pub fn reload_plugin_by_query(&mut self, query: &str) -> Result<String, CommandError> {
-        let idx = self
-            .find_plugin(query)
-            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
+        let idx = self.resolve_plugin_index(query)?;
         let path = self.plugins[idx].path.clone();
         let name = self.plugins[idx].name.clone();
         self.unload_plugin_at(idx);
@@ -291,8 +378,8 @@ impl PluginManager {
             .map_err(|source| CommandError::Load { name, source })
     }
 
-    /// Reloads the plugin whose recorded path matches `path`.
-    fn reload_plugin_path(&mut self, path: &Path) {
+    /// Reloads the plugin whose recorded path matches `path`, or loads it if newly discovered.
+    pub fn reload_plugin_path(&mut self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if let Some(idx) = self
             .plugins
@@ -311,12 +398,8 @@ impl PluginManager {
                     self.unload_plugin_at(idx);
                     let new_idx = self.plugins.len();
                     if let Some(meta) = &new_plugin.metadata {
-                        for cmd in &meta.commands {
-                            self.command_registry
-                                .entry(cmd.clone())
-                                .or_default()
-                                .push(new_idx);
-                        }
+                        self.command_registry
+                            .register_commands(new_idx, &meta.commands);
                     }
                     self.plugins.push(new_plugin);
                     crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
@@ -328,47 +411,25 @@ impl PluginManager {
                     ));
                 }
             }
-        }
-    }
-
-    /// Debounced wrapper around [`reload_plugin_path`].
-    fn reload_plugin_path_debounced(&mut self, path: &Path) {
-        let now = Instant::now();
-        if let Some(last) = self.last_reload.get(path) {
-            if now.duration_since(*last) < watcher::RELOAD_DEBOUNCE {
-                return;
+        } else {
+            match self.load_plugin(path) {
+                Ok(msg) => crate::host_log(&format!("Discovered and loaded new plugin: {msg}")),
+                Err(e) => crate::host_log(&format!("Failed to load new plugin at {:?}: {e}", path)),
             }
         }
-        self.last_reload.insert(path.to_path_buf(), now);
-        self.reload_plugin_path(path);
-    }
-
-    /// Watches `dir` for changed `.wasm` files and reloads matching plugins on next frame.
-    pub fn enable_hot_reload<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), CommandError> {
-        let w = watcher::spawn_watcher(dir, "wasm", self.event_tx.clone())?;
-        self.watchers.push(w);
-        self.watcher_count += 1;
-        Ok(())
-    }
-
-    /// Watches `dir` for changed `.toml` config files.
-    pub fn enable_config_watcher<P: AsRef<Path>>(&mut self, dir: P) -> Result<(), CommandError> {
-        let w = watcher::spawn_watcher(dir, "toml", self.event_tx.clone())?;
-        self.watchers.push(w);
-        self.watcher_count += 1;
-        Ok(())
     }
 
     /// Returns all registered command names across all loaded plugins.
     pub fn registered_commands(&self) -> Vec<String> {
-        self.command_registry.keys().cloned().collect()
+        self.command_registry.command_names()
     }
 
     /// Dispatches a server command to the plugins that registered it.
     pub fn dispatch_command(&mut self, cmd: &str, caller: i32, args: &str) -> bool {
-        let Some(owners) = self.command_registry.get(cmd).cloned() else {
+        let Some(owners) = self.command_registry.get_handlers(cmd) else {
             return false;
         };
+        let owners = owners.to_vec();
         for idx in owners {
             if let Some(plugin) = self.plugins.get_mut(idx) {
                 if plugin.call_on_command(cmd, caller, args).unwrap_or(false) {
@@ -379,40 +440,8 @@ impl PluginManager {
         false
     }
 
-    /// Registers a callback invoked on the host runtime when a configuration/localization (.toml) file changes.
-    pub fn set_config_reload_handler<F: Fn(&Path) + Send + Sync + 'static>(&mut self, handler: F) {
-        self.config_reload_handler = Some(Arc::new(handler));
-    }
-
-    /// Drains watcher events for WASM plugins and configuration files.
-    /// Returns any changed `.toml` paths that need higher-level orchestration reload (debounced).
-    pub fn drain_watcher_events(&mut self) -> Vec<PathBuf> {
-        self.engine.increment_epoch();
-        let mut changed_configs = Vec::new();
-        let now = Instant::now();
-        while let Ok(path) = self.event_rx.try_recv() {
-            match path.extension().and_then(|s| s.to_str()) {
-                Some("wasm") => self.reload_plugin_path_debounced(&path),
-                Some("toml") => {
-                    if let Some(last) = self.last_reload.get(&path) {
-                        if now.duration_since(*last) < watcher::RELOAD_DEBOUNCE {
-                            continue;
-                        }
-                    }
-                    self.last_reload.insert(path.clone(), now);
-                    let data = path.to_string_lossy().as_bytes().to_vec();
-                    self.call_on_event("config_changed", &data);
-                    changed_configs.push(path);
-                }
-                _ => {}
-            }
-        }
-        changed_configs
-    }
-
-    /// Drains watcher events and ticks every plugin's `on_frame`.
+    /// Ticks every plugin's `on_frame`.
     pub fn on_server_frame(&mut self) {
-        let _ = self.drain_watcher_events();
         self.call_on_frame();
     }
 
@@ -456,16 +485,14 @@ impl PluginManager {
 
     /// Unloads a single plugin by name or index.
     pub fn unload_plugin_by_query(&mut self, query: &str) -> Result<String, CommandError> {
-        let idx = self
-            .find_plugin(query)
-            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
+        let idx = self.resolve_plugin_index(query)?;
         let plugin = self.unload_plugin_at(idx);
         Ok(format!("Unloaded '{}'", plugin.name))
     }
 
-    /// Returns `(loaded_plugins, active_watchers)` for status displays.
-    pub fn get_status_info(&self) -> (usize, usize) {
-        (self.plugins.len(), self.watcher_count)
+    /// Returns the number of loaded plugins.
+    pub fn loaded_count(&self) -> usize {
+        self.plugins.len()
     }
 
     /// Calls `on_frame` on every (non-paused) plugin.
@@ -479,6 +506,16 @@ impl PluginManager {
     pub fn call_on_event(&mut self, name: &str, data: &[u8]) {
         for plugin in &mut self.plugins {
             let _ = plugin.call_on_event(name, data);
+        }
+    }
+
+    /// Calls `on_event` on a specific target plugin by name. Returns `true` if plugin was found and called.
+    pub fn call_plugin_event(&mut self, target: &str, name: &str, data: &[u8]) -> bool {
+        if let Some(plugin) = self.plugins.iter_mut().find(|p| p.name == target) {
+            let _ = plugin.call_on_event(name, data);
+            true
+        } else {
+            false
         }
     }
 
@@ -923,5 +960,104 @@ mod tests {
         assert_eq!(strings, vec!["%s", "Global center notice"]);
 
         assert_eq!(*engine.ended.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_active_menu_owner_tracking_and_lifecycle() {
+        let engine = Arc::new(MockMessageEngine::default());
+        let mut host_state = HostState {
+            engine: engine.clone(),
+            limits: wasmtime::StoreLimitsBuilder::new().build(),
+            plugin_name: "test_menu".to_string(),
+            permissions: Vec::new(),
+            shared_buckets: Vec::new(),
+        };
+
+        crate::clear_all_active_menu_owners();
+        assert_eq!(crate::get_active_menu_owner(1), None);
+
+        // Opening menu sets owner
+        host_state.host_show_menu(1, 0x3FF, -1, "Test Menu".to_string());
+        assert_eq!(
+            crate::get_active_menu_owner(1),
+            Some("test_menu".to_string())
+        );
+
+        // Another plugin opening menu overrides owner
+        let mut vip_state = HostState {
+            engine: engine.clone(),
+            limits: wasmtime::StoreLimitsBuilder::new().build(),
+            plugin_name: "vip_menu".to_string(),
+            permissions: Vec::new(),
+            shared_buckets: Vec::new(),
+        };
+        vip_state.host_show_menu(1, 0x1F, -1, "VIP Menu".to_string());
+        assert_eq!(
+            crate::get_active_menu_owner(1),
+            Some("vip_menu".to_string())
+        );
+
+        // Closing menu (keys_mask == 0) removes owner
+        vip_state.host_show_menu(1, 0, 0, "".to_string());
+        assert_eq!(crate::get_active_menu_owner(1), None);
+    }
+
+    #[test]
+    fn test_pause_outcome_display_and_semantics() {
+        let p = PauseOutcome::Paused {
+            name: "vip_menu".to_string(),
+        };
+        assert!(p.changed());
+        assert_eq!(p.name(), "vip_menu");
+        assert_eq!(p.to_string(), "Plugin 'vip_menu' paused successfully.");
+
+        let ap = PauseOutcome::AlreadyPaused {
+            name: "vip_menu".to_string(),
+        };
+        assert!(!ap.changed());
+        assert_eq!(ap.to_string(), "Plugin 'vip_menu' is already paused.");
+
+        let r = PauseOutcome::Resumed {
+            name: "vip_menu".to_string(),
+        };
+        assert!(r.changed());
+        assert_eq!(r.to_string(), "Plugin 'vip_menu' resumed successfully.");
+
+        let ar = PauseOutcome::AlreadyRunning {
+            name: "vip_menu".to_string(),
+        };
+        assert!(!ar.changed());
+        assert_eq!(ar.to_string(), "Plugin 'vip_menu' is already active.");
+
+        let all_paused = PauseAllOutcome {
+            changed: 3,
+            already_in_state: 1,
+            pause: true,
+        };
+        assert_eq!(
+            all_paused.to_string(),
+            "Paused 3 plugin(s) (1 were already paused)."
+        );
+
+        let all_resumed = PauseAllOutcome {
+            changed: 4,
+            already_in_state: 0,
+            pause: false,
+        };
+        assert_eq!(all_resumed.to_string(), "Resumed 4 plugin(s).");
+    }
+
+    #[test]
+    fn test_component_compilation_and_loading() {
+        let wasm_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/wasm32-unknown-unknown/release/admin_system.wasm");
+        if wasm_path.exists() {
+            let engine = Arc::new(MockMessageEngine::default());
+            let mut manager = PluginManager::new(engine).expect("failed to create PluginManager");
+            let result = manager.load_plugin(&wasm_path);
+            assert!(result.is_ok(), "Failed to load plugin: {:?}", result.err());
+            assert_eq!(manager.plugins.len(), 1);
+            assert_eq!(manager.plugins[0].name, "admin_system");
+        }
     }
 }

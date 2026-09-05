@@ -2,7 +2,8 @@
 
 pub mod registry;
 
+pub use crate::dag::EventPhase;
 pub use registry::{
-    Event, EventHandler, EventPriority, EventRegistry, EventSubscriberBuilder, EventSubscription,
-    clear_events, dispatch_event, subscribe_event,
+    Event, EventHandler, EventRegistry, EventSubscriberBuilder, EventSubscription, clear_events,
+    dispatch_event, subscribe_event,
 };

@@ -42,7 +42,7 @@ pub fn parse_plugin_and_helpers(
         url: cargo_url,
         license: cargo_license,
         bundle: None,
-        require: Vec::new(),
+        requires: Vec::new(),
         permissions: Vec::new(),
         load_time: "anytime".to_string(),
         unload_time: "anytime".to_string(),
@@ -63,8 +63,8 @@ pub fn parse_plugin_and_helpers(
             };
             match meta {
                 Meta::NameValue(nv) => {
-                    if ident == "require" {
-                        parse_string_list_expr(&nv.value, &mut out.require)?;
+                    if ident == "requires" {
+                        parse_string_list_expr(&nv.value, &mut out.requires)?;
                         continue;
                     } else if ident == "permissions" || ident == "permission" {
                         parse_string_list_expr(&nv.value, &mut out.permissions)?;
@@ -76,7 +76,7 @@ pub fn parse_plugin_and_helpers(
                 other => {
                     return Err(syn::Error::new_spanned(
                         other,
-                        "unsupported #[plugin] attribute; supported: name, version, author, description, url/repository, license, bundle, require, permissions",
+                        "unsupported #[plugin] attribute; supported: name, version, author, description, url/repository, license, bundle, requires, permissions",
                     ));
                 }
             }
@@ -98,7 +98,7 @@ pub fn parse_plugin_and_helpers(
                 });
             }
             false
-        } else if attr.path().is_ident("require") {
+        } else if attr.path().is_ident("requires") {
             if let Ok(exprs) = attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated)
             {
                 for expr in exprs {
@@ -106,13 +106,13 @@ pub fn parse_plugin_and_helpers(
                         lit: Lit::Str(s), ..
                     }) = expr
                     {
-                        out.require.push(s.value());
+                        out.requires.push(s.value());
                     }
                 }
             } else if let Ok(meta_list) = attr.meta.require_list() {
                 let _ = meta_list.parse_nested_meta(|meta| {
                     if let Some(id) = meta.path.get_ident() {
-                        out.require.push(id.to_string());
+                        out.requires.push(id.to_string());
                     }
                     Ok(())
                 });
@@ -278,7 +278,7 @@ fn apply_kv_meta(
         return Err(syn::Error::new_spanned(
             &nv.path,
             format!(
-                "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url/repository, license, bundle, require, permissions"
+                "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url/repository, license, bundle, requires, permissions"
             ),
         ));
     }

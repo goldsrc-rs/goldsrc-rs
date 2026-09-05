@@ -10,6 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Centralized `WatcherService` Subsystem (`core/goldsrc-core`)**:
+  - Extracted centralized filesystem watcher engine into `goldsrc-core`, decoupling `goldsrc-host-wasm` from the `notify` crate entirely.
+  - Implemented `WatchTarget` Value Object distinguishing single `File(PathBuf)` from `Directory { path, recursive, filter }`.
+  - Added multi-criteria matching filters via `WatcherFilter`: `Any`, `Extension(&'static str)`, `Stem(&'static str)`, `ExactName(&'static str)`, and `Pattern(String)`.
+  - Added per-target debouncing, pause/resume capability, and telemetry inspection (`WatcherStatus`, `WatcherOverview`).
+  - Standardized all system watchers under canonical IDs: `core:plugins`, `core:configs`, and `i18n:dicts`.
+- **Strict Hierarchical Host Management CLI Reorganization (`grs`)**:
+  - Reorganized all CLI commands under clean domain namespaces: `grs plugins <subcommand>` and `grs watchers <subcommand>`.
+  - Added `grs watchers list [--json]`, `grs watchers pause <id>`, and `grs watchers resume <id>`.
+  - Grouped plugin lifecycle under `grs plugins <list|info|load|unload|reload|pause|unpause|cmds>`.
+  - Completely purged legacy flat top-level commands (`list`, `info`, `pause`, etc.) for strict structural consistency.
+- **Universal `PhasedDag` Topological Ordering Engine (`core/goldsrc-api`)**:
+  - Implemented `PhasedDag<P, Id, T>` with Kahn's topological sort algorithm, macro-phase stratification (`Phase` trait), and deterministic tie-breaking (`Phase` $\to$ `Declaration Order` $\to$ `Alphabetical ID`).
+  - Added cycle detection (`DagError::CycleDetected`), missing dependency validation (`DagError::MissingDependency`), and cross-phase violation reporting (`DagError::PhaseConflict`).
+  - Integrated `PhasedDag` into `EventRegistry` with `EventPhase` (`Filter` $\to$ `Handle` $\to$ `Observe`), deprecating numeric `EventPriority`.
+  - Integrated `PhasedDag` into `SystemRegistry` (ECS) across all execution stages and phases.
+  - Integrated `PhasedDag` into host-side plugin discovery and loading (`HostRuntime`), resolving plugins deterministically by architectural tier and declared dependencies.
+- **Complete Standardization on `requires` & Elimination of Magic Priority Numbers**:
+  - Standardized DSL and metadata exclusively on `requires` (purging legacy `require` across macros, manifests, and configs).
+  - Replaced numeric `priority = 100, 150` with architectural `PluginTier` (`Core` $\to$ `Service` $\to$ `Gameplay` $\to$ `Addon` $\to$ `Analytics`) and explicit `requires` anchors in `plugins.toml` and `#[plugin]`.
+  - Added flexible dual deserialization for `requires` in `plugins.toml` supporting both single string (`requires = "dep"`) and array (`requires = ["dep1", "dep2"]`).
+- **Algebraic Commutative State Modifiers & Typed Context Blackboard (`core/goldsrc-api` & `core/goldsrc-core`)**:
+  - Implemented `CommutativeModifier` with order-independent mathematical evaluation model ($(\text{base} + \sum \text{flat}) \times \prod \text{mult} - \sum \text{red}$), tagged contributions, and block status.
+  - Implemented `TypedBlackboard` providing type-safe, thread-safe auxiliary property passing across inter-plugin contexts.
+  - Integrated `CommutativeModifier` and `TypedBlackboard` into `TakeDamageContext`, eliminating AMX Mod X style damage overwrite conflicts.
 - **Unified 3-Tier Layering Architecture (`macros -> builders -> imperative registries`)**:
   - Implemented thread-safe runtime registries in `core/goldsrc-api`: `CommandRegistry`, `EventRegistry`, `PlaceholderRegistry`, and `MenuActionRegistry`.
   - Added fluent builders with terminal `.register()` and `.subscribe()` methods (`CommandBuilder`, `EventSubscriberBuilder`, `PlaceholderBuilder`, `SystemBuilder`).

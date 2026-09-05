@@ -33,10 +33,10 @@ pub fn bundle(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("bundle")
 }
 
-/// Helper attribute for declaring plugin / command requirements (`#[require("plugin@^1.0")]`).
+/// Helper attribute for declaring plugin / command requirements (`#[requires("plugin@^1.0")]`).
 #[proc_macro_attribute]
-pub fn require(_attr: TokenStream, _item: TokenStream) -> TokenStream {
-    marker_outside_plugin("require")
+pub fn requires(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("requires")
 }
 
 /// Helper attribute for declaring WASM sandbox permissions (`#[permissions("fs:read", "chat:broadcast")]`).
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn parses_all_attrs() {
         let a = parse_attr(
-            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", license = "MIT", url = "https://github.com", require = ["plugin:b@>=1", "plugin:c@1.0"], permissions = ["fs:read", "chat:broadcast"]"#,
+            r#"name = "x", version = "2.0", author = "A", description = "Test Desc", license = "MIT", url = "https://github.com", requires = ["plugin:b@>=1", "plugin:c@1.0"], permissions = ["fs:read", "chat:broadcast"]"#,
             "impl MyPlugin {}",
         )
         .unwrap();
@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(a.description, "Test Desc");
         assert_eq!(a.license, "MIT");
         assert_eq!(a.url, "https://github.com");
-        assert_eq!(a.require, vec!["plugin:b@>=1", "plugin:c@1.0"]);
+        assert_eq!(a.requires, vec!["plugin:b@>=1", "plugin:c@1.0"]);
         assert_eq!(a.permissions, vec!["fs:read", "chat:broadcast"]);
     }
 
@@ -141,8 +141,8 @@ mod tests {
             "",
             r#"
             #[bundle("vip_system")]
-            #[require("vip_core")]
-            #[require("cstrike@^1.0")]
+            #[requires("vip_core")]
+            #[requires("cstrike@^1.0")]
             #[permissions("fs:read('configs/*.toml')", "storage:wal")]
             #[lifecycle(load = anytime, unload = never)]
             impl MyPlugin {}
@@ -151,7 +151,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(a.bundle, Some("vip_system".to_string()));
-        assert_eq!(a.require, vec!["vip_core", "cstrike@^1.0"]);
+        assert_eq!(a.requires, vec!["vip_core", "cstrike@^1.0"]);
         assert_eq!(
             a.permissions,
             vec!["fs:read('configs/*.toml')", "storage:wal"]

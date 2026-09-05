@@ -110,6 +110,10 @@ pub struct LogConfig {
     #[serde(default = "default_level")]
     pub level: LogLevel,
 
+    /// Custom format template utilizing placeholders (e.g. "[{log:date-time}][{log:level}][{log:target}] {log:message}").
+    #[serde(default = "default_format")]
+    pub format: String,
+
     /// Write log lines to `<logs_dir>/goldsrc.log`.
     #[serde(default = "default_true")]
     pub file_output: bool,
@@ -129,11 +133,15 @@ fn default_level() -> LogLevel {
 fn default_true() -> bool {
     true
 }
+pub fn default_format() -> String {
+    "[{log:date-time}][{log:level}][{log:target}] {log:message}".to_string()
+}
 
 impl Default for LogConfig {
     fn default() -> Self {
         Self {
             level: default_level(),
+            format: default_format(),
             file_output: true,
             console_output: true,
             targets: Vec::new(), // all targets
@@ -279,6 +287,33 @@ impl GoldSrcLogger {
         }
     }
 
+    fn format_message(
+        template: &str,
+        today: &str,
+        timestamp: &str,
+        level_str: &str,
+        target_str: &str,
+        message: &str,
+    ) -> String {
+        template
+            .replace("{log:date-time}", timestamp)
+            .replace("{log:timestamp}", timestamp)
+            .replace("{date-time}", timestamp)
+            .replace("{time}", timestamp)
+            .replace("{log:date}", today)
+            .replace("{date}", today)
+            .replace("{log:level}", level_str)
+            .replace("{level}", level_str)
+            .replace("{log:target}", target_str)
+            .replace("{log:source}", target_str)
+            .replace("{target}", target_str)
+            .replace("{source}", target_str)
+            .replace("{log:message}", message)
+            .replace("{log:msg}", message)
+            .replace("{message}", message)
+            .replace("{msg}", message)
+    }
+
     fn emit(&mut self, level: LogLevel, target: LogTarget, message: &str) -> Option<String> {
         if !self.should_emit(level, target) {
             return None;
@@ -286,13 +321,17 @@ impl GoldSrcLogger {
 
         let (today, timestamp) = get_current_date_and_time();
 
-        // Structured plain text format for file: [2026-08-28 01:42:00][INFO][core] message
-        let plain_line = format!(
-            "[{timestamp}][{}][{}] {}\n",
+        let mut plain_line = Self::format_message(
+            &self.config.format,
+            &today,
+            &timestamp,
             level.as_str(),
             target.as_str(),
-            message
+            message,
         );
+        if !plain_line.ends_with('\n') {
+            plain_line.push('\n');
+        }
 
         // File output with daily rotation and dedicated error stream (buffered)
         if self.config.file_output {
@@ -322,12 +361,21 @@ impl GoldSrcLogger {
             let target_color = "\x1b[35m"; // Magenta for target
             let reset = "\x1b[0m";
 
-            Some(format!(
-                "[{level_color}{}{reset}][{target_color}{}{reset}] {}\n",
-                level.as_str(),
-                target.as_str(),
-                message
-            ))
+            let colored_level = format!("{level_color}{}{reset}", level.as_str());
+            let colored_target = format!("{target_color}{}{reset}", target.as_str());
+
+            let mut console_line = Self::format_message(
+                &self.config.format,
+                &today,
+                &timestamp,
+                &colored_level,
+                &colored_target,
+                message,
+            );
+            if !console_line.ends_with('\n') {
+                console_line.push('\n');
+            }
+            Some(console_line)
         } else {
             None
         }
@@ -434,4 +482,55 @@ pub fn log_file_path(backend: BackendType) -> PathBuf {
     PathResolver::framework_dir(backend)
         .join(crate::paths::LOGS_DIR_NAME)
         .join(format!("{}.log", today))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_log_config() {
+        let cfg = LogConfig::default();
+        assert_eq!(cfg.level, LogLevel::Info);
+        assert_eq!(
+            cfg.format,
+            "[{log:date-time}][{log:level}][{log:target}] {log:message}"
+        );
+        assert!(cfg.file_output);
+        assert!(cfg.console_output);
+    }
+
+    #[test]
+    fn test_format_message_interpolation() {
+        let template = "{log:date-time} [{log:level}] ({log:target}) -> {log:message}";
+        let formatted = GoldSrcLogger::format_message(
+            template,
+            "2026-09-05",
+            "2026-09-05 14:30:00",
+            "INFO",
+            "core",
+            "Server initialized",
+        );
+        assert_eq!(
+            formatted,
+            "2026-09-05 14:30:00 [INFO] (core) -> Server initialized"
+        );
+    }
+
+    #[test]
+    fn test_format_message_fallback_aliases() {
+        let template = "[{time}][{level}][{source}] {msg}";
+        let formatted = GoldSrcLogger::format_message(
+            template,
+            "2026-09-05",
+            "2026-09-05 14:30:00",
+            "WARN",
+            "wasm",
+            "Epoch deadline exceeded",
+        );
+        assert_eq!(
+            formatted,
+            "[2026-09-05 14:30:00][WARN][wasm] Epoch deadline exceeded"
+        );
+    }
 }

@@ -23,6 +23,7 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
         goldsrc_api::auth::Auth::remove_player(index);
         goldsrc_api::menu::close_player_menu(index);
+        goldsrc_host_wasm::clear_active_menu_owner(index);
         if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
             mgr.on_disconnect(index);
         }
@@ -32,7 +33,11 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_connect" || name == "client_disconnect" {
         let player_count = goldsrc_api::auth::Auth::total_players();
         let current_map = HostRuntime::current_map();
-        HostRuntime::evaluate_rules(&current_map, player_count);
+        HostRuntime::evaluate_rules_scoped(
+            goldsrc_api::rules::RuleScope::PlayerCount,
+            &current_map,
+            player_count,
+        );
     }
 
     res
@@ -68,7 +73,22 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         let mut payload = Vec::with_capacity(8);
         payload.extend_from_slice(&player_idx.to_le_bytes());
         payload.extend_from_slice(&(slot as u32).to_le_bytes());
-        emit_event("menu_select", &payload);
+
+        let targeted = if let Some(owner) = goldsrc_host_wasm::get_active_menu_owner(player_idx) {
+            HostRuntime::with_manager(|m| {
+                if let Some(manager) = m {
+                    manager.call_plugin_event(&owner, "menu_select", &payload)
+                } else {
+                    false
+                }
+            })
+        } else {
+            false
+        };
+
+        if !targeted {
+            emit_event("menu_select", &payload);
+        }
 
         return true;
     }
@@ -124,11 +144,16 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
 
 /// Invoked when a new server map is activated (ServerActivate).
 pub fn on_server_activate() {
+    goldsrc_api::menu::on_round_start(1);
     emit_event("server_activate", &[]);
     if let Some(engine) = HostRuntime::engine() {
         let map_name = engine.cvar_get_string("mapname").unwrap_or_default();
         let player_count = goldsrc_api::auth::Auth::total_players();
-        HostRuntime::evaluate_rules(&map_name, player_count);
+        HostRuntime::evaluate_rules_scoped(
+            goldsrc_api::rules::RuleScope::MapChange,
+            &map_name,
+            player_count,
+        );
     }
 }
 
@@ -138,6 +163,7 @@ pub fn on_server_deactivate() {
     goldsrc_api::edict::bump_map_generation();
     goldsrc_api::auth::Auth::clear_all_players();
     goldsrc_api::menu::clear_all_menus();
+    goldsrc_host_wasm::clear_all_active_menu_owners();
     if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
         mgr.on_map_change();
     }

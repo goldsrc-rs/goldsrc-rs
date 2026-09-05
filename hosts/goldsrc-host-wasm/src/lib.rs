@@ -14,7 +14,8 @@ pub mod manager;
 /// Loaded plugin instance and metadata types.
 pub mod plugin;
 
-pub use manager::{PluginInfo, PluginManager};
+pub use error::{CommandError, HostError, LoadError};
+pub use manager::{CommandRegistry, PauseAllOutcome, PauseOutcome, PluginInfo, PluginManager};
 pub use plugin::PluginStatus;
 
 pub type PrintCallback = fn(&str);
@@ -83,6 +84,39 @@ pub(crate) fn notify_show_menu(player_idx: i32, keys_mask: i32, timeout: i32, te
         if let Some(cb) = *lock {
             cb(player_idx, keys_mask, timeout, text);
         }
+    }
+}
+
+static ACTIVE_MENU_OWNERS: std::sync::LazyLock<
+    std::sync::RwLock<std::collections::HashMap<i32, String>>,
+> = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+
+/// Registers the owning WASM plugin for an active player menu.
+pub fn set_active_menu_owner(player_index: i32, owner: String) {
+    if let Ok(mut lock) = ACTIVE_MENU_OWNERS.write() {
+        lock.insert(player_index, owner);
+    }
+}
+
+/// Clears the active menu owner for a player when their menu closes.
+pub fn clear_active_menu_owner(player_index: i32) {
+    if let Ok(mut lock) = ACTIVE_MENU_OWNERS.write() {
+        lock.remove(&player_index);
+    }
+}
+
+/// Retrieves the owning WASM plugin name for the player's active menu, if any.
+pub fn get_active_menu_owner(player_index: i32) -> Option<String> {
+    ACTIVE_MENU_OWNERS
+        .read()
+        .ok()
+        .and_then(|lock| lock.get(&player_index).cloned())
+}
+
+/// Clears all active menu owners (e.g. on map change / server deactivate).
+pub fn clear_all_active_menu_owners() {
+    if let Ok(mut lock) = ACTIVE_MENU_OWNERS.write() {
+        lock.clear();
     }
 }
 

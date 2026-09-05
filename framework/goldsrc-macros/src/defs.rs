@@ -10,7 +10,7 @@ pub struct PluginAttr {
     pub url: String,
     pub license: String,
     pub bundle: Option<String>,
-    pub require: Vec<String>,
+    pub requires: Vec<String>,
     pub permissions: Vec<String>,
     pub load_time: String,
     pub unload_time: String,
@@ -24,7 +24,7 @@ pub struct CommandDefInfo {
     pub usage: String,
     pub aliases: Vec<String>,
     pub capability: Option<String>,
-    pub require: Vec<String>,
+    pub requires: Vec<String>,
 }
 
 /// Information about a registered ECS system definition.

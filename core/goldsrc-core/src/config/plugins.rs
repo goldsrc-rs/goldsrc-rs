@@ -89,6 +89,26 @@ impl PluginDebugSetting {
     }
 }
 
+use goldsrc_api::dag::PluginTier;
+
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        One(String),
+        Many(Vec<String>),
+    }
+
+    match Option::<StringOrVec>::deserialize(deserializer)? {
+        Some(StringOrVec::One(s)) => Ok(vec![s]),
+        Some(StringOrVec::Many(v)) => Ok(v),
+        None => Ok(Vec::new()),
+    }
+}
+
 /// Individual plugin entry in `plugins.toml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PluginEntry {
@@ -97,16 +117,15 @@ pub struct PluginEntry {
     /// Whether the plugin is enabled for loading.
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// Load priority (higher priority loads earlier, default 100).
-    #[serde(default = "default_priority")]
-    pub priority: i32,
+    /// Architectural loading tier (Core -> Service -> Gameplay -> Addon -> Analytics).
+    #[serde(default)]
+    pub tier: PluginTier,
+    /// Required dependencies (plugin names) that must load before this plugin.
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    pub requires: Vec<String>,
     /// Debugging and profiling configuration.
     #[serde(default)]
     pub debug: Option<PluginDebugSetting>,
-}
-
-fn default_priority() -> i32 {
-    100
 }
 
 /// A named profile group of plugins (e.g. `[groups.vip_pack]`).
@@ -131,6 +150,26 @@ pub struct RuleConfig {
     /// Action map: action name -> TOML value.
     #[serde(default)]
     pub action: BTreeMap<String, toml::Value>,
+    /// Explicit trigger scopes (e.g. `scope = "map_change"` or `scope = ["map_change", "player_count"]`).
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    pub scope: Vec<String>,
+}
+
+impl RuleConfig {
+    /// Converts this config model into a [`goldsrc_api::rules::Rule`].
+    pub fn to_rule(&self) -> goldsrc_api::rules::Rule {
+        let scopes: Vec<goldsrc_api::rules::RuleScope> = self
+            .scope
+            .iter()
+            .map(|s| goldsrc_api::rules::RuleScope::parse(s))
+            .collect();
+        goldsrc_api::rules::Rule::with_scopes(
+            &self.name,
+            self.when.clone(),
+            self.action.clone(),
+            scopes,
+        )
+    }
 }
 
 /// Individual plugin entry representation before resolving name.
@@ -139,9 +178,12 @@ pub struct PluginEntryItem {
     /// Whether the plugin is enabled for loading.
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// Load priority (higher priority loads earlier, default 100).
-    #[serde(default = "default_priority")]
-    pub priority: i32,
+    /// Architectural loading tier (Core -> Service -> Gameplay -> Addon -> Analytics).
+    #[serde(default)]
+    pub tier: PluginTier,
+    /// Required dependencies (plugin names) that must load before this plugin.
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    pub requires: Vec<String>,
     /// Debugging and profiling configuration.
     #[serde(default)]
     pub debug: Option<PluginDebugSetting>,
@@ -172,6 +214,9 @@ pub struct RuleItemConfig {
     /// Action map: action name -> TOML value.
     #[serde(default)]
     pub action: BTreeMap<String, toml::Value>,
+    /// Explicit trigger scopes (e.g. `scope = "map_change"` or `scope = ["map_change", "player_count"]`).
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    pub scope: Vec<String>,
 }
 
 /// Intermediate raw TOML representation for flexible dual-format deserialization.
@@ -213,7 +258,8 @@ impl PluginsConfig {
                         plugins.push(PluginEntry {
                             name,
                             enabled: item.enabled,
-                            priority: item.priority,
+                            tier: item.tier,
+                            requires: item.requires,
                             debug: item.debug,
                         });
                     }
@@ -231,6 +277,7 @@ impl PluginsConfig {
                             name,
                             when: item.when,
                             action: item.action,
+                            scope: item.scope,
                         });
                     }
                 }
@@ -341,12 +388,14 @@ mod tests {
             [[plugins]]
             name = "admin_system"
             enabled = true
-            priority = 150
+            tier = "core"
             debug = true
 
             [[plugins]]
             name = "vip_core"
             enabled = true
+            tier = "gameplay"
+            requires = ["admin_system"]
             [plugins.debug]
             level = "trace"
             profile = true
@@ -366,7 +415,12 @@ mod tests {
         let cfg = PluginsConfig::parse(toml_str).unwrap();
         assert_eq!(cfg.plugins.len(), 2);
         assert_eq!(cfg.plugins[0].name, "admin_system");
-        assert_eq!(cfg.plugins[0].priority, 150);
+        assert_eq!(cfg.plugins[0].tier, PluginTier::Core);
+        assert!(cfg.plugins[0].requires.is_empty());
+
+        assert_eq!(cfg.plugins[1].name, "vip_core");
+        assert_eq!(cfg.plugins[1].tier, PluginTier::Gameplay);
+        assert_eq!(cfg.plugins[1].requires, vec!["admin_system"]);
 
         let debug0 = cfg.get_debug_config("admin_system");
         assert_eq!(debug0.level, PluginLogLevel::Debug);
@@ -392,12 +446,13 @@ mod tests {
         let toml_str = r#"
             [plugins.admin_system]
             enabled = true
-            priority = 150
+            tier = "core"
             debug = true
 
             [plugins.vip_core]
             enabled = false
-            priority = 120
+            tier = "addon"
+            requires = "admin_system"
 
             [groups.fun_mods]
             enabled = false
@@ -416,11 +471,13 @@ mod tests {
             .find(|p| p.name == "admin_system")
             .unwrap();
         assert!(admin.enabled);
-        assert_eq!(admin.priority, 150);
+        assert_eq!(admin.tier, PluginTier::Core);
+        assert!(admin.requires.is_empty());
 
         let vip = cfg.plugins.iter().find(|p| p.name == "vip_core").unwrap();
         assert!(!vip.enabled);
-        assert_eq!(vip.priority, 120);
+        assert_eq!(vip.tier, PluginTier::Addon);
+        assert_eq!(vip.requires, vec!["admin_system"]);
 
         assert_eq!(cfg.rules.len(), 1);
         assert_eq!(cfg.rules[0].name, "disable_on_dust2");

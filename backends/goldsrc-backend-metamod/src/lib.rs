@@ -45,7 +45,8 @@ pub fn init_wasm_host() {
             if mapname_str_offset != 0 {
                 // 1. Direct memory resolution via pStringBase (standard HLSDK STRING() macro)
                 if !globals.pStringBase.is_null()
-                    && (mapname_str_offset as usize) <= goldsrc_sys::ffi::STRING_POOL_MASK
+                    && (mapname_str_offset as usize).wrapping_add(64)
+                        <= goldsrc_sys::ffi::STRING_POOL_MAX
                 {
                     let ptr = unsafe {
                         (globals.pStringBase as *const u8).add(mapname_str_offset as usize)

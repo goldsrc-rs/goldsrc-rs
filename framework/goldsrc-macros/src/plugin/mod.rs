@@ -41,7 +41,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             let mut cmd_capability: Option<String> = None;
             let mut cmd_description: Option<String> = None;
             let mut cmd_usage: Option<String> = None;
-            let mut cmd_require: Vec<String> = Vec::new();
+            let mut cmd_requires: Vec<String> = Vec::new();
             let mut macro_error: Option<syn::Error> = None;
 
             // Retain attributes that are NOT our custom ones
@@ -112,7 +112,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                                 if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
                                     cmd_usage = Some(s.value());
                                 }
-                            } else if meta.path.is_ident("require") {
+                            } else if meta.path.is_ident("requires") {
                                 if let Ok(ExprArray { elems, .. }) =
                                     meta.value()?.parse::<ExprArray>()
                                 {
@@ -121,11 +121,11 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                                             lit: Lit::Str(s), ..
                                         }) = elem
                                         {
-                                            cmd_require.push(s.value());
+                                            cmd_requires.push(s.value());
                                         }
                                     }
                                 } else if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
-                                    cmd_require.push(s.value());
+                                    cmd_requires.push(s.value());
                                 }
                             } else if meta.path.is_ident("aliases") {
                                 if let Ok(ExprArray { elems, .. }) =
@@ -339,7 +339,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                     usage: cmd_usage.clone().unwrap_or_default(),
                     aliases: cmd_aliases.clone(),
                     capability: cmd_capability.clone(),
-                    require: cmd_require.clone(),
+                    requires: cmd_requires.clone(),
                 });
 
                 let is_raw_signature = match inputs_len {
@@ -432,10 +432,20 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                                 });
                             } else if ident == "player" {
                                 param_bindings.push(quote! {
-                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(&caller.to_string()) {
+                                    let caller_token = caller.to_string();
+                                    let target_token = if #total_non_context_params == 0 {
+                                        if let Some(arg) = parsed_args.first().filter(|s| !s.is_empty()) {
+                                            arg.as_str()
+                                        } else {
+                                            &caller_token
+                                        }
+                                    } else {
+                                        &caller_token
+                                    };
+                                    let mut #ident: #ty = match ::goldsrc::FromArg::from_arg(target_token) {
                                         Ok(val) => val,
                                         Err(err) => {
-                                            ::goldsrc::log_warn!("[Command Error] Failed to bind 'player' context for caller {caller}: {err}");
+                                            ::goldsrc::log_warn!("[Command Error] Failed to bind 'player' context for '{target_token}' (caller {caller}): {err}");
                                             return false;
                                         }
                                     };
@@ -605,14 +615,14 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
         });
     }
 
-    let mut require_toml = String::new();
-    if !attr.require.is_empty() {
+    let mut requires_toml = String::new();
+    if !attr.requires.is_empty() {
         let reqs: Vec<String> = attr
-            .require
+            .requires
             .iter()
             .map(|d| format!("\"{}\"", toml_escape(d)))
             .collect();
-        require_toml = format!("require = [{}]\n", reqs.join(", "));
+        requires_toml = format!("requires = [{}]\n", reqs.join(", "));
     }
 
     let mut permissions_toml = String::new();
@@ -651,13 +661,13 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             if let Some(cap) = &cmd.capability {
                 commands_toml.push_str(&format!("capability = \"{}\"\n", toml_escape(cap)));
             }
-            if !cmd.require.is_empty() {
+            if !cmd.requires.is_empty() {
                 let req_str: Vec<String> = cmd
-                    .require
+                    .requires
                     .iter()
                     .map(|r| format!("\"{}\"", toml_escape(r)))
                     .collect();
-                commands_toml.push_str(&format!("require = [{}]\n", req_str.join(", ")));
+                commands_toml.push_str(&format!("requires = [{}]\n", req_str.join(", ")));
             }
             commands_toml.push('\n');
         }
@@ -683,7 +693,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
         toml_escape(&attr.url),
         toml_escape(&attr.license),
         bundle_field,
-        require_toml,
+        requires_toml,
         permissions_toml,
         lifecycle_toml,
         commands_toml
@@ -718,8 +728,19 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             fn on_event(name: String, payload: Vec<u8>) {
                 if name == "menu_select" && payload.len() >= 8 {
                     let caller = i32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-                    let item_id = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
-                    ::goldsrc::menu::dispatch_menu_action(::goldsrc::Player::new(caller), Some(item_id), None);
+                    let slot = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]) as u8;
+                    if let Some(action) = ::goldsrc::menu::handle_menu_slot(caller, slot) {
+                        match action {
+                            ::goldsrc::menu::SlotAction::Execute { id, action_name, .. } => {
+                                ::goldsrc::menu::dispatch_menu_action(
+                                    ::goldsrc::Player::new(caller),
+                                    Some(id),
+                                    if action_name.is_empty() { None } else { Some(&action_name) },
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
                 }
                 ::goldsrc::event::dispatch_event(&name, &payload);
             }

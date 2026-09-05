@@ -17,6 +17,8 @@ pub mod command;
 pub mod consts;
 /// Typed CVar bindings and flags.
 pub mod cvar;
+/// Universal Phased Directed Acyclic Graph (PhasedDag) ordering engine.
+pub mod dag;
 /// Unified Expression DSL lexer, parser, and grammar primitives.
 pub mod dsl;
 /// Validated `edict_t` handle.
@@ -33,6 +35,8 @@ pub mod hud;
 pub mod liblist;
 /// Declarative multi-page menu system.
 pub mod menu;
+/// Commutative state modifiers and typed context blackboard.
+pub mod modifiers;
 /// Dynamic contextual placeholders and function calls.
 pub mod placeholders;
 /// High-level ReAPI capability flags, detection, and queries.
@@ -56,6 +60,7 @@ pub use command::{
     register_command, split_command_args,
 };
 pub use cvar::{Cvar, CvarFlags};
+pub use dag::{DagError, EventPhase, NodeBuilder, OrderNode, Phase, PhasedDag, PluginTier};
 pub use dsl::{Lexer, Token};
 pub use edict::EDict;
 pub use engine::{
@@ -66,8 +71,8 @@ pub use engine::{
     format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
 };
 pub use event::{
-    Event, EventHandler, EventPriority, EventRegistry, EventSubscriberBuilder, EventSubscription,
-    clear_events, dispatch_event, subscribe_event,
+    Event, EventHandler, EventRegistry, EventSubscriberBuilder, EventSubscription, clear_events,
+    dispatch_event, subscribe_event,
 };
 pub use gamedata::{GameData, MemorySignature, VTableFunc};
 pub use hud::{
@@ -81,6 +86,7 @@ pub use menu::{
     MenuPageBuilder, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,
     clear_menu_actions, dispatch_menu_action, register_menu_action_id, register_menu_action_name,
 };
+pub use modifiers::{BlackboardValue, CommutativeModifier, ModifierContribution, TypedBlackboard};
 pub use placeholders::{
     CallArg, Placeholder, PlaceholderBuilder, PlaceholderCall, PlaceholderHandler,
     PlaceholderMetadata, PlaceholderRegistry, PlayerTarget, clear_placeholders,
@@ -88,7 +94,7 @@ pub use placeholders::{
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
-pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
+pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
 
 /// Safe wrapper around `edict_t` (entity dictionary).
