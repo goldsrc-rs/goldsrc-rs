@@ -1,6 +1,9 @@
+pub mod orchestrator;
+pub use orchestrator::RuleOrchestrator;
+
 use crate::plugins_config::PluginsConfig;
 use goldsrc_api::Engine;
-use goldsrc_api::rules::{RuleAction, RuleCondition};
+use goldsrc_api::rules::{RuleAction, RuleCondition, RuleScope};
 use std::collections::HashMap;
 
 /// Server context provided during rule evaluation.
@@ -10,6 +13,8 @@ pub struct ServerRuleContext<'a> {
     pub engine: &'a dyn Engine,
     pub plugins_config: &'a mut PluginsConfig,
     pub paused_plugins: &'a mut HashMap<String, bool>,
+    /// Deliberate manual overrides initiated by administrator console commands (e.g. `grs pause`, `grs unpause`).
+    pub manual_overrides: &'a HashMap<String, bool>,
     pub execution_log: Vec<String>,
 }
 
@@ -23,6 +28,10 @@ pub struct MapCondition;
 impl<'a> RuleCondition<ServerRuleContext<'a>> for MapCondition {
     fn name(&self) -> &str {
         "map"
+    }
+
+    fn scopes(&self) -> Vec<RuleScope> {
+        vec![RuleScope::MapChange]
     }
 
     fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
@@ -63,6 +72,10 @@ pub struct PlayersCondition;
 impl<'a> RuleCondition<ServerRuleContext<'a>> for PlayersCondition {
     fn name(&self) -> &str {
         "players"
+    }
+
+    fn scopes(&self) -> Vec<RuleScope> {
+        vec![RuleScope::PlayerCount]
     }
 
     fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
@@ -115,6 +128,10 @@ pub struct CvarCondition;
 impl<'a> RuleCondition<ServerRuleContext<'a>> for CvarCondition {
     fn name(&self) -> &str {
         "cvar"
+    }
+
+    fn scopes(&self) -> Vec<RuleScope> {
+        vec![RuleScope::MapChange]
     }
 
     fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
@@ -171,6 +188,10 @@ impl<'a> RuleCondition<ServerRuleContext<'a>> for GroupEnabledCondition {
         "group_enabled"
     }
 
+    fn scopes(&self) -> Vec<RuleScope> {
+        vec![RuleScope::MapChange]
+    }
+
     fn evaluate(&self, ctx: &ServerRuleContext<'a>, value: &toml::Value) -> bool {
         match value {
             toml::Value::String(group_name) => ctx
@@ -210,6 +231,14 @@ impl<'a> RuleAction<ServerRuleContext<'a>> for PauseAction {
         };
 
         for p in plugins_to_pause {
+            if ctx.manual_overrides.contains_key(&p) {
+                log::debug!(
+                    target: "rules",
+                    "Skipping reactive pause on plugin '{}': protected by administrator manual override",
+                    p
+                );
+                continue;
+            }
             ctx.paused_plugins.insert(p.clone(), true);
             ctx.execution_log.push(format!("Paused plugin '{}'", p));
         }
@@ -240,6 +269,14 @@ impl<'a> RuleAction<ServerRuleContext<'a>> for UnpauseAction {
         };
 
         for p in plugins_to_unpause {
+            if ctx.manual_overrides.contains_key(&p) {
+                log::debug!(
+                    target: "rules",
+                    "Skipping reactive unpause on plugin '{}': protected by administrator manual override",
+                    p
+                );
+                continue;
+            }
             ctx.paused_plugins.insert(p.clone(), false);
             ctx.execution_log.push(format!("Unpaused plugin '{}'", p));
         }
@@ -512,6 +549,7 @@ mod tests {
     fn test_server_rule_execution() {
         let mut cfg = PluginsConfig::default();
         let mut paused = HashMap::new();
+        let manual_overrides = HashMap::new();
         let mock_engine = MockEngine;
 
         {
@@ -539,6 +577,7 @@ mod tests {
                 engine: &mock_engine,
                 plugins_config: &mut cfg,
                 paused_plugins: &mut paused,
+                manual_overrides: &manual_overrides,
                 execution_log: Vec::new(),
             };
 
@@ -548,5 +587,108 @@ mod tests {
         }
 
         assert_eq!(paused.get("warmup_mod"), Some(&true));
+    }
+
+    #[test]
+    fn test_rule_orchestrator_scoping_and_manual_overrides() {
+        let mut cfg = PluginsConfig::default();
+        let mut paused = HashMap::new();
+        let mock_engine = MockEngine;
+
+        let mut when_map = std::collections::BTreeMap::new();
+        when_map.insert(
+            "map".to_string(),
+            toml::Value::String("de_dust2".to_string()),
+        );
+        let mut action_map = std::collections::BTreeMap::new();
+        action_map.insert(
+            "pause".to_string(),
+            toml::Value::Array(vec![toml::Value::String("vip_menu".to_string())]),
+        );
+        let map_rule = Rule::new("auto_pause_vip_on_dust2", when_map, action_map);
+
+        let mut when_players = std::collections::BTreeMap::new();
+        when_players.insert(
+            "players".to_string(),
+            toml::Value::String(">= 4".to_string()),
+        );
+        let mut action_players = std::collections::BTreeMap::new();
+        action_players.insert(
+            "unpause".to_string(),
+            toml::Value::Array(vec![toml::Value::String("test_hud".to_string())]),
+        );
+        let players_rule = Rule::new("unpause_test_hud_on_dust2", when_players, action_players);
+
+        let mut orchestrator = RuleOrchestrator::new();
+        orchestrator.set_rules(vec![map_rule, players_rule]);
+
+        // 1. When a player connects (RuleScope::PlayerCount):
+        // The map rule must NOT run, so vip_menu is not touched.
+        {
+            let manual = orchestrator.manual_overrides().clone();
+            let mut ctx = ServerRuleContext {
+                map_name: "de_dust2",
+                player_count: 5,
+                engine: &mock_engine,
+                plugins_config: &mut cfg,
+                paused_plugins: &mut paused,
+                manual_overrides: &manual,
+                execution_log: Vec::new(),
+            };
+
+            let results = orchestrator.evaluate_scope(&RuleScope::PlayerCount, &mut ctx);
+            assert_eq!(results.len(), 1);
+            assert_eq!(results[0].0, "unpause_test_hud_on_dust2");
+            assert_eq!(paused.get("test_hud"), Some(&false));
+            assert_eq!(paused.get("vip_menu"), None); // Map rule was skipped!
+        }
+
+        // 2. When server changes map (RuleScope::MapChange):
+        // Map rule executes and pauses vip_menu.
+        {
+            let manual = orchestrator.manual_overrides().clone();
+            let mut ctx = ServerRuleContext {
+                map_name: "de_dust2",
+                player_count: 5,
+                engine: &mock_engine,
+                plugins_config: &mut cfg,
+                paused_plugins: &mut paused,
+                manual_overrides: &manual,
+                execution_log: Vec::new(),
+            };
+
+            let results = orchestrator.evaluate_scope(&RuleScope::MapChange, &mut ctx);
+            assert_eq!(results.len(), 1);
+            assert_eq!(results[0].0, "auto_pause_vip_on_dust2");
+            assert_eq!(paused.get("vip_menu"), Some(&true));
+        }
+
+        // 3. Administrator deliberately runs `grs unpause vip_menu` -> sets manual override:
+        orchestrator.set_manual_override("vip_menu", false);
+        paused.insert("vip_menu".to_string(), false);
+
+        // 4. Now another player connects (or even full scope re-evaluates):
+        // Because of manual override, vip_menu is NOT re-paused!
+        {
+            let manual = orchestrator.manual_overrides().clone();
+            let mut ctx = ServerRuleContext {
+                map_name: "de_dust2",
+                player_count: 6,
+                engine: &mock_engine,
+                plugins_config: &mut cfg,
+                paused_plugins: &mut paused,
+                manual_overrides: &manual,
+                execution_log: Vec::new(),
+            };
+
+            let results = orchestrator.evaluate_scope(&RuleScope::All, &mut ctx);
+            assert_eq!(results.len(), 2);
+            // vip_menu should remain false because manual_override protected it!
+            assert_eq!(paused.get("vip_menu"), Some(&false));
+        }
+
+        // 5. On map change, manual overrides reset
+        orchestrator.on_map_change();
+        assert!(orchestrator.manual_overrides().is_empty());
     }
 }

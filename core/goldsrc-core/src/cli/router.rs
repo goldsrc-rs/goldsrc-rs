@@ -178,6 +178,9 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             };
             if all {
                 let outcome = manager.pause_all_plugins(true);
+                for info in manager.get_plugins_info() {
+                    crate::host::HostRuntime::set_manual_pause_override(&info.name, true);
+                }
                 if outcome.changed > 0 {
                     out(&CliResponse::success(outcome.to_string()).format_console());
                 } else {
@@ -187,6 +190,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 for t in targets {
                     match manager.pause_plugin(&t, true) {
                         Ok(outcome) => {
+                            crate::host::HostRuntime::set_manual_pause_override(
+                                outcome.name(),
+                                true,
+                            );
                             if outcome.changed() {
                                 out(&CliResponse::success(outcome.to_string()).format_console());
                             } else {
@@ -220,6 +227,9 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             };
             if all {
                 let outcome = manager.pause_all_plugins(false);
+                for info in manager.get_plugins_info() {
+                    crate::host::HostRuntime::set_manual_pause_override(&info.name, false);
+                }
                 if outcome.changed > 0 {
                     out(&CliResponse::success(outcome.to_string()).format_console());
                 } else {
@@ -229,6 +239,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 for t in targets {
                     match manager.pause_plugin(&t, false) {
                         Ok(outcome) => {
+                            crate::host::HostRuntime::set_manual_pause_override(
+                                outcome.name(),
+                                false,
+                            );
                             if outcome.changed() {
                                 out(&CliResponse::success(outcome.to_string()).format_console());
                             } else {

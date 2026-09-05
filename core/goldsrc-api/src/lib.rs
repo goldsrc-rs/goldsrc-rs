@@ -94,7 +94,7 @@ pub use placeholders::{
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
-pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry};
+pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
 
 /// Safe wrapper around `edict_t` (entity dictionary).

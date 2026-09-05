@@ -12,6 +12,7 @@ pub struct HostRuntime {
     pub plugins_config: crate::plugins_config::PluginsConfig,
     pub paused_plugins: std::collections::HashMap<String, bool>,
     pub current_map: String,
+    pub rule_orchestrator: crate::rules::RuleOrchestrator,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -400,6 +401,9 @@ impl HostRuntime {
         }
 
         let paused_plugins = std::collections::HashMap::new();
+        let mut rule_orchestrator = crate::rules::RuleOrchestrator::new();
+        let initial_rules = plugins_config.rules.iter().map(|r| r.to_rule()).collect();
+        rule_orchestrator.set_rules(initial_rules);
 
         let runtime = Self {
             backend,
@@ -409,10 +413,11 @@ impl HostRuntime {
             plugins_config,
             paused_plugins,
             current_map: String::new(),
+            rule_orchestrator,
         };
         let _ = RUNTIME.set(Mutex::new(runtime));
 
-        // Evaluate initial rules (e.g. initial pause/cvar states)
+        // Evaluate initial rules (e.g. initial pause/cvar states) across all scopes
         Self::evaluate_rules("", 0);
 
         Ok(())
@@ -446,6 +451,34 @@ impl HostRuntime {
             .and_then(|lock| lock.lock().ok().map(|g| g.storage.clone()))
     }
 
+    /// Sets a deliberate administrator manual pause state override for a plugin.
+    pub fn set_manual_pause_override(plugin_name: &str, is_paused: bool) {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard
+                .rule_orchestrator
+                .set_manual_override(plugin_name, is_paused);
+        }
+    }
+
+    /// Removes a deliberate administrator manual pause state override for a plugin.
+    pub fn remove_manual_pause_override(plugin_name: &str) -> Option<bool> {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.rule_orchestrator.remove_manual_override(plugin_name)
+        } else {
+            None
+        }
+    }
+
+    /// Clears all deliberate administrator manual pause state overrides.
+    pub fn clear_manual_pause_overrides() {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.rule_orchestrator.clear_manual_overrides();
+        }
+    }
+
     /// Clears temporary rule pause overrides and flushes storage on map change.
     pub fn on_map_change() {
         if let Some(lock) = RUNTIME.get() {
@@ -453,6 +486,7 @@ impl HostRuntime {
             let _ = guard.storage.flush();
             guard.paused_plugins.clear();
             guard.current_map.clear();
+            guard.rule_orchestrator.on_map_change();
         }
     }
 
@@ -487,9 +521,18 @@ impl HostRuntime {
         }
     }
 
-    /// Triggers reactive rule engine re-evaluation for current game state.
-    /// Drops the `HostRuntime` mutex during rule action execution to avoid deadlocks.
+    /// Triggers reactive rule engine re-evaluation for current game state across all scopes.
     pub fn evaluate_rules(map_name: &str, player_count: usize) {
+        Self::evaluate_rules_scoped(goldsrc_api::rules::RuleScope::All, map_name, player_count);
+    }
+
+    /// Triggers reactive rule engine re-evaluation for current game state under the specified [`RuleScope`].
+    /// Drops the `HostRuntime` mutex during rule action execution to avoid deadlocks.
+    pub fn evaluate_rules_scoped(
+        scope: goldsrc_api::rules::RuleScope,
+        map_name: &str,
+        player_count: usize,
+    ) {
         let Some(lock) = RUNTIME.get() else {
             return;
         };
@@ -506,9 +549,17 @@ impl HostRuntime {
             crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
 
         // 2. Snapshot engine, rules, config, and paused states under short lock
-        let (engine, mut plugins_config, mut paused_plugins, effective_map) = {
+        let (engine, mut plugins_config, mut paused_plugins, manual_overrides, effective_map) = {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             guard.plugins_config = fresh_config;
+
+            let rules: Vec<goldsrc_api::rules::Rule> = guard
+                .plugins_config
+                .rules
+                .iter()
+                .map(|r| r.to_rule())
+                .collect();
+            guard.rule_orchestrator.set_rules(rules);
 
             let resolved_map = if !map_name.is_empty() {
                 map_name.to_string()
@@ -526,38 +577,59 @@ impl HostRuntime {
                 guard.engine.clone(),
                 guard.plugins_config.clone(),
                 guard.paused_plugins.clone(),
+                guard.rule_orchestrator.manual_overrides().clone(),
                 resolved_map,
             )
         };
 
+        // 3. Count matching rules for this scope
+        let registry = crate::rules::create_default_server_rule_registry();
+        let rules: Vec<goldsrc_api::rules::Rule> =
+            plugins_config.rules.iter().map(|r| r.to_rule()).collect();
+        let temp_engine = goldsrc_api::rules::RuleEngine::new(registry, rules);
+        let matching_rules_count = if scope == goldsrc_api::rules::RuleScope::All {
+            temp_engine.rules().len()
+        } else {
+            temp_engine
+                .rules()
+                .iter()
+                .filter(|r| temp_engine.resolve_rule_scopes(r).contains(&scope))
+                .count()
+        };
+
+        if matching_rules_count == 0 {
+            log::debug!(
+                target: "rules",
+                "Skipping rule evaluation for scope '{}': no matching rules configured (map: '{}', players: {})",
+                scope,
+                effective_map,
+                player_count
+            );
+            return;
+        }
+
         log::info!(
             target: "rules",
-            "Evaluating {} rules for map: '{}', players: {}",
-            plugins_config.rules.len(),
+            "Evaluating {} rules for scope '{}' (map: '{}', players: {})",
+            matching_rules_count,
+            scope,
             effective_map,
             player_count
         );
 
-        // 2. Evaluate rules and execute actions OUTSIDE of the HostRuntime lock
+        // 4. Evaluate rules and execute actions OUTSIDE of the HostRuntime lock
         {
-            let registry = crate::rules::create_default_server_rule_registry();
-            let rules: Vec<goldsrc_api::rules::Rule> = plugins_config
-                .rules
-                .iter()
-                .map(|r| goldsrc_api::rules::Rule::new(&r.name, r.when.clone(), r.action.clone()))
-                .collect();
-            let rule_engine = goldsrc_api::rules::RuleEngine::new(registry, rules);
-
             let mut ctx = crate::rules::ServerRuleContext {
                 map_name: &effective_map,
                 player_count,
                 engine: engine.as_ref(),
                 plugins_config: &mut plugins_config,
                 paused_plugins: &mut paused_plugins,
+                manual_overrides: &manual_overrides,
                 execution_log: Vec::new(),
             };
 
-            let results = rule_engine.evaluate_and_execute(&mut ctx);
+            let results = temp_engine.evaluate_and_execute_scope(&mut ctx, &scope);
             for (rule_name, res) in results {
                 match res {
                     Ok(_) => log::info!(target: "rules", "Executed reactive rule '{}'", rule_name),
@@ -570,16 +642,27 @@ impl HostRuntime {
                 }
             }
         }
+        drop(temp_engine);
 
-        // 3. Re-acquire lock to commit updated paused states and recalculate dependencies
+        // 5. Re-acquire lock to commit updated paused states and recalculate dependencies
         {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             guard.paused_plugins = paused_plugins.clone();
 
-            // 3.1. Apply group and individual enabled/disabled base state from plugins_config
+            // 5.1. Apply states: manual overrides take top precedence, followed by reactive rules, then defaults
             let plugins_info = guard.manager.get_plugins_info();
             for info in plugins_info {
-                if let Some(is_paused) = paused_plugins.get(&info.name) {
+                if let Some(&is_paused) = guard.rule_orchestrator.manual_overrides().get(&info.name)
+                {
+                    let reason = if is_paused {
+                        Some("manual administrator override".to_string())
+                    } else {
+                        None
+                    };
+                    let _ = guard
+                        .manager
+                        .pause_plugin_with_reason(&info.name, is_paused, reason);
+                } else if let Some(is_paused) = paused_plugins.get(&info.name) {
                     // Reactive rule has explicit override for this plugin
                     let reason = if *is_paused {
                         Some("reactive rule".to_string())

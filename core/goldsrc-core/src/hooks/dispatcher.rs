@@ -33,7 +33,11 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_connect" || name == "client_disconnect" {
         let player_count = goldsrc_api::auth::Auth::total_players();
         let current_map = HostRuntime::current_map();
-        HostRuntime::evaluate_rules(&current_map, player_count);
+        HostRuntime::evaluate_rules_scoped(
+            goldsrc_api::rules::RuleScope::PlayerCount,
+            &current_map,
+            player_count,
+        );
     }
 
     res
@@ -144,7 +148,11 @@ pub fn on_server_activate() {
     if let Some(engine) = HostRuntime::engine() {
         let map_name = engine.cvar_get_string("mapname").unwrap_or_default();
         let player_count = goldsrc_api::auth::Auth::total_players();
-        HostRuntime::evaluate_rules(&map_name, player_count);
+        HostRuntime::evaluate_rules_scoped(
+            goldsrc_api::rules::RuleScope::MapChange,
+            &map_name,
+            player_count,
+        );
     }
 }
 

@@ -150,6 +150,26 @@ pub struct RuleConfig {
     /// Action map: action name -> TOML value.
     #[serde(default)]
     pub action: BTreeMap<String, toml::Value>,
+    /// Explicit trigger scopes (e.g. `scope = "map_change"` or `scope = ["map_change", "player_count"]`).
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    pub scope: Vec<String>,
+}
+
+impl RuleConfig {
+    /// Converts this config model into a [`goldsrc_api::rules::Rule`].
+    pub fn to_rule(&self) -> goldsrc_api::rules::Rule {
+        let scopes: Vec<goldsrc_api::rules::RuleScope> = self
+            .scope
+            .iter()
+            .map(|s| goldsrc_api::rules::RuleScope::parse(s))
+            .collect();
+        goldsrc_api::rules::Rule::with_scopes(
+            &self.name,
+            self.when.clone(),
+            self.action.clone(),
+            scopes,
+        )
+    }
 }
 
 /// Individual plugin entry representation before resolving name.
@@ -194,6 +214,9 @@ pub struct RuleItemConfig {
     /// Action map: action name -> TOML value.
     #[serde(default)]
     pub action: BTreeMap<String, toml::Value>,
+    /// Explicit trigger scopes (e.g. `scope = "map_change"` or `scope = ["map_change", "player_count"]`).
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    pub scope: Vec<String>,
 }
 
 /// Intermediate raw TOML representation for flexible dual-format deserialization.
@@ -254,6 +277,7 @@ impl PluginsConfig {
                             name,
                             when: item.when,
                             action: item.action,
+                            scope: item.scope,
                         });
                     }
                 }
