@@ -33,10 +33,13 @@ static DICT_FALLBACKS: LazyLock<RwLock<FallbackStore>> =
 /// Dictionary-specific access control policies: dict_name -> DictAccess.
 static DICT_ACCESS: LazyLock<RwLock<AccessStore>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
-/// Centralized i18n manager for loading and translating game messages.
-pub struct I18nEngine;
+/// Centralized i18n service for loading and translating game messages.
+pub struct I18nService;
 
-impl I18nEngine {
+/// Backward-compatible type alias for `I18nService`.
+pub type I18nEngine = I18nService;
+
+impl I18nService {
     /// Loads a dictionary TOML file from disk (e.g. `data/lang/vip_menu.toml`).
     pub fn load_file(dict_name: &str, file_path: impl AsRef<Path>) -> Result<usize, String> {
         let path = file_path.as_ref();
@@ -326,7 +329,7 @@ impl I18nEngine {
 macro_rules! tr {
     ($dict:expr, $lang:expr, $key:expr) => {{
         use goldsrc_api::AsLangCode as _;
-        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], &[])
+        $crate::i18n::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], &[])
     }};
     ($dict:expr, $lang:expr, $key:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
         use goldsrc_api::AsLangCode as _;
@@ -335,7 +338,7 @@ macro_rules! tr {
         let __named: &[(&str, &str)] = &[
             $( (stringify!($k), __owned_iter.next().unwrap().as_str()) ),*
         ];
-        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code().as_ref(), $key, __named, &[])
+        $crate::i18n::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, __named, &[])
     }};
     ($dict:expr, $lang:expr, $key:expr, $( $pos:expr ),* $(,)?) => {{
         use goldsrc_api::AsLangCode as _;
@@ -344,7 +347,7 @@ macro_rules! tr {
         let __pos: &[&str] = &[
             $( __owned_iter.next().unwrap().as_str() ),*
         ];
-        $crate::i18n::I18nEngine::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], __pos)
+        $crate::i18n::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], __pos)
     }};
 }
 

@@ -40,6 +40,82 @@ pub struct PluginInfo {
     pub has_on_frame: bool,
 }
 
+/// Outcome of a pause/unpause operation on a plugin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PauseOutcome {
+    /// The plugin was successfully paused.
+    Paused { name: String },
+    /// The plugin was already paused.
+    AlreadyPaused { name: String },
+    /// The plugin was successfully resumed (unpaused).
+    Resumed { name: String },
+    /// The plugin was already running (not paused).
+    AlreadyRunning { name: String },
+}
+
+impl PauseOutcome {
+    /// Returns the target plugin's name.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Paused { name }
+            | Self::AlreadyPaused { name }
+            | Self::Resumed { name }
+            | Self::AlreadyRunning { name } => name,
+        }
+    }
+
+    /// Returns `true` if an actual lifecycle state transition occurred.
+    pub fn changed(&self) -> bool {
+        matches!(self, Self::Paused { .. } | Self::Resumed { .. })
+    }
+}
+
+impl std::fmt::Display for PauseOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Paused { name } => write!(f, "Plugin '{name}' paused successfully."),
+            Self::AlreadyPaused { name } => write!(f, "Plugin '{name}' is already paused."),
+            Self::Resumed { name } => write!(f, "Plugin '{name}' resumed successfully."),
+            Self::AlreadyRunning { name } => write!(f, "Plugin '{name}' is already active."),
+        }
+    }
+}
+
+/// Aggregate outcome of pausing or resuming all loaded plugins.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PauseAllOutcome {
+    /// Number of plugins whose pause state actually changed.
+    pub changed: usize,
+    /// Number of plugins that were already in the requested state.
+    pub already_in_state: usize,
+    /// Target pause state (`true` = paused, `false` = resumed).
+    pub pause: bool,
+}
+
+impl std::fmt::Display for PauseAllOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.pause {
+            if self.already_in_state > 0 {
+                write!(
+                    f,
+                    "Paused {} plugin(s) ({} were already paused).",
+                    self.changed, self.already_in_state
+                )
+            } else {
+                write!(f, "Paused {} plugin(s).", self.changed)
+            }
+        } else if self.already_in_state > 0 {
+            write!(
+                f,
+                "Resumed {} plugin(s) ({} were already active).",
+                self.changed, self.already_in_state
+            )
+        } else {
+            write!(f, "Resumed {} plugin(s).", self.changed)
+        }
+    }
+}
+
 /// Central WASM runtime manager: loads components, executes lifecycle hooks,
 /// and handles filesystem hot-reloading.
 /// Callback handler for file modification notifications across watched directories.
@@ -60,11 +136,14 @@ pub struct PluginManager {
 }
 
 impl PluginManager {
-    /// Initialises the Wasmtime engine with the Component Model and epoch interruption enabled.
+    /// Initialises the Wasmtime engine with the Component Model, epoch interruption,
+    /// and guest DWARF debug info / backtrace formatting enabled.
     pub fn new(engine_ops: Arc<dyn GoldsrcEngine>) -> wasmtime::Result<Self> {
         let mut config = Config::new();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
+        config.debug_info(true);
+        config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         let engine = Engine::new(&config)?;
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
 
@@ -156,12 +235,30 @@ impl PluginManager {
         Ok(name)
     }
 
-    /// Resolves a plugin query (either numeric index or name) to a plugin index.
-    pub fn find_plugin(&self, query: &str) -> Option<usize> {
+    /// Resolves a plugin query (either numeric index or name) to a plugin index with strict bounds checking.
+    ///
+    /// If the query parses as an integer but is out of bounds, returns `CommandError::IndexOutOfBounds`.
+    /// If the query does not match any plugin name, returns `CommandError::NotFound`.
+    pub fn resolve_plugin_index(&self, query: &str) -> Result<usize, CommandError> {
         if let Ok(idx) = query.parse::<usize>() {
-            return (idx < self.plugins.len()).then_some(idx);
+            if idx < self.plugins.len() {
+                return Ok(idx);
+            } else {
+                return Err(CommandError::IndexOutOfBounds {
+                    index: idx,
+                    total: self.plugins.len(),
+                });
+            }
         }
-        self.plugins.iter().position(|p| p.name == query)
+        self.plugins
+            .iter()
+            .position(|p| p.name == query)
+            .ok_or_else(|| CommandError::NotFound(query.to_string()))
+    }
+
+    /// Resolves a plugin query (either numeric index or name) to an optional plugin index.
+    pub fn find_plugin(&self, query: &str) -> Option<usize> {
+        self.resolve_plugin_index(query).ok()
     }
 
     /// Recalculates `status` across all loaded plugins according to dependency states.
@@ -205,7 +302,7 @@ impl PluginManager {
     }
 
     /// Sets or clears the pause flag on a plugin by name or index query.
-    pub fn pause_plugin(&mut self, query: &str, pause: bool) -> Result<String, CommandError> {
+    pub fn pause_plugin(&mut self, query: &str, pause: bool) -> Result<PauseOutcome, CommandError> {
         self.pause_plugin_with_reason(query, pause, None)
     }
 
@@ -215,33 +312,54 @@ impl PluginManager {
         query: &str,
         pause: bool,
         reason: Option<String>,
-    ) -> Result<String, CommandError> {
-        let idx = self
-            .find_plugin(query)
-            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
-        if pause {
-            self.plugins[idx].status = PluginStatus::Paused { reason };
+    ) -> Result<PauseOutcome, CommandError> {
+        let idx = self.resolve_plugin_index(query)?;
+        let name = self.plugins[idx].name.clone();
+        let outcome = if pause {
+            if matches!(self.plugins[idx].status, PluginStatus::Paused { .. }) {
+                PauseOutcome::AlreadyPaused { name }
+            } else {
+                self.plugins[idx].status = PluginStatus::Paused { reason };
+                self.recalculate_dependency_states();
+                PauseOutcome::Paused { name }
+            }
         } else if matches!(self.plugins[idx].status, PluginStatus::Paused { .. }) {
             self.plugins[idx].status = PluginStatus::Running;
-        }
-        self.recalculate_dependency_states();
-        Ok(format!(
-            "Plugin '{}' pause state set to {}",
-            self.plugins[idx].name, pause
-        ))
+            self.recalculate_dependency_states();
+            PauseOutcome::Resumed { name }
+        } else {
+            PauseOutcome::AlreadyRunning { name }
+        };
+        Ok(outcome)
     }
 
     /// Sets or clears the pause flag on every loaded plugin.
-    pub fn pause_all_plugins(&mut self, pause: bool) -> String {
+    pub fn pause_all_plugins(&mut self, pause: bool) -> PauseAllOutcome {
+        let mut changed = 0;
+        let mut already_in_state = 0;
         for p in &mut self.plugins {
             if pause {
-                p.status = PluginStatus::Paused { reason: None };
+                if matches!(p.status, PluginStatus::Paused { .. }) {
+                    already_in_state += 1;
+                } else {
+                    p.status = PluginStatus::Paused { reason: None };
+                    changed += 1;
+                }
             } else if matches!(p.status, PluginStatus::Paused { .. }) {
                 p.status = PluginStatus::Running;
+                changed += 1;
+            } else {
+                already_in_state += 1;
             }
         }
-        self.recalculate_dependency_states();
-        format!("All plugins pause state set to {}", pause)
+        if changed > 0 {
+            self.recalculate_dependency_states();
+        }
+        PauseAllOutcome {
+            changed,
+            already_in_state,
+            pause,
+        }
     }
 
     /// Returns a snapshot of metadata for all loaded plugins.
@@ -280,9 +398,7 @@ impl PluginManager {
 
     /// Reloads a single plugin by name or index.
     pub fn reload_plugin_by_query(&mut self, query: &str) -> Result<String, CommandError> {
-        let idx = self
-            .find_plugin(query)
-            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
+        let idx = self.resolve_plugin_index(query)?;
         let path = self.plugins[idx].path.clone();
         let name = self.plugins[idx].name.clone();
         self.unload_plugin_at(idx);
@@ -456,9 +572,7 @@ impl PluginManager {
 
     /// Unloads a single plugin by name or index.
     pub fn unload_plugin_by_query(&mut self, query: &str) -> Result<String, CommandError> {
-        let idx = self
-            .find_plugin(query)
-            .ok_or_else(|| CommandError::NotFound(query.to_string()))?;
+        let idx = self.resolve_plugin_index(query)?;
         let plugin = self.unload_plugin_at(idx);
         Ok(format!("Unloaded '{}'", plugin.name))
     }
@@ -973,5 +1087,50 @@ mod tests {
         // Closing menu (keys_mask == 0) removes owner
         vip_state.host_show_menu(1, 0, 0, "".to_string());
         assert_eq!(crate::get_active_menu_owner(1), None);
+    }
+
+    #[test]
+    fn test_pause_outcome_display_and_semantics() {
+        let p = PauseOutcome::Paused {
+            name: "vip_menu".to_string(),
+        };
+        assert!(p.changed());
+        assert_eq!(p.name(), "vip_menu");
+        assert_eq!(p.to_string(), "Plugin 'vip_menu' paused successfully.");
+
+        let ap = PauseOutcome::AlreadyPaused {
+            name: "vip_menu".to_string(),
+        };
+        assert!(!ap.changed());
+        assert_eq!(ap.to_string(), "Plugin 'vip_menu' is already paused.");
+
+        let r = PauseOutcome::Resumed {
+            name: "vip_menu".to_string(),
+        };
+        assert!(r.changed());
+        assert_eq!(r.to_string(), "Plugin 'vip_menu' resumed successfully.");
+
+        let ar = PauseOutcome::AlreadyRunning {
+            name: "vip_menu".to_string(),
+        };
+        assert!(!ar.changed());
+        assert_eq!(ar.to_string(), "Plugin 'vip_menu' is already active.");
+
+        let all_paused = PauseAllOutcome {
+            changed: 3,
+            already_in_state: 1,
+            pause: true,
+        };
+        assert_eq!(
+            all_paused.to_string(),
+            "Paused 3 plugin(s) (1 were already paused)."
+        );
+
+        let all_resumed = PauseAllOutcome {
+            changed: 4,
+            already_in_state: 0,
+            pause: false,
+        };
+        assert_eq!(all_resumed.to_string(), "Resumed 4 plugin(s).");
     }
 }

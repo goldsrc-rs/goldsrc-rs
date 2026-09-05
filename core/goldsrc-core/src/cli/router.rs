@@ -1,6 +1,7 @@
 //! Router and dispatcher for host server commands.
 
 use crate::cli::handlers;
+use crate::cli::response::CliResponse;
 use crate::cli::specs::{find_command_spec, print_command_help, print_host_help};
 use goldsrc_host_wasm::PluginManager;
 use lexopt::Arg;
@@ -74,13 +75,16 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 return;
             }
             let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                out(&CliResponse::error("WASM Host not initialized.").format_console());
                 return;
             };
             for t in targets {
                 match manager.load_plugin_by_name(&t) {
-                    Ok(msg) => out(&msg),
-                    Err(err) => out(&err.to_string()),
+                    Ok(name) => out(&CliResponse::success(format!(
+                        "Plugin '{name}' loaded successfully."
+                    ))
+                    .format_console()),
+                    Err(err) => out(&CliResponse::error(err.to_string()).format_console()),
                 }
             }
         }
@@ -99,17 +103,20 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             }
             let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                out(&CliResponse::error("WASM Host not initialized.").format_console());
                 return;
             };
             if all {
                 let msg = manager.unload_all_plugins();
-                out(&msg);
+                out(&CliResponse::success(msg).format_console());
             } else if !targets.is_empty() {
                 for t in targets {
                     match manager.unload_plugin_by_query(&t) {
-                        Ok(msg) => out(&msg),
-                        Err(err) => out(&err.to_string()),
+                        Ok(msg) => {
+                            out(&CliResponse::success(format!("{msg} successfully."))
+                                .format_console())
+                        }
+                        Err(err) => out(&CliResponse::error(err.to_string()).format_console()),
                     }
                 }
             } else {
@@ -131,17 +138,20 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             }
             let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                out(&CliResponse::error("WASM Host not initialized.").format_console());
                 return;
             };
             if all {
                 let msg = manager.reload_all_plugins();
-                out(&msg);
+                out(&CliResponse::success(msg).format_console());
             } else if !targets.is_empty() {
                 for t in targets {
                     match manager.reload_plugin_by_query(&t) {
-                        Ok(msg) => out(&msg),
-                        Err(err) => out(&err.to_string()),
+                        Ok(msg) => {
+                            out(&CliResponse::success(format!("{msg} successfully."))
+                                .format_console())
+                        }
+                        Err(err) => out(&CliResponse::error(err.to_string()).format_console()),
                     }
                 }
             } else {
@@ -163,17 +173,27 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             }
             let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                out(&CliResponse::error("WASM Host not initialized.").format_console());
                 return;
             };
             if all {
-                let msg = manager.pause_all_plugins(true);
-                out(&msg);
+                let outcome = manager.pause_all_plugins(true);
+                if outcome.changed > 0 {
+                    out(&CliResponse::success(outcome.to_string()).format_console());
+                } else {
+                    out(&CliResponse::notice(outcome.to_string()).format_console());
+                }
             } else if !targets.is_empty() {
                 for t in targets {
                     match manager.pause_plugin(&t, true) {
-                        Ok(msg) => out(&msg),
-                        Err(err) => out(&err.to_string()),
+                        Ok(outcome) => {
+                            if outcome.changed() {
+                                out(&CliResponse::success(outcome.to_string()).format_console());
+                            } else {
+                                out(&CliResponse::notice(outcome.to_string()).format_console());
+                            }
+                        }
+                        Err(err) => out(&CliResponse::error(err.to_string()).format_console()),
                     }
                 }
             } else {
@@ -195,17 +215,27 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             }
             let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                out(&CliResponse::error("WASM Host not initialized.").format_console());
                 return;
             };
             if all {
-                let msg = manager.pause_all_plugins(false);
-                out(&msg);
+                let outcome = manager.pause_all_plugins(false);
+                if outcome.changed > 0 {
+                    out(&CliResponse::success(outcome.to_string()).format_console());
+                } else {
+                    out(&CliResponse::notice(outcome.to_string()).format_console());
+                }
             } else if !targets.is_empty() {
                 for t in targets {
                     match manager.pause_plugin(&t, false) {
-                        Ok(msg) => out(&msg),
-                        Err(err) => out(&err.to_string()),
+                        Ok(outcome) => {
+                            if outcome.changed() {
+                                out(&CliResponse::success(outcome.to_string()).format_console());
+                            } else {
+                                out(&CliResponse::notice(outcome.to_string()).format_console());
+                            }
+                        }
+                        Err(err) => out(&CliResponse::error(err.to_string()).format_console()),
                     }
                 }
             } else {
@@ -235,132 +265,137 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 return;
             }
             let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                out(&CliResponse::error("WASM Host not initialized.").format_console());
                 return;
             };
             for t in targets {
-                if let Some(idx) = manager.find_plugin(&t) {
-                    let info = &manager.get_plugins_info()[idx];
-                    let clean_path = crate::paths::PathResolver::normalize(&info.path);
-                    let status_str = match &info.status {
-                        goldsrc_host_wasm::PluginStatus::Loaded => "Loaded".to_string(),
-                        goldsrc_host_wasm::PluginStatus::Running => "Running".to_string(),
-                        goldsrc_host_wasm::PluginStatus::Paused { reason } => {
-                            if let Some(r) = reason {
-                                format!("Paused ({r})")
-                            } else {
-                                "Paused".to_string()
+                match manager.resolve_plugin_index(&t) {
+                    Ok(idx) => {
+                        let info = &manager.get_plugins_info()[idx];
+                        let clean_path = crate::paths::PathResolver::normalize(&info.path);
+                        let status_str = match &info.status {
+                            goldsrc_host_wasm::PluginStatus::Loaded => "Loaded".to_string(),
+                            goldsrc_host_wasm::PluginStatus::Running => "Running".to_string(),
+                            goldsrc_host_wasm::PluginStatus::Paused { reason } => {
+                                if let Some(r) = reason {
+                                    format!("Paused ({r})")
+                                } else {
+                                    "Paused".to_string()
+                                }
                             }
-                        }
-                        goldsrc_host_wasm::PluginStatus::Blocked { reason } => {
-                            format!("Blocked ({reason})")
-                        }
-                        goldsrc_host_wasm::PluginStatus::Degraded { reason } => {
-                            format!("Degraded ({reason})")
-                        }
-                        goldsrc_host_wasm::PluginStatus::Poisoned { error } => {
-                            format!("Poisoned ({error})")
-                        }
-                        goldsrc_host_wasm::PluginStatus::Unloaded => "Unloaded".to_string(),
-                    };
-
-                    let meta_name = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| m.name.as_str())
-                        .unwrap_or(info.name.as_str());
-                    let meta_version = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| m.version.as_str())
-                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_VERSION);
-                    let meta_author = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| m.author.as_str())
-                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR);
-                    let meta_desc = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| m.description.as_str())
-                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_DESCRIPTION);
-                    let meta_license = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| m.license.as_str())
-                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_LICENSE);
-                    let meta_url = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| m.url.as_str())
-                        .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_URL);
-                    let meta_systems = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| {
-                            if m.systems.is_empty() {
-                                goldsrc_api::consts::DEFAULT_PLUGIN_SYSTEMS.to_string()
-                            } else {
-                                m.systems.join(", ")
+                            goldsrc_host_wasm::PluginStatus::Blocked { reason } => {
+                                format!("Blocked ({reason})")
                             }
-                        })
-                        .unwrap_or_else(|| goldsrc_api::consts::DEFAULT_PLUGIN_SYSTEMS.to_string());
-                    let meta_requires = info
-                        .metadata
-                        .as_ref()
-                        .map(|m| {
-                            if m.requires.is_empty() {
-                                goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRES.to_string()
-                            } else {
-                                m.requires.join(", ")
+                            goldsrc_host_wasm::PluginStatus::Degraded { reason } => {
+                                format!("Degraded ({reason})")
                             }
-                        })
-                        .unwrap_or_else(|| {
-                            goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRES.to_string()
-                        });
-
-                    if let Some(ref field) = requested_field {
-                        let value = match field.as_str() {
-                            "name" => meta_name,
-                            "version" => meta_version,
-                            "author" => meta_author,
-                            "description" => meta_desc,
-                            "license" => meta_license,
-                            "url" => meta_url,
-                            "path" => &clean_path,
-                            "status" => &status_str,
-                            "systems" => &meta_systems,
-                            "requires" | "require" => &meta_requires,
-                            "index" => {
-                                out(&format!("{}\n", info.index));
-                                continue;
+                            goldsrc_host_wasm::PluginStatus::Poisoned { error } => {
+                                format!("Poisoned ({error})")
                             }
-                            other => {
-                                out(&format!(
-                                    "[GoldSrc.rs] Unknown field '{}'. Supported: name, version, author, description, license, url, path, status, systems, requires, index.\n",
-                                    other
-                                ));
-                                continue;
-                            }
+                            goldsrc_host_wasm::PluginStatus::Unloaded => "Unloaded".to_string(),
                         };
-                        out(&format!("{}\n", value));
-                        continue;
-                    }
 
-                    out(&format!("--- Plugin Info: {} ---\n", info.name));
-                    out(&format!("  Index:        #{}\n", info.index));
-                    out(&format!("  Path:         \"{}\"\n", clean_path));
-                    out(&format!("  Status:       {}\n", status_str));
-                    out(&format!("  Meta Name:    {}\n", meta_name));
-                    out(&format!("  Version:      {}\n", meta_version));
-                    out(&format!("  Author:       {}\n", meta_author));
-                    out(&format!("  Description:  {}\n", meta_desc));
-                    out(&format!("  License:      {}\n", meta_license));
-                    out(&format!("  URL:          {}\n", meta_url));
-                    out(&format!("  Systems:      {}\n", meta_systems));
-                    out(&format!("  Requires:     {}\n", meta_requires));
-                } else {
-                    out(&format!("[GoldSrc.rs] Plugin '{}' not found.\n", t));
+                        let meta_name = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| m.name.as_str())
+                            .unwrap_or(info.name.as_str());
+                        let meta_version = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| m.version.as_str())
+                            .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_VERSION);
+                        let meta_author = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| m.author.as_str())
+                            .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_AUTHOR);
+                        let meta_desc = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| m.description.as_str())
+                            .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_DESCRIPTION);
+                        let meta_license = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| m.license.as_str())
+                            .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_LICENSE);
+                        let meta_url = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| m.url.as_str())
+                            .unwrap_or(goldsrc_api::consts::DEFAULT_PLUGIN_URL);
+                        let meta_systems = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| {
+                                if m.systems.is_empty() {
+                                    goldsrc_api::consts::DEFAULT_PLUGIN_SYSTEMS.to_string()
+                                } else {
+                                    m.systems.join(", ")
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                goldsrc_api::consts::DEFAULT_PLUGIN_SYSTEMS.to_string()
+                            });
+                        let meta_requires = info
+                            .metadata
+                            .as_ref()
+                            .map(|m| {
+                                if m.requires.is_empty() {
+                                    goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRES.to_string()
+                                } else {
+                                    m.requires.join(", ")
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                goldsrc_api::consts::DEFAULT_PLUGIN_REQUIRES.to_string()
+                            });
+
+                        if let Some(ref field) = requested_field {
+                            let value = match field.as_str() {
+                                "name" => meta_name,
+                                "version" => meta_version,
+                                "author" => meta_author,
+                                "description" => meta_desc,
+                                "license" => meta_license,
+                                "url" => meta_url,
+                                "path" => &clean_path,
+                                "status" => &status_str,
+                                "systems" => &meta_systems,
+                                "requires" | "require" => &meta_requires,
+                                "index" => {
+                                    out(&format!("{}\n", info.index));
+                                    continue;
+                                }
+                                other => {
+                                    out(&format!(
+                                        "[GoldSrc.rs] Unknown field '{}'. Supported: name, version, author, description, license, url, path, status, systems, requires, index.\n",
+                                        other
+                                    ));
+                                    continue;
+                                }
+                            };
+                            out(&format!("{}\n", value));
+                            continue;
+                        }
+
+                        out(&format!("--- Plugin Info: {} ---\n", info.name));
+                        out(&format!("  Index:        #{}\n", info.index));
+                        out(&format!("  Path:         \"{}\"\n", clean_path));
+                        out(&format!("  Status:       {}\n", status_str));
+                        out(&format!("  Meta Name:    {}\n", meta_name));
+                        out(&format!("  Version:      {}\n", meta_version));
+                        out(&format!("  Author:       {}\n", meta_author));
+                        out(&format!("  Description:  {}\n", meta_desc));
+                        out(&format!("  License:      {}\n", meta_license));
+                        out(&format!("  URL:          {}\n", meta_url));
+                        out(&format!("  Systems:      {}\n", meta_systems));
+                        out(&format!("  Requires:     {}\n", meta_requires));
+                    }
+                    Err(err) => {
+                        out(&CliResponse::error(err.to_string()).format_console());
+                    }
                 }
             }
         }
@@ -592,10 +627,9 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             let args_str = cmd_args.join(" ");
             let handled = manager.dispatch_command(&name, 0, &args_str);
             if !handled {
-                out(&format!(
-                    "[GoldSrc.rs] Command '{}' was not handled by any active plugin.\n",
-                    name
-                ));
+                out(&CliResponse::warning(format!(
+                    "Command '{name}' was not handled by any active plugin (is it paused or not registered?)."
+                )).format_console());
             }
         }
         "version" => {

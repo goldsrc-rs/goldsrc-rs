@@ -1,9 +1,11 @@
 //! Host CLI dispatch, C-ABI bindings, and declarative commands for GoldSrc.rs.
 
 pub mod handlers;
+pub mod response;
 pub mod router;
 pub mod specs;
 
+pub use response::{CliResponse, CommandStatus};
 pub use router::dispatch_host_command;
 pub use specs::{
     BUILTIN_COMMANDS, CommandSpec, find_command_spec, print_command_help, print_host_help,

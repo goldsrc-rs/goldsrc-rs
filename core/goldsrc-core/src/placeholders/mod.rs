@@ -118,6 +118,50 @@ impl PlaceholderRegistry {
                 (target_player.armorvalue() as i32).to_string()
             }),
         );
+
+        // 6. {log:date-time} / {log:timestamp} / {time}
+        self.register(
+            "log",
+            PlaceholderMetadata {
+                name: "date-time".to_string(),
+                description: "Returns current formatted timestamp".to_string(),
+                usage: "{log:date-time} or {log:timestamp}".to_string(),
+                aliases: vec!["timestamp".to_string(), "time".to_string()],
+                capability: None,
+            },
+            Arc::new(|_caller: Player, _call: &PlaceholderCall| {
+                let now = std::time::SystemTime::now();
+                let duration = now
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                let total_secs = duration.as_secs();
+                let sec = total_secs % 60;
+                let min = (total_secs / 60) % 60;
+                let hour = (total_secs / 3600) % 24;
+                format!("{:02}:{:02}:{:02}", hour, min, sec)
+            }),
+        );
+
+        // 7. {log:date}
+        self.register(
+            "log",
+            PlaceholderMetadata {
+                name: "date".to_string(),
+                description: "Returns current date".to_string(),
+                usage: "{log:date} or {date}".to_string(),
+                aliases: vec!["date".to_string()],
+                capability: None,
+            },
+            Arc::new(|_caller: Player, _call: &PlaceholderCall| {
+                let now = std::time::SystemTime::now();
+                let duration = now
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                let days = duration.as_secs() / 86400;
+                // Approximate epoch date for general string interpolation
+                format!("epoch+{}d", days)
+            }),
+        );
     }
 
     /// Registers a new placeholder provider in the registry.

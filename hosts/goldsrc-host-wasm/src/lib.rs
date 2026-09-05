@@ -14,7 +14,8 @@ pub mod manager;
 /// Loaded plugin instance and metadata types.
 pub mod plugin;
 
-pub use manager::{PluginInfo, PluginManager};
+pub use error::{CommandError, HostError, LoadError};
+pub use manager::{PauseAllOutcome, PauseOutcome, PluginInfo, PluginManager};
 pub use plugin::PluginStatus;
 
 pub type PrintCallback = fn(&str);

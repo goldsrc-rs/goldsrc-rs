@@ -25,7 +25,7 @@ pub use config::{
     HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
 };
 pub use host::HostRuntime;
-pub use i18n::I18nEngine;
+pub use i18n::{I18nEngine, I18nService};
 pub use paths::PathResolver;
 pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use reapi::ReApiBridge;

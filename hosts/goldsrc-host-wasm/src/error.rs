@@ -36,6 +36,8 @@ pub enum LoadError {
 pub enum CommandError {
     #[error("plugin '{0}' not found")]
     NotFound(String),
+    #[error("plugin index {index} out of bounds (total loaded plugins: {total})")]
+    IndexOutOfBounds { index: usize, total: usize },
     #[error("failed to load plugin '{name}': {source}")]
     Load {
         name: String,

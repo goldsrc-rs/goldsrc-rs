@@ -58,7 +58,7 @@ impl HostRuntime {
         let _ = ENGINE_INSTANCE.set(engine.clone());
 
         goldsrc_host_wasm::set_translate_callback(|caller, dict, lang, key| {
-            crate::i18n::I18nEngine::translate_with_caller(caller, dict, lang, key, &[], &[])
+            crate::i18n::I18nService::translate_with_caller(caller, dict, lang, key, &[], &[])
         });
 
         goldsrc_api::client::player::set_player_resolver_hook(|index| {
@@ -262,7 +262,7 @@ impl HostRuntime {
             let default_template = include_str!("../../../resources/lang/test_i18n.toml");
             let _ = std::fs::write(&sample_lang_file, default_template);
         }
-        let lang_count = crate::i18n::I18nEngine::load_dir(&lang_dir);
+        let lang_count = crate::i18n::I18nService::load_dir(&lang_dir);
         log::info!(
             target: "i18n",
             "Loaded {lang_count} localization entries from \"{}\"",
@@ -630,7 +630,7 @@ impl HostRuntime {
                 );
                 Self::evaluate_rules("", 0);
             } else if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
-                && let Ok(count) = crate::i18n::I18nEngine::load_file(stem, &path)
+                && let Ok(count) = crate::i18n::I18nService::load_file(stem, &path)
             {
                 log::info!(
                     target: "i18n",
