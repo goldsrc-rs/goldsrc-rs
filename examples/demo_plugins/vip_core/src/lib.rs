@@ -89,6 +89,7 @@ impl VipCore {
         usage = "vip_armor <player_index>"
     )]
     fn handle_give_armor(mut player: Alive<Player>) {
+        player.give_item("item_assaultsuit");
         player.set_armorvalue(100.0);
         log_info!("[VIP Core] Given 100 armor to player #{}", player.index());
     }

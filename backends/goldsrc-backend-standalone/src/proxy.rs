@@ -3,6 +3,7 @@
 //! Loads the real game DLL (`mp.dll` / `cs.so`) and forwards all standard
 //! GameDLL exports to it, while inserting our hooks around the key callbacks.
 
+use goldsrc_api::consts::log_targets;
 use goldsrc_core::log;
 use goldsrc_sys::{DLL_FUNCTIONS, NEW_DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
 use std::path::PathBuf;
@@ -47,7 +48,7 @@ pub fn ensure_loaded() -> bool {
     let dll_path = resolve_game_dll_path();
     let norm_path = goldsrc_core::paths::PathResolver::normalize(&dll_path);
     log::info!(
-        target: "proxy",
+        target: log_targets::PROXY,
         "Attempting to load real GameDLL from path: \"{}\"",
         norm_path
     );
@@ -57,7 +58,7 @@ pub fn ensure_loaded() -> bool {
     match result {
         Ok(proxy) => {
             log::info!(
-                target: "proxy",
+                target: log_targets::PROXY,
                 "Successfully loaded real GameDLL from \"{}\"",
                 norm_path
             );
@@ -66,7 +67,7 @@ pub fn ensure_loaded() -> bool {
         }
         Err(e) => {
             log::error!(
-                target: "proxy",
+                target: log_targets::PROXY,
                 "ERROR: Failed to load real GameDLL from \"{}\": {}",
                 norm_path,
                 e
@@ -94,13 +95,13 @@ pub unsafe fn forward_give_fnptrs_to_dll(engfuncs: *mut enginefuncs_t, globals: 
         > = unsafe { guard._lib.get(b"GiveFnptrsToDll\0") };
         match give_fns {
             Ok(f) => {
-                log::trace!(target: "proxy", "Forwarding GiveFnptrsToDll to real GameDLL...");
+                log::trace!(target: log_targets::PROXY, "Forwarding GiveFnptrsToDll to real GameDLL...");
                 unsafe { f(engfuncs, globals) };
-                log::trace!(target: "proxy", "Real GameDLL GiveFnptrsToDll returned successfully");
+                log::trace!(target: log_targets::PROXY, "Real GameDLL GiveFnptrsToDll returned successfully");
             }
             Err(e) => {
                 log::error!(
-                    target: "proxy",
+                    target: log_targets::PROXY,
                     "ERROR: GiveFnptrsToDll not found in real GameDLL: {e}"
                 );
             }
@@ -117,7 +118,7 @@ fn resolve_game_dll_path() -> PathBuf {
     // 1. Try reading and parsing mod descriptor manifest (liblist.gam)
     if let Some((manifest_path, manifest)) = goldsrc_api::LibList::find_and_load(&mod_dirs) {
         log::info!(
-            target: "proxy",
+            target: log_targets::PROXY,
             "Parsed mod manifest \"{}\": game=\"{}\" version=\"{}\" edicts={:?}",
             goldsrc_core::paths::PathResolver::normalize(&manifest_path),
             manifest.game.as_deref().unwrap_or("Unknown"),
@@ -131,7 +132,7 @@ fn resolve_game_dll_path() -> PathBuf {
                 let target_path = PathBuf::from(target);
                 if target_path.exists() {
                     log::info!(
-                        target: "proxy",
+                        target: log_targets::PROXY,
                         "Resolved GameDLL from manifest: \"{}\"",
                         goldsrc_core::paths::PathResolver::normalize(&target_path)
                     );
@@ -141,7 +142,7 @@ fn resolve_game_dll_path() -> PathBuf {
                     let rel_path = parent.join(target);
                     if rel_path.exists() {
                         log::info!(
-                            target: "proxy",
+                            target: log_targets::PROXY,
                             "Resolved GameDLL relative to manifest: \"{}\"",
                             goldsrc_core::paths::PathResolver::normalize(&rel_path)
                         );
@@ -161,7 +162,7 @@ fn resolve_game_dll_path() -> PathBuf {
             let candidate = PathBuf::from(mod_dir).join("dlls").join(dll_name);
             if candidate.exists() {
                 log::info!(
-                    target: "proxy",
+                    target: log_targets::PROXY,
                     "Resolved GameDLL via mod search: \"{}\"",
                     goldsrc_core::paths::PathResolver::normalize(&candidate)
                 );
@@ -177,7 +178,7 @@ fn resolve_game_dll_path() -> PathBuf {
                 let candidate = base.join(mod_dir).join("dlls").join(dll_name);
                 if candidate.exists() {
                     log::info!(
-                        target: "proxy",
+                        target: log_targets::PROXY,
                         "Resolved GameDLL via exe base search: \"{}\"",
                         goldsrc_core::paths::PathResolver::normalize(&candidate)
                     );
@@ -212,7 +213,7 @@ unsafe fn try_load_game_dll(path: &PathBuf) -> Result<GameDllProxy, Box<dyn std:
             let ret = f(&mut dll_funcs, &mut iface_ver);
             if ret != 0 {
                 log::info!(
-                    target: "proxy",
+                    target: log_targets::PROXY,
                     "Successfully populated DLL_FUNCTIONS via GetEntityAPI2"
                 );
                 loaded_api = true;
@@ -229,7 +230,7 @@ unsafe fn try_load_game_dll(path: &PathBuf) -> Result<GameDllProxy, Box<dyn std:
                 let ret = f(&mut dll_funcs, 140);
                 if ret != 0 {
                     log::info!(
-                        target: "proxy",
+                        target: log_targets::PROXY,
                         "Successfully populated DLL_FUNCTIONS via GetEntityAPI"
                     );
                     loaded_api = true;
@@ -239,7 +240,7 @@ unsafe fn try_load_game_dll(path: &PathBuf) -> Result<GameDllProxy, Box<dyn std:
 
         if !loaded_api {
             log::warn!(
-                target: "proxy",
+                target: log_targets::PROXY,
                 "WARNING: Neither GetEntityAPI2 nor GetEntityAPI returned 1 for real GameDLL!"
             );
         }
@@ -259,7 +260,7 @@ unsafe fn try_load_game_dll(path: &PathBuf) -> Result<GameDllProxy, Box<dyn std:
             );
             if ret != 0 {
                 log::info!(
-                    target: "proxy",
+                    target: log_targets::PROXY,
                     "Successfully populated NEW_DLL_FUNCTIONS via GetNewDLLFunctions"
                 );
                 true
@@ -299,9 +300,9 @@ pub fn populate_dll_table(dll_table: *mut DLL_FUNCTIONS) {
             unsafe {
                 std::ptr::copy_nonoverlapping(&guard.dll_funcs, dll_table, 1);
             }
-            log::trace!(target: "proxy", "Successfully copied real DLL_FUNCTIONS to engine table!");
+            log::trace!(target: log_targets::PROXY, "Successfully copied real DLL_FUNCTIONS to engine table!");
         } else {
-            log::error!(target: "proxy", "ERROR: Real GameDLL not loaded when calling populate_dll_table!");
+            log::error!(target: log_targets::PROXY, "ERROR: Real GameDLL not loaded when calling populate_dll_table!");
         }
     }
 }
@@ -322,7 +323,7 @@ pub fn populate_new_dll_table(new_dll_table: *mut std::ffi::c_void) -> bool {
                     1,
                 );
             }
-            log::trace!(target: "proxy", "Successfully copied real NEW_DLL_FUNCTIONS to engine table!");
+            log::trace!(target: log_targets::PROXY, "Successfully copied real NEW_DLL_FUNCTIONS to engine table!");
             return true;
         }
     }

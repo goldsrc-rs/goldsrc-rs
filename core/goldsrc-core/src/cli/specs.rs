@@ -31,137 +31,142 @@ impl CommandSpec {
 /// Canonical table of all built-in management commands.
 pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     CommandSpec {
-        name: "list",
-        aliases: &["ls", "ps"],
-        category: "Inspection & Debugging",
-        summary: "List loaded WASM plugins in hierarchical tree view or flat list",
-        usage: "grs list [OPTIONS]",
+        name: "plugins",
+        aliases: &["pl", "p"],
+        category: "plugin:lifecycle",
+        summary: "Manage WASM plugins (list, info, load, unload, reload, pause, unpause, cmds)",
+        usage: "grs plugins <subcommand> [OPTIONS] [TARGET]",
         options: &[
-            ("-p, --page <N>", "Show specific page (default: 1)"),
-            ("-s, --size <N>", "Set page size (default: 5)"),
-            ("-a, --all", "Show all plugins (ignore pagination)"),
-            ("--flat", "Disable bundle grouping and display as flat list"),
-            ("--paused", "Show only paused plugins"),
+            (
+                "list [OPTIONS]",
+                "List loaded plugins (options: --flat, -p, -s, -a, --paused)",
+            ),
+            ("info <name|index>", "Show detailed metadata for a plugin"),
+            ("load <file...>", "Load WASM plugin component(s)"),
+            (
+                "unload <name|index...> [-a]",
+                "Unload one or all loaded plugins",
+            ),
+            (
+                "reload <name|index...> [-a]",
+                "Reload one or all loaded plugins from disk",
+            ),
+            ("pause <name|index...> [-a]", "Pause plugin execution"),
+            (
+                "unpause <name|index...> [-a]",
+                "Resume execution of paused plugin(s)",
+            ),
+            (
+                "cmds [command_name]",
+                "List registered plugin commands or inspect a command",
+            ),
         ],
         examples: &[
-            "grs list",
-            "grs list -p 2",
-            "grs list --flat",
-            "grs list -a",
-            "grs list --paused",
+            "grs plugins list",
+            "grs pl ps",
+            "grs plugins info vip_core",
+            "grs plugins load admin_system.wasm",
+            "grs plugins reload --all",
+            "grs plugins pause vip_menu",
+            "grs plugins unpause vip_menu",
         ],
     },
     CommandSpec {
-        name: "info",
-        aliases: &["show"],
-        category: "Inspection & Debugging",
-        summary: "Show detailed metadata, systems, exports, and path of a plugin",
-        usage: "grs info <name|index...> [OPTIONS]",
-        options: &[(
-            "-f, --field <FIELD>",
-            "Print only a specific field value (e.g. name, version, author, desc, license, url, path, status, systems, deps)",
-        )],
-        examples: &[
-            "grs info vip_core",
-            "grs info 0",
-            "grs info test_suite -f version",
-            "grs info vip_menu --field license",
+        name: "ps",
+        aliases: &["list", "ls"],
+        category: "plugin:lifecycle",
+        summary: "List loaded plugins (fast shortcut for 'grs plugins list')",
+        usage: "grs ps [OPTIONS]",
+        options: &[
+            ("--flat", "Print flat, unformatted list"),
+            ("-p, --paused", "Show only paused plugins"),
+            ("-a, --active", "Show only running/active plugins"),
         ],
+        examples: &["grs ps", "grs ps --flat", "grs ps -p"],
     },
     CommandSpec {
-        name: "cmds",
-        aliases: &["commands"],
-        category: "Inspection & Debugging",
-        summary: "List registered plugin commands or inspect a specific command",
-        usage: "grs cmds [COMMAND_NAME]",
-        options: &[],
-        examples: &["grs cmds", "grs cmds vip", "grs cmds admin_slay"],
+        name: "reload",
+        aliases: &["rld"],
+        category: "plugin:lifecycle",
+        summary: "Reload WASM plugins from disk (fast shortcut for 'grs plugins reload')",
+        usage: "grs reload [TARGET...] [-a|--all]",
+        options: &[("-a, --all", "Reload all plugins")],
+        examples: &["grs reload --all", "grs reload vip_core"],
+    },
+    CommandSpec {
+        name: "watchers",
+        aliases: &["watch", "w"],
+        category: "watcher:fs",
+        summary: "Inspect and control filesystem watchers",
+        usage: "grs watchers <list|pause|resume> [OPTIONS]",
+        options: &[
+            ("list [--json]", "List all registered filesystem watchers"),
+            (
+                "pause <id>",
+                "Pause filesystem watcher by ID (e.g. core:plugins)",
+            ),
+            ("resume <id>", "Resume paused filesystem watcher by ID"),
+        ],
+        examples: &[
+            "grs watchers list",
+            "grs w list",
+            "grs watchers pause core:plugins",
+            "grs watchers resume core:plugins",
+        ],
     },
     CommandSpec {
         name: "cmd",
-        aliases: &["exec"],
-        category: "Execution Control",
+        aliases: &["exec", "c"],
+        category: "exec:dispatch",
         summary: "Execute a plugin command directly through the host dispatcher",
         usage: "grs cmd <command_name> [args...]",
         options: &[],
         examples: &["grs cmd vip_add 1", "grs cmd test_cvar sv_gravity 600"],
     },
     CommandSpec {
-        name: "load",
-        aliases: &[],
-        category: "Plugin Lifecycle",
-        summary: "Load WASM plugin component(s) from cstrike/goldsrc/plugins/",
-        usage: "grs load <file1> [file2...]",
-        options: &[],
-        examples: &["grs load admin_system.wasm", "grs load vip_core vip_menu"],
-    },
-    CommandSpec {
-        name: "unload",
-        aliases: &[],
-        category: "Plugin Lifecycle",
-        summary: "Gracefully unload one or all loaded plugins",
-        usage: "grs unload <name|index...> [-a|--all]",
-        options: &[("-a, --all", "Unload all currently loaded plugins")],
-        examples: &[
-            "grs unload admin_system",
-            "grs unload 1",
-            "grs unload --all",
-        ],
-    },
-    CommandSpec {
-        name: "reload",
-        aliases: &[],
-        category: "Plugin Lifecycle",
-        summary: "Reload plugin(s) from disk, refreshing bytecode and exports",
-        usage: "grs reload <name|index...> [-a|--all]",
-        options: &[("-a, --all", "Reload all currently loaded plugins")],
-        examples: &["grs reload test_suite", "grs reload 0", "grs reload --all"],
-    },
-    CommandSpec {
-        name: "pause",
-        aliases: &[],
-        category: "Execution Control",
-        summary: "Suspend plugin execution (skips frame and event dispatches)",
-        usage: "grs pause <name|index...> [-a|--all]",
-        options: &[("-a, --all", "Pause all loaded plugins")],
-        examples: &["grs pause vip_menu", "grs pause --all"],
-    },
-    CommandSpec {
-        name: "unpause",
-        aliases: &["resume"],
-        category: "Execution Control",
-        summary: "Resume execution of paused plugin(s)",
-        usage: "grs unpause <name|index...> [-a|--all]",
-        options: &[("-a, --all", "Unpause all plugins")],
-        examples: &["grs unpause vip_menu", "grs unpause -a"],
-    },
-    CommandSpec {
         name: "status",
-        aliases: &[],
-        category: "System",
+        aliases: &["stat", "st", "s"],
+        category: "sys:runtime",
         summary: "Show host runtime stats (active plugins, hot-reload watchers, engine)",
         usage: "grs status",
         options: &[],
-        examples: &["grs status"],
+        examples: &["grs status", "grs st"],
     },
     CommandSpec {
         name: "version",
-        aliases: &["ver"],
-        category: "System",
+        aliases: &["ver", "v"],
+        category: "sys:runtime",
         summary: "Show host runtime and GoldSrc.rs engine version info",
         usage: "grs version",
         options: &[],
-        examples: &["grs version"],
+        examples: &["grs version", "grs ver"],
     },
     CommandSpec {
         name: "help",
         aliases: &["?"],
-        category: "System",
+        category: "sys:help",
         summary: "Display general help or specialized help for a command",
-        usage: "grs help [COMMAND]",
+        usage: "grs help [COMMAND|NAMESPACE]",
         options: &[],
-        examples: &["grs help", "grs help list", "grs help reload"],
+        examples: &[
+            "grs help",
+            "grs help plugins",
+            "grs help plugin",
+            "grs help watcher",
+        ],
     },
+];
+
+/// Canonical table of built-in DSL category namespaces and descriptions.
+pub const BUILTIN_CATEGORIES: &[(&str, &str)] = &[
+    (
+        "plugin:lifecycle",
+        "Plugin management & execution lifecycle",
+    ),
+    ("watcher:fs", "Filesystem watchers & hot-reload controls"),
+    ("exec:dispatch", "Direct command execution & dispatch"),
+    ("sys:runtime", "Engine runtime status & system telemetry"),
+    ("sys:help", "Interactive help & introspection system"),
 ];
 
 /// Find a command specification by query (name or alias).
@@ -172,17 +177,18 @@ pub fn find_command_spec(query: &str) -> Option<&'static CommandSpec> {
 /// Print specialized, formatted help for a single command.
 pub fn print_command_help<F: FnMut(&str)>(spec: &CommandSpec, mut out: F) {
     out(&format!("--- GoldSrc.rs Help: grs {} ---\n", spec.name));
-    out(&format!("{}\n\n", spec.summary));
+    out(&format!("{}\n", spec.summary));
+    out(&format!("Namespace:   [{}]\n\n", spec.category));
     out(&format!("Usage:\n  {}\n\n", spec.usage));
 
     if !spec.aliases.is_empty() {
         out(&format!("Aliases:\n  {}\n\n", spec.aliases.join(", ")));
     }
 
-    out("Options:\n");
+    out("Options / Subcommands:\n");
     out("  -h, --help                Show this help message\n");
     for (flag, desc) in spec.options {
-        out(&format!("  {:<24}  {}\n", flag, desc));
+        out(&format!("  {:<26} {}\n", flag, desc));
     }
     out("\n");
 
@@ -195,22 +201,53 @@ pub fn print_command_help<F: FnMut(&str)>(spec: &CommandSpec, mut out: F) {
     }
 }
 
-/// Print global CLI help dynamically categorized from all registered command specs.
+/// Print specialized help for all commands matching a namespace or category.
+pub fn print_category_help<F: FnMut(&str)>(category_query: &str, mut out: F) -> bool {
+    let query_lower = category_query.to_lowercase();
+    let matching_specs: Vec<&CommandSpec> = BUILTIN_COMMANDS
+        .iter()
+        .filter(|s| {
+            s.category.eq_ignore_ascii_case(&query_lower)
+                || s.category.starts_with(&query_lower)
+                || s.category
+                    .split_once(':')
+                    .map(|(ns, _)| ns.eq_ignore_ascii_case(&query_lower))
+                    .unwrap_or(false)
+        })
+        .collect();
+
+    if matching_specs.is_empty() {
+        return false;
+    }
+
+    out(&format!(
+        "--- GoldSrc.rs Commands in namespace '{}' ---\n\n",
+        category_query
+    ));
+    for spec in matching_specs {
+        let aliases_hint = if !spec.aliases.is_empty() {
+            format!(" ({})", spec.aliases.join(", "))
+        } else {
+            String::new()
+        };
+        out(&format!(
+            "  {:<14} [{:<16}] {}{}\n",
+            spec.name, spec.category, spec.summary, aliases_hint
+        ));
+    }
+    out("\nRun 'grs help <COMMAND>' for detailed command options.\n");
+    true
+}
+
+/// Print global CLI help dynamically categorized by DSL namespaces.
 pub fn print_host_help<F: FnMut(&str)>(mut out: F) {
     out("--- GoldSrc.rs Management CLI ---\n");
-    out("Usage: grs <COMMAND> [OPTIONS] [TARGET]\n");
+    out("Usage: grs <COMMAND> [SUBCOMMAND] [OPTIONS] [TARGET]\n");
     out("Aliases: goldsrc-rs, mrs, meta-rs\n\n");
-    out("Commands:\n");
+    out("Commands by namespace:\n");
 
-    let categories = [
-        "Plugin Lifecycle",
-        "Execution Control",
-        "Inspection & Debugging",
-        "System",
-    ];
-
-    for cat in categories {
-        out(&format!("  {}:\n", cat));
+    for &(cat, desc) in BUILTIN_CATEGORIES {
+        out(&format!("  [{}] - {}\n", cat, desc));
         for spec in BUILTIN_COMMANDS.iter().filter(|s| s.category == cat) {
             let aliases_hint = if !spec.aliases.is_empty() {
                 format!(" ({})", spec.aliases.join(", "))
@@ -218,12 +255,12 @@ pub fn print_host_help<F: FnMut(&str)>(mut out: F) {
                 String::new()
             };
             out(&format!(
-                "    {:<24} {}{}\n",
+                "    {:<16} {}{}\n",
                 spec.name, spec.summary, aliases_hint
             ));
         }
         out("\n");
     }
 
-    out("Run 'grs help <COMMAND>' or 'grs <COMMAND> --help' for detailed option syntax.\n");
+    out("Run 'grs help <COMMAND>' or 'grs help <namespace>' for detailed option syntax.\n");
 }

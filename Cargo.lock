@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "admin_system"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc",
 ]
@@ -529,7 +529,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "goldsrc"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-macros",
@@ -542,7 +542,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-api"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc-sys",
  "log",
@@ -553,7 +553,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-backend-metamod"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
@@ -564,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-backend-standalone"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-core"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "crossbeam-channel",
  "goldsrc-api",
@@ -587,16 +587,16 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror",
  "toml",
 ]
 
 [[package]]
 name = "goldsrc-host-wasm"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "log",
- "notify",
  "serde",
  "thiserror",
  "toml",
@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-macros"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "proc-macro2",
@@ -617,7 +617,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-sys"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "bindgen",
  "cc",
@@ -1263,7 +1263,7 @@ dependencies = [
 
 [[package]]
 name = "test_chat"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc",
  "goldsrc-macros",
@@ -1271,28 +1271,28 @@ dependencies = [
 
 [[package]]
 name = "test_ecs"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_hud"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_i18n"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc",
 ]
 
 [[package]]
 name = "test_menu"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc",
 ]
@@ -1382,7 +1382,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vip_core"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "goldsrc",
 ]

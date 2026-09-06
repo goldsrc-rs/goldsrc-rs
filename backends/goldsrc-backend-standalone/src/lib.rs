@@ -54,7 +54,8 @@ fn init_wasm_host() {
             if mapname_str_offset != 0 {
                 // 1. Direct memory resolution via pStringBase (standard HLSDK STRING() macro)
                 if !globals.pStringBase.is_null()
-                    && (mapname_str_offset as usize) <= goldsrc_sys::ffi::STRING_POOL_MASK
+                    && (mapname_str_offset as usize).wrapping_add(64)
+                        <= goldsrc_sys::ffi::STRING_POOL_MAX
                 {
                     let ptr = unsafe {
                         (globals.pStringBase as *const u8).add(mapname_str_offset as usize)
@@ -86,7 +87,7 @@ fn init_wasm_host() {
         },
         engine,
     ) {
-        log::error!(target: "core", "{e}");
+        log::error!(target: goldsrc_api::consts::log_targets::CORE, "{e}");
     }
 }
 
@@ -107,7 +108,7 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
         init_wasm_host();
         // 3. Register CLI commands after engine command system is initialized
         commands::register_cli_commands();
-        log::info!(target: "core", "hook_game_init: WASM host & commands initialized successfully");
+        log::info!(target: goldsrc_api::consts::log_targets::CORE, "hook_game_init: WASM host & commands initialized successfully");
     }
 
     fn spawn(&self, edict: *mut goldsrc_sys::edict_t) -> i32 {

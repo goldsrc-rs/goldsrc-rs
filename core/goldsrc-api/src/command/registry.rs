@@ -12,6 +12,7 @@ pub type CommandHandler = Arc<dyn Fn(i32, &str) -> bool + Send + Sync + 'static>
 pub struct RegisteredCommand {
     pub descriptor: Command,
     pub handler: CommandHandler,
+    pub parsed_cap: Option<crate::auth::CapExpr>,
 }
 
 /// Thread-safe in-memory command registry for dynamic command routing.
@@ -35,9 +36,27 @@ impl CommandRegistry {
         for alias in &descriptor.aliases {
             self.lookup.insert(alias.to_ascii_lowercase(), idx);
         }
+
+        let parsed_cap = if let Some(cap) = &descriptor.capability {
+            match crate::auth::CapExpr::parse(cap) {
+                Ok(expr) => Some(expr),
+                Err(err) => {
+                    log::error!(
+                        target: crate::consts::log_targets::AUTH,
+                        "[Auth] Malformed capability expression '{}' for command '{}': {}",
+                        cap, descriptor.name, err
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         self.commands.push(RegisteredCommand {
             descriptor,
             handler,
+            parsed_cap,
         });
     }
 
@@ -46,34 +65,26 @@ impl CommandRegistry {
     /// Performs capability access check if configured on the command descriptor.
     /// Returns `true` if the command was found and consumed by the handler.
     pub fn dispatch(&self, name: &str, caller: i32, args: &str) -> bool {
-        let name_lower = name.to_ascii_lowercase();
-        if let Some(&idx) = self.lookup.get(&name_lower) {
+        let idx_opt = self.lookup.get(name).copied().or_else(|| {
+            let lower = name.to_ascii_lowercase();
+            self.lookup.get(&lower).copied()
+        });
+
+        if let Some(idx) = idx_opt {
             let cmd = &self.commands[idx];
 
-            // Capability access validation
-            if let Some(cap) = &cmd.descriptor.capability
+            // Pre-parsed capability access validation (Zero-alloc)
+            if let Some(expr) = &cmd.parsed_cap
                 && caller > 0
             {
-                match crate::auth::CapExpr::parse(cap) {
-                    Ok(expr) => {
-                        let has_cap = |c: &str| crate::auth::Auth::has_capability(caller, c);
-                        if !expr.evaluate(&has_cap) {
-                            log::warn!(
-                                target: "auth",
-                                "[Auth] Caller {} denied command '{}': requires capability '{}'.",
-                                caller, name, cap
-                            );
-                            return false;
-                        }
-                    }
-                    Err(err) => {
-                        log::error!(
-                            target: "auth",
-                            "[Auth] Malformed capability expression '{}' for command '{}': {}",
-                            cap, name, err
-                        );
-                        return false;
-                    }
+                let has_cap = |c: &str| crate::auth::Auth::has_capability(caller, c);
+                if !expr.evaluate(&has_cap) {
+                    log::warn!(
+                        target: crate::consts::log_targets::AUTH,
+                        "[Auth] Caller {} denied command '{}': requires capability.",
+                        caller, name
+                    );
+                    return false;
                 }
             }
 

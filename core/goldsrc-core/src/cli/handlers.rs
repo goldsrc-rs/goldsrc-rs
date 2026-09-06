@@ -215,3 +215,119 @@ pub fn handle_list<F: FnMut(&str)>(
         ));
     }
 }
+
+/// Handles `grs watchers list` inspection command.
+pub fn handle_watchers_list<F: FnMut(&str)>(
+    spec: &CommandSpec,
+    mut parser: lexopt::Parser,
+    mut out: F,
+) {
+    let mut as_json = false;
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Long("json") => as_json = true,
+            _ => {}
+        }
+    }
+
+    let watchers = crate::HostRuntime::with_watcher_service(|w| {
+        w.map(|service| service.list_watchers()).unwrap_or_default()
+    });
+
+    if as_json {
+        let json = serde_json::to_string_pretty(&watchers).unwrap_or_else(|_| "[]".into());
+        out(&json);
+        out("\n");
+        return;
+    }
+
+    if watchers.is_empty() {
+        out("[GoldSrc.rs] Watchers (0):\n  (No registered filesystem watchers)\n");
+        return;
+    }
+
+    out(&format!(
+        "[GoldSrc.rs] Filesystem Watchers ({} registered):\n",
+        watchers.len()
+    ));
+    for w in &watchers {
+        let status_str = if w.is_paused { "[PAUSED]" } else { "[ACTIVE]" };
+        let rec_str = if w.recursive { " (recursive)" } else { "" };
+        out(&format!(
+            "  - {:<16} {:<8} debounce: {}ms\n      target: {} \"{}\"{} (filter: {})\n",
+            w.id,
+            status_str,
+            w.debounce_ms,
+            w.target_type,
+            crate::paths::PathResolver::normalize(&w.path),
+            rec_str,
+            w.filter_desc
+        ));
+    }
+}
+
+/// Handles `grs watchers pause <id>` command.
+pub fn handle_watchers_pause<F: FnMut(&str)>(id: &str, mut out: F) {
+    let res = crate::HostRuntime::with_watcher_service(|w| w.map(|s| s.pause(id)));
+    match res {
+        Some(true) => out(&format!("[GoldSrc.rs] Watcher '{id}' is now PAUSED.\n")),
+        Some(false) => out(&format!("[GoldSrc.rs] Error: Watcher '{id}' not found.\n")),
+        None => out("[GoldSrc.rs] Error: Watcher service not available.\n"),
+    }
+}
+
+/// Handles `grs watchers resume <id>` command.
+pub fn handle_watchers_resume<F: FnMut(&str)>(id: &str, mut out: F) {
+    let res = crate::HostRuntime::with_watcher_service(|w| w.map(|s| s.resume(id)));
+    match res {
+        Some(true) => out(&format!("[GoldSrc.rs] Watcher '{id}' is now ACTIVE.\n")),
+        Some(false) => out(&format!("[GoldSrc.rs] Error: Watcher '{id}' not found.\n")),
+        None => out("[GoldSrc.rs] Error: Watcher service not available.\n"),
+    }
+}
+
+/// Handles `grs plugins reload` and `grs rld` command.
+pub fn handle_reload<F: FnMut(&str)>(
+    spec: &CommandSpec,
+    mut parser: lexopt::Parser,
+    manager: Option<&mut PluginManager>,
+    mut out: F,
+) {
+    let mut targets = Vec::new();
+    let mut all = false;
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Short('a') | Arg::Long("all") => all = true,
+            Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
+            _ => {}
+        }
+    }
+    let Some(manager) = manager else {
+        out(&crate::cli::CliResponse::error("WASM Host not initialized.").format_console());
+        return;
+    };
+    if all || (spec.name == "rld" && targets.is_empty()) {
+        let msg = manager.reload_all_plugins();
+        out(&crate::cli::CliResponse::success(msg).format_console());
+    } else if !targets.is_empty() {
+        for t in targets {
+            match manager.reload_plugin_by_query(&t) {
+                Ok(msg) => out(
+                    &crate::cli::CliResponse::success(format!("{msg} successfully."))
+                        .format_console(),
+                ),
+                Err(err) => out(&crate::cli::CliResponse::error(err.to_string()).format_console()),
+            }
+        }
+    } else {
+        out("[GoldSrc.rs] Usage: grs plugins reload <name|index...> [-a|--all]\n");
+    }
+}

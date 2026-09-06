@@ -236,7 +236,7 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Refactor `framework/goldsrc/src/backend.rs` into modular engine domain adapters (`engine_bridge.rs`, `print_queue.rs`).
 - [x] **Per-Player Localization & i18n Dictionary Engine (`framework/goldsrc/src/i18n`)**:
   - Structured language dictionaries (`data/lang/*.toml`) with lexical variable scoping, color/macro expansions, and access controls.
-  - `AsLangCode` trait, `player.lang()`, `I18nEngine::server_lang()`, and zero-boilerplate `tr!` macro.
+  - `AsLangCode` trait, `player.lang()`, `I18nService::server_lang()`, and zero-boilerplate `tr!` macro.
 
 ## v0.15.0 — Architectural Layer Decomposition & Naming Standardization ✅
 
@@ -266,7 +266,48 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [x] **Comprehensive 5-Phase ECS Verification & Pipeline Hardening**:
   - Multi-system integration tests covering `Validate` -> `Modify` -> `Execute` -> `React` -> `Monitor` execution sequences and topological ordering.
 
-## v0.17.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
+## v0.17.0 — Declarative Orchestration, Unified Layering & Phased DAG ✅
+
+**Goal:** Eliminate magic priority numbers across the ecosystem, establish a deterministic phased topological dependency engine (`PhasedDag`), unify macros/builders/imperative registries, and enforce pure game-agnostic layer separation.
+
+- [x] **Unified 3-Tier Layering Architecture (`macros -> builders -> imperative registries`)**:
+  - Implemented runtime thread-safe registries for `CommandRegistry`, `EventRegistry`, `PlaceholderRegistry`, and `MenuActionRegistry`.
+  - Added fluent builders with terminal `.register()` and `.subscribe()` methods.
+  - Procedural macros (`#[command]`, `#[event]`, `#[menu_action]`, `#[system]`) desugar into dynamic registrations executed during `Guest::on_load()`.
+- [x] **Pure Game-Agnostic Core Decoupling**:
+  - Decoupled CS 1.6 domain layer into external `goldsrc-game-cstrike` repository.
+  - Decoupled `goldsrc-api` and `goldsrc` framework from `goldsrc-sys` via optional `unsafe-sys` feature flag.
+  - Extracted `vip_menu` demo plugin into `goldsrc-game-cstrike`.
+- [x] **Universal Phased DAG Ordering Engine (`PhasedDag<P, Id, T>`)**:
+  - Linear phase stratification with deterministic Kahn topological ordering and stable tie-breaking (`Phase` -> `Declaration Order` -> `Alphabetical ID`).
+  - Compiler-grade diagnostics for cycle detection (`CycleDetected`), phase ordering conflicts (`PhaseConflict`), and missing dependencies (`MissingDependency`).
+- [x] **Declarative Plugin Orchestration (`plugins.toml`)**:
+  - Complete elimination of integer `priority: i32`.
+  - Introduction of architectural layers (`tier = "core" | "service" | "gameplay" | "addon" | "analytics"`) and canonical dependency declarations (`requires = [...]`).
+- [x] **Semantic Event Phases & Commutative State Contexts**:
+  - Transition event subscriptions from numeric priorities to semantic phases: `EventPhase::Filter` -> `EventPhase::Handle` -> `EventPhase::Observe`.
+  - Commutative accumulators (`add_bonus`, `add_multiplier`, `add_reduction`, `cancel`) and typed blackboard property bags preventing mutation conflicts across independent plugins.
+- [x] **System Taxonomy & Architectural Role Standardization (`ARCHITECTURE.md`)**:
+  - Formalize canonical component roles (`Engine`, `Orchestrator`, `Manager`, `Registry`, `Service`, `Dispatcher`, `Router`, `Bridge`) in `ARCHITECTURE.md`.
+  - Decouple `HostRuntime` by extracting `RuleOrchestrator`, `NetworkMessageDispatcher`, and `PluginOrchestrator`.
+  - Extract dedicated `CommandRegistry` from `goldsrc-host-wasm::PluginManager`.
+  - Rename `I18nEngine` -> `I18nService` across workspace.
+- [x] **CLI UX Modernization & Operation Status Protocol**:
+  - Humanize all CLI messages in `grs` (`successfully paused`, `resumed`, `already active/paused` idempotency warnings, bounded index validation).
+  - Introduce structured status markers (`Success`, `Notice`, `Warning`, `Error`) across interactive CLI responses and audit logs.
+  - Informative command dispatch feedback when target plugin is in `Paused` or `Poisoned` status.
+- [x] **Unified Template & Placeholder Formatting Engine**:
+  - Configurable logging format in `goldsrc.toml` utilizing strict `<source>:<placeholder>` notation (e.g. `format = "[{log:date-time}][{log:level}][{log:target}] {log:message}"`).
+  - Core foundation: provide `PlaceholderRegistry` and `NetworkMessageDispatcher` primitives for guest plugins; delegate high-level chat templating, HUD overlays, and external Discord webhooks to modular plugins (`chat_manager.wasm`, `hud_display.wasm`, `discord_notifier.wasm`).
+- [x] **Scoped Edge-Triggered Rule Orchestration (`RuleOrchestrator`)**:
+  - Decouple reactive rule evaluation into `RuleOrchestrator` with open `RuleScope` trigger tagging.
+  - Edge-triggered transition detection (`rule_states`) and `manual_overrides` tracking preventing automatic re-evaluation from overriding intentional admin commands.
+- [x] **Centralized Watcher Subsystem & Hierarchical CLI Reorganization**:
+  - Extract centralized `WatcherService` into `core/goldsrc-core`, completely freeing `goldsrc-host-wasm` from `notify` dependency.
+  - Implement `WatchTarget` Value Object (`File` vs `Directory`), multi-strategy `WatcherFilter` (`Any`, `Extension`, `Stem`, `ExactName`, `Pattern`), and per-watcher debounce windows.
+  - Reorganize CLI under clean hierarchical namespaces: `grs plugins <list|info|load|unload|reload|pause|unpause|cmds>` and `grs watchers <list|pause|resume>` with zero legacy aliases.
+
+## v0.18.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
 
 **Goal:** Support polyglot plugin development by dynamically loading external language runtimes (Native Rust/C plugins via `goldsrc-host-native`, C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 

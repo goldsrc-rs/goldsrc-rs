@@ -12,6 +12,7 @@
 //! Backends implement [`EntityHooks`] once, register it via [`register`],
 //! and let [`install_dll_api2`] / [`install_dll_api2_post`] fill the tables.
 
+use goldsrc_api::consts::log_targets;
 use goldsrc_sys::{DLL_FUNCTIONS, edict_t, enginefuncs_t, qboolean};
 use std::ffi::c_char;
 use std::os::raw::c_int;
@@ -204,7 +205,7 @@ fn hooks() -> Option<&'static dyn EntityHooks> {
         // plugin bug ("events don't fire") — surface the real cause once.
         None => {
             if WARNED_UNREGISTERED.set(()).is_ok() {
-                log::warn!(target: "core",
+                log::warn!(target: log_targets::CORE,
                     "api_registry: hook fired before register() — event dropped");
             }
             None
@@ -806,7 +807,7 @@ pub unsafe extern "C" fn api_spectator_think(p_entity: *mut edict_t) {
 pub unsafe extern "C" fn api_sys_error(error_string: *const c_char) {
     catch_ffi_panic("sys_error", (), || {
         let msg = unsafe { crate::backend::cstr_to_string(error_string) };
-        log::error!(target: "core", "Engine Sys_Error: {msg}");
+        log::error!(target: log_targets::CORE, "Engine Sys_Error: {msg}");
         if let Some(h) = hooks() {
             h.sys_error(&msg);
         }

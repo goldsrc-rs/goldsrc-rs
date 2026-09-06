@@ -5,6 +5,7 @@
 
 use crate::logging::LogConfig;
 use crate::paths::{BackendType, PathResolver};
+use goldsrc_api::consts::log_targets;
 use serde::{Deserialize, Serialize};
 
 /// Behavior when a loaded `.wasm` file is removed from the plugins directory.
@@ -200,7 +201,7 @@ impl HostConfig {
                 }
                 Err(e) => {
                     log::warn!(
-                        target: "goldsrc",
+                        target: log_targets::CORE,
                         "Failed to parse '{}': {e}. Using sanitized defaults.",
                         path.display()
                     );
@@ -232,7 +233,7 @@ impl HostConfig {
                 .debounce_ms
                 .clamp(MIN_DEBOUNCE_MS, MAX_DEBOUNCE_MS);
             log::warn!(
-                target: "goldsrc",
+                target: log_targets::CORE,
                 "Sanitizing watcher.debounce_ms: {} -> {} ms",
                 self.watcher.debounce_ms,
                 clamped
@@ -249,7 +250,7 @@ impl HostConfig {
                 .default_memory_limit_mb
                 .clamp(MIN_MEMORY_LIMIT_MB, MAX_MEMORY_LIMIT_MB);
             log::warn!(
-                target: "goldsrc",
+                target: log_targets::CORE,
                 "Sanitizing runtime.default_memory_limit_mb: {} -> {} MB",
                 self.runtime.default_memory_limit_mb,
                 clamped
@@ -266,7 +267,7 @@ impl HostConfig {
                 .max_table_elements
                 .clamp(MIN_TABLE_ELEMENTS, MAX_TABLE_ELEMENTS);
             log::warn!(
-                target: "goldsrc",
+                target: log_targets::CORE,
                 "Sanitizing runtime.max_table_elements: {} -> {}",
                 self.runtime.max_table_elements,
                 clamped

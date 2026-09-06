@@ -76,6 +76,20 @@ pub fn set_player_lang_hook(hook: PlayerLangResolverHook) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub type OpenMenuHook = fn(i32, &crate::menu::Menu);
+
+#[cfg(not(target_arch = "wasm32"))]
+static OPEN_MENU_HOOK: RwLock<Option<OpenMenuHook>> = RwLock::new(None);
+
+/// Registers the engine/runtime open menu handler for host-side `Player::open_menu` calls.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_open_menu_hook(hook: OpenMenuHook) {
+    if let Ok(mut lock) = OPEN_MENU_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
 /// Safe wrapper around a player entity.
 ///
 /// Delegates all edict field accesses to the underlying [`EDict`] handle,
@@ -324,6 +338,9 @@ impl Player {
 
     /// Sets the player's health.
     pub fn set_health(&mut self, health: f32) {
+        if !health.is_finite() {
+            return;
+        }
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_entity_set_health(self.index, health);
@@ -580,7 +597,55 @@ impl Player {
 
     /// Renders and opens a declarative `Menu` for this player.
     pub fn open_menu(&self, menu: &crate::menu::Menu) {
-        crate::menu::session::open_menu(self.index, menu.clone());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(lock) = OPEN_MENU_HOOK.read()
+                && let Some(hook) = *lock
+            {
+                hook(self.index, menu);
+                return;
+            }
+        }
+        let total_players = crate::auth::Auth::total_players();
+        let ctx = crate::menu::MenuContext {
+            player_index: self.index,
+            round_number: 1,
+            round_time_elapsed: 0.0,
+            is_alive: self.health() > 0.0,
+            players_count: if total_players > 0 {
+                total_players as u32
+            } else {
+                1
+            },
+        };
+        if let Some(rendered) = menu.render_page(&ctx, 0) {
+            match rendered.renderer {
+                crate::menu::MenuRendererKind::Text => {
+                    self.show_raw_menu(rendered.keys_mask as i32, rendered.timeout, &rendered.text);
+                }
+                crate::menu::MenuRendererKind::Dhud {
+                    position,
+                    color,
+                    effect,
+                } => {
+                    let hud_msg = crate::hud::HudMessage {
+                        text: rendered.text.clone(),
+                        kind: crate::hud::HudKind::Dhud,
+                        color,
+                        color2: color,
+                        position,
+                        effect,
+                    };
+                    self.send_hud(&hud_msg);
+                    self.show_raw_menu(rendered.keys_mask as i32, rendered.timeout, "");
+                }
+            }
+        }
+    }
+
+    /// Closes any currently displayed menu on the player's client.
+    pub fn close_menu(&self) {
+        self.show_raw_menu(0, 0, "");
     }
 
     /// Checks if the player has the specified capability.

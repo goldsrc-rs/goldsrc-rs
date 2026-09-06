@@ -55,8 +55,7 @@ pub unsafe fn cstr_to_string(ptr: *const std::ffi::c_char) -> String {
     if ptr.is_null() {
         String::new()
     } else {
-        // SAFETY: caller guarantees validity.
-        unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+        unsafe { goldsrc_sys::ffi::cstr_to_string_bounded(ptr, 1024).unwrap_or_default() }
     }
 }
 

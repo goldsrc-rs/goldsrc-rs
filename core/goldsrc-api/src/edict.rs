@@ -196,9 +196,12 @@ impl EDict {
         }
     }
 
-    /// Set entity health. Returns `false` if entity is no longer valid.
+    /// Set entity health. Returns `false` if entity is no longer valid or health is not finite.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_health(self, health: f32) -> bool {
+        if !health.is_finite() {
+            return false;
+        }
         #[cfg(feature = "unsafe-sys")]
         match self.raw_ptr() {
             Some(ptr) => {
