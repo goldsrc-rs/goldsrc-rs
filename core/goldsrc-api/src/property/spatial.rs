@@ -1,18 +1,18 @@
 //! Spatial and physics-related entity properties (Origin, Velocity, Angles).
 
-use crate::Vector3;
 use crate::client::Player;
 use crate::property::{MutProperty, Property};
+use crate::{Entity, Vector3};
 
-/// Player 3D world origin coordinates (`Vector3`).
+/// Entity or player 3D world origin coordinates (`Vector3`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Origin;
 
-impl Property<Player> for Origin {
+impl Property<Entity> for Origin {
     type Value = Vector3;
 
     #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
+    fn get(&self, target: &Entity) -> Self::Value {
         #[cfg(target_arch = "wasm32")]
         {
             let v = crate::bindings::goldsrc::engine::api::host_entity_origin(target.index);
@@ -29,9 +29,9 @@ impl Property<Player> for Origin {
     }
 }
 
-impl MutProperty<Player> for Origin {
+impl MutProperty<Entity> for Origin {
     #[inline(always)]
-    fn set(&self, target: &mut Player, val: Self::Value) {
+    fn set(&self, target: &mut Entity, val: Self::Value) {
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_entity_set_origin(
@@ -50,15 +50,31 @@ impl MutProperty<Player> for Origin {
     }
 }
 
-/// Player velocity vector (`Vector3`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Velocity;
-
-impl Property<Player> for Velocity {
+impl Property<Player> for Origin {
     type Value = Vector3;
 
     #[inline(always)]
     fn get(&self, target: &Player) -> Self::Value {
+        Property::<Entity>::get(self, target)
+    }
+}
+
+impl MutProperty<Player> for Origin {
+    #[inline(always)]
+    fn set(&self, target: &mut Player, val: Self::Value) {
+        MutProperty::<Entity>::set(self, target, val);
+    }
+}
+
+/// Entity or player velocity vector (`Vector3`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Velocity;
+
+impl Property<Entity> for Velocity {
+    type Value = Vector3;
+
+    #[inline(always)]
+    fn get(&self, target: &Entity) -> Self::Value {
         #[cfg(target_arch = "wasm32")]
         {
             let v = crate::bindings::goldsrc::engine::api::host_entity_velocity(target.index);
@@ -75,9 +91,9 @@ impl Property<Player> for Velocity {
     }
 }
 
-impl MutProperty<Player> for Velocity {
+impl MutProperty<Entity> for Velocity {
     #[inline(always)]
-    fn set(&self, target: &mut Player, val: Self::Value) {
+    fn set(&self, target: &mut Entity, val: Self::Value) {
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_entity_set_velocity(
@@ -96,15 +112,31 @@ impl MutProperty<Player> for Velocity {
     }
 }
 
-/// Player view angles (pitch, yaw, roll) (`Vector3`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Angles;
-
-impl Property<Player> for Angles {
+impl Property<Player> for Velocity {
     type Value = Vector3;
 
     #[inline(always)]
     fn get(&self, target: &Player) -> Self::Value {
+        Property::<Entity>::get(self, target)
+    }
+}
+
+impl MutProperty<Player> for Velocity {
+    #[inline(always)]
+    fn set(&self, target: &mut Player, val: Self::Value) {
+        MutProperty::<Entity>::set(self, target, val);
+    }
+}
+
+/// Entity or player view angles (pitch, yaw, roll) (`Vector3`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Angles;
+
+impl Property<Entity> for Angles {
+    type Value = Vector3;
+
+    #[inline(always)]
+    fn get(&self, target: &Entity) -> Self::Value {
         #[cfg(target_arch = "wasm32")]
         {
             let v = crate::bindings::goldsrc::engine::api::host_entity_angles(target.index);
@@ -121,9 +153,9 @@ impl Property<Player> for Angles {
     }
 }
 
-impl MutProperty<Player> for Angles {
+impl MutProperty<Entity> for Angles {
     #[inline(always)]
-    fn set(&self, target: &mut Player, val: Self::Value) {
+    fn set(&self, target: &mut Entity, val: Self::Value) {
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_entity_set_angles(
@@ -139,5 +171,21 @@ impl MutProperty<Player> for Angles {
         {
             target.inner.set_angles(val.into());
         }
+    }
+}
+
+impl Property<Player> for Angles {
+    type Value = Vector3;
+
+    #[inline(always)]
+    fn get(&self, target: &Player) -> Self::Value {
+        Property::<Entity>::get(self, target)
+    }
+}
+
+impl MutProperty<Player> for Angles {
+    #[inline(always)]
+    fn set(&self, target: &mut Player, val: Self::Value) {
+        MutProperty::<Entity>::set(self, target, val);
     }
 }

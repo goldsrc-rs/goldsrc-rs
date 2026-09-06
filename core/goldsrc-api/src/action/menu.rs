@@ -1,7 +1,7 @@
 //! Interactive and raw menu display and closure actions.
 
 use crate::action::PlayerAction;
-use crate::client::{Player, PlayerExt};
+use crate::client::Player;
 
 /// Displays an interactive declarative menu for the player.
 #[derive(Debug, Clone)]

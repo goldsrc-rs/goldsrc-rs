@@ -1,5 +1,6 @@
 //! Vital state properties (Health, Armor, Team, LifeState).
 
+use crate::Entity;
 use crate::client::{LifeState, Player, Team};
 use crate::property::{MutProperty, Property};
 
@@ -7,11 +8,11 @@ use crate::property::{MutProperty, Property};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Health;
 
-impl Property<Player> for Health {
+impl Property<Entity> for Health {
     type Value = f32;
 
     #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
+    fn get(&self, target: &Entity) -> Self::Value {
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_entity_health(target.index)
@@ -23,9 +24,9 @@ impl Property<Player> for Health {
     }
 }
 
-impl MutProperty<Player> for Health {
+impl MutProperty<Entity> for Health {
     #[inline(always)]
-    fn set(&self, target: &mut Player, val: Self::Value) {
+    fn set(&self, target: &mut Entity, val: Self::Value) {
         if !val.is_finite() {
             return;
         }
@@ -37,6 +38,22 @@ impl MutProperty<Player> for Health {
         {
             target.inner.set_health(val);
         }
+    }
+}
+
+impl Property<Player> for Health {
+    type Value = f32;
+
+    #[inline(always)]
+    fn get(&self, target: &Player) -> Self::Value {
+        Property::<Entity>::get(self, target)
+    }
+}
+
+impl MutProperty<Player> for Health {
+    #[inline(always)]
+    fn set(&self, target: &mut Player, val: Self::Value) {
+        MutProperty::<Entity>::set(self, target, val);
     }
 }
 

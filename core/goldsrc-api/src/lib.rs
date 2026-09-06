@@ -56,8 +56,8 @@ pub use action::{CancellationToken, PlayerAction};
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
-    Alive, AsLangCode, Bot, ClientKind, ConnectionState, Dead, HLTV, LifeState, Player, PlayerExt,
-    PrintTarget, Spectator, Team,
+    Alive, AsLangCode, Bot, ClientExt, ClientKind, ConnectionState, Dead, EntityExt, HLTV,
+    LifeState, Player, PlayerExt, PrintTarget, Spectator, Team,
 };
 pub use command::{
     Command, CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry,
@@ -107,12 +107,13 @@ pub use storage::{SqlDatabase, StorageError, StorageProvider};
 ///
 /// Delegates field access to [`EDict`] which validates the serial number on
 /// every access, preventing use-after-free from stale handles.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Entity {
     /// Entity index (0 = world, 1..=N = players).
     pub index: i32,
     #[cfg(not(target_arch = "wasm32"))]
-    inner: EDict,
+    pub(crate) inner: EDict,
 }
 
 impl Entity {
@@ -146,7 +147,7 @@ impl Entity {
     }
 
     /// Returns the entity index.
-    pub fn index(&self) -> i32 {
+    pub const fn index(&self) -> i32 {
         self.index
     }
 
@@ -162,103 +163,82 @@ impl Entity {
         }
     }
 
+    /// Queries a strongly-typed property on this entity.
+    #[inline(always)]
+    pub fn get<P: crate::property::Property<Entity>>(&self, prop: P) -> P::Value {
+        prop.get(self)
+    }
+
+    /// Queries a default-constructible property on this entity using turbofish (`entity.get_as::<prop::Health>()`).
+    #[inline(always)]
+    pub fn get_as<P: crate::property::Property<Entity> + Default>(&self) -> P::Value {
+        P::default().get(self)
+    }
+
+    /// Mutates a strongly-typed property on this entity.
+    #[inline(always)]
+    pub fn set<P: crate::property::MutProperty<Entity>>(&mut self, prop: P, val: P::Value) {
+        prop.set(self, val);
+    }
+
     /// Returns the entity classname (e.g. `"player"`, `"func_door"`), if set.
+    #[inline(always)]
     pub fn classname(&self) -> Option<String> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_classname(self.index)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.classname()
-        }
+        self.get(crate::property::Classname)
     }
 
-    /// Prints a chat message to the player. On native hosts this is a no-op
-    /// (chat printing is not yet part of the engine bridge surface).
-    pub fn print_chat(&self, msg: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_log(&format!(
-                "Print to player {}: {}",
-                self.index, msg
-            ));
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = msg;
-        }
+    /// Returns the entity origin as a `Vector3`.
+    #[inline(always)]
+    pub fn origin(&self) -> Vector3 {
+        self.get(crate::property::Origin)
     }
 
-    /// Checks if the player has the specified capability.
-    pub fn has_capability(&self, name: &str) -> bool {
-        crate::auth::Auth::has_capability(self.index, name)
+    /// Sets the entity origin.
+    #[inline(always)]
+    pub fn set_origin(&mut self, origin: Vector3) {
+        self.set(crate::property::Origin, origin);
     }
 
-    /// Grants a capability to the player dynamically.
-    pub fn grant_capability(&self, name: &str) -> bool {
-        crate::auth::Auth::grant_capability(self.index, name)
+    /// Returns the entity velocity vector.
+    #[inline(always)]
+    pub fn velocity(&self) -> Vector3 {
+        self.get(crate::property::Velocity)
     }
 
-    /// Returns the entity origin as a flat `[x, y, z]` array.
-    pub fn origin(&self) -> [f32; 3] {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let v = crate::bindings::goldsrc::engine::api::host_entity_origin(self.index);
-            [v.x, v.y, v.z]
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.origin().unwrap_or([0.0, 0.0, 0.0])
-        }
+    /// Sets the entity velocity vector.
+    #[inline(always)]
+    pub fn set_velocity(&mut self, velocity: Vector3) {
+        self.set(crate::property::Velocity, velocity);
     }
 
     /// Returns the entity health.
+    #[inline(always)]
     pub fn health(&self) -> f32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_health(self.index)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.health().unwrap_or(0.0)
-        }
+        self.get(crate::property::Health)
+    }
+
+    /// Sets the entity health.
+    #[inline(always)]
+    pub fn set_health(&mut self, health: f32) {
+        self.set(crate::property::Health, health);
+    }
+
+    /// Returns `true` if the entity is alive (`health > 0.0`).
+    #[inline(always)]
+    pub fn is_alive(&self) -> bool {
+        self.health() > 0.0
     }
 
     /// Returns the entity's rotation angles (pitch, yaw, roll).
+    #[inline(always)]
     pub fn angles(&self) -> Vector3 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let v = crate::bindings::goldsrc::engine::api::host_entity_angles(self.index);
-            Vector3 {
-                x: v.x,
-                y: v.y,
-                z: v.z,
-            }
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.angles().unwrap_or([0.0, 0.0, 0.0]).into()
-        }
+        self.get(crate::property::Angles)
     }
 
     /// Sets the entity's rotation angles.
+    #[inline(always)]
     pub fn set_angles(&mut self, angles: Vector3) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_set_angles(
-                self.index,
-                crate::bindings::goldsrc::engine::api::Vector3 {
-                    x: angles.x,
-                    y: angles.y,
-                    z: angles.z,
-                },
-            );
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.set_angles(angles.into());
-        }
+        self.set(crate::property::Angles, angles);
     }
 
     /// Returns the raw `edict_t` pointer, or null if the handle is stale.

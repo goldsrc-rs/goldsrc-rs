@@ -1,6 +1,6 @@
 //! Client classifications, connection lifecycles, life states, and team slots.
 
-use crate::client::PlayerExt;
+use crate::client::ClientExt;
 
 /// Where a message printed to a player is rendered.
 ///

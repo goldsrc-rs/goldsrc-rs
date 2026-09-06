@@ -1,5 +1,6 @@
 //! Identity, localization, and authorization properties (Name, Lang, Classname, Capability).
 
+use crate::Entity;
 use crate::client::Player;
 use crate::property::{MutProperty, Property};
 
@@ -60,11 +61,11 @@ impl Property<Player> for Lang {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Classname;
 
-impl Property<Player> for Classname {
+impl Property<Entity> for Classname {
     type Value = Option<String>;
 
     #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
+    fn get(&self, target: &Entity) -> Self::Value {
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_entity_classname(target.index)
@@ -73,6 +74,15 @@ impl Property<Player> for Classname {
         {
             target.inner.classname()
         }
+    }
+}
+
+impl Property<Player> for Classname {
+    type Value = Option<String>;
+
+    #[inline(always)]
+    fn get(&self, target: &Player) -> Self::Value {
+        Property::<Entity>::get(self, target)
     }
 }
 

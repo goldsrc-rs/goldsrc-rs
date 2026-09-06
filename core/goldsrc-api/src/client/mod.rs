@@ -5,5 +5,5 @@ pub mod player;
 pub mod types;
 
 pub use guards::{Alive, Bot, Dead, HLTV, Spectator};
-pub use player::{Player, PlayerExt};
+pub use player::{ClientExt, EntityExt, Player, PlayerExt};
 pub use types::{AsLangCode, ClientKind, ConnectionState, LifeState, PrintTarget, Team};

@@ -3,12 +3,12 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use goldsrc_api::PlayerExt;
 use goldsrc_api::consts::log_targets;
 use goldsrc_api::engine::Engine;
 use goldsrc_api::menu::{
     ExitBehavior, Menu, MenuContext, MenuRendererKind, RenderedMenuPage, SlotAction,
 };
+use goldsrc_api::{ClientExt, PlayerExt};
 
 /// Active menu session for a single connected player.
 pub struct PlayerMenuSession {

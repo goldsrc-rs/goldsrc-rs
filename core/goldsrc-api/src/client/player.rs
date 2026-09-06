@@ -97,6 +97,7 @@ pub fn set_open_menu_hook(hook: OpenMenuHook) {
 ///
 /// Delegates all edict field accesses to the underlying [`EDict`] handle,
 /// which performs serial-number validation on every read/write.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Player {
     /// Player index (1-based).
@@ -208,21 +209,41 @@ impl Player {
     }
 }
 
+impl std::ops::Deref for Player {
+    type Target = crate::Entity;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: Player and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        unsafe { &*(self as *const Player as *const crate::Entity) }
+    }
+}
+
+impl std::ops::DerefMut for Player {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: Player and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        unsafe { &mut *(self as *mut Player as *mut crate::Entity) }
+    }
+}
+
+impl AsRef<crate::Entity> for Player {
+    #[inline(always)]
+    fn as_ref(&self) -> &crate::Entity {
+        self
+    }
+}
+
+impl AsMut<crate::Entity> for Player {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut crate::Entity {
+        self
+    }
+}
+
 impl From<Player> for crate::Entity {
     fn from(player: Player) -> Self {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            crate::Entity {
-                index: player.index,
-                inner: player.inner,
-            }
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::Entity {
-                index: player.index,
-            }
-        }
+        *player
     }
 }
 
@@ -249,50 +270,68 @@ impl From<&mut Player> for Player {
 unsafe impl Send for Player {}
 unsafe impl Sync for Player {}
 
-/// Extension trait providing ergonomic shortcuts over `get`, `set`, and `act`.
-pub trait PlayerExt {
-    /// Returns the player's current health.
+/// Extension trait providing spatial, physics, vital, and identity queries on entities.
+pub trait EntityExt {
+    /// Returns the entity's 3D world origin.
+    fn origin(&self) -> Vector3;
+    /// Sets the entity's 3D world origin.
+    fn set_origin(&mut self, pos: Vector3);
+    /// Returns the entity's velocity vector.
+    fn velocity(&self) -> Vector3;
+    /// Sets the entity's velocity vector.
+    fn set_velocity(&mut self, vel: Vector3);
+    /// Returns the entity's rotation angles (pitch, yaw, roll).
+    fn angles(&self) -> Vector3;
+    /// Sets the entity's rotation angles.
+    fn set_angles(&mut self, angles: Vector3);
+    /// Returns the entity's current health.
     fn health(&self) -> f32;
-    /// Sets the player's health.
+    /// Sets the entity's health.
     fn set_health(&mut self, health: f32);
+    /// Returns the entity's class name, if set.
+    fn classname(&self) -> Option<String>;
+    /// Returns `true` if the entity is alive (`health > 0.0`).
+    fn is_alive(&self) -> bool;
+    /// Returns `true` if the entity slot is currently valid.
+    fn is_valid(&self) -> bool;
+}
+
+/// Extension trait providing client-specific queries and actions (slots 1..=32: Player, Bot, HLTV).
+pub trait ClientExt: EntityExt {
+    /// Returns the 1-based client slot index (1..=32).
+    fn client_index(&self) -> i32;
+    /// Returns the client display name, if set.
+    fn name(&self) -> Option<String>;
+    /// Returns the client's preferred language code.
+    fn lang(&self) -> String;
+    /// Returns the client kind (Player, Bot, HLTV).
+    fn client_kind(&self) -> crate::client::ClientKind;
+    /// Returns `true` if this client is an AI bot (`FL_FAKECLIENT`).
+    fn is_bot(&self) -> bool;
+    /// Returns `true` if this client is an HLTV proxy (`FL_PROXY`).
+    fn is_hltv(&self) -> bool;
+    /// Prints a message to client's console.
+    fn print_console(&self, msg: impl Into<String>);
+    /// Prints a top-left notification to client's screen.
+    fn print_notify(&self, msg: impl Into<String>);
+}
+
+/// Extension trait providing gameplay combatant operations (Human Player, Bot).
+pub trait PlayerExt: ClientExt {
     /// Returns the player's armor value.
     fn armorvalue(&self) -> f32;
     /// Sets the player's armor value.
     fn set_armorvalue(&mut self, armor: f32);
-    /// Returns the player's world origin.
-    fn origin(&self) -> Vector3;
-    /// Sets the player's world origin.
-    fn set_origin(&mut self, pos: Vector3);
-    /// Returns the player's velocity.
-    fn velocity(&self) -> Vector3;
-    /// Sets the player's velocity.
-    fn set_velocity(&mut self, vel: Vector3);
-    /// Returns the player's rotation angles (pitch, yaw, roll).
-    fn angles(&self) -> Vector3;
-    /// Sets the player's rotation angles.
-    fn set_angles(&mut self, angles: Vector3);
     /// Returns the player's current game team.
     fn team(&self) -> crate::client::Team;
     /// Returns the player's current life state.
     fn life_state(&self) -> crate::client::LifeState;
-    /// Returns `true` if the player is currently alive.
-    fn is_alive(&self) -> bool;
-    /// Returns the player's display name, if set.
-    fn name(&self) -> Option<String>;
-    /// Returns the player's preferred language code.
-    fn lang(&self) -> String;
-    /// Returns the entity's class name, if set.
-    fn classname(&self) -> Option<String>;
     /// Prints a message to the specified target.
     fn print(&self, target: crate::client::PrintTarget, msg: impl Into<String>);
     /// Prints a message to player's chat.
     fn print_chat(&self, msg: impl Into<String>);
     /// Prints a center notification message to player's screen.
     fn print_center(&self, msg: impl Into<String>);
-    /// Prints a message to player's console.
-    fn print_console(&self, msg: impl Into<String>);
-    /// Prints a top-left notification to player's screen.
-    fn print_notify(&self, msg: impl Into<String>);
     /// Prints a colorized chat message.
     fn print_color(&self, msg: impl Into<String>);
     /// Plays an audio sound effect for this player.
@@ -317,27 +356,7 @@ pub trait PlayerExt {
     fn revoke_capability(&self, name: impl Into<String>) -> bool;
 }
 
-impl PlayerExt for Player {
-    #[inline(always)]
-    fn health(&self) -> f32 {
-        self.get(crate::property::Health)
-    }
-
-    #[inline(always)]
-    fn set_health(&mut self, health: f32) {
-        self.set(crate::property::Health, health);
-    }
-
-    #[inline(always)]
-    fn armorvalue(&self) -> f32 {
-        self.get(crate::property::Armor)
-    }
-
-    #[inline(always)]
-    fn set_armorvalue(&mut self, armor: f32) {
-        self.set(crate::property::Armor, armor);
-    }
-
+impl EntityExt for crate::Entity {
     #[inline(always)]
     fn origin(&self) -> Vector3 {
         self.get(crate::property::Origin)
@@ -369,18 +388,92 @@ impl PlayerExt for Player {
     }
 
     #[inline(always)]
-    fn team(&self) -> crate::client::Team {
-        self.get(crate::property::PlayerTeam)
+    fn health(&self) -> f32 {
+        self.get(crate::property::Health)
     }
 
     #[inline(always)]
-    fn life_state(&self) -> crate::client::LifeState {
-        self.get(crate::property::PlayerLifeState)
+    fn set_health(&mut self, health: f32) {
+        self.set(crate::property::Health, health);
+    }
+
+    #[inline(always)]
+    fn classname(&self) -> Option<String> {
+        self.get(crate::property::Classname)
     }
 
     #[inline(always)]
     fn is_alive(&self) -> bool {
         self.health() > 0.0
+    }
+
+    #[inline(always)]
+    fn is_valid(&self) -> bool {
+        crate::Entity::is_valid(self)
+    }
+}
+
+impl EntityExt for Player {
+    #[inline(always)]
+    fn origin(&self) -> Vector3 {
+        self.get(crate::property::Origin)
+    }
+
+    #[inline(always)]
+    fn set_origin(&mut self, pos: Vector3) {
+        self.set(crate::property::Origin, pos);
+    }
+
+    #[inline(always)]
+    fn velocity(&self) -> Vector3 {
+        self.get(crate::property::Velocity)
+    }
+
+    #[inline(always)]
+    fn set_velocity(&mut self, vel: Vector3) {
+        self.set(crate::property::Velocity, vel);
+    }
+
+    #[inline(always)]
+    fn angles(&self) -> Vector3 {
+        self.get(crate::property::Angles)
+    }
+
+    #[inline(always)]
+    fn set_angles(&mut self, angles: Vector3) {
+        self.set(crate::property::Angles, angles);
+    }
+
+    #[inline(always)]
+    fn health(&self) -> f32 {
+        self.get(crate::property::Health)
+    }
+
+    #[inline(always)]
+    fn set_health(&mut self, health: f32) {
+        self.set(crate::property::Health, health);
+    }
+
+    #[inline(always)]
+    fn classname(&self) -> Option<String> {
+        self.get(crate::property::Classname)
+    }
+
+    #[inline(always)]
+    fn is_alive(&self) -> bool {
+        self.health() > 0.0
+    }
+
+    #[inline(always)]
+    fn is_valid(&self) -> bool {
+        Player::is_valid(self)
+    }
+}
+
+impl ClientExt for Player {
+    #[inline(always)]
+    fn client_index(&self) -> i32 {
+        self.index
     }
 
     #[inline(always)]
@@ -394,8 +487,76 @@ impl PlayerExt for Player {
     }
 
     #[inline(always)]
-    fn classname(&self) -> Option<String> {
-        self.get(crate::property::Classname)
+    fn client_kind(&self) -> crate::client::ClientKind {
+        if self.is_hltv() {
+            crate::client::ClientKind::HLTV
+        } else if self.is_bot() {
+            crate::client::ClientKind::Bot
+        } else {
+            crate::client::ClientKind::Player
+        }
+    }
+
+    #[inline(always)]
+    fn is_bot(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Some(flags) = self.inner.flags() {
+                return (flags & crate::consts::FL_FAKECLIENT) != 0;
+            }
+            false
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            false
+        }
+    }
+
+    #[inline(always)]
+    fn is_hltv(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Some(flags) = self.inner.flags() {
+                return (flags & crate::consts::FL_PROXY) != 0;
+            }
+            false
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            false
+        }
+    }
+
+    #[inline(always)]
+    fn print_console(&self, msg: impl Into<String>) {
+        self.act(crate::action::Print::console(msg));
+    }
+
+    #[inline(always)]
+    fn print_notify(&self, msg: impl Into<String>) {
+        self.act(crate::action::Print::notify(msg));
+    }
+}
+
+impl PlayerExt for Player {
+    #[inline(always)]
+    fn armorvalue(&self) -> f32 {
+        self.get(crate::property::Armor)
+    }
+
+    #[inline(always)]
+    fn set_armorvalue(&mut self, armor: f32) {
+        self.set(crate::property::Armor, armor);
+    }
+
+    #[inline(always)]
+    fn team(&self) -> crate::client::Team {
+        self.get(crate::property::PlayerTeam)
+    }
+
+    #[inline(always)]
+    fn life_state(&self) -> crate::client::LifeState {
+        self.get(crate::property::PlayerLifeState)
     }
 
     #[inline(always)]
@@ -414,16 +575,6 @@ impl PlayerExt for Player {
     #[inline(always)]
     fn print_center(&self, msg: impl Into<String>) {
         self.act(crate::action::Print::center(msg));
-    }
-
-    #[inline(always)]
-    fn print_console(&self, msg: impl Into<String>) {
-        self.act(crate::action::Print::console(msg));
-    }
-
-    #[inline(always)]
-    fn print_notify(&self, msg: impl Into<String>) {
-        self.act(crate::action::Print::notify(msg));
     }
 
     #[inline(always)]

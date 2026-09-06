@@ -1,7 +1,7 @@
 use goldsrc_api::chat::{ChatMessage, ChatScope};
 
 use goldsrc_api::chat::{LifeStateFilter, TeamTarget, split_chat_chunks};
-use goldsrc_api::client::{LifeState, Player, PlayerExt, Team};
+use goldsrc_api::client::{ClientExt, LifeState, Player, PlayerExt, Team};
 use std::sync::{Arc, LazyLock, RwLock};
 
 /// Type definition for a chat filter middleware handler.
