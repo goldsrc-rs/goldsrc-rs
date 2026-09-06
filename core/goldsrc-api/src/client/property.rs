@@ -1,8 +1,7 @@
-//! Identity, localization, and authorization properties (Name, Lang, Classname, Capability).
+//! Player identity and state properties (`Name`, `Lang`, `PlayerTeam`, `PlayerLifeState`).
 
-use crate::Entity;
-use crate::client::Player;
-use crate::property::{MutProperty, Property};
+use crate::client::{LifeState, Player, Team};
+use crate::property::Property;
 
 /// Player display name (`Option<String>` / Read-Only).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -57,58 +56,49 @@ impl Property<Player> for Lang {
     }
 }
 
-/// Entity class name (`Option<String>` / Read-Only).
+/// Player current team (`Team` / Read-Only).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Classname;
+pub struct PlayerTeam;
 
-impl Property<Entity> for Classname {
-    type Value = Option<String>;
+impl Property<Player> for PlayerTeam {
+    type Value = Team;
 
     #[inline(always)]
-    fn get(&self, target: &Entity) -> Self::Value {
+    fn get(&self, target: &Player) -> Self::Value {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_entity_classname(target.index)
+            crate::client::Team::from(crate::bindings::goldsrc::engine::api::host_player_team(
+                target.index,
+            ))
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            target.inner.classname()
+            if let Ok(lock) = crate::client::player::PLAYER_TEAM_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+            {
+                return resolver(target.index).into();
+            }
+            target.inner.team().unwrap_or(0).into()
         }
     }
 }
 
-impl Property<Player> for Classname {
-    type Value = Option<String>;
+/// Player life state (`LifeState` / Read-Only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PlayerLifeState;
+
+impl Property<Player> for PlayerLifeState {
+    type Value = LifeState;
 
     #[inline(always)]
     fn get(&self, target: &Player) -> Self::Value {
-        Property::<Entity>::get(self, target)
-    }
-}
-
-/// Dynamic player authorization capability flag (`bool` / Read-Write).
-///
-/// Evaluates or modifies capabilities via `Auth::has_capability`,
-/// `Auth::grant_capability` and `Auth::revoke_capability`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Capability<'a>(pub &'a str);
-
-impl<'a> Property<Player> for Capability<'a> {
-    type Value = bool;
-
-    #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
-        crate::auth::Auth::has_capability(target.index, self.0)
-    }
-}
-
-impl<'a> MutProperty<Player> for Capability<'a> {
-    #[inline(always)]
-    fn set(&self, target: &mut Player, val: Self::Value) {
-        if val {
-            crate::auth::Auth::grant_capability(target.index, self.0);
+        if !target.is_valid() {
+            return LifeState::Dead;
+        }
+        if target.get(crate::property::Health) > 0.0 {
+            LifeState::Alive
         } else {
-            crate::auth::Auth::revoke_capability(target.index, self.0);
+            LifeState::Dead
         }
     }
 }

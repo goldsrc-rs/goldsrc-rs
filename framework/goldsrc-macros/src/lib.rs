@@ -105,42 +105,6 @@ pub fn placeholder(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("placeholder")
 }
 
-/// Automatically decorates every function in an `impl` or `trait` block with `#[inline(always)]`.
-#[proc_macro_attribute]
-pub fn inline_all(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut item_impl = match syn::parse::<syn::ItemImpl>(item.clone()) {
-        Ok(impl_block) => impl_block,
-        Err(_) => {
-            if let Ok(mut trait_item) = syn::parse::<syn::ItemTrait>(item) {
-                for it in &mut trait_item.items {
-                    if let syn::TraitItem::Fn(method) = it {
-                        if !method.attrs.iter().any(|a| a.path().is_ident("inline")) {
-                            method.attrs.push(syn::parse_quote!(#[inline(always)]));
-                        }
-                    }
-                }
-                return quote::quote!(#trait_item).into();
-            }
-            return syn::Error::new(
-                proc_macro2::Span::call_site(),
-                "#[inline_all] can only be applied to `impl` or `trait` blocks",
-            )
-            .to_compile_error()
-            .into();
-        }
-    };
-
-    for it in &mut item_impl.items {
-        if let syn::ImplItem::Fn(method) = it {
-            if !method.attrs.iter().any(|a| a.path().is_ident("inline")) {
-                method.attrs.push(syn::parse_quote!(#[inline(always)]));
-            }
-        }
-    }
-
-    quote::quote!(#item_impl).into()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::defs::PluginAttr;

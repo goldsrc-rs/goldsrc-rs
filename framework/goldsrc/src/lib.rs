@@ -248,7 +248,7 @@ pub use goldsrc_api::{
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
-    command, event, inline_all, menu_action, on_frame, on_load, on_unload, plugin, system,
+    command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
 };
 
 /// Convenient prelude module for plugin authors.
@@ -273,8 +273,8 @@ pub mod prelude {
         Team, TypedBlackboard, Vector3, VisualDeny, action, prop,
     };
     pub use crate::{
-        chat_broadcast, chat_print, command, event, inline_all, menu_action, on_frame, on_load,
-        on_unload, plugin, system,
+        chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,
+        plugin, system,
     };
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }
@@ -305,31 +305,5 @@ mod tests {
         let pos = &["Alice", "Bob", "AWP"];
         let res = substitute_positional(tmpl, pos);
         assert_eq!(res, "Player Alice killed Bob with AWP");
-    }
-
-    #[test]
-    fn test_inline_all_macro() {
-        #[inline_all]
-        trait FooTrait {
-            fn foo(&self) -> i32 {
-                42
-            }
-        }
-
-        struct Bar;
-
-        #[inline_all]
-        impl Bar {
-            fn bar(&self) -> i32 {
-                100
-            }
-        }
-
-        #[inline_all]
-        impl FooTrait for Bar {}
-
-        let b = Bar;
-        assert_eq!(b.bar(), 100);
-        assert_eq!(b.foo(), 42);
     }
 }
