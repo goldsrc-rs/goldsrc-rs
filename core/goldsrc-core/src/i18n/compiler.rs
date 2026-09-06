@@ -349,73 +349,96 @@ impl<'a> Compiler<'a> {
             )
         })?;
 
-        let mut formatted = template_body.clone();
-        for (k, v) in &call.named_args {
-            let pattern = format!("{{{k}}}");
-            formatted = formatted.replace(&pattern, v);
+        let mut formatted = String::with_capacity(template_body.len() + 64);
+        let mut last_idx = 0;
+        let bytes = template_body.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'{'
+                && let Some(close_rel) = bytes[i + 1..].iter().position(|&b| b == b'}')
+            {
+                let close_idx = i + 1 + close_rel;
+                let key = &template_body[i + 1..close_idx];
+                if let Some(val) = call.named_args.get(key) {
+                    formatted.push_str(&template_body[last_idx..i]);
+                    formatted.push_str(val);
+                    i = close_idx + 1;
+                    last_idx = i;
+                    continue;
+                } else if let Ok(idx) = key.parse::<usize>()
+                    && let Some(val) = call.pos_args.get(idx)
+                {
+                    formatted.push_str(&template_body[last_idx..i]);
+                    formatted.push_str(val);
+                    i = close_idx + 1;
+                    last_idx = i;
+                    continue;
+                }
+            }
+            i += 1;
+            while i < bytes.len() && !template_body.is_char_boundary(i) {
+                i += 1;
+            }
         }
-        for (i, v) in call.pos_args.iter().enumerate() {
-            let pattern = format!("{{{i}}}");
-            formatted = formatted.replace(&pattern, v);
+        if last_idx < template_body.len() {
+            formatted.push_str(&template_body[last_idx..]);
         }
 
         self.expand_entry(&formatted, vars, templates, depth)
     }
 
     pub fn find_macro_call(text: &str) -> Option<MacroCall> {
-        let chars: Vec<(usize, char)> = text.char_indices().collect();
+        let bytes = text.as_bytes();
         let mut i = 0;
 
-        while i < chars.len() {
-            if chars[i].1 == '\\' && i + 1 < chars.len() && chars[i + 1].1 == '@' {
+        while i < bytes.len() {
+            if bytes[i] == b'\\' && i + 1 < bytes.len() && bytes[i + 1] == b'@' {
                 i += 2;
                 continue;
             }
 
-            if chars[i].1 == '@' && i + 1 < chars.len() && chars[i + 1].1 == '{' {
-                let start = chars[i].0;
+            if bytes[i] == b'@' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                let start = i;
                 i += 2;
 
-                let mut name = String::new();
-                while i < chars.len()
-                    && (chars[i].1.is_alphanumeric() || chars[i].1 == '_' || chars[i].1 == '.')
+                let name_start = i;
+                while i < bytes.len()
+                    && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.')
                 {
-                    name.push(chars[i].1);
                     i += 1;
                 }
+                let name = &text[name_start..i];
 
-                if i < chars.len() && chars[i].1 == '(' {
+                if i < bytes.len() && bytes[i] == b'(' {
                     i += 1; // skip '('
                     let mut paren_depth = 1;
-                    let mut args_raw = String::new();
+                    let args_start = i;
+                    let mut args_end = i;
 
-                    while i < chars.len() && paren_depth > 0 {
-                        let c = chars[i].1;
-                        if c == '(' {
+                    while i < bytes.len() && paren_depth > 0 {
+                        let b = bytes[i];
+                        if b == b'(' {
                             paren_depth += 1;
-                            args_raw.push(c);
-                        } else if c == ')' {
+                        } else if b == b')' {
                             paren_depth -= 1;
-                            if paren_depth > 0 {
-                                args_raw.push(c);
+                            if paren_depth == 0 {
+                                args_end = i;
                             }
-                        } else {
-                            args_raw.push(c);
                         }
                         i += 1;
                     }
 
                     // Skip whitespace between ')' and '}' if any
-                    while i < chars.len() && chars[i].1.is_whitespace() {
+                    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
                         i += 1;
                     }
 
-                    if i < chars.len() && chars[i].1 == '}' {
-                        let end = chars[i].0 + chars[i].1.len_utf8();
-
-                        let (pos_args, named_args) = Self::parse_args(&args_raw);
+                    if i < bytes.len() && bytes[i] == b'}' {
+                        let end = i + 1;
+                        let args_raw = &text[args_start..args_end];
+                        let (pos_args, named_args) = Self::parse_args(args_raw);
                         return Some(MacroCall {
-                            name,
+                            name: name.to_string(),
                             pos_args,
                             named_args,
                             start,

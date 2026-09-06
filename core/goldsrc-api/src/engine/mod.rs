@@ -53,8 +53,8 @@ pub const PRINT_CENTER: i32 = 1;
 /// Client print destination: Chat (HLSDK `print_chat = 2`).
 pub const PRINT_CHAT: i32 = 2;
 
-/// Client print destination: Notify / developer print.
-pub const PRINT_NOTIFY: i32 = 0;
+/// Client print destination: Notify / developer print (HLSDK `print_notify = 1`).
+pub const PRINT_NOTIFY: i32 = 1;
 
 /// HUD / TextMsg print destination: Notify / developer print (HLSDK `HUD_PRINTNOTIFY = 1`).
 pub const HUD_PRINTNOTIFY: i32 = 1;

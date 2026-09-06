@@ -220,12 +220,12 @@ mod tests {
             .item(("Standard Knife", 1))
             .item(
                 MenuItem::new("Gold AWP", 2)
-                    .require(Condition::MinRound(3))
+                    .requires(Condition::MinRound(3))
                     .on_deny_replace("[Locked: Round 3+]"),
             )
             .item(
                 MenuItem::new("Admin Slay", 3)
-                    .require(Condition::Capability("admin.slay".into()))
+                    .requires(Condition::Capability("admin.slay".into()))
                     .on_deny(DenyPolicy::hide()),
             )
             .build();

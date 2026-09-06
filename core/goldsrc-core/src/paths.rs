@@ -263,6 +263,11 @@ impl PathResolver {
 
         result
     }
+
+    /// Normalizes a path into a canonicalized `PathBuf` with forward slashes and resolved dot components.
+    pub fn normalize_path(path: &Path) -> PathBuf {
+        PathBuf::from(Self::normalize(path))
+    }
 }
 
 #[cfg(test)]

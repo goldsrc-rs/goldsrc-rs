@@ -9,8 +9,13 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicU8, Ordering},
+    },
 };
+
+static ATOMIC_MAX_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info.as_u8());
 
 // ============================================================================
 // Configuration (matches [logging] section in goldsrc.toml)
@@ -65,7 +70,31 @@ impl LogLevel {
             Self::Error => log::LevelFilter::Error,
         }
     }
+
+    /// Convert to numeric representation for atomic operations.
+    pub const fn as_u8(self) -> u8 {
+        match self {
+            Self::Trace => 1,
+            Self::Debug => 2,
+            Self::Info => 3,
+            Self::Warn => 4,
+            Self::Error => 5,
+        }
+    }
+
+    /// Convert from numeric representation.
+    pub const fn from_u8(val: u8) -> Self {
+        match val {
+            1 => Self::Trace,
+            2 => Self::Debug,
+            4 => Self::Warn,
+            5 => Self::Error,
+            _ => Self::Info,
+        }
+    }
 }
+
+use goldsrc_api::consts::log_targets;
 
 /// Logical sub-system producing the log message. Enables per-target filtering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,10 +102,30 @@ impl LogLevel {
 pub enum LogTarget {
     /// Framework core (init, lifecycle, config).
     Core,
-    /// GameDLL proxy layer (standalone backend).
-    Proxy,
+    /// Authentication, capabilities, and permissions.
+    Auth,
+    /// Persistence, SQLite, and KV storage engine.
+    Storage,
+    /// Declarative reactive rules engine.
+    Rules,
+    /// Menu presentation and user sessions.
+    Menu,
+    /// Internationalization dictionary compiler and placeholder expansion.
+    I18n,
+    /// Entity Component System (ECS) world, stages, and systems.
+    Ecs,
     /// WASM host and plugin management.
     Wasm,
+    /// GameDLL proxy layer (standalone backend).
+    Proxy,
+    /// Metamod engine interface bridge and precache manager.
+    Engine,
+    /// ReHLDS/ReGameDLL interface bindings.
+    Reapi,
+    /// Filesystem watcher service and hot-reload debouncer.
+    Watcher,
+    /// Core event bus and engine events.
+    Events,
     /// Individual plugin code.
     Plugin,
 }
@@ -85,9 +134,19 @@ impl LogTarget {
     /// Parses a target string into a `LogTarget`.
     pub fn from_target_str(target: &str) -> Self {
         match target {
-            "proxy" => Self::Proxy,
-            "wasm" => Self::Wasm,
-            "plugin" => Self::Plugin,
+            log_targets::AUTH => Self::Auth,
+            log_targets::STORAGE => Self::Storage,
+            log_targets::RULES => Self::Rules,
+            log_targets::MENU => Self::Menu,
+            log_targets::I18N => Self::I18n,
+            log_targets::ECS => Self::Ecs,
+            log_targets::WASM => Self::Wasm,
+            log_targets::PROXY => Self::Proxy,
+            log_targets::ENGINE => Self::Engine,
+            log_targets::REAPI => Self::Reapi,
+            log_targets::WATCHER => Self::Watcher,
+            log_targets::EVENTS => Self::Events,
+            log_targets::PLUGIN => Self::Plugin,
             _ => Self::Core,
         }
     }
@@ -95,10 +154,20 @@ impl LogTarget {
     /// Returns the lowercase name used in log lines (e.g. `"core"`).
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Core => "core",
-            Self::Proxy => "proxy",
-            Self::Wasm => "wasm",
-            Self::Plugin => "plugin",
+            Self::Core => log_targets::CORE,
+            Self::Auth => log_targets::AUTH,
+            Self::Storage => log_targets::STORAGE,
+            Self::Rules => log_targets::RULES,
+            Self::Menu => log_targets::MENU,
+            Self::I18n => log_targets::I18N,
+            Self::Ecs => log_targets::ECS,
+            Self::Wasm => log_targets::WASM,
+            Self::Proxy => log_targets::PROXY,
+            Self::Engine => log_targets::ENGINE,
+            Self::Reapi => log_targets::REAPI,
+            Self::Watcher => log_targets::WATCHER,
+            Self::Events => log_targets::EVENTS,
+            Self::Plugin => log_targets::PLUGIN,
         }
     }
 }
@@ -109,6 +178,10 @@ pub struct LogConfig {
     /// Minimum level to emit. Default: `Info`.
     #[serde(default = "default_level")]
     pub level: LogLevel,
+
+    /// Custom format template utilizing placeholders (e.g. "[{log:date-time}][{log:level}][{log:target}] {log:message}").
+    #[serde(default = "default_format")]
+    pub format: String,
 
     /// Write log lines to `<logs_dir>/goldsrc.log`.
     #[serde(default = "default_true")]
@@ -129,11 +202,15 @@ fn default_level() -> LogLevel {
 fn default_true() -> bool {
     true
 }
+pub fn default_format() -> String {
+    "[{log:date-time}][{log:level}][{log:target}] {log:message}".to_string()
+}
 
 impl Default for LogConfig {
     fn default() -> Self {
         Self {
             level: default_level(),
+            format: default_format(),
             file_output: true,
             console_output: true,
             targets: Vec::new(), // all targets
@@ -279,6 +356,33 @@ impl GoldSrcLogger {
         }
     }
 
+    fn format_message(
+        template: &str,
+        today: &str,
+        timestamp: &str,
+        level_str: &str,
+        target_str: &str,
+        message: &str,
+    ) -> String {
+        template
+            .replace("{log:date-time}", timestamp)
+            .replace("{log:timestamp}", timestamp)
+            .replace("{date-time}", timestamp)
+            .replace("{time}", timestamp)
+            .replace("{log:date}", today)
+            .replace("{date}", today)
+            .replace("{log:level}", level_str)
+            .replace("{level}", level_str)
+            .replace("{log:target}", target_str)
+            .replace("{log:source}", target_str)
+            .replace("{target}", target_str)
+            .replace("{source}", target_str)
+            .replace("{log:message}", message)
+            .replace("{log:msg}", message)
+            .replace("{message}", message)
+            .replace("{msg}", message)
+    }
+
     fn emit(&mut self, level: LogLevel, target: LogTarget, message: &str) -> Option<String> {
         if !self.should_emit(level, target) {
             return None;
@@ -286,13 +390,17 @@ impl GoldSrcLogger {
 
         let (today, timestamp) = get_current_date_and_time();
 
-        // Structured plain text format for file: [2026-08-28 01:42:00][INFO][core] message
-        let plain_line = format!(
-            "[{timestamp}][{}][{}] {}\n",
+        let mut plain_line = Self::format_message(
+            &self.config.format,
+            &today,
+            &timestamp,
             level.as_str(),
             target.as_str(),
-            message
+            message,
         );
+        if !plain_line.ends_with('\n') {
+            plain_line.push('\n');
+        }
 
         // File output with daily rotation and dedicated error stream (buffered)
         if self.config.file_output {
@@ -322,12 +430,21 @@ impl GoldSrcLogger {
             let target_color = "\x1b[35m"; // Magenta for target
             let reset = "\x1b[0m";
 
-            Some(format!(
-                "[{level_color}{}{reset}][{target_color}{}{reset}] {}\n",
-                level.as_str(),
-                target.as_str(),
-                message
-            ))
+            let colored_level = format!("{level_color}{}{reset}", level.as_str());
+            let colored_target = format!("{target_color}{}{reset}", target.as_str());
+
+            let mut console_line = Self::format_message(
+                &self.config.format,
+                &today,
+                &timestamp,
+                &colored_level,
+                &colored_target,
+                message,
+            );
+            if !console_line.ends_with('\n') {
+                console_line.push('\n');
+            }
+            Some(console_line)
         } else {
             None
         }
@@ -341,6 +458,11 @@ struct LoggerImpl {
 impl log::Log for LoggerImpl {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         let level = LogLevel::from_log_level(metadata.level());
+        // Lock-free fast-path: if message level is lower than configured minimum, drop immediately
+        if (level.as_u8()) < ATOMIC_MAX_LEVEL.load(Ordering::Relaxed) {
+            return false;
+        }
+
         let target = LogTarget::from_target_str(metadata.target());
         let guard = match self.inner.lock() {
             Ok(g) => g,
@@ -351,14 +473,22 @@ impl log::Log for LoggerImpl {
 
     fn log(&self, record: &log::Record) {
         let level = LogLevel::from_log_level(record.level());
+        // Lock-free fast-path: never format args or lock mutex if level is filtered out
+        if (level.as_u8()) < ATOMIC_MAX_LEVEL.load(Ordering::Relaxed) {
+            return;
+        }
+
         let target = LogTarget::from_target_str(record.target());
-        let message = record.args().to_string();
 
         let (console_line, console_cb) = {
             let mut guard = match self.inner.lock() {
                 Ok(g) => g,
                 Err(e) => e.into_inner(),
             };
+            if !guard.should_emit(level, target) {
+                return;
+            }
+            let message = record.args().to_string();
             let console_line = guard.emit(level, target, &message);
             let cb = guard.console_cb.clone();
             (console_line, cb)
@@ -411,6 +541,7 @@ pub fn init_with_dir<F>(
 {
     let cb: Option<ConsoleCb> = console_cb.map(|f| std::sync::Arc::new(f) as ConsoleCb);
     let level_filter = config.level.to_level_filter();
+    ATOMIC_MAX_LEVEL.store(config.level.as_u8(), Ordering::Relaxed);
 
     if let Ok(_logger) = LOGGER_INSTANCE.set(LoggerImpl {
         inner: Mutex::new(GoldSrcLogger::new(config, logs_dir, backend_type, cb)),
@@ -434,4 +565,55 @@ pub fn log_file_path(backend: BackendType) -> PathBuf {
     PathResolver::framework_dir(backend)
         .join(crate::paths::LOGS_DIR_NAME)
         .join(format!("{}.log", today))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_log_config() {
+        let cfg = LogConfig::default();
+        assert_eq!(cfg.level, LogLevel::Info);
+        assert_eq!(
+            cfg.format,
+            "[{log:date-time}][{log:level}][{log:target}] {log:message}"
+        );
+        assert!(cfg.file_output);
+        assert!(cfg.console_output);
+    }
+
+    #[test]
+    fn test_format_message_interpolation() {
+        let template = "{log:date-time} [{log:level}] ({log:target}) -> {log:message}";
+        let formatted = GoldSrcLogger::format_message(
+            template,
+            "2026-09-05",
+            "2026-09-05 14:30:00",
+            "INFO",
+            "core",
+            "Server initialized",
+        );
+        assert_eq!(
+            formatted,
+            "2026-09-05 14:30:00 [INFO] (core) -> Server initialized"
+        );
+    }
+
+    #[test]
+    fn test_format_message_fallback_aliases() {
+        let template = "[{time}][{level}][{source}] {msg}";
+        let formatted = GoldSrcLogger::format_message(
+            template,
+            "2026-09-05",
+            "2026-09-05 14:30:00",
+            "WARN",
+            "wasm",
+            "Epoch deadline exceeded",
+        );
+        assert_eq!(
+            formatted,
+            "[2026-09-05 14:30:00][WARN][wasm] Epoch deadline exceeded"
+        );
+    }
 }

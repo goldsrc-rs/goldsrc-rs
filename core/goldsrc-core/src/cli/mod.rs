@@ -1,12 +1,15 @@
 //! Host CLI dispatch, C-ABI bindings, and declarative commands for GoldSrc.rs.
 
 pub mod handlers;
+pub mod response;
 pub mod router;
 pub mod specs;
 
+pub use response::{CliResponse, CommandStatus};
 pub use router::dispatch_host_command;
 pub use specs::{
-    BUILTIN_COMMANDS, CommandSpec, find_command_spec, print_command_help, print_host_help,
+    BUILTIN_CATEGORIES, BUILTIN_COMMANDS, CommandSpec, find_command_spec, print_category_help,
+    print_command_help, print_host_help,
 };
 
 use std::ffi::{CStr, OsString, c_char};
@@ -53,9 +56,9 @@ pub unsafe extern "C" fn handle_host_command() {
                 raw_args.push(OsString::from(cstr));
             }
         }
-        crate::host::HostRuntime::with_manager(|manager| {
-            dispatch_host_command(raw_args, manager, backend.version, backend.print);
-        });
+        // Dispatch directly; commands requiring PluginManager will acquire it with
+        // narrow scope, preventing re-entrant deadlocks with WatcherService or HostRuntime.
+        dispatch_host_command(raw_args, None, backend.version, backend.print);
     });
 }
 
@@ -133,21 +136,46 @@ mod tests {
 
     #[test]
     fn test_find_command_spec() {
-        assert!(find_command_spec("list").is_some());
-        assert!(find_command_spec("ls").is_some());
+        assert!(find_command_spec("plugins").is_some());
+        assert!(find_command_spec("pl").is_some());
+        assert!(find_command_spec("p").is_some());
         assert!(find_command_spec("ps").is_some());
+        assert!(find_command_spec("rld").is_some());
         assert!(find_command_spec("reload").is_some());
+        assert!(find_command_spec("watchers").is_some());
+        assert!(find_command_spec("watch").is_some());
+        assert!(find_command_spec("w").is_some());
+        assert!(find_command_spec("cmd").is_some());
+        assert!(find_command_spec("exec").is_some());
+        assert!(find_command_spec("c").is_some());
+        assert!(find_command_spec("status").is_some());
+        assert!(find_command_spec("st").is_some());
+        assert!(find_command_spec("s").is_some());
+        assert!(find_command_spec("version").is_some());
+        assert!(find_command_spec("ver").is_some());
+        assert!(find_command_spec("v").is_some());
+        assert!(find_command_spec("help").is_some());
         assert!(find_command_spec("nonexistent").is_none());
+        assert!(find_command_spec("foobar_xyz").is_none());
     }
 
     #[test]
     fn test_print_command_help() {
-        let spec = find_command_spec("list").unwrap();
+        let spec = find_command_spec("plugins").unwrap();
         let mut output = String::new();
         print_command_help(spec, |s| output.push_str(s));
-        assert!(output.contains("grs list"));
+        assert!(output.contains("grs plugins"));
+        assert!(output.contains("list"));
         assert!(output.contains("--flat"));
         assert!(output.contains("--paused"));
+
+        let watcher_spec = find_command_spec("watchers").unwrap();
+        let mut watcher_output = String::new();
+        print_command_help(watcher_spec, |s| watcher_output.push_str(s));
+        assert!(watcher_output.contains("grs watchers"));
+        assert!(watcher_output.contains("list"));
+        assert!(watcher_output.contains("pause"));
+        assert!(watcher_output.contains("resume"));
     }
 
     #[test]
@@ -155,10 +183,17 @@ mod tests {
         let mut output = String::new();
         print_host_help(|s| output.push_str(s));
         assert!(output.contains("GoldSrc.rs Management CLI"));
-        assert!(output.contains("Plugin Lifecycle:"));
-        assert!(output.contains("Execution Control:"));
-        assert!(output.contains("Inspection & Debugging:"));
-        assert!(output.contains("System:"));
+        assert!(output.contains("[plugin:lifecycle]"));
+        assert!(output.contains("[watcher:fs]"));
+        assert!(output.contains("[exec:dispatch]"));
+        assert!(output.contains("[sys:runtime]"));
+        assert!(output.contains("[sys:help]"));
+
+        let mut cat_output = String::new();
+        let matched = print_category_help("plugin", |s| cat_output.push_str(s));
+        assert!(matched);
+        assert!(cat_output.contains("plugins"));
+        assert!(cat_output.contains("plugin:lifecycle"));
     }
 
     #[test]
@@ -172,11 +207,97 @@ mod tests {
         let args_cmd = vec![
             OsString::from("grs"),
             OsString::from("help"),
-            OsString::from("reload"),
+            OsString::from("plugins"),
         ];
         dispatch_host_command(args_cmd, None, ("0.10.0", "abc", "x86"), |s| {
             output_cmd.push_str(s)
         });
-        assert!(output_cmd.contains("grs reload"));
+        assert!(output_cmd.contains("grs plugins"));
+    }
+
+    #[test]
+    fn test_levenshtein_and_command_suggestions() {
+        use router::{levenshtein_distance, suggest_command, suggest_subcommand};
+
+        assert_eq!(levenshtein_distance("plugin", "plugins"), 1);
+        assert_eq!(levenshtein_distance("plguins", "plugins"), 2);
+        assert_eq!(levenshtein_distance("watchr", "watchers"), 2);
+        assert_eq!(levenshtein_distance("completely_different", "plugins"), 16);
+        assert_eq!(
+            levenshtein_distance(
+                "this_is_a_very_long_string_that_exceeds_thirty_two_chars",
+                "plugins"
+            ),
+            usize::MAX
+        );
+
+        assert_eq!(suggest_command("plugin"), Some("plugins"));
+        assert_eq!(suggest_command("plguins"), Some("plugins"));
+        assert_eq!(suggest_command("watcher"), Some("watchers"));
+        assert_eq!(suggest_command("unknown_xyz"), None);
+
+        let subcmds = &[
+            "list", "info", "load", "unload", "reload", "pause", "unpause",
+        ];
+        assert_eq!(suggest_subcommand("reloadd", subcmds), Some("reload"));
+        assert_eq!(suggest_subcommand("paws", subcmds), Some("pause")); // distance is 2
+        assert_eq!(suggest_subcommand("completely_unrelated", subcmds), None);
+
+        let mut output = String::new();
+        let args_typo = vec![OsString::from("grs"), OsString::from("plugin")];
+        dispatch_host_command(args_typo, None, ("0.10.0", "abc", "x86"), |s| {
+            output.push_str(s)
+        });
+        assert!(output.contains("Unknown command 'plugin'. Did you mean 'plugins'?"));
+    }
+
+    #[test]
+    fn test_shortcuts_and_watchers_dispatch() {
+        // Test `grs watchers` dispatch with None manager (should not deadlock or error)
+        let mut out_watchers = String::new();
+        let args_watchers = vec![OsString::from("grs"), OsString::from("watchers")];
+        dispatch_host_command(args_watchers, None, ("0.10.0", "abc", "x86"), |s| {
+            out_watchers.push_str(s)
+        });
+        assert!(out_watchers.contains("Watchers (0)"));
+
+        // Test `grs w` alias
+        let mut out_w = String::new();
+        let args_w = vec![OsString::from("grs"), OsString::from("w")];
+        dispatch_host_command(args_w, None, ("0.10.0", "abc", "x86"), |s| {
+            out_w.push_str(s)
+        });
+        assert!(out_w.contains("Watchers (0)"));
+
+        // Test `grs ps` top-level shortcut
+        let mut out_ps = String::new();
+        let args_ps = vec![OsString::from("grs"), OsString::from("ps")];
+        dispatch_host_command(args_ps, None, ("0.10.0", "abc", "x86"), |s| {
+            out_ps.push_str(s)
+        });
+        assert!(out_ps.contains("WASM Host not initialized.") || out_ps.contains("WASM plugins"));
+
+        // Test `grs pl ps` (plugins alias + ps list subcommand)
+        let mut out_pl_ps = String::new();
+        let args_pl_ps = vec![
+            OsString::from("grs"),
+            OsString::from("pl"),
+            OsString::from("ps"),
+        ];
+        dispatch_host_command(args_pl_ps, None, ("0.10.0", "abc", "x86"), |s| {
+            out_pl_ps.push_str(s)
+        });
+        assert!(
+            out_pl_ps.contains("WASM Host not initialized.") || out_pl_ps.contains("WASM plugins")
+        );
+
+        // Test `grs status`
+        let mut out_status = String::new();
+        let args_status = vec![OsString::from("grs"), OsString::from("status")];
+        dispatch_host_command(args_status, None, ("0.10.0", "abc", "x86"), |s| {
+            out_status.push_str(s)
+        });
+        assert!(out_status.contains("GoldSrc.rs Host Engine Status"));
+        assert!(out_status.contains("Watchers:"));
     }
 }

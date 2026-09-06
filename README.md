@@ -158,13 +158,19 @@ GoldSrc.rs provides a built-in server console and client command `grs` (or `gold
 
 | Command | Description |
 | --- | --- |
-| `grs list` | List all loaded WASM plugins and their current status |
-| `grs info <plugin>` | Display detailed metadata and capabilities of a plugin |
-| `grs load <name.wasm>` | Load a new plugin from `goldsrc/plugins/` |
-| `grs unload <plugin>` | Gracefully unload an active plugin |
-| `grs reload <plugin>` | Hot-reload a plugin without restarting the server |
-| `grs pause / unpause` | Pause or resume event dispatching for a plugin |
-| `grs status` | Print engine backend, memory usage, and runtime info |
+| `grs plugins list [OPTIONS]` | List all loaded WASM plugins and their current status (`--flat`, `-p`, `-s`, `-a`, `--paused`) |
+| `grs plugins info <plugin>` | Display detailed metadata, exports, and capabilities of a plugin |
+| `grs plugins load <file.wasm>` | Load a new plugin component |
+| `grs plugins unload <plugin>` | Gracefully unload an active plugin |
+| `grs plugins reload <plugin>` | Hot-reload a plugin without restarting the server |
+| `grs plugins pause / unpause` | Pause or resume event dispatching for a plugin |
+| `grs plugins cmds [command]` | List or inspect registered plugin commands |
+| `grs watchers list [--json]` | List all registered filesystem watchers, debounces, and statuses |
+| `grs watchers pause <id>` | Pause a filesystem watcher by ID (e.g. `core:plugins`, `core:configs`) |
+| `grs watchers resume <id>` | Resume a paused filesystem watcher by ID |
+| `grs cmd <command> [args...]` | Directly execute a plugin command |
+| `grs status` | Print engine backend, plugins count, watchers count, and runtime info |
+| `grs version` | Display host runtime and engine version information |
 
 ## Maintainers
 
