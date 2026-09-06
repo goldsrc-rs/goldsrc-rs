@@ -2,7 +2,7 @@
 
 use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
 use crate::{call_engfunc, call_engfunc_ret};
-use goldsrc_api::{EngineCvars, EngineMessages};
+use goldsrc_api::{EngineCvars, EngineMessages, PlayerExt};
 use goldsrc_sys::enginefuncs_t;
 
 /// Standard `Engine` implementation parameterized by the engfunc source.

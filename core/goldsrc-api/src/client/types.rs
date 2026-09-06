@@ -1,5 +1,7 @@
 //! Client classifications, connection lifecycles, life states, and team slots.
 
+use crate::client::PlayerExt;
+
 /// Where a message printed to a player is rendered.
 ///
 /// Wire values match the engine's `PRINT_TYPE` enum consumed by

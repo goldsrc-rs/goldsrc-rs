@@ -509,12 +509,15 @@ mod tests {
             "cstrike/configs/plugins.toml"
         );
 
+        let temp_dir = std::env::temp_dir().join("goldsrc_test_watcher_spec");
+        let target_path = temp_dir.join(r"server\cstrike\plugins");
+
         let mut service = WatcherService::new();
         service
             .register(WatcherSpec {
                 id: "manual:raw".into(),
                 target: WatchTarget::Directory {
-                    path: PathBuf::from(r"server\cstrike\plugins"),
+                    path: target_path.clone(),
                     recursive: false,
                     filter: WatcherFilter::Any,
                 },
@@ -524,6 +527,8 @@ mod tests {
 
         let watchers = service.list_watchers();
         assert_eq!(watchers.len(), 1);
-        assert_eq!(watchers[0].path.to_str().unwrap(), "server/cstrike/plugins");
+        let expected = crate::paths::PathResolver::normalize_path(&target_path);
+        assert_eq!(watchers[0].path, expected);
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

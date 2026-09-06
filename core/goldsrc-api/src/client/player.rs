@@ -165,27 +165,27 @@ impl Player {
         }
     }
 
-    /// Queries a strongly-typed property on this player via ZST marker.
+    /// Queries a strongly-typed property on this player.
+    ///
+    /// Accepts both unit ZST markers (e.g. `player.get(prop::Health)`) and
+    /// parameterized properties (e.g. `player.get(prop::Capability("admin"))`).
     #[inline(always)]
-    pub fn get<P: crate::property::Property<Player> + Default>(&self) -> P::Value {
-        P::default().get(self)
-    }
-
-    /// Queries a strongly-typed property on this player via explicit property instance.
-    #[inline(always)]
-    pub fn get_prop<P: crate::property::Property<Player>>(&self, prop: P) -> P::Value {
+    pub fn get<P: crate::property::Property<Player>>(&self, prop: P) -> P::Value {
         prop.get(self)
     }
 
-    /// Mutates a strongly-typed property on this player via ZST marker.
+    /// Queries a default-constructible property on this player using turbofish (`player.get_as::<prop::Health>()`).
     #[inline(always)]
-    pub fn set<P: crate::property::MutProperty<Player> + Default>(&mut self, val: P::Value) {
-        P::default().set(self, val);
+    pub fn get_as<P: crate::property::Property<Player> + Default>(&self) -> P::Value {
+        P::default().get(self)
     }
 
-    /// Mutates a strongly-typed property on this player via explicit property instance.
+    /// Mutates a strongly-typed property on this player.
+    ///
+    /// Accepts both unit ZST markers (e.g. `player.set(prop::Health, 100.0)`) and
+    /// parameterized properties (e.g. `player.set(prop::Capability("admin"), true)`).
     #[inline(always)]
-    pub fn set_prop<P: crate::property::MutProperty<Player>>(&mut self, prop: P, val: P::Value) {
+    pub fn set<P: crate::property::MutProperty<Player>>(&mut self, prop: P, val: P::Value) {
         prop.set(self, val);
     }
 
@@ -193,205 +193,6 @@ impl Player {
     #[inline(always)]
     pub fn act<A: crate::action::PlayerAction>(&self, action: A) -> A::Output {
         action.execute(self)
-    }
-
-    /// Returns `true` if the player is currently alive (`health > 0`).
-    #[inline(always)]
-    pub fn is_alive(&self) -> bool {
-        self.is_valid() && self.health() > 0.0
-    }
-
-    /// Returns the player's display name, if set.
-    #[inline(always)]
-    pub fn name(&self) -> Option<String> {
-        self.get::<crate::property::prop::Name>()
-    }
-
-    /// Returns the player's preferred language code (e.g. `"ru"`, `"en"`).
-    #[inline(always)]
-    pub fn lang(&self) -> String {
-        self.get::<crate::property::prop::Lang>()
-    }
-
-    /// Returns the entity's class name, if set.
-    #[inline(always)]
-    pub fn classname(&self) -> Option<String> {
-        self.get::<crate::property::prop::Classname>()
-    }
-
-    /// Returns the player's world origin.
-    #[inline(always)]
-    pub fn origin(&self) -> Vector3 {
-        self.get::<crate::property::prop::Origin>()
-    }
-
-    /// Sets the player's world origin.
-    #[inline(always)]
-    pub fn set_origin(&mut self, pos: Vector3) {
-        self.set::<crate::property::prop::Origin>(pos);
-    }
-
-    /// Returns the player's velocity.
-    #[inline(always)]
-    pub fn velocity(&self) -> Vector3 {
-        self.get::<crate::property::prop::Velocity>()
-    }
-
-    /// Sets the player's velocity.
-    #[inline(always)]
-    pub fn set_velocity(&mut self, vel: Vector3) {
-        self.set::<crate::property::prop::Velocity>(vel);
-    }
-
-    /// Returns the player's rotation angles (pitch, yaw, roll).
-    #[inline(always)]
-    pub fn angles(&self) -> Vector3 {
-        self.get::<crate::property::prop::Angles>()
-    }
-
-    /// Sets the player's rotation angles.
-    #[inline(always)]
-    pub fn set_angles(&mut self, angles: Vector3) {
-        self.set::<crate::property::prop::Angles>(angles);
-    }
-
-    /// Returns the player's current health.
-    #[inline(always)]
-    pub fn health(&self) -> f32 {
-        self.get::<crate::property::prop::Health>()
-    }
-
-    /// Sets the player's health.
-    #[inline(always)]
-    pub fn set_health(&mut self, health: f32) {
-        self.set::<crate::property::prop::Health>(health);
-    }
-
-    /// Returns the player's armor value.
-    #[inline(always)]
-    pub fn armorvalue(&self) -> f32 {
-        self.get::<crate::property::prop::Armor>()
-    }
-
-    /// Sets the player's armor value.
-    #[inline(always)]
-    pub fn set_armorvalue(&mut self, armor: f32) {
-        self.set::<crate::property::prop::Armor>(armor);
-    }
-
-    /// Returns the player's current game team.
-    #[inline(always)]
-    pub fn team(&self) -> crate::client::Team {
-        self.get::<crate::property::prop::PlayerTeam>()
-    }
-
-    /// Returns the player's current life state.
-    #[inline(always)]
-    pub fn life_state(&self) -> crate::client::LifeState {
-        self.get::<crate::property::prop::PlayerLifeState>()
-    }
-
-    /// Prints a message to the specified target (console / center / chat).
-    #[inline(always)]
-    pub fn print(&self, target: crate::client::PrintTarget, msg: &str) {
-        self.act(crate::action::action::Print {
-            target,
-            message: msg.to_string(),
-        });
-    }
-
-    /// Prints a message to the player's game console.
-    #[inline(always)]
-    pub fn print_console(&self, msg: &str) {
-        self.act(crate::action::action::Print::console(msg));
-    }
-
-    /// Prints a developer notification (top-left screen con_notify area) to the player.
-    #[inline(always)]
-    pub fn print_notify(&self, msg: &str) {
-        self.act(crate::action::action::Print::notify(msg));
-    }
-
-    /// Prints a chat message to the player.
-    #[inline(always)]
-    pub fn print_chat(&self, msg: &str) {
-        self.act(crate::action::action::Print::chat(msg));
-    }
-
-    /// Prints a center notification message to the player.
-    #[inline(always)]
-    pub fn print_center(&self, msg: &str) {
-        self.act(crate::action::action::Print::center(msg));
-    }
-
-    /// Prints a colorized chat message (`^1` default, `^3` team, `^4` green).
-    #[inline(always)]
-    pub fn print_color(&self, msg: &str) {
-        self.act(crate::action::action::Print::colored_chat(msg));
-    }
-
-    /// Plays a dynamic sound effect to the player (e.g. `"buttons/button10.wav"`).
-    #[inline(always)]
-    pub fn play_sound(&self, sample: &str) {
-        self.act(crate::action::action::PlaySound::new(sample));
-    }
-
-    /// Spawns an item/weapon entity by classname and delivers it to this player.
-    #[inline(always)]
-    pub fn give_item(&self, item: &str) -> Option<i32> {
-        self.act(crate::action::action::GiveItem::new(item))
-    }
-
-    /// Displays a raw `ShowMenu` dialog to the player.
-    #[inline(always)]
-    pub fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str) {
-        self.act(crate::action::action::ShowRawMenu {
-            keys_mask,
-            timeout,
-            text,
-        });
-    }
-
-    /// Sends a screen HUD / DHUD message to the player.
-    #[inline(always)]
-    pub fn send_hud(&self, msg: &crate::hud::HudMessage) {
-        self.act(crate::action::action::SendHud::new(msg));
-    }
-
-    /// Renders and opens a declarative `Menu` for this player.
-    #[inline(always)]
-    pub fn open_menu(&self, menu: &crate::menu::Menu) {
-        self.act(crate::action::action::ShowMenu::new(menu));
-    }
-
-    /// Displays a menu for the player.
-    #[inline(always)]
-    pub fn show_menu(&self, menu: &crate::menu::Menu) {
-        self.open_menu(menu);
-    }
-
-    /// Closes any currently displayed menu on the player's client.
-    #[inline(always)]
-    pub fn close_menu(&self) {
-        self.act(crate::action::action::CloseMenu);
-    }
-
-    /// Checks if the player has the specified capability.
-    #[inline(always)]
-    pub fn has_capability(&self, name: &str) -> bool {
-        self.get_prop(crate::property::prop::Capability(name))
-    }
-
-    /// Grants a capability to the player dynamically.
-    #[inline(always)]
-    pub fn grant_capability(&self, name: &str) -> bool {
-        self.act(crate::action::action::GrantCapability::new(name))
-    }
-
-    /// Revokes a capability from the player dynamically.
-    #[inline(always)]
-    pub fn revoke_capability(&self, name: &str) -> bool {
-        self.act(crate::action::action::RevokeCapability::new(name))
     }
 
     /// Returns the raw `edict_t` pointer, or null if the handle is stale.
@@ -480,6 +281,10 @@ pub trait PlayerExt {
     fn name(&self) -> Option<String>;
     /// Returns the player's preferred language code.
     fn lang(&self) -> String;
+    /// Returns the entity's class name, if set.
+    fn classname(&self) -> Option<String>;
+    /// Prints a message to the specified target.
+    fn print(&self, target: crate::client::PrintTarget, msg: impl Into<String>);
     /// Prints a message to player's chat.
     fn print_chat(&self, msg: impl Into<String>);
     /// Prints a center notification message to player's screen.
@@ -494,6 +299,10 @@ pub trait PlayerExt {
     fn play_sound(&self, sample: impl Into<String>);
     /// Opens an interactive declarative menu for this player.
     fn open_menu(&self, menu: &crate::menu::Menu);
+    /// Displays a menu for the player.
+    fn show_menu(&self, menu: &crate::menu::Menu);
+    /// Displays a raw `ShowMenu` dialog to the player.
+    fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str);
     /// Closes any currently displayed menu on the player's client.
     fn close_menu(&self);
     /// Sends a HUD or DHUD message to the player.
@@ -511,62 +320,62 @@ pub trait PlayerExt {
 impl PlayerExt for Player {
     #[inline(always)]
     fn health(&self) -> f32 {
-        self.get::<crate::property::prop::Health>()
+        self.get(crate::property::Health)
     }
 
     #[inline(always)]
     fn set_health(&mut self, health: f32) {
-        self.set::<crate::property::prop::Health>(health);
+        self.set(crate::property::Health, health);
     }
 
     #[inline(always)]
     fn armorvalue(&self) -> f32 {
-        self.get::<crate::property::prop::Armor>()
+        self.get(crate::property::Armor)
     }
 
     #[inline(always)]
     fn set_armorvalue(&mut self, armor: f32) {
-        self.set::<crate::property::prop::Armor>(armor);
+        self.set(crate::property::Armor, armor);
     }
 
     #[inline(always)]
     fn origin(&self) -> Vector3 {
-        self.get::<crate::property::prop::Origin>()
+        self.get(crate::property::Origin)
     }
 
     #[inline(always)]
     fn set_origin(&mut self, pos: Vector3) {
-        self.set::<crate::property::prop::Origin>(pos);
+        self.set(crate::property::Origin, pos);
     }
 
     #[inline(always)]
     fn velocity(&self) -> Vector3 {
-        self.get::<crate::property::prop::Velocity>()
+        self.get(crate::property::Velocity)
     }
 
     #[inline(always)]
     fn set_velocity(&mut self, vel: Vector3) {
-        self.set::<crate::property::prop::Velocity>(vel);
+        self.set(crate::property::Velocity, vel);
     }
 
     #[inline(always)]
     fn angles(&self) -> Vector3 {
-        self.get::<crate::property::prop::Angles>()
+        self.get(crate::property::Angles)
     }
 
     #[inline(always)]
     fn set_angles(&mut self, angles: Vector3) {
-        self.set::<crate::property::prop::Angles>(angles);
+        self.set(crate::property::Angles, angles);
     }
 
     #[inline(always)]
     fn team(&self) -> crate::client::Team {
-        self.get::<crate::property::prop::PlayerTeam>()
+        self.get(crate::property::PlayerTeam)
     }
 
     #[inline(always)]
     fn life_state(&self) -> crate::client::LifeState {
-        self.get::<crate::property::prop::PlayerLifeState>()
+        self.get(crate::property::PlayerLifeState)
     }
 
     #[inline(always)]
@@ -576,76 +385,103 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn name(&self) -> Option<String> {
-        self.get::<crate::property::prop::Name>()
+        self.get(crate::property::Name)
     }
 
     #[inline(always)]
     fn lang(&self) -> String {
-        self.get::<crate::property::prop::Lang>()
+        self.get(crate::property::Lang)
+    }
+
+    #[inline(always)]
+    fn classname(&self) -> Option<String> {
+        self.get(crate::property::Classname)
+    }
+
+    #[inline(always)]
+    fn print(&self, target: crate::client::PrintTarget, msg: impl Into<String>) {
+        self.act(crate::action::Print {
+            target,
+            message: msg.into(),
+        });
     }
 
     #[inline(always)]
     fn print_chat(&self, msg: impl Into<String>) {
-        self.act(crate::action::action::Print::chat(msg));
+        self.act(crate::action::Print::chat(msg));
     }
 
     #[inline(always)]
     fn print_center(&self, msg: impl Into<String>) {
-        self.act(crate::action::action::Print::center(msg));
+        self.act(crate::action::Print::center(msg));
     }
 
     #[inline(always)]
     fn print_console(&self, msg: impl Into<String>) {
-        self.act(crate::action::action::Print::console(msg));
+        self.act(crate::action::Print::console(msg));
     }
 
     #[inline(always)]
     fn print_notify(&self, msg: impl Into<String>) {
-        self.act(crate::action::action::Print::notify(msg));
+        self.act(crate::action::Print::notify(msg));
     }
 
     #[inline(always)]
     fn print_color(&self, msg: impl Into<String>) {
-        self.act(crate::action::action::Print::colored_chat(msg));
+        self.act(crate::action::Print::colored_chat(msg));
     }
 
     #[inline(always)]
     fn play_sound(&self, sample: impl Into<String>) {
-        self.act(crate::action::action::PlaySound::new(sample));
+        self.act(crate::action::PlaySound::new(sample));
     }
 
     #[inline(always)]
     fn open_menu(&self, menu: &crate::menu::Menu) {
-        self.act(crate::action::action::ShowMenu::new(menu));
+        self.act(crate::action::ShowMenu::new(menu));
+    }
+
+    #[inline(always)]
+    fn show_menu(&self, menu: &crate::menu::Menu) {
+        self.open_menu(menu);
+    }
+
+    #[inline(always)]
+    fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str) {
+        self.act(crate::action::ShowRawMenu {
+            keys_mask,
+            timeout,
+            text,
+        });
     }
 
     #[inline(always)]
     fn close_menu(&self) {
-        self.act(crate::action::action::CloseMenu);
+        self.act(crate::action::CloseMenu);
     }
 
     #[inline(always)]
     fn send_hud(&self, msg: &crate::hud::HudMessage) {
-        self.act(crate::action::action::SendHud::new(msg));
+        self.act(crate::action::SendHud::new(msg));
     }
 
     #[inline(always)]
     fn give_item(&self, item: impl Into<String>) -> Option<i32> {
-        self.act(crate::action::action::GiveItem::new(item))
+        self.act(crate::action::GiveItem::new(item))
     }
 
     #[inline(always)]
     fn has_capability(&self, name: &str) -> bool {
-        self.get_prop(crate::property::prop::Capability(name))
+        self.get(crate::property::Capability(name))
     }
 
     #[inline(always)]
     fn grant_capability(&self, name: impl Into<String>) -> bool {
-        self.act(crate::action::action::GrantCapability::new(name))
+        self.act(crate::action::GrantCapability::new(name))
     }
 
     #[inline(always)]
     fn revoke_capability(&self, name: impl Into<String>) -> bool {
-        self.act(crate::action::action::RevokeCapability::new(name))
+        self.act(crate::action::RevokeCapability::new(name))
     }
 }

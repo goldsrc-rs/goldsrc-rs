@@ -1,6 +1,6 @@
 //! In-memory placeholder registry, fluent builder, and guest dispatcher.
 
-use crate::client::Player;
+use crate::client::{Player, PlayerExt};
 use crate::placeholders::{
     PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, parse_placeholder_call,
 };

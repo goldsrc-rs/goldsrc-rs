@@ -352,6 +352,7 @@ macro_rules! tr {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use goldsrc_api::PlayerExt;
     use std::sync::Mutex;
 
     /// Global test lock to serialize tests that mutate global `I18nService` state.

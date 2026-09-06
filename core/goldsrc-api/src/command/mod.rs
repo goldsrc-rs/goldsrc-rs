@@ -11,7 +11,7 @@ pub use registry::{
     register_command,
 };
 
-use crate::client::{Alive, Dead, Player};
+use crate::client::{Alive, Dead, Player, PlayerExt};
 
 /// Scope for in-game chat command execution (`say` vs `say_team`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
