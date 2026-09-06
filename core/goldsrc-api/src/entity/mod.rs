@@ -6,6 +6,9 @@ pub use ext::EntityExt;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::types::EDict;
 
+use crate::action::Action;
+use crate::property::{Property, PropertyGetter, PropertySetter};
+
 /// Validated handle to an active GoldSrc engine entity (world, items, physics, monsters, players).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,22 +69,19 @@ impl Entity {
 
     /// Queries a property of type `T` from this entity.
     #[inline(always)]
-    pub fn get<T: crate::property::PropertyGetter<Entity>>(&self) -> T {
+    pub fn get<T: PropertyGetter<Entity>>(&self) -> T {
         T::get_from(self)
     }
 
     /// Mutates a property of type `T` on this entity.
     #[inline(always)]
-    pub fn set<T: crate::property::PropertySetter<Entity>>(&mut self, val: T) {
+    pub fn set<T: PropertySetter<Entity>>(&mut self, val: T) {
         val.set_on(self);
     }
 
     /// In-place mutation of a property on this entity.
     #[inline(always)]
-    pub fn modify<T>(&mut self, f: impl FnOnce(&mut T))
-    where
-        T: crate::property::PropertyGetter<Entity> + crate::property::PropertySetter<Entity>,
-    {
+    pub fn modify<T: Property<Entity>>(&mut self, f: impl FnOnce(&mut T)) {
         let mut val = self.get::<T>();
         f(&mut val);
         self.set(val);
@@ -89,7 +89,7 @@ impl Entity {
 
     /// Executes a strongly-typed action against this entity.
     #[inline(always)]
-    pub fn act<A: crate::action::Action<Entity>>(&self, action: A) -> A::Output {
+    pub fn act<A: Action<Entity>>(&self, action: A) -> A::Output {
         action.execute(self)
     }
 

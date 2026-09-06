@@ -5,6 +5,9 @@ use crate::edict::EDict;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::RwLock;
 
+use crate::action::Action;
+use crate::property::{Property, PropertyGetter, PropertySetter};
+
 #[cfg(not(target_arch = "wasm32"))]
 pub type NativePrintHook = fn(i32, crate::client::PrintTarget, &str);
 
@@ -167,22 +170,19 @@ impl Player {
 
     /// Queries a property of type `T` from this player.
     #[inline(always)]
-    pub fn get<T: crate::property::PropertyGetter<Player>>(&self) -> T {
+    pub fn get<T: PropertyGetter<Player>>(&self) -> T {
         T::get_from(self)
     }
 
     /// Mutates a property of type `T` on this player.
     #[inline(always)]
-    pub fn set<T: crate::property::PropertySetter<Player>>(&mut self, val: T) {
+    pub fn set<T: PropertySetter<Player>>(&mut self, val: T) {
         val.set_on(self);
     }
 
     /// In-place mutation of a property on this player.
     #[inline(always)]
-    pub fn modify<T>(&mut self, f: impl FnOnce(&mut T))
-    where
-        T: crate::property::PropertyGetter<Player> + crate::property::PropertySetter<Player>,
-    {
+    pub fn modify<T: Property<Player>>(&mut self, f: impl FnOnce(&mut T)) {
         let mut val = self.get::<T>();
         f(&mut val);
         self.set(val);
@@ -190,7 +190,7 @@ impl Player {
 
     /// Executes a strongly-typed action or command on this player.
     #[inline(always)]
-    pub fn act<A: crate::action::Action<Player>>(&self, action: A) -> A::Output {
+    pub fn act<A: Action<Player>>(&self, action: A) -> A::Output {
         action.execute(self)
     }
 

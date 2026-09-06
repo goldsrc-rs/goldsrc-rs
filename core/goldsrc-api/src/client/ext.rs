@@ -1,7 +1,12 @@
 //! Extension traits providing client and gameplay shortcuts (slots 1..=32: Player, Bot, HLTV).
 
+use crate::action::{
+    CloseMenu, GiveItem, GrantCapability, PlaySound, Print, RevokeCapability, SendHud, ShowMenu,
+    ShowRawMenu,
+};
 use crate::client::{ClientKind, LifeState, Player, PrintTarget, Team};
 use crate::entity::EntityExt;
+use crate::property::{Armor, Capability};
 
 /// Extension trait providing client-specific queries and actions (slots 1..=32: Player, Bot, HLTV).
 pub trait ClientExt: EntityExt {
@@ -30,9 +35,9 @@ pub trait PlayerExt: ClientExt {
     /// Sets the player's armor value.
     fn set_armorvalue(&mut self, armor: f32);
     /// Returns the player's armor points (`Armor`).
-    fn armor(&self) -> crate::property::Armor;
+    fn armor(&self) -> Armor;
     /// Sets the player's armor points.
-    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>);
+    fn set_armor(&mut self, armor: impl Into<Armor>);
     /// Returns the player's current game team.
     fn team(&self) -> Team;
     /// Returns the player's current life state.
@@ -143,16 +148,16 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn set_armorvalue(&mut self, armor: f32) {
-        self.set(crate::property::Armor::new(armor));
+        self.set(Armor::new(armor));
     }
 
     #[inline(always)]
-    fn armor(&self) -> crate::property::Armor {
-        self.get::<crate::property::Armor>()
+    fn armor(&self) -> Armor {
+        self.get::<Armor>()
     }
 
     #[inline(always)]
-    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+    fn set_armor(&mut self, armor: impl Into<Armor>) {
         self.set(armor.into());
     }
 
@@ -168,7 +173,7 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn print(&self, target: PrintTarget, msg: impl Into<String>) {
-        self.act(crate::action::Print {
+        self.act(Print {
             target,
             message: msg.into(),
         });
@@ -176,27 +181,27 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn print_chat(&self, msg: impl Into<String>) {
-        self.act(crate::action::Print::chat(msg));
+        self.act(Print::chat(msg));
     }
 
     #[inline(always)]
     fn print_center(&self, msg: impl Into<String>) {
-        self.act(crate::action::Print::center(msg));
+        self.act(Print::center(msg));
     }
 
     #[inline(always)]
     fn print_color(&self, msg: impl Into<String>) {
-        self.act(crate::action::Print::colored_chat(msg));
+        self.act(Print::colored_chat(msg));
     }
 
     #[inline(always)]
     fn play_sound(&self, sample: impl Into<String>) {
-        self.act(crate::action::PlaySound::new(sample));
+        self.act(PlaySound::new(sample));
     }
 
     #[inline(always)]
     fn open_menu(&self, menu: &crate::menu::Menu) {
-        self.act(crate::action::ShowMenu::new(menu));
+        self.act(ShowMenu::new(menu));
     }
 
     #[inline(always)]
@@ -206,7 +211,7 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str) {
-        self.act(crate::action::ShowRawMenu {
+        self.act(ShowRawMenu {
             keys_mask,
             timeout,
             text,
@@ -215,31 +220,31 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn close_menu(&self) {
-        self.act(crate::action::CloseMenu);
+        self.act(CloseMenu);
     }
 
     #[inline(always)]
     fn send_hud(&self, msg: &crate::hud::HudMessage) {
-        self.act(crate::action::SendHud::new(msg));
+        self.act(SendHud::new(msg));
     }
 
     #[inline(always)]
     fn give_item(&self, item: impl Into<String>) -> Option<i32> {
-        self.act(crate::action::GiveItem::new(item))
+        self.act(GiveItem::new(item))
     }
 
     #[inline(always)]
     fn has_capability(&self, name: &str) -> bool {
-        self.act(crate::property::Capability(name))
+        self.act(Capability(name))
     }
 
     #[inline(always)]
     fn grant_capability(&self, name: impl Into<String>) -> bool {
-        self.act(crate::action::GrantCapability::new(name))
+        self.act(GrantCapability::new(name))
     }
 
     #[inline(always)]
     fn revoke_capability(&self, name: impl Into<String>) -> bool {
-        self.act(crate::action::RevokeCapability::new(name))
+        self.act(RevokeCapability::new(name))
     }
 }
