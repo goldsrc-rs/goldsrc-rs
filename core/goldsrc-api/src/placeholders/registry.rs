@@ -4,6 +4,7 @@ use crate::client::Player;
 use crate::placeholders::{
     PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, parse_placeholder_call,
 };
+use crate::property::Capability;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -42,7 +43,7 @@ impl PlaceholderRegistry {
 
         // Capability check if configured
         if let Some(cap) = &meta.capability
-            && !caller.act(crate::property::Capability(cap))
+            && !caller.act(Capability(cap))
         {
             return None;
         }

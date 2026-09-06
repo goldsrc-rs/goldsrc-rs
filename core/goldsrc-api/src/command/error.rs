@@ -1,5 +1,6 @@
 //! Command execution error pipeline, result types, and invocation context.
 
+use crate::action::Print;
 use crate::client::Player;
 use crate::command::CommandTarget;
 
@@ -178,10 +179,10 @@ impl CommandContext {
         if let Some(player) = &self.player {
             match self.target {
                 CommandTarget::Chat { .. } => {
-                    player.act(crate::action::Print::chat(message));
+                    player.act(Print::chat(message));
                 }
                 _ => {
-                    player.act(crate::action::Print::chat(message));
+                    player.act(Print::chat(message));
                 }
             }
         } else {
@@ -192,7 +193,7 @@ impl CommandContext {
     /// Explicitly send a reply to the caller's in-game chat.
     pub fn reply_chat(&self, message: &str) {
         if let Some(player) = &self.player {
-            player.act(crate::action::Print::chat(message));
+            player.act(Print::chat(message));
         } else {
             Self::print_server(message);
         }

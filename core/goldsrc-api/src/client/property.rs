@@ -1,7 +1,7 @@
 //! Player identity and state properties (`Name`, `Lang`, `Team`, `LifeState`).
 
 use crate::client::{LifeState, Player, Team};
-use crate::property::PropertyGetter;
+use crate::property::{Health, PropertyGetter};
 
 /// Player display name (`Option<String>` / Read-Only).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -147,7 +147,7 @@ impl PropertyGetter<Player> for LifeState {
         if !target.is_valid() {
             return LifeState::Dead;
         }
-        if target.get::<crate::property::Health>().is_alive() {
+        if target.get::<Health>().is_alive() {
             LifeState::Alive
         } else {
             LifeState::Dead

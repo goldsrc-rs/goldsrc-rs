@@ -2,6 +2,9 @@
 
 use crate::Vector3;
 use crate::client::{ClientExt, EntityExt, Player, PlayerExt};
+use crate::hud::HudMessage;
+use crate::menu::Menu;
+use crate::property::{Armor, Health};
 use std::ops::{Deref, DerefMut};
 
 /// Typestate extractor guaranteeing that the wrapped player/entity is currently alive (`health > 0`).
@@ -47,11 +50,11 @@ impl<T: EntityExt> EntityExt for Alive<T> {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> crate::property::Health {
+    fn health(&self) -> Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
+    fn set_health(&mut self, health: impl Into<Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -113,11 +116,11 @@ impl<T: PlayerExt> PlayerExt for Alive<T> {
         self.0.set_armorvalue(armor);
     }
     #[inline(always)]
-    fn armor(&self) -> crate::property::Armor {
+    fn armor(&self) -> Armor {
         self.0.armor()
     }
     #[inline(always)]
-    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+    fn set_armor(&mut self, armor: impl Into<Armor>) {
         self.0.set_armor(armor);
     }
     #[inline(always)]
@@ -149,11 +152,11 @@ impl<T: PlayerExt> PlayerExt for Alive<T> {
         self.0.play_sound(sample);
     }
     #[inline(always)]
-    fn open_menu(&self, menu: &crate::menu::Menu) {
+    fn open_menu(&self, menu: &Menu) {
         self.0.open_menu(menu);
     }
     #[inline(always)]
-    fn show_menu(&self, menu: &crate::menu::Menu) {
+    fn show_menu(&self, menu: &Menu) {
         self.0.show_menu(menu);
     }
     #[inline(always)]
@@ -165,7 +168,7 @@ impl<T: PlayerExt> PlayerExt for Alive<T> {
         self.0.close_menu();
     }
     #[inline(always)]
-    fn send_hud(&self, msg: &crate::hud::HudMessage) {
+    fn send_hud(&self, msg: &HudMessage) {
         self.0.send_hud(msg);
     }
     #[inline(always)]
@@ -229,11 +232,11 @@ impl<T: EntityExt> EntityExt for Dead<T> {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> crate::property::Health {
+    fn health(&self) -> Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
+    fn set_health(&mut self, health: impl Into<Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -295,11 +298,11 @@ impl<T: PlayerExt> PlayerExt for Dead<T> {
         self.0.set_armorvalue(armor);
     }
     #[inline(always)]
-    fn armor(&self) -> crate::property::Armor {
+    fn armor(&self) -> Armor {
         self.0.armor()
     }
     #[inline(always)]
-    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+    fn set_armor(&mut self, armor: impl Into<Armor>) {
         self.0.set_armor(armor);
     }
     #[inline(always)]
@@ -331,11 +334,11 @@ impl<T: PlayerExt> PlayerExt for Dead<T> {
         self.0.play_sound(sample);
     }
     #[inline(always)]
-    fn open_menu(&self, menu: &crate::menu::Menu) {
+    fn open_menu(&self, menu: &Menu) {
         self.0.open_menu(menu);
     }
     #[inline(always)]
-    fn show_menu(&self, menu: &crate::menu::Menu) {
+    fn show_menu(&self, menu: &Menu) {
         self.0.show_menu(menu);
     }
     #[inline(always)]
@@ -347,7 +350,7 @@ impl<T: PlayerExt> PlayerExt for Dead<T> {
         self.0.close_menu();
     }
     #[inline(always)]
-    fn send_hud(&self, msg: &crate::hud::HudMessage) {
+    fn send_hud(&self, msg: &HudMessage) {
         self.0.send_hud(msg);
     }
     #[inline(always)]
@@ -411,11 +414,11 @@ impl EntityExt for Spectator {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> crate::property::Health {
+    fn health(&self) -> Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
+    fn set_health(&mut self, health: impl Into<Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -477,11 +480,11 @@ impl PlayerExt for Spectator {
         self.0.set_armorvalue(armor);
     }
     #[inline(always)]
-    fn armor(&self) -> crate::property::Armor {
+    fn armor(&self) -> Armor {
         self.0.armor()
     }
     #[inline(always)]
-    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+    fn set_armor(&mut self, armor: impl Into<Armor>) {
         self.0.set_armor(armor);
     }
     #[inline(always)]
@@ -513,11 +516,11 @@ impl PlayerExt for Spectator {
         self.0.play_sound(sample);
     }
     #[inline(always)]
-    fn open_menu(&self, menu: &crate::menu::Menu) {
+    fn open_menu(&self, menu: &Menu) {
         self.0.open_menu(menu);
     }
     #[inline(always)]
-    fn show_menu(&self, menu: &crate::menu::Menu) {
+    fn show_menu(&self, menu: &Menu) {
         self.0.show_menu(menu);
     }
     #[inline(always)]
@@ -529,7 +532,7 @@ impl PlayerExt for Spectator {
         self.0.close_menu();
     }
     #[inline(always)]
-    fn send_hud(&self, msg: &crate::hud::HudMessage) {
+    fn send_hud(&self, msg: &HudMessage) {
         self.0.send_hud(msg);
     }
     #[inline(always)]
@@ -593,11 +596,11 @@ impl EntityExt for Bot {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> crate::property::Health {
+    fn health(&self) -> Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
+    fn set_health(&mut self, health: impl Into<Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -659,11 +662,11 @@ impl PlayerExt for Bot {
         self.0.set_armorvalue(armor);
     }
     #[inline(always)]
-    fn armor(&self) -> crate::property::Armor {
+    fn armor(&self) -> Armor {
         self.0.armor()
     }
     #[inline(always)]
-    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+    fn set_armor(&mut self, armor: impl Into<Armor>) {
         self.0.set_armor(armor);
     }
     #[inline(always)]
@@ -695,11 +698,11 @@ impl PlayerExt for Bot {
         self.0.play_sound(sample);
     }
     #[inline(always)]
-    fn open_menu(&self, menu: &crate::menu::Menu) {
+    fn open_menu(&self, menu: &Menu) {
         self.0.open_menu(menu);
     }
     #[inline(always)]
-    fn show_menu(&self, menu: &crate::menu::Menu) {
+    fn show_menu(&self, menu: &Menu) {
         self.0.show_menu(menu);
     }
     #[inline(always)]
@@ -711,7 +714,7 @@ impl PlayerExt for Bot {
         self.0.close_menu();
     }
     #[inline(always)]
-    fn send_hud(&self, msg: &crate::hud::HudMessage) {
+    fn send_hud(&self, msg: &HudMessage) {
         self.0.send_hud(msg);
     }
     #[inline(always)]
@@ -788,11 +791,11 @@ impl EntityExt for Hltv {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> crate::property::Health {
+    fn health(&self) -> Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
+    fn set_health(&mut self, health: impl Into<Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]

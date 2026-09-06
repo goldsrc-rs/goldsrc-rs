@@ -12,6 +12,7 @@ pub use registry::{
 };
 
 use crate::client::{Alive, Dead, Player};
+use crate::property::Health;
 
 /// Scope for in-game chat command execution (`say` vs `say_team`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,7 +145,7 @@ impl FromArg for Player {
 impl FromArg for Alive<Player> {
     fn from_arg(token: &str) -> Result<Self, String> {
         let p = Player::from_arg(token)?;
-        if p.get::<crate::property::Health>().is_alive() {
+        if p.get::<Health>().is_alive() {
             Ok(Alive(p))
         } else {
             Err(format!(
@@ -158,7 +159,7 @@ impl FromArg for Alive<Player> {
 impl FromArg for Dead<Player> {
     fn from_arg(token: &str) -> Result<Self, String> {
         let p = Player::from_arg(token)?;
-        if p.get::<crate::property::Health>().is_dead() {
+        if p.get::<Health>().is_dead() {
             Ok(Dead(p))
         } else {
             Err(format!(

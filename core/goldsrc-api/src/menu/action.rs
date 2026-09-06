@@ -2,17 +2,20 @@
 
 use crate::action::Action;
 use crate::client::Player;
+use crate::hud::{HudKind, HudMessage, SendHud};
+use crate::menu::{Menu, MenuContext, MenuRendererKind};
+use crate::property::Health;
 
 /// Displays an interactive declarative menu for the player.
 #[derive(Debug, Clone)]
 pub struct ShowMenu<'a> {
     /// Declarative menu configuration and pages.
-    pub menu: &'a crate::menu::Menu,
+    pub menu: &'a Menu,
 }
 
 impl<'a> ShowMenu<'a> {
     /// Creates a new declarative menu action.
-    pub fn new(menu: &'a crate::menu::Menu) -> Self {
+    pub fn new(menu: &'a Menu) -> Self {
         Self { menu }
     }
 }
@@ -26,37 +29,37 @@ impl<'a> Action<Player> for ShowMenu<'a> {
             return;
         }
 
-        let ctx = crate::menu::MenuContext {
+        let ctx = MenuContext {
             player_index: player.index,
             round_number: 0,
             round_time_elapsed: 0.0,
-            is_alive: player.get::<crate::property::Health>().is_alive(),
+            is_alive: player.get::<Health>().is_alive(),
             players_count: 0,
         };
 
         if let Some(rendered) = self.menu.render_page(&ctx, 0) {
             match rendered.renderer {
-                crate::menu::MenuRendererKind::Text => {
+                MenuRendererKind::Text => {
                     player.act(ShowRawMenu {
                         keys_mask: rendered.keys_mask as i32,
                         timeout: rendered.timeout,
                         text: &rendered.text,
                     });
                 }
-                crate::menu::MenuRendererKind::Dhud {
+                MenuRendererKind::Dhud {
                     position,
                     color,
                     effect,
                 } => {
-                    let hud_msg = crate::hud::HudMessage {
+                    let hud_msg = HudMessage {
                         text: rendered.text.clone(),
-                        kind: crate::hud::HudKind::Dhud,
+                        kind: HudKind::Dhud,
                         color,
                         color2: color,
                         position,
                         effect,
                     };
-                    player.act(crate::hud::SendHud::new(&hud_msg));
+                    player.act(SendHud::new(&hud_msg));
                     player.act(ShowRawMenu {
                         keys_mask: rendered.keys_mask as i32,
                         timeout: rendered.timeout,

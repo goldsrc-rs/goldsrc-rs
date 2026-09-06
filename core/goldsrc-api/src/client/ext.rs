@@ -6,6 +6,8 @@ use crate::action::{
 };
 use crate::client::{ClientKind, LifeState, Player, PrintTarget, Team};
 use crate::entity::EntityExt;
+use crate::hud::HudMessage;
+use crate::menu::Menu;
 use crate::property::{Armor, Capability};
 
 /// Extension trait providing client-specific queries and actions (slots 1..=32: Player, Bot, HLTV).
@@ -53,15 +55,15 @@ pub trait PlayerExt: ClientExt {
     /// Plays an audio sound effect for this player.
     fn play_sound(&self, sample: impl Into<String>);
     /// Opens an interactive declarative menu for this player.
-    fn open_menu(&self, menu: &crate::menu::Menu);
+    fn open_menu(&self, menu: &Menu);
     /// Displays a menu for the player.
-    fn show_menu(&self, menu: &crate::menu::Menu);
+    fn show_menu(&self, menu: &Menu);
     /// Displays a raw `ShowMenu` dialog to the player.
     fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str);
     /// Closes any currently displayed menu on the player's client.
     fn close_menu(&self);
     /// Sends a HUD or DHUD message to the player.
-    fn send_hud(&self, msg: &crate::hud::HudMessage);
+    fn send_hud(&self, msg: &HudMessage);
     /// Spawns an item or weapon entity and delivers it to the player.
     fn give_item(&self, item: impl Into<String>) -> Option<i32>;
     /// Checks if the player has the specified capability.
@@ -131,12 +133,12 @@ impl ClientExt for Player {
 
     #[inline(always)]
     fn print_console(&self, msg: impl Into<String>) {
-        self.act(crate::action::Print::console(msg));
+        self.act(Print::console(msg));
     }
 
     #[inline(always)]
     fn print_notify(&self, msg: impl Into<String>) {
-        self.act(crate::action::Print::notify(msg));
+        self.act(Print::notify(msg));
     }
 }
 
@@ -200,12 +202,12 @@ impl PlayerExt for Player {
     }
 
     #[inline(always)]
-    fn open_menu(&self, menu: &crate::menu::Menu) {
+    fn open_menu(&self, menu: &Menu) {
         self.act(ShowMenu::new(menu));
     }
 
     #[inline(always)]
-    fn show_menu(&self, menu: &crate::menu::Menu) {
+    fn show_menu(&self, menu: &Menu) {
         self.open_menu(menu);
     }
 
@@ -224,7 +226,7 @@ impl PlayerExt for Player {
     }
 
     #[inline(always)]
-    fn send_hud(&self, msg: &crate::hud::HudMessage) {
+    fn send_hud(&self, msg: &HudMessage) {
         self.act(SendHud::new(msg));
     }
 
