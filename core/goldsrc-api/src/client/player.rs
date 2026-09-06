@@ -165,22 +165,27 @@ impl Player {
         }
     }
 
-    /// Queries a strongly-typed property on this player.
-    ///
-    /// Accepts both unit ZST markers (e.g. `player.get(prop::Health)`) and
-    /// parameterized properties (e.g. `player.get(prop::Capability("admin"))`).
+    /// Queries a property of type `T` from this player.
     #[inline(always)]
-    pub fn get<P: crate::property::Property<Player>>(&self, prop: P) -> P::Value {
-        prop.get(self)
+    pub fn get<T: crate::property::PropertyGetter<Player>>(&self) -> T {
+        T::get_from(self)
     }
 
-    /// Mutates a strongly-typed property on this player.
-    ///
-    /// Accepts both unit ZST markers (e.g. `player.set(prop::Health, 100.0)`) and
-    /// parameterized properties (e.g. `player.set(prop::Capability("admin"), true)`).
+    /// Mutates a property of type `T` on this player.
     #[inline(always)]
-    pub fn set<P: crate::property::MutProperty<Player>>(&mut self, prop: P, val: P::Value) {
-        prop.set(self, val);
+    pub fn set<T: crate::property::PropertySetter<Player>>(&mut self, val: T) {
+        val.set_on(self);
+    }
+
+    /// In-place mutation of a property on this player.
+    #[inline(always)]
+    pub fn modify<T>(&mut self, f: impl FnOnce(&mut T))
+    where
+        T: crate::property::PropertyGetter<Player> + crate::property::PropertySetter<Player>,
+    {
+        let mut val = self.get::<T>();
+        f(&mut val);
+        self.set(val);
     }
 
     /// Executes a strongly-typed action or command on this player.

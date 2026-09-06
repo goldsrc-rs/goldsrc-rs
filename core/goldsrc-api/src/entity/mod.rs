@@ -64,16 +64,27 @@ impl Entity {
         }
     }
 
-    /// Queries a strongly-typed property on this entity.
+    /// Queries a property of type `T` from this entity.
     #[inline(always)]
-    pub fn get<P: crate::property::Property<Entity>>(&self, prop: P) -> P::Value {
-        prop.get(self)
+    pub fn get<T: crate::property::PropertyGetter<Entity>>(&self) -> T {
+        T::get_from(self)
     }
 
-    /// Mutates a strongly-typed property on this entity.
+    /// Mutates a property of type `T` on this entity.
     #[inline(always)]
-    pub fn set<P: crate::property::MutProperty<Entity>>(&mut self, prop: P, val: P::Value) {
-        prop.set(self, val);
+    pub fn set<T: crate::property::PropertySetter<Entity>>(&mut self, val: T) {
+        val.set_on(self);
+    }
+
+    /// In-place mutation of a property on this entity.
+    #[inline(always)]
+    pub fn modify<T>(&mut self, f: impl FnOnce(&mut T))
+    where
+        T: crate::property::PropertyGetter<Entity> + crate::property::PropertySetter<Entity>,
+    {
+        let mut val = self.get::<T>();
+        f(&mut val);
+        self.set(val);
     }
 
     /// Executes a strongly-typed action against this entity.

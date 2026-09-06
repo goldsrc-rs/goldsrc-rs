@@ -42,7 +42,7 @@ impl PlaceholderRegistry {
 
         // Capability check if configured
         if let Some(cap) = &meta.capability
-            && !caller.get(crate::property::Capability(cap))
+            && !caller.act(crate::property::Capability(cap))
         {
             return None;
         }

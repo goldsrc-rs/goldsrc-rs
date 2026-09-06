@@ -488,13 +488,13 @@ impl goldsrc_api::EngineEntities for EngineBackend {
 
     fn entity_health(&self, index: i32) -> f32 {
         self.get_player(index)
-            .map(|e| e.get(goldsrc_api::prop::Health))
+            .map(|e| e.get::<goldsrc_api::Health>().current())
             .unwrap_or(0.0)
     }
 
     fn entity_set_health(&self, index: i32, health: f32) {
         if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::prop::Health, health);
+            e.set(goldsrc_api::Health::current_only(health));
             // Synchronize HUD health display for human and bot players
             if (1..=32).contains(&index) {
                 let health_msg_id = self.reg_user_msg("Health", 1);
@@ -514,37 +514,37 @@ impl goldsrc_api::EngineEntities for EngineBackend {
 
     fn entity_origin(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.get(goldsrc_api::prop::Origin).into())
+            .map(|e| e.get::<goldsrc_api::Origin>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_set_origin(&self, index: i32, pos: [f32; 3]) {
         if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::prop::Origin, pos.into());
+            e.set(goldsrc_api::Origin(pos.into()));
         }
     }
 
     fn entity_velocity(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.get(goldsrc_api::prop::Velocity).into())
+            .map(|e| e.get::<goldsrc_api::Velocity>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_set_velocity(&self, index: i32, vel: [f32; 3]) {
         if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::prop::Velocity, vel.into());
+            e.set(goldsrc_api::Velocity(vel.into()));
         }
     }
 
     fn entity_angles(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.get(goldsrc_api::prop::Angles).into())
+            .map(|e| e.get::<goldsrc_api::Angles>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_set_angles(&self, index: i32, angles: [f32; 3]) {
         if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::prop::Angles, angles.into());
+            e.set(goldsrc_api::Angles(angles.into()));
         }
     }
 
@@ -632,13 +632,13 @@ impl goldsrc_api::EngineEntities for EngineBackend {
 
     fn player_armorvalue(&self, index: i32) -> f32 {
         self.get_player(index)
-            .map(|p| p.get(goldsrc_api::prop::Armor))
+            .map(|p| p.get::<goldsrc_api::Armor>().value())
             .unwrap_or(0.0)
     }
 
     fn player_set_armorvalue(&self, index: i32, armor: f32) {
         if let Some(mut p) = self.get_player(index) {
-            p.set(goldsrc_api::prop::Armor, armor);
+            p.set(goldsrc_api::Armor::new(armor));
             // Synchronize HUD armor display for human and bot players
             if (1..=32).contains(&index) {
                 let battery_msg_id = self.reg_user_msg("Battery", 2);

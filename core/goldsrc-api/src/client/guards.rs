@@ -47,11 +47,11 @@ impl<T: EntityExt> EntityExt for Alive<T> {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> f32 {
+    fn health(&self) -> crate::property::Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: f32) {
+    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -111,6 +111,14 @@ impl<T: PlayerExt> PlayerExt for Alive<T> {
     #[inline(always)]
     fn set_armorvalue(&mut self, armor: f32) {
         self.0.set_armorvalue(armor);
+    }
+    #[inline(always)]
+    fn armor(&self) -> crate::property::Armor {
+        self.0.armor()
+    }
+    #[inline(always)]
+    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+        self.0.set_armor(armor);
     }
     #[inline(always)]
     fn team(&self) -> crate::client::Team {
@@ -221,11 +229,11 @@ impl<T: EntityExt> EntityExt for Dead<T> {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> f32 {
+    fn health(&self) -> crate::property::Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: f32) {
+    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -285,6 +293,14 @@ impl<T: PlayerExt> PlayerExt for Dead<T> {
     #[inline(always)]
     fn set_armorvalue(&mut self, armor: f32) {
         self.0.set_armorvalue(armor);
+    }
+    #[inline(always)]
+    fn armor(&self) -> crate::property::Armor {
+        self.0.armor()
+    }
+    #[inline(always)]
+    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+        self.0.set_armor(armor);
     }
     #[inline(always)]
     fn team(&self) -> crate::client::Team {
@@ -395,11 +411,11 @@ impl EntityExt for Spectator {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> f32 {
+    fn health(&self) -> crate::property::Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: f32) {
+    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -459,6 +475,14 @@ impl PlayerExt for Spectator {
     #[inline(always)]
     fn set_armorvalue(&mut self, armor: f32) {
         self.0.set_armorvalue(armor);
+    }
+    #[inline(always)]
+    fn armor(&self) -> crate::property::Armor {
+        self.0.armor()
+    }
+    #[inline(always)]
+    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+        self.0.set_armor(armor);
     }
     #[inline(always)]
     fn team(&self) -> crate::client::Team {
@@ -569,11 +593,11 @@ impl EntityExt for Bot {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> f32 {
+    fn health(&self) -> crate::property::Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: f32) {
+    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]
@@ -633,6 +657,14 @@ impl PlayerExt for Bot {
     #[inline(always)]
     fn set_armorvalue(&mut self, armor: f32) {
         self.0.set_armorvalue(armor);
+    }
+    #[inline(always)]
+    fn armor(&self) -> crate::property::Armor {
+        self.0.armor()
+    }
+    #[inline(always)]
+    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+        self.0.set_armor(armor);
     }
     #[inline(always)]
     fn team(&self) -> crate::client::Team {
@@ -756,11 +788,11 @@ impl EntityExt for Hltv {
         self.0.set_angles(angles);
     }
     #[inline(always)]
-    fn health(&self) -> f32 {
+    fn health(&self) -> crate::property::Health {
         self.0.health()
     }
     #[inline(always)]
-    fn set_health(&mut self, health: f32) {
+    fn set_health(&mut self, health: impl Into<crate::property::Health>) {
         self.0.set_health(health);
     }
     #[inline(always)]

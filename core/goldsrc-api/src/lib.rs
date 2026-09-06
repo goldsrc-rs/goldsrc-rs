@@ -102,7 +102,10 @@ pub use placeholders::{
     PlaceholderMetadata, PlaceholderRegistry, PlayerTarget, clear_placeholders,
     dispatch_local_placeholder, parse_placeholder_call, register_placeholder,
 };
-pub use property::{MutProperty, Property, prop};
+pub use property::{
+    Angles, Armor, Capability, Classname, Health, Origin, Property, PropertyGetter, PropertySetter,
+    Velocity, prop,
+};
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};

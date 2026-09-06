@@ -1,20 +1,48 @@
-//! Player identity and state properties (`Name`, `Lang`, `PlayerTeam`, `PlayerLifeState`).
+//! Player identity and state properties (`Name`, `Lang`, `Team`, `LifeState`).
 
 use crate::client::{LifeState, Player, Team};
-use crate::property::Property;
+use crate::property::PropertyGetter;
 
 /// Player display name (`Option<String>` / Read-Only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Name;
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Name(pub Option<String>);
 
-impl Property<Player> for Name {
-    type Value = Option<String>;
+impl Name {
+    /// Creates a new `Name` wrapper.
+    #[inline]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(Some(name.into()))
+    }
 
+    /// Returns the name as a string slice, if present.
+    #[inline]
+    pub fn as_deref(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+}
+
+impl From<Option<String>> for Name {
+    #[inline]
+    fn from(opt: Option<String>) -> Self {
+        Self(opt)
+    }
+}
+
+impl From<Name> for Option<String> {
+    #[inline]
+    fn from(n: Name) -> Self {
+        n.0
+    }
+}
+
+impl PropertyGetter<Player> for Name {
     #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
+    fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_player_name(target.index)
+            Self(crate::bindings::goldsrc::engine::api::host_player_name(
+                target.index,
+            ))
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -22,26 +50,62 @@ impl Property<Player> for Name {
                 && let Some(resolver) = *lock
                 && let Some(name) = resolver(target.index)
             {
-                return Some(name);
+                return Self(Some(name));
             }
-            target.inner.netname()
+            Self(target.inner.netname())
         }
     }
 }
 
 /// Player language code (`String` / Read-Only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Lang;
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Lang(pub String);
 
-impl Property<Player> for Lang {
-    type Value = String;
+impl Lang {
+    /// Creates a new `Lang` wrapper.
+    #[inline]
+    pub fn new(lang: impl Into<String>) -> Self {
+        Self(lang.into())
+    }
 
+    /// Returns the language code as a string slice.
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for Lang {
+    #[inline]
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for Lang {
+    #[inline]
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl std::ops::Deref for Lang {
+    type Target = str;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PropertyGetter<Player> for Lang {
     #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
+    fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_player_lang(target.index)
-                .unwrap_or_else(|| "en".to_string())
+            Self(
+                crate::bindings::goldsrc::engine::api::host_player_lang(target.index)
+                    .unwrap_or_else(|| "en".to_string()),
+            )
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -49,22 +113,16 @@ impl Property<Player> for Lang {
                 && let Some(resolver) = *lock
                 && let Some(lang) = resolver(target.index)
             {
-                return lang;
+                return Self(lang);
             }
-            "en".to_string()
+            Self("en".to_string())
         }
     }
 }
 
-/// Player current team (`Team` / Read-Only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct PlayerTeam;
-
-impl Property<Player> for PlayerTeam {
-    type Value = Team;
-
+impl PropertyGetter<Player> for Team {
     #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
+    fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
             crate::client::Team::from(crate::bindings::goldsrc::engine::api::host_player_team(
@@ -83,22 +141,22 @@ impl Property<Player> for PlayerTeam {
     }
 }
 
-/// Player life state (`LifeState` / Read-Only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct PlayerLifeState;
-
-impl Property<Player> for PlayerLifeState {
-    type Value = LifeState;
-
+impl PropertyGetter<Player> for LifeState {
     #[inline(always)]
-    fn get(&self, target: &Player) -> Self::Value {
+    fn get_from(target: &Player) -> Self {
         if !target.is_valid() {
             return LifeState::Dead;
         }
-        if target.get(crate::property::Health) > 0.0 {
+        if target.get::<crate::property::Health>().is_alive() {
             LifeState::Alive
         } else {
             LifeState::Dead
         }
     }
 }
+
+/// Type alias for `Team` property query for backward compatibility.
+pub type PlayerTeam = Team;
+
+/// Type alias for `LifeState` property query for backward compatibility.
+pub type PlayerLifeState = LifeState;

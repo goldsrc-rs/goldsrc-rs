@@ -163,13 +163,13 @@ impl AsLangCode for &String {
 
 impl AsLangCode for crate::client::Player {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        Cow::Owned(self.get(crate::property::Lang))
+        Cow::Owned(self.get::<crate::client::property::Lang>().0)
     }
 }
 
 impl AsLangCode for &crate::client::Player {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        Cow::Owned(self.get(crate::property::Lang))
+        Cow::Owned(self.get::<crate::client::property::Lang>().0)
     }
 }
 

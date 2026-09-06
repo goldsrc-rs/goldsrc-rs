@@ -30,7 +30,7 @@ impl<'a> Action<Player> for ShowMenu<'a> {
             player_index: player.index,
             round_number: 0,
             round_time_elapsed: 0.0,
-            is_alive: player.get(crate::property::Health) > 0.0,
+            is_alive: player.get::<crate::property::Health>().is_alive(),
             players_count: 0,
         };
 

@@ -54,9 +54,10 @@ impl PlaceholderRegistry {
                 capability: None,
             },
             Arc::new(|caller: Player, call: &PlaceholderCall| {
+                use goldsrc_api::ClientExt;
                 let target_player = resolve_target(caller, call);
                 target_player
-                    .get(goldsrc_api::prop::Name)
+                    .name()
                     .unwrap_or_else(|| format!("Player#{}", target_player.index()))
             }),
         );
@@ -98,8 +99,9 @@ impl PlaceholderRegistry {
                 capability: None,
             },
             Arc::new(|caller: Player, call: &PlaceholderCall| {
+                use goldsrc_api::EntityExt;
                 let target_player = resolve_target(caller, call);
-                (target_player.get(goldsrc_api::prop::Health) as i32).to_string()
+                (target_player.health().current() as i32).to_string()
             }),
         );
 
@@ -114,8 +116,9 @@ impl PlaceholderRegistry {
                 capability: None,
             },
             Arc::new(|caller: Player, call: &PlaceholderCall| {
+                use goldsrc_api::PlayerExt;
                 let target_player = resolve_target(caller, call);
-                (target_player.get(goldsrc_api::prop::Armor) as i32).to_string()
+                (target_player.armorvalue() as i32).to_string()
             }),
         );
 

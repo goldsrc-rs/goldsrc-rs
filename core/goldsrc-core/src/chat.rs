@@ -117,7 +117,9 @@ pub fn process_chat_message_with_manager(
 
     // 3. Render final output with player name and prefix
     let sender_name = sender
-        .get(goldsrc_api::prop::Name)
+        .get::<goldsrc_api::client::Name>()
+        .as_deref()
+        .map(String::from)
         .unwrap_or_else(|| format!("Player#{}", sender.index()));
 
     let full_text = match msg.scope.team {
@@ -144,7 +146,7 @@ pub fn process_chat_message_with_manager(
     let chunks = split_chat_chunks(&full_text);
 
     // 5. Broadcast chunks to target recipients based on ChatScope
-    let sender_team = sender.get(goldsrc_api::prop::PlayerTeam);
+    let sender_team = sender.get::<goldsrc_api::client::Team>();
     match msg.scope.team {
         TeamTarget::Direct(slot) => {
             let target = Player::new(slot);
@@ -168,7 +170,7 @@ pub fn process_chat_message_with_manager(
             for i in 1..=32 {
                 let target = Player::new(i);
                 if target.is_valid()
-                    && target.get(goldsrc_api::prop::PlayerTeam) == sender_team
+                    && target.get::<goldsrc_api::client::Team>() == sender_team
                     && matches_lifestate(target, msg.scope.state)
                 {
                     for chunk in &chunks {
@@ -181,7 +183,7 @@ pub fn process_chat_message_with_manager(
             for i in 1..=32 {
                 let target = Player::new(i);
                 if target.is_valid()
-                    && is_opposite_team(sender_team, target.get(goldsrc_api::prop::PlayerTeam))
+                    && is_opposite_team(sender_team, target.get::<goldsrc_api::client::Team>())
                     && matches_lifestate(target, msg.scope.state)
                 {
                     for chunk in &chunks {
@@ -199,10 +201,10 @@ fn matches_lifestate(player: Player, filter: LifeStateFilter) -> bool {
     match filter {
         LifeStateFilter::Any => true,
         LifeStateFilter::AliveOnly => {
-            player.get(goldsrc_api::prop::PlayerLifeState) == LifeState::Alive
+            player.get::<goldsrc_api::client::LifeState>() == LifeState::Alive
         }
         LifeStateFilter::DeadOnly => {
-            player.get(goldsrc_api::prop::PlayerLifeState) != LifeState::Alive
+            player.get::<goldsrc_api::client::LifeState>() != LifeState::Alive
         }
     }
 }
@@ -298,10 +300,10 @@ macro_rules! chat_broadcast {
 macro_rules! chat_team {
     ($sender:expr, $msg:literal) => {{
         let sender = $crate::Player::from($sender);
-        let sender_team = sender.get($crate::goldsrc_api::prop::PlayerTeam);
+        let sender_team = sender.get::<$crate::goldsrc_api::Team>();
         for i in 1..=32 {
             let player = $crate::Player::new(i);
-            if player.is_valid() && player.get($crate::goldsrc_api::prop::PlayerTeam) == sender_team {
+            if player.is_valid() && player.get::<$crate::goldsrc_api::Team>() == sender_team {
                 let formatted = $crate::placeholders::format_placeholders($msg, player);
                 let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
                 for chunk in chunks {
@@ -313,10 +315,10 @@ macro_rules! chat_team {
     ($sender:expr, $fmt:expr, $( $arg:expr ),* $(,)?) => {{
         let text = format!($fmt, $( $arg ),*);
         let sender = $crate::Player::from($sender);
-        let sender_team = sender.get($crate::goldsrc_api::prop::PlayerTeam);
+        let sender_team = sender.get::<$crate::goldsrc_api::Team>();
         for i in 1..=32 {
             let player = $crate::Player::new(i);
-            if player.is_valid() && player.get($crate::goldsrc_api::prop::PlayerTeam) == sender_team {
+            if player.is_valid() && player.get::<$crate::goldsrc_api::Team>() == sender_team {
                 let formatted = $crate::placeholders::format_placeholders(&text, player);
                 let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
                 for chunk in chunks {

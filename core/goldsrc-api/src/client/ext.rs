@@ -29,6 +29,10 @@ pub trait PlayerExt: ClientExt {
     fn armorvalue(&self) -> f32;
     /// Sets the player's armor value.
     fn set_armorvalue(&mut self, armor: f32);
+    /// Returns the player's armor points (`Armor`).
+    fn armor(&self) -> crate::property::Armor;
+    /// Sets the player's armor points.
+    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>);
     /// Returns the player's current game team.
     fn team(&self) -> Team;
     /// Returns the player's current life state.
@@ -71,12 +75,12 @@ impl ClientExt for Player {
 
     #[inline(always)]
     fn name(&self) -> Option<String> {
-        self.get(crate::property::Name)
+        self.get::<crate::client::property::Name>().0
     }
 
     #[inline(always)]
     fn lang(&self) -> String {
-        self.get(crate::property::Lang)
+        self.get::<crate::client::property::Lang>().0
     }
 
     #[inline(always)]
@@ -134,22 +138,32 @@ impl ClientExt for Player {
 impl PlayerExt for Player {
     #[inline(always)]
     fn armorvalue(&self) -> f32 {
-        self.get(crate::property::Armor)
+        self.armor().value()
     }
 
     #[inline(always)]
     fn set_armorvalue(&mut self, armor: f32) {
-        self.set(crate::property::Armor, armor);
+        self.set(crate::property::Armor::new(armor));
+    }
+
+    #[inline(always)]
+    fn armor(&self) -> crate::property::Armor {
+        self.get::<crate::property::Armor>()
+    }
+
+    #[inline(always)]
+    fn set_armor(&mut self, armor: impl Into<crate::property::Armor>) {
+        self.set(armor.into());
     }
 
     #[inline(always)]
     fn team(&self) -> Team {
-        self.get(crate::property::PlayerTeam)
+        self.get::<Team>()
     }
 
     #[inline(always)]
     fn life_state(&self) -> LifeState {
-        self.get(crate::property::PlayerLifeState)
+        self.get::<LifeState>()
     }
 
     #[inline(always)]
@@ -216,7 +230,7 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn has_capability(&self, name: &str) -> bool {
-        self.get(crate::property::Capability(name))
+        self.act(crate::property::Capability(name))
     }
 
     #[inline(always)]

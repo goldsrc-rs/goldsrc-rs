@@ -1,6 +1,7 @@
 //! Extension trait providing spatial, physics, vital, and identity shortcuts on entities.
 
 use crate::entity::Entity;
+use crate::property::{Angles, Classname, Health, Origin, Velocity};
 use crate::types::Vector3;
 
 /// Extension trait providing spatial, physics, vital, and identity queries on entities.
@@ -18,9 +19,9 @@ pub trait EntityExt {
     /// Sets the entity's rotation angles.
     fn set_angles(&mut self, angles: Vector3);
     /// Returns the entity's current health.
-    fn health(&self) -> f32;
+    fn health(&self) -> Health;
     /// Sets the entity's health.
-    fn set_health(&mut self, health: f32);
+    fn set_health(&mut self, health: impl Into<Health>);
     /// Returns the entity's class name, if set.
     fn classname(&self) -> Option<String>;
     /// Returns `true` if the entity is alive (`health > 0.0`).
@@ -32,52 +33,52 @@ pub trait EntityExt {
 impl EntityExt for Entity {
     #[inline(always)]
     fn origin(&self) -> Vector3 {
-        self.get(crate::property::Origin)
+        self.get::<Origin>().0
     }
 
     #[inline(always)]
     fn set_origin(&mut self, pos: Vector3) {
-        self.set(crate::property::Origin, pos);
+        self.set(Origin(pos));
     }
 
     #[inline(always)]
     fn velocity(&self) -> Vector3 {
-        self.get(crate::property::Velocity)
+        self.get::<Velocity>().0
     }
 
     #[inline(always)]
     fn set_velocity(&mut self, vel: Vector3) {
-        self.set(crate::property::Velocity, vel);
+        self.set(Velocity(vel));
     }
 
     #[inline(always)]
     fn angles(&self) -> Vector3 {
-        self.get(crate::property::Angles)
+        self.get::<Angles>().0
     }
 
     #[inline(always)]
     fn set_angles(&mut self, angles: Vector3) {
-        self.set(crate::property::Angles, angles);
+        self.set(Angles(angles));
     }
 
     #[inline(always)]
-    fn health(&self) -> f32 {
-        self.get(crate::property::Health)
+    fn health(&self) -> Health {
+        self.get::<Health>()
     }
 
     #[inline(always)]
-    fn set_health(&mut self, health: f32) {
-        self.set(crate::property::Health, health);
+    fn set_health(&mut self, health: impl Into<Health>) {
+        self.set(health.into());
     }
 
     #[inline(always)]
     fn classname(&self) -> Option<String> {
-        self.get(crate::property::Classname)
+        self.get::<Classname>().0
     }
 
     #[inline(always)]
     fn is_alive(&self) -> bool {
-        self.health() > 0.0
+        self.health().is_alive()
     }
 
     #[inline(always)]
@@ -89,52 +90,52 @@ impl EntityExt for Entity {
 impl EntityExt for crate::client::Player {
     #[inline(always)]
     fn origin(&self) -> Vector3 {
-        self.get(crate::property::Origin)
+        self.get::<Origin>().0
     }
 
     #[inline(always)]
     fn set_origin(&mut self, pos: Vector3) {
-        self.set(crate::property::Origin, pos);
+        self.set(Origin(pos));
     }
 
     #[inline(always)]
     fn velocity(&self) -> Vector3 {
-        self.get(crate::property::Velocity)
+        self.get::<Velocity>().0
     }
 
     #[inline(always)]
     fn set_velocity(&mut self, vel: Vector3) {
-        self.set(crate::property::Velocity, vel);
+        self.set(Velocity(vel));
     }
 
     #[inline(always)]
     fn angles(&self) -> Vector3 {
-        self.get(crate::property::Angles)
+        self.get::<Angles>().0
     }
 
     #[inline(always)]
     fn set_angles(&mut self, angles: Vector3) {
-        self.set(crate::property::Angles, angles);
+        self.set(Angles(angles));
     }
 
     #[inline(always)]
-    fn health(&self) -> f32 {
-        self.get(crate::property::Health)
+    fn health(&self) -> Health {
+        self.get::<Health>()
     }
 
     #[inline(always)]
-    fn set_health(&mut self, health: f32) {
-        self.set(crate::property::Health, health);
+    fn set_health(&mut self, health: impl Into<Health>) {
+        self.set(health.into());
     }
 
     #[inline(always)]
     fn classname(&self) -> Option<String> {
-        self.get(crate::property::Classname)
+        self.get::<Classname>().0
     }
 
     #[inline(always)]
     fn is_alive(&self) -> bool {
-        self.health() > 0.0
+        self.health().is_alive()
     }
 
     #[inline(always)]
