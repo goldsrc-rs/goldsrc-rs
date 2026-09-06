@@ -1,6 +1,6 @@
 //! Command execution error pipeline, result types, and invocation context.
 
-use crate::client::{Player, PlayerExt};
+use crate::client::Player;
 use crate::command::CommandTarget;
 
 /// Taxonomy of errors that can occur during command parsing, guard checks, or execution.
@@ -177,9 +177,11 @@ impl CommandContext {
     pub fn reply(&self, message: &str) {
         if let Some(player) = &self.player {
             match self.target {
-                CommandTarget::Chat { .. } => player.print_chat(message),
+                CommandTarget::Chat { .. } => {
+                    player.act(crate::action::Print::chat(message));
+                }
                 _ => {
-                    player.print_chat(message);
+                    player.act(crate::action::Print::chat(message));
                 }
             }
         } else {
@@ -190,7 +192,7 @@ impl CommandContext {
     /// Explicitly send a reply to the caller's in-game chat.
     pub fn reply_chat(&self, message: &str) {
         if let Some(player) = &self.player {
-            player.print_chat(message);
+            player.act(crate::action::Print::chat(message));
         } else {
             Self::print_server(message);
         }

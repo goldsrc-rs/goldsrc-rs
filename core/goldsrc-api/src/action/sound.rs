@@ -1,9 +1,10 @@
 //! Audio playback action.
 
-use crate::action::PlayerAction;
+use crate::Entity;
+use crate::action::Action;
 use crate::client::Player;
 
-/// Plays an audio sample effect directly to the player's client.
+/// Plays an audio sample effect directly to the player's client or from an entity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaySound {
     /// Relative sound filepath within the game directory (e.g. `"buttons/button10.wav"`).
@@ -19,19 +20,19 @@ impl PlaySound {
     }
 }
 
-impl PlayerAction for PlaySound {
+impl Action<Entity> for PlaySound {
     type Output = ();
 
     #[inline(always)]
-    fn execute(self, player: &Player) -> Self::Output {
-        if !player.is_valid() {
+    fn execute(self, entity: &Entity) -> Self::Output {
+        if !entity.is_valid() {
             return;
         }
 
         #[cfg(target_arch = "wasm32")]
         {
             crate::bindings::goldsrc::engine::api::host_emit_sound(
-                player.index,
+                entity.index,
                 0, // CHAN_AUTO
                 &self.sample,
                 1.0, // VOL_NORM
@@ -43,7 +44,16 @@ impl PlayerAction for PlaySound {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = (player, self.sample);
+            let _ = (entity, self.sample);
         }
+    }
+}
+
+impl Action<Player> for PlaySound {
+    type Output = ();
+
+    #[inline(always)]
+    fn execute(self, player: &Player) -> Self::Output {
+        self.execute(&**player)
     }
 }

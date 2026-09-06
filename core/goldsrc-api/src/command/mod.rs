@@ -144,7 +144,7 @@ impl FromArg for Player {
 impl FromArg for Alive<Player> {
     fn from_arg(token: &str) -> Result<Self, String> {
         let p = Player::from_arg(token)?;
-        if p.is_alive() {
+        if p.get(crate::property::Health) > 0.0 {
             Ok(Alive(p))
         } else {
             Err(format!(
@@ -158,7 +158,7 @@ impl FromArg for Alive<Player> {
 impl FromArg for Dead<Player> {
     fn from_arg(token: &str) -> Result<Self, String> {
         let p = Player::from_arg(token)?;
-        if !p.is_alive() {
+        if p.get(crate::property::Health) <= 0.0 {
             Ok(Dead(p))
         } else {
             Err(format!(

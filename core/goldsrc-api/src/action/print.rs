@@ -1,6 +1,6 @@
 //! Message printing actions (console, chat, center, notify, colored chat).
 
-use crate::action::PlayerAction;
+use crate::action::Action;
 use crate::client::{Player, PrintTarget};
 
 /// Prints a message to the player's client via the specified target.
@@ -54,7 +54,7 @@ impl Print {
     }
 }
 
-impl PlayerAction for Print {
+impl Action<Player> for Print {
     type Output = ();
 
     #[inline(always)]

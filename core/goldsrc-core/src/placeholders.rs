@@ -1,6 +1,6 @@
 //! Global Placeholder Engine, Registry, and String Interpolator for GoldSrc.rs.
 
-use goldsrc_api::client::{ClientExt, Player, PlayerExt};
+use goldsrc_api::client::Player;
 use goldsrc_api::placeholders::{
     PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, parse_placeholder_call,
 };
@@ -56,7 +56,7 @@ impl PlaceholderRegistry {
             Arc::new(|caller: Player, call: &PlaceholderCall| {
                 let target_player = resolve_target(caller, call);
                 target_player
-                    .name()
+                    .get(goldsrc_api::prop::Name)
                     .unwrap_or_else(|| format!("Player#{}", target_player.index()))
             }),
         );
@@ -99,7 +99,7 @@ impl PlaceholderRegistry {
             },
             Arc::new(|caller: Player, call: &PlaceholderCall| {
                 let target_player = resolve_target(caller, call);
-                (target_player.health() as i32).to_string()
+                (target_player.get(goldsrc_api::prop::Health) as i32).to_string()
             }),
         );
 
@@ -115,7 +115,7 @@ impl PlaceholderRegistry {
             },
             Arc::new(|caller: Player, call: &PlaceholderCall| {
                 let target_player = resolve_target(caller, call);
-                (target_player.armorvalue() as i32).to_string()
+                (target_player.get(goldsrc_api::prop::Armor) as i32).to_string()
             }),
         );
 

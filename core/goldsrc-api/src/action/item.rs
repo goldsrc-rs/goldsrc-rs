@@ -1,6 +1,6 @@
 //! Item and weapon delivery action.
 
-use crate::action::PlayerAction;
+use crate::action::Action;
 use crate::client::Player;
 
 /// Spawns an item or weapon entity by classname and delivers it to the player.
@@ -17,7 +17,7 @@ impl GiveItem {
     }
 }
 
-impl PlayerAction for GiveItem {
+impl Action<Player> for GiveItem {
     type Output = Option<i32>;
 
     #[inline(always)]

@@ -352,7 +352,6 @@ macro_rules! tr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use goldsrc_api::ClientExt;
     use std::sync::Mutex;
 
     /// Global test lock to serialize tests that mutate global `I18nService` state.
@@ -672,7 +671,7 @@ mod tests {
 
         // 4. Test Player as AsLangCode in tr! macro
         let player = goldsrc_api::client::Player::new(1);
-        assert_eq!(player.lang(), "en");
+        assert_eq!(player.get(goldsrc_api::prop::Lang), "en");
         let player_welcome = tr!("demo_i18n", &player, "welcome_msg", name = "TestUser");
         assert_eq!(
             player_welcome,

@@ -1,7 +1,5 @@
 //! Client classifications, connection lifecycles, life states, and team slots.
 
-use crate::client::ClientExt;
-
 /// Where a message printed to a player is rendered.
 ///
 /// Wire values match the engine's `PRINT_TYPE` enum consumed by
@@ -165,13 +163,13 @@ impl AsLangCode for &String {
 
 impl AsLangCode for crate::client::Player {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        Cow::Owned(self.lang())
+        Cow::Owned(self.get(crate::property::Lang))
     }
 }
 
 impl AsLangCode for &crate::client::Player {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        Cow::Owned(self.lang())
+        Cow::Owned(self.get(crate::property::Lang))
     }
 }
 

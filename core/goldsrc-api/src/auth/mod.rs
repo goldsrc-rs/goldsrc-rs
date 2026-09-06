@@ -1,8 +1,10 @@
 //! Capability-based access control, registry, and hierarchical DSL.
 
+pub mod action;
 pub mod dsl;
 pub mod registry;
 
+pub use action::{GrantCapability, RevokeCapability};
 pub use dsl::CapExpr;
 pub use registry::{CAPS, CapabilityRegistry};
 

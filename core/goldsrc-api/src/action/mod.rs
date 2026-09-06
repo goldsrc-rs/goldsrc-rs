@@ -31,23 +31,9 @@ pub trait Action<Target> {
     fn execute(self, target: &Target) -> Self::Output;
 }
 
-/// Specialized trait for strongly-typed actions executed directly against a [`Player`].
-pub trait PlayerAction {
-    /// Type returned upon completion of the action.
-    type Output;
-
-    /// Executes this action for the specified player.
-    fn execute(self, player: &Player) -> Self::Output;
-}
-
-impl<A: PlayerAction> Action<Player> for A {
-    type Output = A::Output;
-
-    #[inline(always)]
-    fn execute(self, target: &Player) -> Self::Output {
-        PlayerAction::execute(self, target)
-    }
-}
+/// Trait alias marker for actions executed directly against a [`Player`].
+pub trait PlayerAction: Action<Player> {}
+impl<T: Action<Player>> PlayerAction for T {}
 
 /// Standard engine actions namespace for backward compatibility (`crate::action::action::*`).
 #[allow(clippy::module_inception)]

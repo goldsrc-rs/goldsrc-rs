@@ -1,7 +1,7 @@
 use goldsrc_api::chat::{ChatMessage, ChatScope};
 
 use goldsrc_api::chat::{LifeStateFilter, TeamTarget, split_chat_chunks};
-use goldsrc_api::client::{ClientExt, LifeState, Player, PlayerExt, Team};
+use goldsrc_api::client::{LifeState, Player, Team};
 use std::sync::{Arc, LazyLock, RwLock};
 
 /// Type definition for a chat filter middleware handler.
@@ -117,7 +117,7 @@ pub fn process_chat_message_with_manager(
 
     // 3. Render final output with player name and prefix
     let sender_name = sender
-        .name()
+        .get(goldsrc_api::prop::Name)
         .unwrap_or_else(|| format!("Player#{}", sender.index()));
 
     let full_text = match msg.scope.team {
@@ -144,13 +144,13 @@ pub fn process_chat_message_with_manager(
     let chunks = split_chat_chunks(&full_text);
 
     // 5. Broadcast chunks to target recipients based on ChatScope
-    let sender_team = sender.team();
+    let sender_team = sender.get(goldsrc_api::prop::PlayerTeam);
     match msg.scope.team {
         TeamTarget::Direct(slot) => {
             let target = Player::new(slot);
             if target.is_valid() && matches_lifestate(target, msg.scope.state) {
                 for chunk in &chunks {
-                    target.print_chat(chunk);
+                    target.act(goldsrc_api::action::Print::chat(chunk));
                 }
             }
         }
@@ -159,7 +159,7 @@ pub fn process_chat_message_with_manager(
                 let target = Player::new(i);
                 if target.is_valid() && matches_lifestate(target, msg.scope.state) {
                     for chunk in &chunks {
-                        target.print_chat(chunk);
+                        target.act(goldsrc_api::action::Print::chat(chunk));
                     }
                 }
             }
@@ -168,11 +168,11 @@ pub fn process_chat_message_with_manager(
             for i in 1..=32 {
                 let target = Player::new(i);
                 if target.is_valid()
-                    && target.team() == sender_team
+                    && target.get(goldsrc_api::prop::PlayerTeam) == sender_team
                     && matches_lifestate(target, msg.scope.state)
                 {
                     for chunk in &chunks {
-                        target.print_chat(chunk);
+                        target.act(goldsrc_api::action::Print::chat(chunk));
                     }
                 }
             }
@@ -181,11 +181,11 @@ pub fn process_chat_message_with_manager(
             for i in 1..=32 {
                 let target = Player::new(i);
                 if target.is_valid()
-                    && is_opposite_team(sender_team, target.team())
+                    && is_opposite_team(sender_team, target.get(goldsrc_api::prop::PlayerTeam))
                     && matches_lifestate(target, msg.scope.state)
                 {
                     for chunk in &chunks {
-                        target.print_chat(chunk);
+                        target.act(goldsrc_api::action::Print::chat(chunk));
                     }
                 }
             }
@@ -198,8 +198,12 @@ pub fn process_chat_message_with_manager(
 fn matches_lifestate(player: Player, filter: LifeStateFilter) -> bool {
     match filter {
         LifeStateFilter::Any => true,
-        LifeStateFilter::AliveOnly => player.life_state() == LifeState::Alive,
-        LifeStateFilter::DeadOnly => player.life_state() != LifeState::Alive,
+        LifeStateFilter::AliveOnly => {
+            player.get(goldsrc_api::prop::PlayerLifeState) == LifeState::Alive
+        }
+        LifeStateFilter::DeadOnly => {
+            player.get(goldsrc_api::prop::PlayerLifeState) != LifeState::Alive
+        }
     }
 }
 
@@ -234,7 +238,7 @@ macro_rules! chat_print {
         let formatted = $crate::placeholders::format_placeholders($msg, player);
         let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
         for chunk in chunks {
-            player.print_chat(&chunk);
+            player.act($crate::goldsrc_api::action::Print::chat(&chunk));
         }
     }};
     ($target:expr, $fmt:expr, $( $arg:expr ),* $(,)?) => {{
@@ -243,7 +247,7 @@ macro_rules! chat_print {
         let formatted = $crate::placeholders::format_placeholders(&text, player);
         let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
         for chunk in chunks {
-            player.print_chat(&chunk);
+            player.act($crate::goldsrc_api::action::Print::chat(&chunk));
         }
     }};
 }
@@ -264,7 +268,7 @@ macro_rules! chat_broadcast {
                 let formatted = $crate::placeholders::format_placeholders($msg, player);
                 let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
                 for chunk in chunks {
-                    player.print_chat(&chunk);
+                    player.act($crate::goldsrc_api::action::Print::chat(&chunk));
                 }
             }
         }
@@ -277,7 +281,7 @@ macro_rules! chat_broadcast {
                 let formatted = $crate::placeholders::format_placeholders(&text, player);
                 let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
                 for chunk in chunks {
-                    player.print_chat(&chunk);
+                    player.act($crate::goldsrc_api::action::Print::chat(&chunk));
                 }
             }
         }
@@ -294,14 +298,14 @@ macro_rules! chat_broadcast {
 macro_rules! chat_team {
     ($sender:expr, $msg:literal) => {{
         let sender = $crate::Player::from($sender);
-        let sender_team = sender.team();
+        let sender_team = sender.get($crate::goldsrc_api::prop::PlayerTeam);
         for i in 1..=32 {
             let player = $crate::Player::new(i);
-            if player.is_valid() && player.team() == sender_team {
+            if player.is_valid() && player.get($crate::goldsrc_api::prop::PlayerTeam) == sender_team {
                 let formatted = $crate::placeholders::format_placeholders($msg, player);
                 let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
                 for chunk in chunks {
-                    player.print_chat(&chunk);
+                    player.act($crate::goldsrc_api::action::Print::chat(&chunk));
                 }
             }
         }
@@ -309,14 +313,14 @@ macro_rules! chat_team {
     ($sender:expr, $fmt:expr, $( $arg:expr ),* $(,)?) => {{
         let text = format!($fmt, $( $arg ),*);
         let sender = $crate::Player::from($sender);
-        let sender_team = sender.team();
+        let sender_team = sender.get($crate::goldsrc_api::prop::PlayerTeam);
         for i in 1..=32 {
             let player = $crate::Player::new(i);
-            if player.is_valid() && player.team() == sender_team {
+            if player.is_valid() && player.get($crate::goldsrc_api::prop::PlayerTeam) == sender_team {
                 let formatted = $crate::placeholders::format_placeholders(&text, player);
                 let chunks = $crate::goldsrc_api::chat::split_chat_chunks(&formatted);
                 for chunk in chunks {
-                    player.print_chat(&chunk);
+                    player.act($crate::goldsrc_api::action::Print::chat(&chunk));
                 }
             }
         }

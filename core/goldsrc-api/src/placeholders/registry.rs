@@ -1,6 +1,6 @@
 //! In-memory placeholder registry, fluent builder, and guest dispatcher.
 
-use crate::client::{Player, PlayerExt};
+use crate::client::Player;
 use crate::placeholders::{
     PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, parse_placeholder_call,
 };
@@ -42,7 +42,7 @@ impl PlaceholderRegistry {
 
         // Capability check if configured
         if let Some(cap) = &meta.capability
-            && !caller.has_capability(cap)
+            && !caller.get(crate::property::Capability(cap))
         {
             return None;
         }

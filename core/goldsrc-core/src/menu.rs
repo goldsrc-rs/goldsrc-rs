@@ -8,7 +8,6 @@ use goldsrc_api::engine::Engine;
 use goldsrc_api::menu::{
     ExitBehavior, Menu, MenuContext, MenuRendererKind, RenderedMenuPage, SlotAction,
 };
-use goldsrc_api::{ClientExt, PlayerExt};
 
 /// Active menu session for a single connected player.
 pub struct PlayerMenuSession {
@@ -152,10 +151,13 @@ impl MenuSessionManager {
                     goldsrc_api::menu::AntiSpamAction::Feedback(fb) => {
                         let player = goldsrc_api::Player::new(player_idx);
                         if let Some((target, ref msg)) = fb.message {
-                            player.print(target, msg);
+                            player.act(goldsrc_api::action::Print {
+                                target,
+                                message: msg.clone(),
+                            });
                         }
                         if let Some(ref sound) = fb.sound {
-                            player.play_sound(sound);
+                            player.act(goldsrc_api::action::PlaySound::new(sound));
                         }
                     }
                     goldsrc_api::menu::AntiSpamAction::CloseMenu => {
@@ -249,7 +251,7 @@ impl MenuSessionManager {
                                     round_number: self.round_number,
                                     round_time_elapsed: (current_time - self.round_start_time)
                                         .max(0.0),
-                                    is_alive: player.health() > 0.0,
+                                    is_alive: player.get(goldsrc_api::prop::Health) > 0.0,
                                     players_count: goldsrc_api::auth::Auth::total_players().max(1)
                                         as u32,
                                 };
@@ -288,7 +290,10 @@ impl MenuSessionManager {
                     goldsrc_api::menu::DenyAction::Feedback(fb) => {
                         if let Some((target, ref msg)) = fb.message {
                             let player = goldsrc_api::Player::new(player_idx);
-                            player.print(target, msg);
+                            player.act(goldsrc_api::action::Print {
+                                target,
+                                message: msg.clone(),
+                            });
                         }
                         if let Some(ref snd) = fb.sound {
                             engine.emit_sound(player_idx, 0, snd, 1.0, 0.8, 0, 100);
@@ -394,7 +399,7 @@ impl MenuSessionManager {
         let round_start_time = self.round_start_time;
         if let Some(session) = self.sessions.get_mut(&player_idx) {
             let player = goldsrc_api::Player::new(player_idx);
-            let lang = player.lang();
+            let lang = player.get(goldsrc_api::prop::Lang);
             session.menu.style = session.menu.style.clone().with_lang(&lang);
             Self::render_and_send_session(
                 round_number,
@@ -413,7 +418,7 @@ impl MenuSessionManager {
         let round_start_time = self.round_start_time;
         for (&player_idx, session) in self.sessions.iter_mut() {
             let player = goldsrc_api::Player::new(player_idx);
-            let lang = player.lang();
+            let lang = player.get(goldsrc_api::prop::Lang);
             session.menu.style = session.menu.style.clone().with_lang(&lang);
             Self::render_and_send_session(
                 round_number,
