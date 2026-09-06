@@ -3,6 +3,8 @@
 //! This crate defines the abstract interface that plugin developers use.
 //! It has no dependency on any specific backend (Metamod or Standalone).
 
+/// Universal Entity and Player Action System and Value Objects.
+pub mod action;
 /// Capability-based access control, registry, and hierarchical DSL.
 pub mod auth;
 /// Generated WASM bindings (wasm32 only).
@@ -39,6 +41,8 @@ pub mod menu;
 pub mod modifiers;
 /// Dynamic contextual placeholders and function calls.
 pub mod placeholders;
+/// Universal Entity and Player Property System (`Property` & `MutProperty`).
+pub mod property;
 /// High-level ReAPI capability flags, detection, and queries.
 pub mod reapi;
 /// Unified requirements DSL.
@@ -48,10 +52,11 @@ pub mod rules;
 /// Dual Storage Port Abstraction & Typed Bucket Facade.
 pub mod storage;
 
+pub use action::{CancellationToken, PlayerAction};
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
-    Alive, AsLangCode, Bot, ClientKind, ConnectionState, Dead, HLTV, LifeState, Player,
+    Alive, AsLangCode, Bot, ClientKind, ConnectionState, Dead, HLTV, LifeState, Player, PlayerExt,
     PrintTarget, Spectator, Team,
 };
 pub use command::{
@@ -92,6 +97,7 @@ pub use placeholders::{
     PlaceholderMetadata, PlaceholderRegistry, PlayerTarget, clear_placeholders,
     dispatch_local_placeholder, parse_placeholder_call, register_placeholder,
 };
+pub use property::{MutProperty, Property, prop};
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};

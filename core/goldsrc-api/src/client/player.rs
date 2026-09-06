@@ -162,6 +162,36 @@ impl Player {
         }
     }
 
+    /// Queries a strongly-typed property on this player via ZST marker.
+    #[inline(always)]
+    pub fn get<P: crate::property::Property<Player> + Default>(&self) -> P::Value {
+        P::default().get(self)
+    }
+
+    /// Queries a strongly-typed property on this player via explicit property instance.
+    #[inline(always)]
+    pub fn get_prop<P: crate::property::Property<Player>>(&self, prop: P) -> P::Value {
+        prop.get(self)
+    }
+
+    /// Mutates a strongly-typed property on this player via ZST marker.
+    #[inline(always)]
+    pub fn set<P: crate::property::MutProperty<Player> + Default>(&mut self, val: P::Value) {
+        P::default().set(self, val);
+    }
+
+    /// Mutates a strongly-typed property on this player via explicit property instance.
+    #[inline(always)]
+    pub fn set_prop<P: crate::property::MutProperty<Player>>(&mut self, prop: P, val: P::Value) {
+        prop.set(self, val);
+    }
+
+    /// Executes a strongly-typed action or command on this player.
+    #[inline(always)]
+    pub fn act<A: crate::action::PlayerAction>(&self, action: A) -> A::Output {
+        action.execute(self)
+    }
+
     /// Returns `true` if the player is currently alive (`health > 0`).
     pub fn is_alive(&self) -> bool {
         self.is_valid() && self.health() > 0.0
@@ -716,3 +746,93 @@ impl From<&mut Player> for Player {
 // The caller must ensure the pointer is valid when used.
 unsafe impl Send for Player {}
 unsafe impl Sync for Player {}
+
+/// Extension trait providing ergonomic shortcuts over `get`, `set`, and `act`.
+pub trait PlayerExt {
+    /// Prints a message to player's chat.
+    fn print_chat(&self, msg: impl Into<String>);
+    /// Prints a center notification message to player's screen.
+    fn print_center(&self, msg: impl Into<String>);
+    /// Prints a message to player's console.
+    fn print_console(&self, msg: impl Into<String>);
+    /// Prints a top-left notification to player's screen.
+    fn print_notify(&self, msg: impl Into<String>);
+    /// Plays an audio sound effect for this player.
+    fn play_sound(&self, sample: impl Into<String>);
+    /// Opens an interactive declarative menu for this player.
+    fn open_menu(&self, menu: &crate::menu::Menu);
+    /// Closes any currently displayed menu on the player's client.
+    fn close_menu(&self);
+    /// Sends a HUD or DHUD message to the player.
+    fn send_hud(&self, msg: &crate::hud::HudMessage);
+    /// Spawns an item or weapon entity and delivers it to the player.
+    fn give_item(&self, item: impl Into<String>) -> Option<i32>;
+    /// Checks if the player has the specified capability.
+    fn has_capability(&self, name: &str) -> bool;
+    /// Grants a capability to the player dynamically.
+    fn grant_capability(&self, name: impl Into<String>) -> bool;
+    /// Revokes a capability from the player dynamically.
+    fn revoke_capability(&self, name: impl Into<String>) -> bool;
+}
+
+impl PlayerExt for Player {
+    #[inline(always)]
+    fn print_chat(&self, msg: impl Into<String>) {
+        self.act(crate::action::action::Print::chat(msg));
+    }
+
+    #[inline(always)]
+    fn print_center(&self, msg: impl Into<String>) {
+        self.act(crate::action::action::Print::center(msg));
+    }
+
+    #[inline(always)]
+    fn print_console(&self, msg: impl Into<String>) {
+        self.act(crate::action::action::Print::console(msg));
+    }
+
+    #[inline(always)]
+    fn print_notify(&self, msg: impl Into<String>) {
+        self.act(crate::action::action::Print::notify(msg));
+    }
+
+    #[inline(always)]
+    fn play_sound(&self, sample: impl Into<String>) {
+        self.act(crate::action::action::PlaySound::new(sample));
+    }
+
+    #[inline(always)]
+    fn open_menu(&self, menu: &crate::menu::Menu) {
+        self.act(crate::action::action::ShowMenu::new(menu));
+    }
+
+    #[inline(always)]
+    fn close_menu(&self) {
+        self.act(crate::action::action::CloseMenu);
+    }
+
+    #[inline(always)]
+    fn send_hud(&self, msg: &crate::hud::HudMessage) {
+        self.act(crate::action::action::SendHud::new(msg));
+    }
+
+    #[inline(always)]
+    fn give_item(&self, item: impl Into<String>) -> Option<i32> {
+        self.act(crate::action::action::GiveItem::new(item))
+    }
+
+    #[inline(always)]
+    fn has_capability(&self, name: &str) -> bool {
+        crate::auth::Auth::has_capability(self.index, name)
+    }
+
+    #[inline(always)]
+    fn grant_capability(&self, name: impl Into<String>) -> bool {
+        self.act(crate::action::action::GrantCapability::new(name))
+    }
+
+    #[inline(always)]
+    fn revoke_capability(&self, name: impl Into<String>) -> bool {
+        self.act(crate::action::action::RevokeCapability::new(name))
+    }
+}

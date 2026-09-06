@@ -206,6 +206,18 @@ pub mod modifiers {
     pub use goldsrc_api::modifiers::*;
 }
 
+pub mod action {
+    pub use goldsrc_api::action::*;
+}
+
+pub mod prop {
+    pub use goldsrc_api::prop::*;
+}
+
+pub mod property {
+    pub use goldsrc_api::property::*;
+}
+
 pub use ::log;
 pub use ecs::*;
 pub use goldsrc_api as api;
@@ -216,25 +228,26 @@ pub use goldsrc_api::hud as hud_api;
 pub use goldsrc_api::menu as menu_api;
 pub use goldsrc_api::modifiers as modifiers_api;
 pub use goldsrc_api::{
-    Alive, AntiSpamAction, AsLangCode, Auth, BlackboardValue, Bot, CapExpr, ChatScope, ClientKind,
-    Command, CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry,
-    CommandResult, CommandTarget, CommutativeModifier, Condition, ConnectionState, DagError, Dead,
-    DenyAction, DenyPolicy, Engine, Entity, Event, EventHandler, EventPhase, EventRegistry,
-    EventSubscriberBuilder, EventSubscription, ExitBehavior, Feedback, FromArg, HLTV, HudColor,
-    HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle, LifeState,
-    Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext, MenuItem,
-    MenuPageBuilder, MenuRendererKind, MenuStyle, ModifierContribution, NodeBuilder, OrderNode,
-    Phase, PhasedDag, Placeholder, PlaceholderBuilder, PlaceholderCall, PlaceholderHandler,
-    PlaceholderMetadata, PlaceholderRegistry, Player, PlayerStateFilter, PluginTier, PrintTarget,
-    RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, Team,
-    TypedBlackboard, Vector3, VisualDeny, clear_commands, clear_events, clear_menu_actions,
-    clear_placeholders, dispatch_command, dispatch_event, dispatch_local_placeholder,
-    dispatch_menu_action, register_command, register_menu_action_id, register_menu_action_name,
-    register_placeholder, split_command_args, subscribe_event,
+    Alive, AntiSpamAction, AsLangCode, Auth, BlackboardValue, Bot, CancellationToken, CapExpr,
+    ChatScope, ClientKind, Command, CommandBuilder, CommandContext, CommandError, CommandHandler,
+    CommandRegistry, CommandResult, CommandTarget, CommutativeModifier, Condition, ConnectionState,
+    DagError, Dead, DenyAction, DenyPolicy, Engine, Entity, Event, EventHandler, EventPhase,
+    EventRegistry, EventSubscriberBuilder, EventSubscription, ExitBehavior, Feedback, FromArg,
+    HLTV, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind,
+    ItemTitle, LifeState, Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext,
+    MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, ModifierContribution, MutProperty,
+    NodeBuilder, OrderNode, Phase, PhasedDag, Placeholder, PlaceholderBuilder, PlaceholderCall,
+    PlaceholderHandler, PlaceholderMetadata, PlaceholderRegistry, Player, PlayerAction, PlayerExt,
+    PlayerStateFilter, PluginTier, PrintTarget, Property, RenderedMenuPage, SlotAction, Spectator,
+    SqlDatabase, StorageError, StorageProvider, Team, TypedBlackboard, Vector3, VisualDeny,
+    clear_commands, clear_events, clear_menu_actions, clear_placeholders, dispatch_command,
+    dispatch_event, dispatch_local_placeholder, dispatch_menu_action, register_command,
+    register_menu_action_id, register_menu_action_name, register_placeholder, split_command_args,
+    subscribe_event,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
-    command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
+    command, event, inline_all, menu_action, on_frame, on_load, on_unload, plugin, system,
 };
 
 /// Convenient prelude module for plugin authors.
@@ -246,20 +259,21 @@ pub mod prelude {
     pub use crate::modifiers_api as modifiers;
     pub use crate::tr;
     pub use crate::{
-        Alive, AntiSpamAction, AsLangCode, Auth, BlackboardValue, Bot, CapExpr, ChatScope,
-        ClientKind, Command, CommandBuilder, CommandContext, CommandError, CommandHandler,
-        CommandResult, CommandTarget, CommutativeModifier, Condition, ConnectionState, Dead,
-        DenyAction, DenyPolicy, Engine, Entity, Event, EventHandler, EventPhase,
-        EventSubscriberBuilder, ExitBehavior, Feedback, FromArg, HLTV, HudColor, HudCoord,
-        HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle, LifeState, Menu,
-        MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle,
-        ModifierContribution, Placeholder, PlaceholderBuilder, Player, PlayerStateFilter,
-        PrintTarget, RenderedMenuPage, SlotAction, Spectator, SqlDatabase, StorageError,
-        StorageProvider, System, SystemBuilder, Team, TypedBlackboard, Vector3, VisualDeny,
+        Alive, AntiSpamAction, AsLangCode, Auth, BlackboardValue, Bot, CancellationToken, CapExpr,
+        ChatScope, ClientKind, Command, CommandBuilder, CommandContext, CommandError,
+        CommandHandler, CommandResult, CommandTarget, CommutativeModifier, Condition,
+        ConnectionState, Dead, DenyAction, DenyPolicy, Engine, Entity, Event, EventHandler,
+        EventPhase, EventSubscriberBuilder, ExitBehavior, Feedback, FromArg, HLTV, HudColor,
+        HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ItemKind, ItemTitle,
+        LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind,
+        MenuStyle, ModifierContribution, MutProperty, Placeholder, PlaceholderBuilder, Player,
+        PlayerAction, PlayerExt, PlayerStateFilter, PrintTarget, Property, RenderedMenuPage,
+        SlotAction, Spectator, SqlDatabase, StorageError, StorageProvider, System, SystemBuilder,
+        Team, TypedBlackboard, Vector3, VisualDeny, action, prop,
     };
     pub use crate::{
-        chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,
-        plugin, system,
+        chat_broadcast, chat_print, command, event, inline_all, menu_action, on_frame, on_load,
+        on_unload, plugin, system,
     };
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }
@@ -290,5 +304,31 @@ mod tests {
         let pos = &["Alice", "Bob", "AWP"];
         let res = substitute_positional(tmpl, pos);
         assert_eq!(res, "Player Alice killed Bob with AWP");
+    }
+
+    #[test]
+    fn test_inline_all_macro() {
+        #[inline_all]
+        trait FooTrait {
+            fn foo(&self) -> i32 {
+                42
+            }
+        }
+
+        struct Bar;
+
+        #[inline_all]
+        impl Bar {
+            fn bar(&self) -> i32 {
+                100
+            }
+        }
+
+        #[inline_all]
+        impl FooTrait for Bar {}
+
+        let b = Bar;
+        assert_eq!(b.bar(), 100);
+        assert_eq!(b.foo(), 42);
     }
 }

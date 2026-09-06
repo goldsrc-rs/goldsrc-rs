@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Universal Entity Property & Action Triad (`get / set / act`) & Value Objects (`core/goldsrc-api`, `framework/goldsrc`, `framework/goldsrc-macros`)**:
+  - Implemented type-level extensible properties via `Property<Target>` and `MutProperty<Target>` traits with zero-cost ZST markers (`prop::Health`, `prop::Armor`, `prop::Origin`, `prop::Velocity`, `prop::Angles`, `prop::PlayerTeam`, `prop::PlayerLifeState`, `prop::Name`, `prop::Lang`, `prop::Capability`).
+  - Added type-safe turbofish property querying and mutation on `Player`: `player.get::<P>()`, `player.set::<P>(val)`, `player.get_prop(p)`, and `player.set_prop(p, val)`.
+  - Implemented Command-Query Separation (CQS) side-effects via `PlayerAction` trait and strongly-typed Action Value Objects: `action::Print`, `action::PlaySound`, `action::ShowMenu`, `action::CloseMenu`, `action::SendHud`, `action::GiveItem`, `action::GrantCapability`, and `action::RevokeCapability`.
+  - Added thread-safe `CancellationToken` (`Arc<AtomicBool>`) with `is_cancelled()`, `cancel()`, and `reset()` for abortable or repeating tasks.
+  - Extracted high-level ergonomic convenience methods from `Player` into `PlayerExt` extension trait, preserving 100% backward compatibility for all existing plugins (`test_chat`, `test_menu`, `vip_core`, `admin_system`, etc.).
+  - Implemented procedural attribute macro `#[inline_all]` in `goldsrc-macros`, automatically injecting `#[inline(always)]` attributes across all methods in `impl` and `trait` blocks.
+
 - **Rust 2018+ Module Structure Conformity & File Flattening**:
   - Migrated 10 single-file directory modules (`dir/mod.rs` $\to$ `dir.rs`) across `goldsrc-api` and `goldsrc-core` (`chat`, `dsl`, `gamedata`, `reapi`, `rules`, `storage`, `placeholders`, `watcher`), adhering strictly to the idiomatic Rust 2018+ standard where directory modules are reserved exclusively for folders with $\ge 2$ files.
 - **Consolidated Host-Side Menu Runtime & Purged API Global Sessions (`core/goldsrc-api` & `core/goldsrc-core`)**:
