@@ -2,7 +2,13 @@
 
 use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
 use crate::{call_engfunc, call_engfunc_ret};
-use goldsrc_api::{EngineCvars, EngineMessages};
+use goldsrc_api::client::Player;
+use goldsrc_api::consts::FL_CLIENT;
+use goldsrc_api::consts::log_targets::CORE;
+use goldsrc_api::{
+    EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
+    EngineSound,
+};
 use goldsrc_sys::enginefuncs_t;
 
 /// Standard `Engine` implementation parameterized by the engfunc source.
@@ -30,17 +36,17 @@ impl EngineBackend {
     /// engine slots without a connected client will not have this flag even when
     /// `edict.free == 0`, so we reject them here before handing off to
     /// `EDict::is_valid()` which only checks the serial number.
-    pub fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
+    pub fn get_player(&self, index: i32) -> Option<Player> {
         unsafe {
             let funcs = (self.engfuncs)();
             let edict = (funcs.pfnPEntityOfEntIndex).and_then(|f| f(index).as_mut())?;
             if edict.free != 0 {
                 return None;
             }
-            if (1..=32).contains(&index) && edict.v.flags & goldsrc_api::consts::FL_CLIENT == 0 {
+            if (1..=32).contains(&index) && edict.v.flags & FL_CLIENT == 0 {
                 return None;
             }
-            Some(goldsrc_api::Player::from_raw(index, edict))
+            Some(Player::from_raw(index, edict))
         }
     }
 
@@ -151,7 +157,7 @@ impl EngineBackend {
     }
 }
 
-impl goldsrc_api::EnginePrecache for EngineBackend {
+impl EnginePrecache for EngineBackend {
     fn precache_model(&self, path: &str) -> i32 {
         if let Ok(mut set) = PRECACHE_MODELS.lock() {
             set.insert(path.to_string());
@@ -234,7 +240,7 @@ static ACTIVE_MSG_TYPE: std::sync::atomic::AtomicI32 = std::sync::atomic::Atomic
 static ACTIVE_MSG_STRINGS: std::sync::LazyLock<std::sync::Mutex<Vec<String>>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
 
-impl goldsrc_api::EngineMessages for EngineBackend {
+impl EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
         if let Ok(map) = USER_MSG_REGISTRY.read()
             && let Some(&id) = map.get(name)
@@ -380,7 +386,7 @@ impl goldsrc_api::EngineMessages for EngineBackend {
     }
 }
 
-impl goldsrc_api::EngineConsole for EngineBackend {
+impl EngineConsole for EngineBackend {
     fn server_print(&self, message: &str) {
         unsafe {
             let funcs = (self.engfuncs)();
@@ -431,7 +437,7 @@ impl goldsrc_api::EngineConsole for EngineBackend {
     }
 }
 
-impl goldsrc_api::EngineEntities for EngineBackend {
+impl EngineEntities for EngineBackend {
     fn entity_is_valid(&self, index: i32) -> bool {
         unsafe {
             let funcs = (self.engfuncs)();
@@ -731,14 +737,14 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             match (resolve(touched), resolve(other), GAME_DLL_TOUCH.get()) {
                 (Some(a), Some(b), Some(f)) => f(a, b),
                 _ => {
-                    log::debug!(target: goldsrc_api::consts::log_targets::CORE, "dispatch_touch({touched},{other}): no GameDLL bridge");
+                    log::debug!(target: CORE, "dispatch_touch({touched},{other}): no GameDLL bridge");
                 }
             }
         }
     }
 }
 
-impl goldsrc_api::EngineCvars for EngineBackend {
+impl EngineCvars for EngineBackend {
     fn cvar_get_float(&self, name: &str) -> f32 {
         unsafe {
             let cname = std::ffi::CString::new(name).unwrap_or_default();
@@ -796,7 +802,7 @@ impl goldsrc_api::EngineCvars for EngineBackend {
     }
 }
 
-impl goldsrc_api::EnginePhysics for EngineBackend {
+impl EnginePhysics for EngineBackend {
     fn point_contents(&self, point: [f32; 3]) -> i32 {
         unsafe { call_engfunc_ret!((self.engfuncs)().pfnPointContents, point.as_ptr()) }
     }
@@ -936,7 +942,7 @@ impl goldsrc_api::EnginePhysics for EngineBackend {
     }
 }
 
-impl goldsrc_api::EngineSound for EngineBackend {
+impl EngineSound for EngineBackend {
     fn emit_sound(
         &self,
         entity: i32,

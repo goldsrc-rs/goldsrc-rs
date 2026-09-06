@@ -565,10 +565,14 @@ pub fn register_host_placeholder(name: &str, plugin_name: &str) {
 mod tests {
     use super::*;
     use crate::bindings::goldsrc::engine::api::Host;
+    use goldsrc_api::{
+        EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
+        EngineSound, TraceResult,
+    };
 
     struct NoopEngineOps;
 
-    impl goldsrc_api::EnginePrecache for NoopEngineOps {
+    impl EnginePrecache for NoopEngineOps {
         fn precache_model(&self, _path: &str) -> i32 {
             0
         }
@@ -580,7 +584,7 @@ mod tests {
         }
     }
 
-    impl goldsrc_api::EngineMessages for NoopEngineOps {
+    impl EngineMessages for NoopEngineOps {
         fn reg_user_msg(&self, _name: &str, _size: i32) -> i32 {
             0
         }
@@ -604,13 +608,13 @@ mod tests {
         fn write_entity(&self, _val: i32) {}
     }
 
-    impl goldsrc_api::EngineConsole for NoopEngineOps {
+    impl EngineConsole for NoopEngineOps {
         fn server_print(&self, _message: &str) {}
         fn client_print(&self, _client_index: i32, _print_type: i32, _message: &str) {}
         fn server_command(&self, _command: &str) {}
     }
 
-    impl goldsrc_api::EngineEntities for NoopEngineOps {
+    impl EngineEntities for NoopEngineOps {
         fn entity_is_valid(&self, _index: i32) -> bool {
             false
         }
@@ -653,7 +657,7 @@ mod tests {
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
 
-    impl goldsrc_api::EngineCvars for NoopEngineOps {
+    impl EngineCvars for NoopEngineOps {
         fn cvar_get_float(&self, _name: &str) -> f32 {
             0.0
         }
@@ -664,7 +668,7 @@ mod tests {
         fn cvar_set_string(&self, _name: &str, _val: &str) {}
     }
 
-    impl goldsrc_api::EnginePhysics for NoopEngineOps {
+    impl EnginePhysics for NoopEngineOps {
         fn point_contents(&self, _point: [f32; 3]) -> i32 {
             0
         }
@@ -674,8 +678,8 @@ mod tests {
             _end: [f32; 3],
             _flags: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
         fn trace_hull(
             &self,
@@ -684,12 +688,12 @@ mod tests {
             _flags: i32,
             _hull_number: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
     }
 
-    impl goldsrc_api::EngineSound for NoopEngineOps {
+    impl EngineSound for NoopEngineOps {
         fn emit_sound(
             &self,
             _entity: i32,
@@ -829,7 +833,7 @@ mod tests {
         ended: std::sync::Mutex<usize>,
     }
 
-    impl goldsrc_api::EnginePrecache for MockMessageEngine {
+    impl EnginePrecache for MockMessageEngine {
         fn precache_model(&self, _path: &str) -> i32 {
             0
         }
@@ -841,7 +845,7 @@ mod tests {
         }
     }
 
-    impl goldsrc_api::EngineMessages for MockMessageEngine {
+    impl EngineMessages for MockMessageEngine {
         fn reg_user_msg(&self, _name: &str, _size: i32) -> i32 {
             75
         }
@@ -874,13 +878,13 @@ mod tests {
         fn write_entity(&self, _val: i32) {}
     }
 
-    impl goldsrc_api::EngineConsole for MockMessageEngine {
+    impl EngineConsole for MockMessageEngine {
         fn server_print(&self, _message: &str) {}
         fn client_print(&self, _client_index: i32, _print_type: i32, _message: &str) {}
         fn server_command(&self, _command: &str) {}
     }
 
-    impl goldsrc_api::EngineEntities for MockMessageEngine {
+    impl EngineEntities for MockMessageEngine {
         fn entity_is_valid(&self, index: i32) -> bool {
             (1..=32).contains(&index)
         }
@@ -923,7 +927,7 @@ mod tests {
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
 
-    impl goldsrc_api::EngineCvars for MockMessageEngine {
+    impl EngineCvars for MockMessageEngine {
         fn cvar_get_float(&self, _name: &str) -> f32 {
             0.0
         }
@@ -934,7 +938,7 @@ mod tests {
         fn cvar_set_string(&self, _name: &str, _val: &str) {}
     }
 
-    impl goldsrc_api::EnginePhysics for MockMessageEngine {
+    impl EnginePhysics for MockMessageEngine {
         fn point_contents(&self, _point: [f32; 3]) -> i32 {
             0
         }
@@ -944,8 +948,8 @@ mod tests {
             _end: [f32; 3],
             _flags: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
         fn trace_hull(
             &self,
@@ -954,12 +958,12 @@ mod tests {
             _flags: i32,
             _hull_number: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
     }
 
-    impl goldsrc_api::EngineSound for MockMessageEngine {
+    impl EngineSound for MockMessageEngine {
         fn emit_sound(
             &self,
             _entity: i32,
