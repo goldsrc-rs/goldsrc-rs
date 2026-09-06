@@ -101,7 +101,7 @@ pub fn init_wasm_host() {
         },
         engine,
     ) {
-        log::error!(target: "core", "{e}");
+        log::error!(target: goldsrc_api::consts::log_targets::CORE, "{e}");
     }
 }
 

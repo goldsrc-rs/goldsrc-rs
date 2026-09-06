@@ -3,7 +3,7 @@
 //! Provides granular plugin debugging, profile groups, and reactive rules.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// Log level for plugin debugging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -194,7 +194,7 @@ pub struct PluginEntryItem {
 #[serde(untagged)]
 pub enum PluginsSection {
     Array(Vec<PluginEntry>),
-    Map(HashMap<String, PluginEntryItem>),
+    Map(BTreeMap<String, PluginEntryItem>),
 }
 
 /// Flexible representation of `rules` section supporting both array and named table (map).
@@ -202,7 +202,7 @@ pub enum PluginsSection {
 #[serde(untagged)]
 pub enum RulesSection {
     Array(Vec<RuleConfig>),
-    Map(HashMap<String, RuleItemConfig>),
+    Map(BTreeMap<String, RuleItemConfig>),
 }
 
 /// A reactive lifecycle rule without explicit `name` field (key is name).
@@ -225,7 +225,7 @@ struct RawPluginsConfig {
     #[serde(default)]
     plugins: Option<PluginsSection>,
     #[serde(default)]
-    groups: HashMap<String, PluginGroup>,
+    groups: BTreeMap<String, PluginGroup>,
     #[serde(default)]
     rules: Option<RulesSection>,
 }
@@ -238,7 +238,7 @@ pub struct PluginsConfig {
     pub plugins: Vec<PluginEntry>,
     /// Named profile groups (`[groups.<name>]`).
     #[serde(default)]
-    pub groups: HashMap<String, PluginGroup>,
+    pub groups: BTreeMap<String, PluginGroup>,
     /// Reactive lifecycle rules (`[[rules]]` or `[rules.<name>]`).
     #[serde(default)]
     pub rules: Vec<RuleConfig>,
@@ -347,7 +347,7 @@ impl PluginsConfig {
                     Ok(cfg) => return cfg,
                     Err(e) => {
                         log::error!(
-                            target: "wasm",
+                            target: goldsrc_api::consts::log_targets::WASM,
                             "CRITICAL: Failed to parse '{:?}': {e}. Preserving file and using default in-memory config.",
                             config_path
                         );
@@ -359,7 +359,7 @@ impl PluginsConfig {
                 }
             } else {
                 log::warn!(
-                    target: "wasm",
+                    target: goldsrc_api::consts::log_targets::WASM,
                     "Failed to read '{:?}', using default discovery.",
                     config_path
                 );

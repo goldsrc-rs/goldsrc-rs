@@ -5,11 +5,99 @@ use crate::error::LoadError;
 use crate::manager::state::HostState;
 use crate::plugin::{LoadedPlugin, PluginMetadata, PluginStatus};
 use goldsrc_api::Engine as GoldsrcEngine;
+use goldsrc_api::consts::log_targets;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use wasmtime::Engine;
 use wasmtime::component::{Component, Linker};
+
+/// Computes a deterministic 128-bit FNV-1a content hash over bytes.
+#[inline]
+fn fnv1a_128(bytes: &[u8]) -> (u64, u64) {
+    let mut h1: u64 = 0xcbf29ce484222325;
+    let mut h2: u64 = 0x84222325cbf29ce4;
+    for &byte in bytes {
+        h1 ^= byte as u64;
+        h1 = h1.wrapping_mul(0x100000001b3);
+        h2 = h2.wrapping_add(byte as u64);
+        h2 = h2.rotate_left(7) ^ h1;
+    }
+    (h1, h2)
+}
+
+/// Computes a deterministic 128-bit FNV-1a content hash over bytes, returning a 32-character hex string.
+#[inline]
+fn compute_content_hash(bytes: &[u8]) -> String {
+    let (h1, h2) = fnv1a_128(bytes);
+    format!("{:016x}{:016x}", h1, h2)
+}
+
+/// Removes obsolete .cwasm and .tmp cache files for the given plugin in the cache directory.
+fn clean_old_cache_files(cache_dir: &Path, plugin_name: &str, current_hash: &str) {
+    let prefix = format!("{plugin_name}.");
+    let current_name = format!("{plugin_name}.{current_hash}.cwasm");
+    if let Ok(entries) = fs::read_dir(cache_dir) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+            if name_str.starts_with(&prefix)
+                && (name_str.ends_with(".cwasm") || name_str.ends_with(".tmp"))
+                && name_str != current_name
+            {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+}
+
+/// Saves an AOT-precompiled component into the cache directory atomically.
+fn save_aot_cache(
+    engine: &Engine,
+    component_bytes: &[u8],
+    cache_dir: &Path,
+    cache_file: &Path,
+    plugin_name: &str,
+    current_hash: &str,
+) {
+    if let Err(e) = fs::create_dir_all(cache_dir) {
+        log::debug!(
+            target: log_targets::WASM,
+            "Could not create cache dir {:?}: {e}",
+            cache_dir
+        );
+        return;
+    }
+    match engine.precompile_component(component_bytes) {
+        Ok(cwasm_bytes) => {
+            let tmp_file = cache_dir.join(format!("{plugin_name}.{current_hash}.tmp"));
+            if fs::write(&tmp_file, &cwasm_bytes).is_ok() {
+                if let Err(e) = fs::rename(&tmp_file, cache_file) {
+                    log::warn!(
+                        target: log_targets::WASM,
+                        "Failed to rename temporary cwasm {:?} to {:?}: {e}",
+                        tmp_file,
+                        cache_file
+                    );
+                    let _ = fs::remove_file(&tmp_file);
+                } else {
+                    log::info!(
+                        target: log_targets::WASM,
+                        "AOT compiled '{plugin_name}' cached ({:.2} KB)",
+                        cwasm_bytes.len() as f64 / 1024.0
+                    );
+                    clean_old_cache_files(cache_dir, plugin_name, current_hash);
+                }
+            }
+        }
+        Err(err) => {
+            log::warn!(
+                target: log_targets::WASM,
+                "Failed to precompile component for '{plugin_name}': {err}"
+            );
+        }
+    }
+}
 
 /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
 pub fn instantiate_plugin<P: AsRef<Path>>(
@@ -18,6 +106,12 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
     path: P,
 ) -> Result<LoadedPlugin, LoadError> {
     let path = path.as_ref();
+    let name = path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
     let metadata = fs::metadata(path).map_err(|source| LoadError::Io {
         path: path.to_path_buf(),
         source,
@@ -28,47 +122,114 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
             metadata.len()
         )));
     }
-    let bytes = fs::read(path).map_err(|source| LoadError::Io {
-        path: path.to_path_buf(),
-        source,
-    })?;
 
-    let is_comp = bytes.len() >= 8 && &bytes[0..8] == b"\0asm\x0d\0\x01\0";
-    let component_bytes = if is_comp {
-        bytes
+    let is_direct_cwasm = path.extension().and_then(|e| e.to_str()) == Some("cwasm");
+
+    let component = if is_direct_cwasm {
+        // SAFETY: Loading verified precompiled cwasm directly from disk.
+        unsafe {
+            Component::deserialize_file(engine, path).map_err(|e| {
+                LoadError::Compile(format!(
+                    "Failed to deserialize precompiled cwasm at {:?}: {e}",
+                    path
+                ))
+            })?
+        }
     } else {
-        let mut resolve = wit_parser::Resolve::default();
-        let pkg = resolve
-            .push_str(
-                "goldsrc.wit",
-                include_str!("../../../../core/goldsrc-api/wit/goldsrc.wit"),
+        let bytes = fs::read(path).map_err(|source| LoadError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+
+        let is_comp = bytes.len() >= 8 && &bytes[0..8] == b"\0asm\x0d\0\x01\0";
+        let component_bytes = if is_comp {
+            bytes
+        } else {
+            let mut resolve = wit_parser::Resolve::default();
+            let pkg = resolve
+                .push_str(
+                    "goldsrc.wit",
+                    include_str!("../../../../core/goldsrc-api/wit/goldsrc.wit"),
+                )
+                .unwrap();
+            let world_id = resolve
+                .select_world(&[pkg], Some("goldsrc-plugin"))
+                .unwrap();
+
+            let mut wasm_bytes = bytes.to_vec();
+            wit_component::embed_component_metadata(
+                &mut wasm_bytes,
+                &resolve,
+                world_id,
+                wit_component::StringEncoding::UTF8,
             )
-            .unwrap();
-        let world_id = resolve
-            .select_world(&[pkg], Some("goldsrc-plugin"))
-            .unwrap();
+            .map_err(|e| LoadError::Embed(e.to_string()))?;
 
-        let mut wasm_bytes = bytes.to_vec();
-        wit_component::embed_component_metadata(
-            &mut wasm_bytes,
-            &resolve,
-            world_id,
-            wit_component::StringEncoding::UTF8,
-        )
-        .map_err(|e| LoadError::Embed(e.to_string()))?;
+            let mut base_encoder = wit_component::ComponentEncoder::default();
+            let encoder = base_encoder.validate(true);
+            let encoder = encoder
+                .module(&wasm_bytes)
+                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?;
+            encoder
+                .encode()
+                .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
+        };
 
-        let mut base_encoder = wit_component::ComponentEncoder::default();
-        let encoder = base_encoder.validate(true);
-        let encoder = encoder
-            .module(&wasm_bytes)
-            .map_err(|e| LoadError::Encode(format!("{e:#?}")))?;
-        encoder
-            .encode()
-            .map_err(|e| LoadError::Encode(format!("{e:#?}")))?
+        if std::env::var_os("GOLDSRC_NO_AOT_CACHE").is_none() {
+            let cache_dir = path
+                .parent()
+                .map(|p| p.join(".cache"))
+                .unwrap_or_else(|| PathBuf::from(".cache"));
+            let hash = compute_content_hash(&component_bytes);
+            let cache_file = cache_dir.join(format!("{name}.{hash}.cwasm"));
+
+            if cache_file.is_file() {
+                // SAFETY: Loading previously cached component compiled by this engine.
+                match unsafe { Component::deserialize_file(engine, &cache_file) } {
+                    Ok(comp) => {
+                        log::debug!(
+                            target: log_targets::WASM,
+                            "Loaded AOT precompiled component for '{name}' from {:?}",
+                            cache_file
+                        );
+                        comp
+                    }
+                    Err(err) => {
+                        log::warn!(
+                            target: log_targets::WASM,
+                            "Cached AOT component for '{name}' invalid ({err}); recompiling..."
+                        );
+                        let comp = Component::new(engine, &component_bytes)
+                            .map_err(|e| LoadError::Compile(e.to_string()))?;
+                        save_aot_cache(
+                            engine,
+                            &component_bytes,
+                            &cache_dir,
+                            &cache_file,
+                            &name,
+                            &hash,
+                        );
+                        comp
+                    }
+                }
+            } else {
+                let comp = Component::new(engine, &component_bytes)
+                    .map_err(|e| LoadError::Compile(e.to_string()))?;
+                save_aot_cache(
+                    engine,
+                    &component_bytes,
+                    &cache_dir,
+                    &cache_file,
+                    &name,
+                    &hash,
+                );
+                comp
+            }
+        } else {
+            Component::new(engine, &component_bytes)
+                .map_err(|e| LoadError::Compile(e.to_string()))?
+        }
     };
-
-    let component =
-        Component::new(engine, &component_bytes).map_err(|e| LoadError::Compile(e.to_string()))?;
 
     let mut linker = Linker::new(engine);
     api::add_to_linker::<HostState, wasmtime::component::HasSelf<HostState>>(
@@ -150,12 +311,6 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
         }
         Err(_) => None,
     };
-
-    let name = path
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
 
     let shared_buckets = metadata
         .as_ref()

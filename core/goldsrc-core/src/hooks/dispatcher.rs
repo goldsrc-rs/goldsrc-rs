@@ -1,6 +1,7 @@
 //! Centralized event and command dispatcher for backends and WASM plugins.
 
 use crate::host::HostRuntime;
+use goldsrc_api::consts::log_targets;
 
 /// Dispatches an event with an optional payload to all loaded WASM plugins.
 /// Returns `true` if the host runtime is active and processed the event.
@@ -11,7 +12,7 @@ pub fn emit_event(name: &str, payload: &[u8]) -> bool {
             true
         }
         None => {
-            log::trace!(target: "core", "emit_event('{name}') skipped: WASM host not initialized");
+            log::trace!(target: log_targets::CORE, "emit_event('{name}') skipped: WASM host not initialized");
             false
         }
     })
@@ -22,7 +23,6 @@ pub fn emit_event(name: &str, payload: &[u8]) -> bool {
 pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
         goldsrc_api::auth::Auth::remove_player(index);
-        goldsrc_api::menu::close_player_menu(index);
         goldsrc_host_wasm::clear_active_menu_owner(index);
         if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
             mgr.on_disconnect(index);
@@ -46,7 +46,12 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
 /// Dispatches client userinfo change event and updates active player menu if open.
 pub fn on_client_user_info_changed(player_idx: i32) {
     emit_player_event("client_user_info_changed", player_idx);
-    goldsrc_api::menu::refresh_player_menu(player_idx);
+    if let Some(engine) = HostRuntime::engine() {
+        let current_time = HostRuntime::current_time();
+        if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+            mgr.refresh_player_menu(player_idx, engine.as_ref(), current_time);
+        }
+    }
 }
 
 /// Dispatches a console / client command to the WASM host.
@@ -55,7 +60,7 @@ pub fn dispatch_command(cmd: &str, args: &str) -> bool {
     HostRuntime::with_manager(|m| match m {
         Some(manager) => manager.dispatch_command(cmd, 0, args),
         None => {
-            log::trace!(target: "core", "dispatch_command('{cmd}') skipped: WASM host not initialized");
+            log::trace!(target: log_targets::CORE, "dispatch_command('{cmd}') skipped: WASM host not initialized");
             false
         }
     })
@@ -69,7 +74,16 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         let slot = raw_args.trim().parse::<u8>().unwrap_or(0);
         let slot = if slot == 0 { 10 } else { slot };
 
-        // Dispatch raw slot to WASM plugins event "menu_select" (8 bytes payload: [player_idx: i32, slot: u32])
+        if let Some(engine) = HostRuntime::engine() {
+            let current_time = HostRuntime::current_time();
+            if let Ok(mut mgr) = crate::menu::menu_manager().lock()
+                && mgr.handle_menuselect(player_idx, slot, engine.as_ref(), current_time)
+            {
+                return true;
+            }
+        }
+
+        // Fallback: dispatch raw slot to WASM plugins event "menu_select" (8 bytes payload: [player_idx: i32, slot: u32])
         let mut payload = Vec::with_capacity(8);
         payload.extend_from_slice(&player_idx.to_le_bytes());
         payload.extend_from_slice(&(slot as u32).to_le_bytes());
@@ -107,17 +121,30 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
                 // Suppress empty chat messages
                 return true;
             }
-            let mut parts = text.split_whitespace();
-            if let Some(trigger) = parts.next() {
+            let trimmed_text = text.trim();
+            if let Some(first_space_idx) = trimmed_text.find(|c: char| c.is_whitespace()) {
+                let trigger = &trimmed_text[..first_space_idx];
+                let rest_args = trimmed_text[first_space_idx..].trim_start();
                 let clean_trigger = trigger.trim_start_matches(['/', '!']);
-                let rest_args = parts.collect::<Vec<_>>().join(" ");
 
                 // 1. Try exact clean trigger (e.g. "vip" or "vipmenu")
-                if manager.dispatch_command(clean_trigger, player_idx, &rest_args) {
+                if manager.dispatch_command(clean_trigger, player_idx, rest_args) {
                     return true;
                 }
                 // 2. Try raw trigger (e.g. "/vip")
-                if manager.dispatch_command(trigger, player_idx, &rest_args) {
+                if manager.dispatch_command(trigger, player_idx, rest_args) {
+                    return true;
+                }
+            } else {
+                let trigger = trimmed_text;
+                let clean_trigger = trigger.trim_start_matches(['/', '!']);
+
+                // 1. Try exact clean trigger (e.g. "vip" or "vipmenu")
+                if manager.dispatch_command(clean_trigger, player_idx, "") {
+                    return true;
+                }
+                // 2. Try raw trigger (e.g. "/vip")
+                if manager.dispatch_command(trigger, player_idx, "") {
                     return true;
                 }
             }
@@ -144,7 +171,10 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
 
 /// Invoked when a new server map is activated (ServerActivate).
 pub fn on_server_activate() {
-    goldsrc_api::menu::on_round_start(1);
+    let now = HostRuntime::current_time();
+    if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+        mgr.on_round_start(1, now);
+    }
     emit_event("server_activate", &[]);
     if let Some(engine) = HostRuntime::engine() {
         let map_name = engine.cvar_get_string("mapname").unwrap_or_default();
@@ -162,7 +192,6 @@ pub fn on_server_activate() {
 pub fn on_server_deactivate() {
     goldsrc_api::edict::bump_map_generation();
     goldsrc_api::auth::Auth::clear_all_players();
-    goldsrc_api::menu::clear_all_menus();
     goldsrc_host_wasm::clear_all_active_menu_owners();
     if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
         mgr.on_map_change();

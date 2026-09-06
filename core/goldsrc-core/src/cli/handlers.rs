@@ -263,7 +263,7 @@ pub fn handle_watchers_list<F: FnMut(&str)>(
             status_str,
             w.debounce_ms,
             w.target_type,
-            w.path.display(),
+            crate::paths::PathResolver::normalize(&w.path),
             rec_str,
             w.filter_desc
         ));
@@ -287,5 +287,47 @@ pub fn handle_watchers_resume<F: FnMut(&str)>(id: &str, mut out: F) {
         Some(true) => out(&format!("[GoldSrc.rs] Watcher '{id}' is now ACTIVE.\n")),
         Some(false) => out(&format!("[GoldSrc.rs] Error: Watcher '{id}' not found.\n")),
         None => out("[GoldSrc.rs] Error: Watcher service not available.\n"),
+    }
+}
+
+/// Handles `grs plugins reload` and `grs rld` command.
+pub fn handle_reload<F: FnMut(&str)>(
+    spec: &CommandSpec,
+    mut parser: lexopt::Parser,
+    manager: Option<&mut PluginManager>,
+    mut out: F,
+) {
+    let mut targets = Vec::new();
+    let mut all = false;
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Short('a') | Arg::Long("all") => all = true,
+            Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
+            _ => {}
+        }
+    }
+    let Some(manager) = manager else {
+        out(&crate::cli::CliResponse::error("WASM Host not initialized.").format_console());
+        return;
+    };
+    if all || (spec.name == "rld" && targets.is_empty()) {
+        let msg = manager.reload_all_plugins();
+        out(&crate::cli::CliResponse::success(msg).format_console());
+    } else if !targets.is_empty() {
+        for t in targets {
+            match manager.reload_plugin_by_query(&t) {
+                Ok(msg) => out(
+                    &crate::cli::CliResponse::success(format!("{msg} successfully."))
+                        .format_console(),
+                ),
+                Err(err) => out(&crate::cli::CliResponse::error(err.to_string()).format_console()),
+            }
+        }
+    } else {
+        out("[GoldSrc.rs] Usage: grs plugins reload <name|index...> [-a|--all]\n");
     }
 }

@@ -10,17 +10,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Centralized `WatcherService` Subsystem (`core/goldsrc-core`)**:
+- **Rust 2018+ Module Structure Conformity & File Flattening**:
+  - Migrated 10 single-file directory modules (`dir/mod.rs` $\to$ `dir.rs`) across `goldsrc-api` and `goldsrc-core` (`chat`, `dsl`, `gamedata`, `reapi`, `rules`, `storage`, `placeholders`, `watcher`), adhering strictly to the idiomatic Rust 2018+ standard where directory modules are reserved exclusively for folders with $\ge 2$ files.
+- **Consolidated Host-Side Menu Runtime & Purged API Global Sessions (`core/goldsrc-api` & `core/goldsrc-core`)**:
+  - Removed `core/goldsrc-api/src/menu/session.rs`, eliminating 4 global statics (`MENU_STATE`, `ROUND_STATE`, `Instant`, `Mutex`) from the API layer for zero overhead and clean library boundaries.
+  - Retained `goldsrc-api::menu` as pure Value Objects, Builders, and Action Registry (`types.rs`, `builder.rs`, `action_registry.rs`).
+  - Consolidated all player menu sessions, pagination, history navigation, global slot debouncing, and per-item antispam cooldowns in `goldsrc-core/src/menu.rs` (`MenuSessionManager`).
+  - Connected `MenuSessionManager` directly to `dispatch_client_command` (`menuselect`), `on_client_user_info_changed` (hot menu language refresh), and `on_server_frame` (automatic session timeout expiration).
+  - Introduced `set_open_menu_hook` in `Player` for seamless dependency inversion without runtime leaks.
+  - Streamlined `goldsrc-macros` `on_event("menu_select")` handling to directly trigger callbacks by numeric action ID.
+- **Centralized `WatcherService` Subsystem & Cross-Platform Path Normalization (`core/goldsrc-core`)**:
   - Extracted centralized filesystem watcher engine into `goldsrc-core`, decoupling `goldsrc-host-wasm` from the `notify` crate entirely.
   - Implemented `WatchTarget` Value Object distinguishing single `File(PathBuf)` from `Directory { path, recursive, filter }`.
   - Added multi-criteria matching filters via `WatcherFilter`: `Any`, `Extension(&'static str)`, `Stem(&'static str)`, `ExactName(&'static str)`, and `Pattern(String)`.
-  - Added per-target debouncing, pause/resume capability, and telemetry inspection (`WatcherStatus`, `WatcherOverview`).
+  - Guaranteed canonical path normalization with forward slashes (`/`) across all watcher registrations, telemetry specs, and dynamic file system events.
   - Standardized all system watchers under canonical IDs: `core:plugins`, `core:configs`, and `i18n:dicts`.
-- **Strict Hierarchical Host Management CLI Reorganization (`grs`)**:
-  - Reorganized all CLI commands under clean domain namespaces: `grs plugins <subcommand>` and `grs watchers <subcommand>`.
-  - Added `grs watchers list [--json]`, `grs watchers pause <id>`, and `grs watchers resume <id>`.
-  - Grouped plugin lifecycle under `grs plugins <list|info|load|unload|reload|pause|unpause|cmds>`.
-  - Completely purged legacy flat top-level commands (`list`, `info`, `pause`, etc.) for strict structural consistency.
+- **DSL Namespace Categorization, Fast Shortcuts & Deadlock-Free CLI Architecture (`grs`)**:
+  - Categorized all CLI commands under standardized DSL namespaces: `plugin:lifecycle`, `watcher:fs`, `exec:dispatch`, `sys:runtime`, `sys:help`.
+  - Added specialized namespace introspection in `grs help <namespace>` (e.g. `grs help plugin`, `grs help watcher`).
+  - Completely eliminated re-entrant `Mutex<HostRuntime>` deadlocks by replacing outer blanket manager locking with scoped, on-demand manager acquisition.
+  - Added top-level ergonomic shortcuts and aliases: `grs ps` / `grs list` (list plugins), `grs rld` / `grs reload` (reload plugins), `grs w` (watchers), `grs st` / `grs s` (status), `grs pl ps` (subcommand alias).
+  - Implemented zero-alloc stack-based Levenshtein distance typo suggestions ("Did you mean...?") for commands and subcommands.
+- **Strict Subsystem Log Target Constants & Comprehensive Typification (`core/goldsrc-api` & `core/goldsrc-core`)**:
+  - Introduced `goldsrc_api::consts::log_targets` module with standardized constants (`CORE`, `AUTH`, `STORAGE`, `RULES`, `MENU`, `I18N`, `ECS`, `WASM`, `PROXY`, `ENGINE`, `REAPI`, `WATCHER`, `EVENTS`, `PLUGIN`).
+  - Refactored entire codebase replacing all raw string literal log targets with typed constants.
+  - Expanded `LogTarget` enum to fully support all subsystem variants in `goldsrc.toml` logging filters.
+- **Robust Entity Health Sanitization Guards (`core/goldsrc-api`)**:
+  - Added `is_finite()` validation guards preventing `NaN` and `Infinity` float corruption across entity and player health setters, preserving negative GoldSrc overkill values.
 - **Universal `PhasedDag` Topological Ordering Engine (`core/goldsrc-api`)**:
   - Implemented `PhasedDag<P, Id, T>` with Kahn's topological sort algorithm, macro-phase stratification (`Phase` trait), and deterministic tie-breaking (`Phase` $\to$ `Declaration Order` $\to$ `Alphabetical ID`).
   - Added cycle detection (`DagError::CycleDetected`), missing dependency validation (`DagError::MissingDependency`), and cross-phase violation reporting (`DagError::PhaseConflict`).

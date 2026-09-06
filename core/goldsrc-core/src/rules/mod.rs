@@ -3,6 +3,7 @@ pub use orchestrator::RuleOrchestrator;
 
 use crate::plugins_config::PluginsConfig;
 use goldsrc_api::Engine;
+use goldsrc_api::consts::log_targets;
 use goldsrc_api::rules::{RuleAction, RuleCondition, RuleScope};
 use std::collections::HashMap;
 
@@ -98,7 +99,7 @@ impl<'a> RuleCondition<ServerRuleContext<'a>> for PlayersCondition {
                 } else if let Some((start, end)) = expr.split_once("..") {
                     let Ok(s) = start.trim().parse::<usize>() else {
                         log::warn!(
-                            target: "rules",
+                            target: log_targets::RULES,
                             "Invalid start range in players condition: '{}'",
                             start
                         );
@@ -106,7 +107,7 @@ impl<'a> RuleCondition<ServerRuleContext<'a>> for PlayersCondition {
                     };
                     let Ok(e) = end.trim().parse::<usize>() else {
                         log::warn!(
-                            target: "rules",
+                            target: log_targets::RULES,
                             "Invalid end range in players condition: '{}'",
                             end
                         );
@@ -154,13 +155,13 @@ impl<'a> RuleCondition<ServerRuleContext<'a>> for CvarCondition {
         } else if let Some((c, v)) = expr.split_once('<') {
             (c.trim(), "<", v.trim())
         } else {
-            log::warn!(target: "rules", "Invalid cvar expression operator: '{}'", expr);
+            log::warn!(target: log_targets::RULES, "Invalid cvar expression operator: '{}'", expr);
             return false;
         };
 
         let Ok(expected_val) = expected_str.parse::<f32>() else {
             log::warn!(
-                target: "rules",
+                target: log_targets::RULES,
                 "Invalid numeric value in cvar condition: '{}'",
                 expected_str
             );
@@ -233,7 +234,7 @@ impl<'a> RuleAction<ServerRuleContext<'a>> for PauseAction {
         for p in plugins_to_pause {
             if ctx.manual_overrides.contains_key(&p) {
                 log::debug!(
-                    target: "rules",
+                    target: log_targets::RULES,
                     "Skipping reactive pause on plugin '{}': protected by administrator manual override",
                     p
                 );
@@ -271,7 +272,7 @@ impl<'a> RuleAction<ServerRuleContext<'a>> for UnpauseAction {
         for p in plugins_to_unpause {
             if ctx.manual_overrides.contains_key(&p) {
                 log::debug!(
-                    target: "rules",
+                    target: log_targets::RULES,
                     "Skipping reactive unpause on plugin '{}': protected by administrator manual override",
                     p
                 );

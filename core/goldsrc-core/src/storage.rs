@@ -6,6 +6,7 @@
 //! - Reads check the in-memory cache first, falling back to SQLite WAL queries.
 //! - Synchronous transactional flush on `client_disconnect` and `ServerDeactivate`.
 
+use goldsrc_api::consts::log_targets;
 use goldsrc_api::storage::{StorageError, StorageProvider};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -40,12 +41,12 @@ enum StorageOp {
     Flush(Sender<()>),
 }
 
-type StorageMemoryCache = HashMap<(String, String), Option<Vec<u8>>>;
+type StorageMemoryCache = HashMap<String, HashMap<String, Option<Vec<u8>>>>;
 
 /// High-performance Key-Value & Relational Storage Engine backed by SQLite WAL.
 pub struct SqliteStorageEngine {
     db_path: PathBuf,
-    /// Fast in-memory cache for dirty/hot keys: (bucket, key) -> value
+    /// Fast in-memory cache for dirty/hot keys: bucket -> (key -> value)
     memory_cache: RwLock<StorageMemoryCache>,
     /// Direct read connection protected by a mutex for queries on cache misses
     read_conn: Mutex<Connection>,
@@ -126,7 +127,7 @@ impl SqliteStorageEngine {
         let mut conn = match Connection::open(&db_path) {
             Ok(c) => c,
             Err(e) => {
-                log::error!(target: "storage", "Storage worker failed to open SQLite: {e}");
+                log::error!(target: log_targets::STORAGE, "Storage worker failed to open SQLite: {e}");
                 return;
             }
         };
@@ -217,7 +218,7 @@ impl SqliteStorageEngine {
                     ) {
                         Ok(s) => s,
                         Err(e) => {
-                            log::error!(target: "storage", "Failed to prepare insert stmt: {e}");
+                            log::error!(target: log_targets::STORAGE, "Failed to prepare insert stmt: {e}");
                             batch.clear();
                             return;
                         }
@@ -228,7 +229,7 @@ impl SqliteStorageEngine {
                     {
                         Ok(s) => s,
                         Err(e) => {
-                            log::error!(target: "storage", "Failed to prepare delete stmt: {e}");
+                            log::error!(target: log_targets::STORAGE, "Failed to prepare delete stmt: {e}");
                             batch.clear();
                             return;
                         }
@@ -247,11 +248,11 @@ impl SqliteStorageEngine {
                     }
                 }
                 if let Err(e) = tx.commit() {
-                    log::error!(target: "storage", "Failed to commit storage batch transaction: {e}");
+                    log::error!(target: log_targets::STORAGE, "Failed to commit storage batch transaction: {e}");
                 }
             }
             Err(e) => {
-                log::error!(target: "storage", "Failed to begin storage transaction: {e}");
+                log::error!(target: log_targets::STORAGE, "Failed to begin storage transaction: {e}");
                 batch.clear();
             }
         }
@@ -283,10 +284,12 @@ impl SqliteStorageEngine {
 
 impl StorageProvider for SqliteStorageEngine {
     fn get(&self, bucket: &str, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
-        // 1. Check in-memory cache first
+        // 1. Check in-memory cache first (Zero-alloc: borrows &str keys directly)
         {
             let cache = self.memory_cache.read().unwrap();
-            if let Some(entry) = cache.get(&(bucket.to_string(), key.to_string())) {
+            if let Some(bucket_map) = cache.get(bucket)
+                && let Some(entry) = bucket_map.get(key)
+            {
                 return Ok(entry.clone());
             }
         }
@@ -312,7 +315,9 @@ impl StorageProvider for SqliteStorageEngine {
             self.memory_cache
                 .write()
                 .unwrap()
-                .insert((bucket.to_string(), key.to_string()), Some(bytes.clone()));
+                .entry(bucket.to_string())
+                .or_default()
+                .insert(key.to_string(), Some(bytes.clone()));
             Ok(Some(bytes))
         } else {
             Ok(None)
@@ -325,7 +330,9 @@ impl StorageProvider for SqliteStorageEngine {
         self.memory_cache
             .write()
             .unwrap()
-            .insert((bucket.to_string(), key.to_string()), Some(val_vec.clone()));
+            .entry(bucket.to_string())
+            .or_default()
+            .insert(key.to_string(), Some(val_vec.clone()));
 
         // 2. Dispatch non-blocking write to background worker
         self.tx
@@ -344,7 +351,9 @@ impl StorageProvider for SqliteStorageEngine {
         self.memory_cache
             .write()
             .unwrap()
-            .insert((bucket.to_string(), key.to_string()), None);
+            .entry(bucket.to_string())
+            .or_default()
+            .insert(key.to_string(), None);
 
         // 2. Dispatch delete
         self.tx
@@ -360,7 +369,7 @@ impl StorageProvider for SqliteStorageEngine {
     fn fetch_add(&self, bucket: &str, key: &str, delta: i64) -> Result<i64, StorageError> {
         // Synchronous atomic fetch_add under memory cache lock
         let mut cache = self.memory_cache.write().unwrap();
-        let current_val = match cache.get(&(bucket.to_string(), key.to_string())) {
+        let current_val = match cache.get(bucket).and_then(|m| m.get(key)) {
             Some(Some(bytes)) => i64::from_le_bytes(bytes.as_slice().try_into().unwrap_or([0; 8])),
             Some(None) => 0,
             None => {
@@ -389,10 +398,10 @@ impl StorageProvider for SqliteStorageEngine {
         let new_val = current_val + delta;
         let new_bytes = new_val.to_le_bytes().to_vec();
 
-        cache.insert(
-            (bucket.to_string(), key.to_string()),
-            Some(new_bytes.clone()),
-        );
+        cache
+            .entry(bucket.to_string())
+            .or_default()
+            .insert(key.to_string(), Some(new_bytes.clone()));
 
         self.tx
             .send(StorageOp::Set {

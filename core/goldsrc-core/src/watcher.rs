@@ -90,9 +90,12 @@ impl WatchTarget {
 
     /// Evaluates if the event path matches this target's criteria.
     pub fn matches_event(&self, event_path: &Path) -> bool {
+        let norm_event = crate::paths::PathResolver::normalize_path(event_path);
         match self {
             Self::File(expected_file) => {
-                event_path == expected_file
+                let norm_expected = crate::paths::PathResolver::normalize_path(expected_file);
+                norm_event == norm_expected
+                    || event_path == expected_file
                     || event_path
                         .canonicalize()
                         .ok()
@@ -104,7 +107,8 @@ impl WatchTarget {
                 filter,
                 ..
             } => {
-                if !event_path.starts_with(base_dir) {
+                let norm_base = crate::paths::PathResolver::normalize_path(base_dir);
+                if !norm_event.starts_with(&norm_base) && !event_path.starts_with(base_dir) {
                     if let (Ok(can_event), Ok(can_base)) =
                         (event_path.canonicalize(), base_dir.canonicalize())
                     {
@@ -115,7 +119,7 @@ impl WatchTarget {
                         return false;
                     }
                 }
-                filter.matches(event_path)
+                filter.matches(&norm_event)
             }
         }
     }
@@ -140,10 +144,11 @@ impl WatcherSpec {
         filter: WatcherFilter,
         recursive: bool,
     ) -> Self {
+        let p = path.into();
         Self {
             id: id.into(),
             target: WatchTarget::Directory {
-                path: path.into(),
+                path: crate::paths::PathResolver::normalize_path(&p),
                 recursive,
                 filter,
             },
@@ -153,9 +158,10 @@ impl WatcherSpec {
 
     /// Creates a file watcher specification with standard 500ms debounce.
     pub fn file<P: Into<PathBuf>>(id: impl Into<String>, path: P) -> Self {
+        let p = path.into();
         Self {
             id: id.into(),
-            target: WatchTarget::File(path.into()),
+            target: WatchTarget::File(crate::paths::PathResolver::normalize_path(&p)),
             debounce: DEFAULT_RELOAD_DEBOUNCE,
         }
     }
@@ -246,9 +252,19 @@ impl WatcherService {
     }
 
     /// Registers and activates a new watcher according to [`WatcherSpec`].
-    pub fn register(&mut self, spec: WatcherSpec) -> Result<(), WatcherError> {
+    pub fn register(&mut self, mut spec: WatcherSpec) -> Result<(), WatcherError> {
         if self.watchers.contains_key(&spec.id) {
             return Err(WatcherError::AlreadyExists(spec.id));
+        }
+
+        // Canonicalize target path to ensure forward-slash consistency across all platforms
+        match &mut spec.target {
+            WatchTarget::File(p) => {
+                *p = crate::paths::PathResolver::normalize_path(p);
+            }
+            WatchTarget::Directory { path, .. } => {
+                *path = crate::paths::PathResolver::normalize_path(path);
+            }
         }
 
         let watch_path = match &spec.target {
@@ -271,10 +287,11 @@ impl WatcherService {
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
             if let Ok(event) = res {
                 for p in event.paths {
-                    if target_clone.matches_event(&p) {
+                    let norm_p = crate::paths::PathResolver::normalize_path(&p);
+                    if target_clone.matches_event(&norm_p) {
                         let _ = tx.send(WatcherEvent {
                             watcher_id: id_clone.clone(),
-                            path: p,
+                            path: norm_p,
                         });
                     }
                 }
@@ -395,7 +412,7 @@ impl WatcherService {
                 WatcherStatus {
                     id: w.spec.id.clone(),
                     target_type,
-                    path: w.spec.target.root_path().to_path_buf(),
+                    path: crate::paths::PathResolver::normalize_path(w.spec.target.root_path()),
                     filter_desc,
                     recursive,
                     is_paused: w.is_paused,
@@ -452,5 +469,61 @@ mod tests {
         assert!(dir_target.matches_event(Path::new("plugins/vip.wasm")));
         assert!(dir_target.matches_event(Path::new("plugins/nested/sub.wasm")));
         assert!(!dir_target.matches_event(Path::new("plugins/vip.toml")));
+    }
+
+    #[test]
+    fn test_watch_target_cross_platform_path_separators() {
+        // Targets with Windows backslashes should match forward slash events and vice versa
+        let file_target = WatchTarget::File(PathBuf::from(r"cstrike\configs\plugins.toml"));
+        assert!(file_target.matches_event(Path::new("cstrike/configs/plugins.toml")));
+        assert!(file_target.matches_event(Path::new(r"cstrike\configs\plugins.toml")));
+
+        let dir_target = WatchTarget::Directory {
+            path: PathBuf::from(r"cstrike\plugins"),
+            recursive: true,
+            filter: WatcherFilter::Extension("wasm"),
+        };
+        assert!(dir_target.matches_event(Path::new("cstrike/plugins/vip.wasm")));
+        assert!(dir_target.matches_event(Path::new(r"cstrike\plugins\vip.wasm")));
+        assert!(dir_target.matches_event(Path::new(r"cstrike\plugins\sub\admin.wasm")));
+        assert!(dir_target.matches_event(Path::new("cstrike/plugins/sub/admin.wasm")));
+    }
+
+    #[test]
+    fn test_watcher_spec_and_status_normalize_paths() {
+        let dir_spec = WatcherSpec::directory(
+            "test:plugins",
+            r"cstrike\addons\..\plugins",
+            WatcherFilter::Extension("wasm"),
+            true,
+        );
+        assert_eq!(
+            dir_spec.target.root_path().to_str().unwrap(),
+            "cstrike/plugins"
+        );
+
+        let file_spec =
+            WatcherSpec::file("test:config", r"cstrike\configs\..\configs\plugins.toml");
+        assert_eq!(
+            file_spec.target.root_path().to_str().unwrap(),
+            "cstrike/configs/plugins.toml"
+        );
+
+        let mut service = WatcherService::new();
+        service
+            .register(WatcherSpec {
+                id: "manual:raw".into(),
+                target: WatchTarget::Directory {
+                    path: PathBuf::from(r"server\cstrike\plugins"),
+                    recursive: false,
+                    filter: WatcherFilter::Any,
+                },
+                debounce: DEFAULT_RELOAD_DEBOUNCE,
+            })
+            .expect("registration should succeed");
+
+        let watchers = service.list_watchers();
+        assert_eq!(watchers.len(), 1);
+        assert_eq!(watchers[0].path.to_str().unwrap(), "server/cstrike/plugins");
     }
 }

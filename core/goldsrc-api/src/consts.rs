@@ -140,3 +140,39 @@ pub mod permissions {
     /// Allows issuing raw console commands to the server engine.
     pub const SERVER_COMMAND: &str = "server:command";
 }
+
+// ----------------------------------------------------------------------------
+// Standard Logging & Tracing Subsystem Targets
+// ----------------------------------------------------------------------------
+
+/// Canonical subsystem logging targets used across the GoldSrc.rs framework.
+pub mod log_targets {
+    /// Framework core (init, lifecycle, configuration).
+    pub const CORE: &str = "core";
+    /// Authentication, capabilities, and permissions.
+    pub const AUTH: &str = "auth";
+    /// Persistence, SQLite, and KV storage engine.
+    pub const STORAGE: &str = "storage";
+    /// Declarative reactive rules engine.
+    pub const RULES: &str = "rules";
+    /// Menu presentation and user sessions.
+    pub const MENU: &str = "menu";
+    /// Internationalization dictionary compiler and placeholder expansion.
+    pub const I18N: &str = "i18n";
+    /// Entity Component System (ECS) world, stages, and systems.
+    pub const ECS: &str = "ecs";
+    /// WASM host runtime and component manager.
+    pub const WASM: &str = "wasm";
+    /// GameDLL proxy layer (standalone backend).
+    pub const PROXY: &str = "proxy";
+    /// Metamod engine interface bridge and precache manager.
+    pub const ENGINE: &str = "engine";
+    /// ReHLDS/ReGameDLL interface bindings.
+    pub const REAPI: &str = "reapi";
+    /// Filesystem watcher service and hot-reload debouncer.
+    pub const WATCHER: &str = "watcher";
+    /// Engine and plugin event bus.
+    pub const EVENTS: &str = "events";
+    /// Individual guest WASM plugins.
+    pub const PLUGIN: &str = "plugin";
+}

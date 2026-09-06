@@ -146,10 +146,20 @@ pub fn host_log(msg: &str) {
     };
 
     match level {
-        log::Level::Error => log::error!(target: "plugin", "{clean_msg}"),
-        log::Level::Warn => log::warn!(target: "plugin", "{clean_msg}"),
-        log::Level::Debug => log::debug!(target: "plugin", "{clean_msg}"),
-        log::Level::Trace => log::trace!(target: "plugin", "{clean_msg}"),
-        log::Level::Info => log::info!(target: "plugin", "{clean_msg}"),
+        log::Level::Error => {
+            log::error!(target: goldsrc_api::consts::log_targets::PLUGIN, "{clean_msg}")
+        }
+        log::Level::Warn => {
+            log::warn!(target: goldsrc_api::consts::log_targets::PLUGIN, "{clean_msg}")
+        }
+        log::Level::Debug => {
+            log::debug!(target: goldsrc_api::consts::log_targets::PLUGIN, "{clean_msg}")
+        }
+        log::Level::Trace => {
+            log::trace!(target: goldsrc_api::consts::log_targets::PLUGIN, "{clean_msg}")
+        }
+        log::Level::Info => {
+            log::info!(target: goldsrc_api::consts::log_targets::PLUGIN, "{clean_msg}")
+        }
     }
 }

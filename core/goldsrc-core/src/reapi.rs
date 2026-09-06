@@ -3,6 +3,7 @@
 //! Provides zero-overhead access to ReAPI extensions, queries `CreateInterface`
 //! dynamically on module load, and verifies major/minor version compatibility.
 
+use goldsrc_api::consts::log_targets;
 use goldsrc_api::reapi::ReApiStatus;
 use goldsrc_sys::reapi::{
     CreateInterfaceFn, IReGameApi, IRehldsApi, REGAMEDLL_API_VERSION_MAJOR,
@@ -58,14 +59,14 @@ impl ReApiBridge {
                 &mut ret_code,
             );
             if iface_ptr.is_null() {
-                log::debug!(target: "core", "ReHLDS interface not found in engine module");
+                log::debug!(target: log_targets::REAPI, "ReHLDS interface not found in engine module");
                 return false;
             }
 
             let rehlds_api = iface_ptr as *const IRehldsApi;
             let vtbl = (*rehlds_api).vtable;
             if vtbl.is_null() {
-                log::warn!(target: "core", "ReHLDS interface found but vtable is null");
+                log::warn!(target: log_targets::REAPI, "ReHLDS interface found but vtable is null");
                 return false;
             }
 
@@ -74,7 +75,7 @@ impl ReApiBridge {
 
             if major != REHLDS_API_VERSION_MAJOR || minor < REHLDS_API_VERSION_MINOR {
                 log::warn!(
-                    target: "core",
+                    target: log_targets::REAPI,
                     "ReHLDS version mismatch: got {major}.{minor}, expected >={REHLDS_API_VERSION_MAJOR}.{REHLDS_API_VERSION_MINOR}"
                 );
                 return false;
@@ -91,7 +92,7 @@ impl ReApiBridge {
             }
 
             log::info!(
-                target: "core",
+                target: log_targets::REAPI,
                 "ReHLDS API successfully initialized (v{major}.{minor})"
             );
             true
@@ -107,14 +108,14 @@ impl ReApiBridge {
                 &mut ret_code,
             );
             if iface_ptr.is_null() {
-                log::debug!(target: "core", "ReGameDLL interface not found in GameDLL module");
+                log::debug!(target: log_targets::REAPI, "ReGameDLL interface not found in GameDLL module");
                 return false;
             }
 
             let regame_api = iface_ptr as *const IReGameApi;
             let vtbl = (*regame_api).vtable;
             if vtbl.is_null() {
-                log::warn!(target: "core", "ReGameDLL interface found but vtable is null");
+                log::warn!(target: log_targets::REAPI, "ReGameDLL interface found but vtable is null");
                 return false;
             }
 
@@ -123,7 +124,7 @@ impl ReApiBridge {
 
             if major != REGAMEDLL_API_VERSION_MAJOR || minor < REGAMEDLL_API_VERSION_MINOR {
                 log::warn!(
-                    target: "core",
+                    target: log_targets::REAPI,
                     "ReGameDLL version mismatch: got {major}.{minor}, expected >={REGAMEDLL_API_VERSION_MAJOR}.{REGAMEDLL_API_VERSION_MINOR}"
                 );
                 return false;
@@ -140,7 +141,7 @@ impl ReApiBridge {
             }
 
             log::info!(
-                target: "core",
+                target: log_targets::REAPI,
                 "ReGameDLL API successfully initialized (v{major}.{minor})"
             );
             true

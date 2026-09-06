@@ -715,16 +715,28 @@ mod tests {
     }
 
     /// Loads the built demo plugin and checks the command registry + consume semantics.
+    /// Loads the built demo plugin and checks the command registry + consume semantics.
     #[test]
     fn command_registry_registers_and_consumes() {
-        let wasm_path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../target/wasm32-unknown-unknown/debug/admin_system.wasm"
-        );
-        if !std::path::Path::new(wasm_path).exists() {
+        let candidates = [
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../target/wasm32-unknown-unknown/release/admin_system.wasm"
+            ),
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../target/wasm32-wasip1/debug/admin_system.wasm"
+            ),
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../target/wasm32-unknown-unknown/debug/admin_system.wasm"
+            ),
+        ];
+        let wasm_path = candidates.iter().find(|p| std::path::Path::new(p).exists());
+        let Some(&wasm_path) = wasm_path else {
             eprintln!("admin_system.wasm not built; skipping command registry test");
             return;
-        }
+        };
 
         let mut manager = PluginManager::new(Arc::new(NoopEngineOps)).unwrap();
         manager.load_plugin(wasm_path).unwrap();
@@ -739,6 +751,74 @@ mod tests {
         );
 
         assert!(!manager.dispatch_command("nonexistent", 0, ""));
+    }
+
+    #[test]
+    fn test_cwasm_aot_caching_and_reloading() {
+        let candidates = [
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../target/wasm32-unknown-unknown/release/admin_system.wasm"
+            ),
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../target/wasm32-wasip1/debug/admin_system.wasm"
+            ),
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../target/wasm32-unknown-unknown/debug/admin_system.wasm"
+            ),
+        ];
+        let src_path = candidates
+            .iter()
+            .map(std::path::Path::new)
+            .find(|p| p.exists());
+
+        let Some(src_path) = src_path else {
+            eprintln!("admin_system.wasm not built; skipping cwasm AOT caching test");
+            return;
+        };
+
+        let temp_dir = std::env::temp_dir().join(format!("grs_cwasm_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let plugin_wasm = temp_dir.join("admin_system.wasm");
+        std::fs::copy(src_path, &plugin_wasm).unwrap();
+
+        let manager = PluginManager::new(Arc::new(NoopEngineOps)).unwrap();
+
+        // 1. Initial compilation: should populate .cache with .cwasm
+        let loaded_1 = manager.instantiate_plugin(&plugin_wasm).unwrap();
+        assert_eq!(loaded_1.name, "admin_system");
+
+        let cache_dir = temp_dir.join(".cache");
+        assert!(
+            cache_dir.is_dir(),
+            ".cache directory should have been created"
+        );
+
+        let cache_files: Vec<_> = std::fs::read_dir(&cache_dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("cwasm"))
+            .collect();
+        assert_eq!(cache_files.len(), 1, "Expected exactly 1 cached cwasm file");
+        let cached_cwasm_path = cache_files[0].path();
+
+        // 2. Second load: should load from cache via deserialize_file
+        let loaded_2 = manager.instantiate_plugin(&plugin_wasm).unwrap();
+        assert_eq!(loaded_2.name, "admin_system");
+
+        // 3. Direct loading of .cwasm file
+        let loaded_3 = manager.instantiate_plugin(&cached_cwasm_path).unwrap();
+        assert_eq!(
+            loaded_3.name,
+            cached_cwasm_path.file_stem().unwrap().to_str().unwrap()
+        );
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[derive(Default)]

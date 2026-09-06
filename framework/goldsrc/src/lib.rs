@@ -16,7 +16,7 @@ macro_rules! log_info {
         {
             #[cfg(target_arch = "wasm32")]
             $crate::logging::init_guest_logger();
-            $crate::log::info!(target: "plugin", $($arg)*)
+            $crate::log::info!(target: $crate::api::consts::log_targets::PLUGIN, $($arg)*)
         }
     };
 }
@@ -27,7 +27,7 @@ macro_rules! log_warn {
         {
             #[cfg(target_arch = "wasm32")]
             $crate::logging::init_guest_logger();
-            $crate::log::warn!(target: "plugin", $($arg)*)
+            $crate::log::warn!(target: $crate::api::consts::log_targets::PLUGIN, $($arg)*)
         }
     };
 }
@@ -38,7 +38,7 @@ macro_rules! log_err {
         {
             #[cfg(target_arch = "wasm32")]
             $crate::logging::init_guest_logger();
-            $crate::log::error!(target: "plugin", $($arg)*)
+            $crate::log::error!(target: $crate::api::consts::log_targets::PLUGIN, $($arg)*)
         }
     };
 }
@@ -49,7 +49,7 @@ macro_rules! log_debug {
         {
             #[cfg(target_arch = "wasm32")]
             $crate::logging::init_guest_logger();
-            $crate::log::debug!(target: "plugin", $($arg)*)
+            $crate::log::debug!(target: $crate::api::consts::log_targets::PLUGIN, $($arg)*)
         }
     };
 }

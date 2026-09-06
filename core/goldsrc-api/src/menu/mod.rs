@@ -2,7 +2,6 @@
 
 pub mod action_registry;
 pub mod builder;
-pub mod session;
 pub mod types;
 
 pub use action_registry::{
@@ -10,10 +9,6 @@ pub use action_registry::{
     register_menu_action_id, register_menu_action_name,
 };
 pub use builder::{MenuBuilder, MenuPageBuilder};
-pub use session::{
-    PlayerMenuSession, clear_all_menus, close_menu, close_menu as close_player_menu,
-    handle_menu_slot, on_round_start, open_menu, refresh_all_menus, refresh_player_menu,
-};
 pub use types::{
     AntiSpamAction, Condition, DenyAction, DenyPolicy, ExitBehavior, Feedback, ItemKind, ItemTitle,
     Menu, MenuContext, MenuItem, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction,

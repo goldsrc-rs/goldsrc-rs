@@ -146,22 +146,17 @@ impl World {
     /// Queries all entities having a component of type `T`.
     pub fn query<T: 'static>(&self) -> impl Iterator<Item = (EntityId, &T)> {
         let type_id = TypeId::of::<T>();
-        let storage = self
+        let slice = self
             .storages
             .get(&type_id)
-            .and_then(|s| s.downcast_ref::<ComponentStorage<T>>());
+            .and_then(|s| s.downcast_ref::<ComponentStorage<T>>())
+            .map(|s| s.dense.as_slice())
+            .unwrap_or(&[]);
 
-        let items: Vec<(EntityId, &T)> = match storage {
-            Some(s) => s
-                .dense
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, opt)| opt.as_ref().map(|comp| (EntityId(idx as u16), comp)))
-                .collect(),
-            None => Vec::new(),
-        };
-
-        items.into_iter()
+        slice
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, opt)| opt.as_ref().map(|comp| (EntityId(idx as u16), comp)))
     }
 }
 
@@ -398,7 +393,7 @@ impl SystemRegistry {
                     Ok(systems) => resolved.extend(systems),
                     Err(err) => {
                         log::error!(
-                            target: "ecs",
+                            target: goldsrc_api::consts::log_targets::ECS,
                             "[SystemRegistry] Dependency resolution error in stage '{stage}': {err}"
                         );
                     }

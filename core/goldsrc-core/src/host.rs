@@ -1,6 +1,6 @@
 use crate::{HostConfig, paths::PathResolver};
 use goldsrc_api::StorageProvider;
-use goldsrc_api::consts::BackendType;
+use goldsrc_api::consts::{BackendType, log_targets};
 use goldsrc_host_wasm::PluginManager;
 use goldsrc_host_wasm::error::HostError;
 
@@ -101,6 +101,14 @@ impl HostRuntime {
                 );
             }
         });
+        goldsrc_api::client::player::set_open_menu_hook(|player_idx, menu| {
+            if let Some(engine) = HostRuntime::engine() {
+                let current_time = HostRuntime::current_time();
+                if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                    mgr.open_menu(player_idx, menu.clone(), engine.as_ref(), current_time);
+                }
+            }
+        });
 
         let mut manager = PluginManager::new(engine.clone())
             .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
@@ -119,7 +127,7 @@ impl HostRuntime {
 
         // Initial startup banner stating active backend and version
         log::info!(
-            target: "core",
+            target: log_targets::CORE,
             "GoldSrc.rs v{} initialized (Backend: {})",
             env!("CARGO_PKG_VERSION"),
             backend_name
@@ -127,7 +135,7 @@ impl HostRuntime {
 
         let main_cfg_path = PathResolver::main_config_path(backend);
         log::info!(
-            target: "core",
+            target: log_targets::CORE,
             "Config loaded from: \"{}\"",
             PathResolver::normalize(&main_cfg_path)
         );
@@ -137,7 +145,7 @@ impl HostRuntime {
         let storage = match crate::storage::SqliteStorageEngine::open(&db_path) {
             Ok(s) => {
                 log::info!(
-                    target: "storage",
+                    target: log_targets::STORAGE,
                     "SQLite WAL Storage Engine initialized at \"{}\"",
                     PathResolver::normalize(&db_path)
                 );
@@ -145,7 +153,7 @@ impl HostRuntime {
             }
             Err(e) => {
                 log::error!(
-                    target: "storage",
+                    target: log_targets::STORAGE,
                     "Failed to initialize SQLite Storage Engine at \"{}\": {e}",
                     PathResolver::normalize(&db_path)
                 );
@@ -170,7 +178,7 @@ impl HostRuntime {
         }
         let lang_count = crate::i18n::I18nService::load_dir(&lang_dir);
         log::info!(
-            target: "i18n",
+            target: log_targets::I18N,
             "Loaded {lang_count} localization entries from \"{}\"",
             PathResolver::normalize(&lang_dir)
         );
@@ -179,44 +187,61 @@ impl HostRuntime {
         let mut watcher_service = crate::watcher::WatcherService::new();
 
         let existing_plugin_dir = crate::paths::PathResolver::existing_plugin_dir(backend);
-        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec {
-            id: "core:plugins".into(),
-            target: crate::watcher::WatchTarget::Directory {
-                path: existing_plugin_dir.clone(),
-                recursive: true,
-                filter: crate::watcher::WatcherFilter::Extension("wasm"),
-            },
-            debounce: std::time::Duration::from_millis(500),
-        }) {
-            log::warn!(target: "core", "Failed to register plugin watcher on {:?}: {e}", existing_plugin_dir);
+        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec::directory(
+            "core:plugins",
+            &existing_plugin_dir,
+            crate::watcher::WatcherFilter::Extension("wasm"),
+            true,
+        )) {
+            log::warn!(
+                target: log_targets::CORE,
+                "Failed to register plugin watcher on \"{}\": {e}",
+                PathResolver::normalize(&existing_plugin_dir)
+            );
         } else {
-            log::info!(target: "core", "Watcher registered: 'core:plugins' on {:?}", existing_plugin_dir);
+            log::info!(
+                target: log_targets::CORE,
+                "Watcher registered: 'core:plugins' on \"{}\"",
+                PathResolver::normalize(&existing_plugin_dir)
+            );
         }
 
         let config_dir = crate::paths::PathResolver::existing_config_dir(backend);
         let plugins_config_path = config_dir.join("plugins.toml");
-        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec {
-            id: "core:configs".into(),
-            target: crate::watcher::WatchTarget::File(plugins_config_path.clone()),
-            debounce: std::time::Duration::from_millis(500),
-        }) {
-            log::warn!(target: "core", "Failed to register config watcher on {:?}: {e}", plugins_config_path);
+        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec::file(
+            "core:configs",
+            &plugins_config_path,
+        )) {
+            log::warn!(
+                target: log_targets::CORE,
+                "Failed to register config watcher on \"{}\": {e}",
+                PathResolver::normalize(&plugins_config_path)
+            );
         } else {
-            log::info!(target: "core", "Watcher registered: 'core:configs' on {:?}", plugins_config_path);
+            log::info!(
+                target: log_targets::CORE,
+                "Watcher registered: 'core:configs' on \"{}\"",
+                PathResolver::normalize(&plugins_config_path)
+            );
         }
 
-        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec {
-            id: "i18n:dicts".into(),
-            target: crate::watcher::WatchTarget::Directory {
-                path: lang_dir.clone(),
-                recursive: true,
-                filter: crate::watcher::WatcherFilter::Extension("toml"),
-            },
-            debounce: std::time::Duration::from_millis(500),
-        }) {
-            log::warn!(target: "core", "Failed to register i18n watcher on {:?}: {e}", lang_dir);
+        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec::directory(
+            "i18n:dicts",
+            &lang_dir,
+            crate::watcher::WatcherFilter::Extension("toml"),
+            true,
+        )) {
+            log::warn!(
+                target: log_targets::CORE,
+                "Failed to register i18n watcher on \"{}\": {e}",
+                PathResolver::normalize(&lang_dir)
+            );
         } else {
-            log::info!(target: "core", "Watcher registered: 'i18n:dicts' on {:?}", lang_dir);
+            log::info!(
+                target: log_targets::CORE,
+                "Watcher registered: 'i18n:dicts' on \"{}\"",
+                PathResolver::normalize(&lang_dir)
+            );
         }
 
         // Load or create plugins.toml configuration template
@@ -224,7 +249,7 @@ impl HostRuntime {
         let plugins_config =
             crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
         log::info!(
-            target: "wasm",
+            target: log_targets::WASM,
             "Plugins orchestration config loaded from: \"{}\"",
             crate::paths::PathResolver::normalize(&plugins_config_path)
         );
@@ -292,7 +317,7 @@ impl HostRuntime {
             Ok(resolved) => resolved.into_iter().map(|n| (n.id, n.data)).collect(),
             Err(e) => {
                 log::error!(
-                    target: "wasm",
+                    target: log_targets::WASM,
                     "Plugin topological resolution encountered conflict: {e}. Falling back to default discovery order."
                 );
                 discovered_plugins
@@ -305,7 +330,7 @@ impl HostRuntime {
             match manager.load_plugin(&path) {
                 Ok(plugin_name) => {
                     log::info!(
-                        target: "wasm",
+                        target: log_targets::WASM,
                         "Loaded plugin '{}' from \"{}\"",
                         rel_name,
                         PathResolver::normalize(&path)
@@ -316,7 +341,7 @@ impl HostRuntime {
                 }
                 Err(e) => {
                     log::error!(
-                        target: "wasm",
+                        target: log_targets::WASM,
                         "Failed to load plugin '{}' (\"{}\"): {e}",
                         rel_name,
                         PathResolver::normalize(&path)
@@ -352,6 +377,15 @@ impl HostRuntime {
     /// Returns a clone of the Engine reference if initialized.
     pub fn engine() -> Option<std::sync::Arc<dyn goldsrc_api::Engine>> {
         ENGINE_INSTANCE.get().cloned()
+    }
+
+    /// Returns monotonic server host uptime in seconds (f32).
+    pub fn current_time() -> f32 {
+        static START_TIME: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        START_TIME
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_secs_f32()
     }
 
     /// Returns the currently active map name.
@@ -426,7 +460,7 @@ impl HostRuntime {
 
         if IN_MANAGER.get() {
             log::warn!(
-                target: "core",
+                target: log_targets::CORE,
                 "Re-entrant call to HostRuntime::with_manager detected and suppressed to prevent deadlock"
             );
             return f(None);
@@ -538,7 +572,7 @@ impl HostRuntime {
 
         if matching_rules_count == 0 {
             log::debug!(
-                target: "rules",
+                target: log_targets::RULES,
                 "Skipping rule evaluation for scope '{}': no matching rules configured (map: '{}', players: {})",
                 scope,
                 effective_map,
@@ -548,7 +582,7 @@ impl HostRuntime {
         }
 
         log::info!(
-            target: "rules",
+            target: log_targets::RULES,
             "Evaluating {} rules for scope '{}' (map: '{}', players: {})",
             matching_rules_count,
             scope,
@@ -571,9 +605,11 @@ impl HostRuntime {
             let results = temp_engine.evaluate_and_execute_scope(&mut ctx, &scope);
             for (rule_name, res) in results {
                 match res {
-                    Ok(_) => log::info!(target: "rules", "Executed reactive rule '{}'", rule_name),
+                    Ok(_) => {
+                        log::info!(target: log_targets::RULES, "Executed reactive rule '{}'", rule_name)
+                    }
                     Err(errors) => log::warn!(
-                        target: "rules",
+                        target: log_targets::RULES,
                         "Failed to execute rule '{}': {:?}",
                         rule_name,
                         errors
@@ -613,7 +649,7 @@ impl HostRuntime {
             match event.watcher_id.as_str() {
                 "core:plugins" => {
                     log::info!(
-                        target: "wasm",
+                        target: log_targets::WASM,
                         "Detected change in plugin file \"{}\", reloading...",
                         crate::paths::PathResolver::normalize(&event.path)
                     );
@@ -631,7 +667,7 @@ impl HostRuntime {
                         .unwrap_or_default();
                     if file_name.eq_ignore_ascii_case("plugins.toml") {
                         log::info!(
-                            target: "wasm",
+                            target: log_targets::WASM,
                             "Hot-reloaded plugins orchestration config from \"{}\"",
                             crate::paths::PathResolver::normalize(path)
                         );
@@ -650,7 +686,7 @@ impl HostRuntime {
                         && let Ok(count) = crate::i18n::I18nService::load_file(stem, path)
                     {
                         log::info!(
-                            target: "i18n",
+                            target: log_targets::I18N,
                             "Hot-reloaded {count} keys from \"{}\"",
                             crate::paths::PathResolver::normalize(path)
                         );
@@ -660,15 +696,20 @@ impl HostRuntime {
                                 manager.call_on_event("config_changed", &data);
                             }
                         });
-                        goldsrc_api::menu::refresh_all_menus();
+                        if let Some(engine) = Self::engine() {
+                            let now = Self::current_time();
+                            if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                                mgr.refresh_all_menus(engine.as_ref(), now);
+                            }
+                        }
                     }
                 }
                 _ => {
                     log::debug!(
-                        target: "watcher",
-                        "Unhandled watcher event '{}' for path {:?}",
+                        target: log_targets::WATCHER,
+                        "Unhandled watcher event '{}' for path \"{}\"",
                         event.watcher_id,
-                        event.path
+                        crate::paths::PathResolver::normalize(&event.path)
                     );
                 }
             }
@@ -679,6 +720,13 @@ impl HostRuntime {
                 manager.call_on_frame();
             }
         });
+
+        let now = Self::current_time();
+        if let Some(engine) = Self::engine()
+            && let Ok(mut mgr) = crate::menu::menu_manager().lock()
+        {
+            mgr.tick_frame(now, engine.as_ref());
+        }
 
         // Throttle disk flushing to at most once every second to prevent per-frame I/O stalls
         static LAST_LOG_FLUSH: std::sync::OnceLock<std::sync::Mutex<std::time::Instant>> =

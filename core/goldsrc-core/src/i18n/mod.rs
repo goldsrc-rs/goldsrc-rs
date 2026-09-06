@@ -13,6 +13,7 @@ pub use compiler::{Compiler, MacroCall};
 pub use dict::{DictAccess, DictConfig, LangDict, LangTable};
 pub use placeholders::format_placeholders;
 
+use goldsrc_api::consts::log_targets;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{LazyLock, RwLock};
@@ -90,7 +91,7 @@ impl I18nService {
             };
             if !is_public {
                 log::warn!(
-                    target: "i18n",
+                    target: log_targets::I18N,
                     "Dictionary 'common' is system-level and cannot be set to non-public access. Ignored, remains 'Public'"
                 );
             }
@@ -106,7 +107,7 @@ impl I18nService {
         if let Ok(mut lock) = DICT_ACCESS.write() {
             if from_disk_config && lock.contains_key(&clean_dict) {
                 log::info!(
-                    target: "i18n",
+                    target: log_targets::I18N,
                     "Dictionary '{clean_dict}' access policy updated by disk config: {:?}",
                     access
                 );
@@ -145,7 +146,7 @@ impl I18nService {
         for (dict_name, file_path) in &single_files {
             if subdirs.contains_key(dict_name) {
                 log::debug!(
-                    target: "i18n",
+                    target: log_targets::I18N,
                     "Found both file '{dict_name}.toml' and directory '{dict_name}/'. Merging into dictionary '{dict_name}'."
                 );
             }
@@ -213,7 +214,7 @@ impl I18nService {
 
             if !is_allowed {
                 log::warn!(
-                    target: "i18n",
+                    target: log_targets::I18N,
                     "Access denied: plugin '{caller_plugin}' attempted to access private dictionary '{dict_name}'"
                 );
                 // Fallback to 'common' dictionary

@@ -6,6 +6,83 @@ use crate::cli::specs::{find_command_spec, print_command_help, print_host_help};
 use goldsrc_host_wasm::PluginManager;
 use lexopt::Arg;
 
+/// Calculates the Levenshtein edit distance between two ASCII strings using stack arrays without heap allocation.
+pub fn levenshtein_distance(a: &str, b: &str) -> usize {
+    let a_bytes = a.as_bytes();
+    let b_bytes = b.as_bytes();
+    let mut prev = [0usize; 32];
+    let mut curr = [0usize; 32];
+
+    if b_bytes.len() >= 32 || a_bytes.len() >= 32 {
+        return usize::MAX;
+    }
+
+    for (j, item) in prev.iter_mut().enumerate().take(b_bytes.len() + 1) {
+        *item = j;
+    }
+
+    for (i, &ca) in a_bytes.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, &cb) in b_bytes.iter().enumerate() {
+            let cost = if ca.eq_ignore_ascii_case(&cb) { 0 } else { 1 };
+            curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
+        }
+        prev[..=b_bytes.len()].copy_from_slice(&curr[..=b_bytes.len()]);
+    }
+
+    prev[b_bytes.len()]
+}
+
+/// Suggests the closest matching command name from registered specs, if any.
+pub fn suggest_command(query: &str) -> Option<&'static str> {
+    let mut best_match = None;
+    let mut min_dist = usize::MAX;
+
+    for spec in crate::cli::specs::BUILTIN_COMMANDS {
+        let dist = levenshtein_distance(query, spec.name);
+        if dist < min_dist {
+            min_dist = dist;
+            best_match = Some(spec.name);
+        }
+        for &alias in spec.aliases {
+            let dist = levenshtein_distance(query, alias);
+            if dist < min_dist {
+                min_dist = dist;
+                best_match = Some(spec.name);
+            }
+        }
+    }
+
+    if min_dist <= 2 { best_match } else { None }
+}
+
+/// Suggests the closest matching subcommand name from a list of candidates.
+pub fn suggest_subcommand(query: &str, candidates: &[&'static str]) -> Option<&'static str> {
+    let mut best_match = None;
+    let mut min_dist = usize::MAX;
+
+    for &cand in candidates {
+        let dist = levenshtein_distance(query, cand);
+        if dist < min_dist {
+            min_dist = dist;
+            best_match = Some(cand);
+        }
+    }
+
+    if min_dist <= 2 { best_match } else { None }
+}
+
+fn with_manager_or_host<R>(
+    manager: Option<&mut PluginManager>,
+    f: impl FnOnce(Option<&mut PluginManager>) -> R,
+) -> R {
+    if let Some(m) = manager {
+        f(Some(m))
+    } else {
+        crate::host::HostRuntime::with_manager(f)
+    }
+}
+
 pub fn dispatch_host_command<F: FnMut(&str)>(
     raw_args: Vec<std::ffi::OsString>,
     manager: Option<&mut PluginManager>,
@@ -34,9 +111,16 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             let sub_query = sub_name.to_string_lossy();
             if let Some(spec) = find_command_spec(&sub_query) {
                 print_command_help(spec, out);
+            } else if crate::cli::specs::print_category_help(&sub_query, &mut out) {
+                // Namespace/category help printed successfully.
+            } else if let Some(suggestion) = suggest_command(&sub_query) {
+                out(&format!(
+                    "[GoldSrc.rs] Unknown command or namespace '{}'. Did you mean '{}'? Run 'grs help' for command list.\n",
+                    sub_query, suggestion
+                ));
             } else {
                 out(&format!(
-                    "[GoldSrc.rs] Unknown command '{}'. Run 'grs help' for command list.\n",
+                    "[GoldSrc.rs] Unknown command or namespace '{}'. Run 'grs help' for command list.\n",
                     sub_query
                 ));
             }
@@ -47,10 +131,17 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
     }
 
     let Some(spec) = find_command_spec(&command_arg) else {
-        out(&format!(
-            "[GoldSrc.rs] Unknown command '{}'. Run 'grs help' for available commands.\n",
-            command_arg
-        ));
+        if let Some(suggestion) = suggest_command(&command_arg) {
+            out(&format!(
+                "[GoldSrc.rs] Unknown command '{}'. Did you mean '{}'? Run 'grs help' for available commands.\n",
+                command_arg, suggestion
+            ));
+        } else {
+            out(&format!(
+                "[GoldSrc.rs] Unknown command '{}'. Run 'grs help' for available commands.\n",
+                command_arg
+            ));
+        }
         return;
     };
 
@@ -68,8 +159,8 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             };
 
-            match sub_arg.as_str() {
-                "list" | "ls" => handlers::handle_list(spec, parser, manager, out),
+            with_manager_or_host(manager, |manager| match sub_arg.as_str() {
+                "list" | "ls" | "ps" => handlers::handle_list(spec, parser, manager, &mut out),
                 "info" => {
                     let mut targets = Vec::new();
                     let mut requested_field: Option<String> = None;
@@ -300,43 +391,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         out("[GoldSrc.rs] Usage: grs plugins unload <name|index...> [-a|--all]\n");
                     }
                 }
-                "reload" => {
-                    let mut targets = Vec::new();
-                    let mut all = false;
-                    while let Ok(Some(arg)) = parser.next() {
-                        match arg {
-                            Arg::Short('h') | Arg::Long("help") => {
-                                print_command_help(spec, out);
-                                return;
-                            }
-                            Arg::Short('a') | Arg::Long("all") => all = true,
-                            Arg::Value(val) => targets.push(val.to_string_lossy().into_owned()),
-                            _ => {}
-                        }
-                    }
-                    let Some(manager) = manager else {
-                        out(&CliResponse::error("WASM Host not initialized.").format_console());
-                        return;
-                    };
-                    if all {
-                        let msg = manager.reload_all_plugins();
-                        out(&CliResponse::success(msg).format_console());
-                    } else if !targets.is_empty() {
-                        for t in targets {
-                            match manager.reload_plugin_by_query(&t) {
-                                Ok(msg) => {
-                                    out(&CliResponse::success(format!("{msg} successfully."))
-                                        .format_console())
-                                }
-                                Err(err) => {
-                                    out(&CliResponse::error(err.to_string()).format_console())
-                                }
-                            }
-                        }
-                    } else {
-                        out("[GoldSrc.rs] Usage: grs plugins reload <name|index...> [-a|--all]\n");
-                    }
-                }
+                "reload" | "rld" => handlers::handle_reload(spec, parser, manager, &mut out),
                 "pause" => {
                     let mut targets = Vec::new();
                     let mut all = false;
@@ -390,7 +445,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         out("[GoldSrc.rs] Usage: grs plugins pause <name|index...> [-a|--all]\n");
                     }
                 }
-                "unpause" | "resume" => {
+                "unpause" | "resume" | "unps" => {
                     let mut targets = Vec::new();
                     let mut all = false;
                     while let Ok(Some(arg)) = parser.next() {
@@ -626,12 +681,32 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     print_command_help(spec, out);
                 }
                 other => {
-                    out(&format!(
-                        "[GoldSrc.rs] Unknown plugins subcommand '{}'. Run 'grs plugins --help' for usage.\n",
-                        other
-                    ));
+                    const PLUGIN_SUBCOMMANDS: &[&str] = &[
+                        "list", "info", "load", "unload", "reload", "pause", "unpause", "cmds",
+                    ];
+                    if let Some(suggestion) = suggest_subcommand(other, PLUGIN_SUBCOMMANDS) {
+                        out(&format!(
+                            "[GoldSrc.rs] Unknown plugins subcommand '{}'. Did you mean '{}'? Run 'grs plugins --help' for usage.\n",
+                            other, suggestion
+                        ));
+                    } else {
+                        out(&format!(
+                            "[GoldSrc.rs] Unknown plugins subcommand '{}'. Run 'grs plugins --help' for usage.\n",
+                            other
+                        ));
+                    }
                 }
-            }
+            });
+        }
+        "ps" => {
+            with_manager_or_host(manager, |m| {
+                handlers::handle_list(spec, parser, m, &mut out)
+            });
+        }
+        "rld" => {
+            with_manager_or_host(manager, |m| {
+                handlers::handle_reload(spec, parser, m, &mut out)
+            });
         }
         "watchers" => {
             let sub_arg = match parser.next() {
@@ -693,10 +768,18 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     print_command_help(spec, out);
                 }
                 other => {
-                    out(&format!(
-                        "[GoldSrc.rs] Unknown watchers subcommand '{}'. Run 'grs watchers --help' for usage.\n",
-                        other
-                    ));
+                    const WATCHERS_SUBCOMMANDS: &[&str] = &["list", "pause", "resume"];
+                    if let Some(suggestion) = suggest_subcommand(other, WATCHERS_SUBCOMMANDS) {
+                        out(&format!(
+                            "[GoldSrc.rs] Unknown watchers subcommand '{}'. Did you mean '{}'? Run 'grs watchers --help' for usage.\n",
+                            other, suggestion
+                        ));
+                    } else {
+                        out(&format!(
+                            "[GoldSrc.rs] Unknown watchers subcommand '{}'. Run 'grs watchers --help' for usage.\n",
+                            other
+                        ));
+                    }
                 }
             }
         }
@@ -727,18 +810,20 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 return;
             };
 
-            let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
-                return;
-            };
+            with_manager_or_host(manager, |manager| {
+                let Some(manager) = manager else {
+                    out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
+                    return;
+                };
 
-            let args_str = cmd_args.join(" ");
-            let handled = manager.dispatch_command(&name, 0, &args_str);
-            if !handled {
-                out(&CliResponse::warning(format!(
-                    "Command '{name}' was not handled by any active plugin (is it paused or not registered?)."
-                )).format_console());
-            }
+                let args_str = cmd_args.join(" ");
+                let handled = manager.dispatch_command(&name, 0, &args_str);
+                if !handled {
+                    out(&CliResponse::warning(format!(
+                        "Command '{name}' was not handled by any active plugin (is it paused or not registered?)."
+                    )).format_console());
+                }
+            });
         }
         "status" => {
             while let Ok(Some(arg)) = parser.next() {
@@ -747,11 +832,8 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     return;
                 }
             }
-            let Some(manager) = manager else {
-                out("[GoldSrc.rs] Error: WASM Host not initialized.\n");
-                return;
-            };
-            let plugins_count = manager.loaded_count();
+            let plugins_count =
+                with_manager_or_host(manager, |m| m.map(|mgr| mgr.loaded_count()).unwrap_or(0));
             let (watchers_total, watchers_active) = crate::HostRuntime::with_watcher_service(|w| {
                 w.map(|s| {
                     let st = s.status();

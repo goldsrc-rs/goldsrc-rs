@@ -77,7 +77,7 @@ impl EventRegistry {
                 }
                 Err(err) => {
                     log::error!(
-                        target: "events",
+                        target: crate::consts::log_targets::EVENTS,
                         "[EventRegistry] Dependency resolution failed for event '{event_name}': {err}"
                     );
                     // Fallback to insertion order if dag resolution errors

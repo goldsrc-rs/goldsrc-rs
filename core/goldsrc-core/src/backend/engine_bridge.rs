@@ -99,12 +99,13 @@ impl EngineBackend {
     }
 }
 
-static PRECACHE_SOUNDS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
-static PRECACHE_MODELS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
-static PRECACHE_GENERICS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
+static PRECACHE_SOUNDS: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
+static PRECACHE_MODELS: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
+static PRECACHE_GENERICS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::BTreeSet<String>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
 
 impl EngineBackend {
     /// Precaches all pending/registered resources during map spawn phase.
@@ -709,7 +710,7 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             match (pent, GAME_DLL_SPAWN.get()) {
                 (Some(p), Some(f)) => f(p),
                 _ => {
-                    log::debug!(target: "core", "dispatch_spawn({index}): no GameDLL bridge");
+                    log::debug!(target: goldsrc_api::consts::log_targets::CORE, "dispatch_spawn({index}): no GameDLL bridge");
                     0
                 }
             }
@@ -728,7 +729,7 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             match (resolve(touched), resolve(other), GAME_DLL_TOUCH.get()) {
                 (Some(a), Some(b), Some(f)) => f(a, b),
                 _ => {
-                    log::debug!(target: "core", "dispatch_touch({touched},{other}): no GameDLL bridge");
+                    log::debug!(target: goldsrc_api::consts::log_targets::CORE, "dispatch_touch({touched},{other}): no GameDLL bridge");
                 }
             }
         }
