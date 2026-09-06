@@ -169,12 +169,6 @@ impl Entity {
         prop.get(self)
     }
 
-    /// Queries a default-constructible property on this entity using turbofish (`entity.get_as::<prop::Health>()`).
-    #[inline(always)]
-    pub fn get_as<P: crate::property::Property<Entity> + Default>(&self) -> P::Value {
-        P::default().get(self)
-    }
-
     /// Mutates a strongly-typed property on this entity.
     #[inline(always)]
     pub fn set<P: crate::property::MutProperty<Entity>>(&mut self, prop: P, val: P::Value) {

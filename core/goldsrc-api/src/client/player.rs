@@ -175,12 +175,6 @@ impl Player {
         prop.get(self)
     }
 
-    /// Queries a default-constructible property on this player using turbofish (`player.get_as::<prop::Health>()`).
-    #[inline(always)]
-    pub fn get_as<P: crate::property::Property<Player> + Default>(&self) -> P::Value {
-        P::default().get(self)
-    }
-
     /// Mutates a strongly-typed property on this player.
     ///
     /// Accepts both unit ZST markers (e.g. `player.set(prop::Health, 100.0)`) and
