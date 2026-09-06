@@ -60,7 +60,7 @@ pub use action::{Action, CancellationToken, PlayerAction};
 pub use auth::{Auth, CapExpr, CapabilityRegistry};
 pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
-    Alive, AsLangCode, Bot, ClientExt, ClientKind, ConnectionState, Dead, HLTV, LifeState, Player,
+    Alive, AsLangCode, Bot, ClientExt, ClientKind, ConnectionState, Dead, Hltv, LifeState, Player,
     PlayerExt, PrintTarget, Spectator, Team,
 };
 pub use command::{

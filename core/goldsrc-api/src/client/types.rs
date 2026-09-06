@@ -31,7 +31,7 @@ pub enum ClientKind {
     /// Fake client / AI Bot (`FL_FAKECLIENT`).
     Bot,
     /// HLTV spectator proxy (`FL_PROXY`).
-    HLTV,
+    Hltv,
 }
 
 /// Network connection lifecycle of a client slot.
@@ -197,7 +197,7 @@ impl AsLangCode for crate::client::Bot {
     }
 }
 
-impl AsLangCode for crate::client::HLTV {
+impl AsLangCode for crate::client::Hltv {
     fn as_lang_code(&self) -> Cow<'_, str> {
         self.0.as_lang_code()
     }

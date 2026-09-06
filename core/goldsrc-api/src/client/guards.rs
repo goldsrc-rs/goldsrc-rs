@@ -706,9 +706,9 @@ impl PlayerExt for Bot {
 /// This ensures at compile time that operations like giving items, opening interactive menus,
 /// or combatant actions cannot be performed on an HLTV spectator proxy.
 #[derive(Debug, Clone, PartialEq)]
-pub struct HLTV(pub Player);
+pub struct Hltv(pub Player);
 
-impl Deref for HLTV {
+impl Deref for Hltv {
     type Target = crate::Entity;
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
@@ -716,21 +716,21 @@ impl Deref for HLTV {
     }
 }
 
-impl DerefMut for HLTV {
+impl DerefMut for Hltv {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl AsRef<crate::Entity> for HLTV {
+impl AsRef<crate::Entity> for Hltv {
     #[inline(always)]
     fn as_ref(&self) -> &crate::Entity {
         &self.0
     }
 }
 
-impl EntityExt for HLTV {
+impl EntityExt for Hltv {
     #[inline(always)]
     fn origin(&self) -> Vector3 {
         self.0.origin()
@@ -777,7 +777,7 @@ impl EntityExt for HLTV {
     }
 }
 
-impl ClientExt for HLTV {
+impl ClientExt for Hltv {
     #[inline(always)]
     fn client_index(&self) -> i32 {
         self.0.client_index()
@@ -792,7 +792,7 @@ impl ClientExt for HLTV {
     }
     #[inline(always)]
     fn client_kind(&self) -> crate::client::ClientKind {
-        crate::client::ClientKind::HLTV
+        crate::client::ClientKind::Hltv
     }
     #[inline(always)]
     fn is_bot(&self) -> bool {
@@ -853,13 +853,13 @@ mod tests {
 
     #[test]
     fn test_hltv_implements_client_and_entity_but_not_player() {
-        let hltv = HLTV(Player::new(32));
+        let hltv = Hltv(Player::new(32));
         assert_is_entity(&hltv);
         assert_is_client(&hltv);
         assert_eq!(hltv.client_index(), 32);
         assert!(hltv.is_hltv());
         assert!(!hltv.is_bot());
-        assert_eq!(hltv.client_kind(), crate::client::ClientKind::HLTV);
+        assert_eq!(hltv.client_kind(), crate::client::ClientKind::Hltv);
         assert_eq!(hltv.origin(), Vector3::new(0.0, 0.0, 0.0));
     }
 
@@ -875,7 +875,7 @@ mod tests {
         assert_is_client(&dead_player);
         assert_is_player(&dead_player);
 
-        let alive_hltv = Alive(HLTV(Player::new(5)));
+        let alive_hltv = Alive(Hltv(Player::new(5)));
         assert_is_entity(&alive_hltv);
         assert_is_client(&alive_hltv);
     }

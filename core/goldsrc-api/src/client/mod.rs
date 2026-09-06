@@ -8,7 +8,7 @@ pub mod types;
 
 pub use crate::entity::EntityExt;
 pub use ext::{ClientExt, PlayerExt};
-pub use guards::{Alive, Bot, Dead, HLTV, Spectator};
+pub use guards::{Alive, Bot, Dead, Hltv, Spectator};
 pub use player::Player;
 pub use property::{Lang, Name, PlayerLifeState, PlayerTeam};
 pub use types::{AsLangCode, ClientKind, ConnectionState, LifeState, PrintTarget, Team};

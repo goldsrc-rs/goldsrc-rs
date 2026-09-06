@@ -82,7 +82,7 @@ impl ClientExt for Player {
     #[inline(always)]
     fn client_kind(&self) -> ClientKind {
         if self.is_hltv() {
-            ClientKind::HLTV
+            ClientKind::Hltv
         } else if self.is_bot() {
             ClientKind::Bot
         } else {
