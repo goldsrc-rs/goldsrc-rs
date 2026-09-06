@@ -22,19 +22,22 @@ pub type PlayerTeamResolverHook = fn(i32) -> i32;
 pub type PlayerLangResolverHook = fn(i32) -> Option<String>;
 
 #[cfg(not(target_arch = "wasm32"))]
-static NATIVE_PRINT_HOOK: RwLock<Option<NativePrintHook>> = RwLock::new(None);
+pub(crate) static NATIVE_PRINT_HOOK: RwLock<Option<NativePrintHook>> = RwLock::new(None);
 
 #[cfg(not(target_arch = "wasm32"))]
-static PLAYER_RESOLVER_HOOK: RwLock<Option<PlayerResolverHook>> = RwLock::new(None);
+pub(crate) static PLAYER_RESOLVER_HOOK: RwLock<Option<PlayerResolverHook>> = RwLock::new(None);
 
 #[cfg(not(target_arch = "wasm32"))]
-static PLAYER_NAME_RESOLVER_HOOK: RwLock<Option<PlayerNameResolverHook>> = RwLock::new(None);
+pub(crate) static PLAYER_NAME_RESOLVER_HOOK: RwLock<Option<PlayerNameResolverHook>> =
+    RwLock::new(None);
 
 #[cfg(not(target_arch = "wasm32"))]
-static PLAYER_TEAM_RESOLVER_HOOK: RwLock<Option<PlayerTeamResolverHook>> = RwLock::new(None);
+pub(crate) static PLAYER_TEAM_RESOLVER_HOOK: RwLock<Option<PlayerTeamResolverHook>> =
+    RwLock::new(None);
 
 #[cfg(not(target_arch = "wasm32"))]
-static PLAYER_LANG_RESOLVER_HOOK: RwLock<Option<PlayerLangResolverHook>> = RwLock::new(None);
+pub(crate) static PLAYER_LANG_RESOLVER_HOOK: RwLock<Option<PlayerLangResolverHook>> =
+    RwLock::new(None);
 
 /// Registers the native backend print dispatcher for host-side `Player::print_*` calls.
 #[cfg(not(target_arch = "wasm32"))]
@@ -80,7 +83,7 @@ pub fn set_player_lang_hook(hook: PlayerLangResolverHook) {
 pub type OpenMenuHook = fn(i32, &crate::menu::Menu);
 
 #[cfg(not(target_arch = "wasm32"))]
-static OPEN_MENU_HOOK: RwLock<Option<OpenMenuHook>> = RwLock::new(None);
+pub(crate) static OPEN_MENU_HOOK: RwLock<Option<OpenMenuHook>> = RwLock::new(None);
 
 /// Registers the engine/runtime open menu handler for host-side `Player::open_menu` calls.
 #[cfg(not(target_arch = "wasm32"))]
@@ -193,504 +196,202 @@ impl Player {
     }
 
     /// Returns `true` if the player is currently alive (`health > 0`).
+    #[inline(always)]
     pub fn is_alive(&self) -> bool {
         self.is_valid() && self.health() > 0.0
     }
 
     /// Returns the player's display name, if set.
+    #[inline(always)]
     pub fn name(&self) -> Option<String> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_player_name(self.index)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Ok(lock) = PLAYER_NAME_RESOLVER_HOOK.read()
-                && let Some(resolver) = *lock
-                && let Some(name) = resolver(self.index)
-            {
-                return Some(name);
-            }
-            self.inner.netname()
-        }
+        self.get::<crate::property::prop::Name>()
     }
 
     /// Returns the player's preferred language code (e.g. `"ru"`, `"en"`).
+    #[inline(always)]
     pub fn lang(&self) -> String {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_player_lang(self.index)
-                .unwrap_or_else(|| "en".to_string())
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Ok(lock) = PLAYER_LANG_RESOLVER_HOOK.read()
-                && let Some(resolver) = *lock
-                && let Some(lang) = resolver(self.index)
-            {
-                return lang;
-            }
-            "en".to_string()
-        }
+        self.get::<crate::property::prop::Lang>()
     }
 
     /// Returns the entity's class name, if set.
+    #[inline(always)]
     pub fn classname(&self) -> Option<String> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_classname(self.index)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.classname()
-        }
+        self.get::<crate::property::prop::Classname>()
     }
 
     /// Returns the player's world origin.
+    #[inline(always)]
     pub fn origin(&self) -> Vector3 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let v = crate::bindings::goldsrc::engine::api::host_entity_origin(self.index);
-            Vector3 {
-                x: v.x,
-                y: v.y,
-                z: v.z,
-            }
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.origin().unwrap_or([0.0, 0.0, 0.0]).into()
-        }
+        self.get::<crate::property::prop::Origin>()
     }
 
     /// Sets the player's world origin.
+    #[inline(always)]
     pub fn set_origin(&mut self, pos: Vector3) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_set_origin(
-                self.index,
-                crate::bindings::goldsrc::engine::api::Vector3 {
-                    x: pos.x,
-                    y: pos.y,
-                    z: pos.z,
-                },
-            );
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.set_origin(pos.into());
-        }
+        self.set::<crate::property::prop::Origin>(pos);
     }
 
     /// Returns the player's velocity.
+    #[inline(always)]
     pub fn velocity(&self) -> Vector3 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let v = crate::bindings::goldsrc::engine::api::host_entity_velocity(self.index);
-            Vector3 {
-                x: v.x,
-                y: v.y,
-                z: v.z,
-            }
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.velocity().unwrap_or([0.0, 0.0, 0.0]).into()
-        }
+        self.get::<crate::property::prop::Velocity>()
     }
 
     /// Sets the player's velocity.
+    #[inline(always)]
     pub fn set_velocity(&mut self, vel: Vector3) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_set_velocity(
-                self.index,
-                crate::bindings::goldsrc::engine::api::Vector3 {
-                    x: vel.x,
-                    y: vel.y,
-                    z: vel.z,
-                },
-            );
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.set_velocity(vel.into());
-        }
+        self.set::<crate::property::prop::Velocity>(vel);
     }
 
     /// Returns the player's rotation angles (pitch, yaw, roll).
+    #[inline(always)]
     pub fn angles(&self) -> Vector3 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let v = crate::bindings::goldsrc::engine::api::host_entity_angles(self.index);
-            Vector3 {
-                x: v.x,
-                y: v.y,
-                z: v.z,
-            }
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.angles().unwrap_or([0.0, 0.0, 0.0]).into()
-        }
+        self.get::<crate::property::prop::Angles>()
     }
 
     /// Sets the player's rotation angles.
+    #[inline(always)]
     pub fn set_angles(&mut self, angles: Vector3) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_set_angles(
-                self.index,
-                crate::bindings::goldsrc::engine::api::Vector3 {
-                    x: angles.x,
-                    y: angles.y,
-                    z: angles.z,
-                },
-            );
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.set_angles(angles.into());
-        }
+        self.set::<crate::property::prop::Angles>(angles);
     }
 
     /// Returns the player's current health.
+    #[inline(always)]
     pub fn health(&self) -> f32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_health(self.index)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.health().unwrap_or(0.0)
-        }
+        self.get::<crate::property::prop::Health>()
     }
 
     /// Sets the player's health.
+    #[inline(always)]
     pub fn set_health(&mut self, health: f32) {
-        if !health.is_finite() {
-            return;
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_entity_set_health(self.index, health);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.set_health(health);
-        }
+        self.set::<crate::property::prop::Health>(health);
     }
 
     /// Returns the player's armor value.
+    #[inline(always)]
     pub fn armorvalue(&self) -> f32 {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_player_armorvalue(self.index)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.armorvalue().unwrap_or(0.0)
-        }
+        self.get::<crate::property::prop::Armor>()
     }
 
     /// Sets the player's armor value.
+    #[inline(always)]
     pub fn set_armorvalue(&mut self, armor: f32) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_player_set_armorvalue(self.index, armor);
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.inner.set_armorvalue(armor);
-        }
+        self.set::<crate::property::prop::Armor>(armor);
     }
 
     /// Returns the player's current game team.
+    #[inline(always)]
     pub fn team(&self) -> crate::client::Team {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::client::Team::from(crate::bindings::goldsrc::engine::api::host_player_team(
-                self.index,
-            ))
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Ok(lock) = PLAYER_TEAM_RESOLVER_HOOK.read()
-                && let Some(resolver) = *lock
-            {
-                return resolver(self.index).into();
-            }
-            self.inner.team().unwrap_or(0).into()
-        }
+        self.get::<crate::property::prop::PlayerTeam>()
     }
 
     /// Returns the player's current life state.
+    #[inline(always)]
     pub fn life_state(&self) -> crate::client::LifeState {
-        if !self.is_valid() {
-            return crate::client::LifeState::Dead;
-        }
-        if self.health() > 0.0 {
-            crate::client::LifeState::Alive
-        } else {
-            crate::client::LifeState::Dead
-        }
+        self.get::<crate::property::prop::PlayerLifeState>()
     }
 
     /// Prints a message to the specified target (console / center / chat).
-    ///
-    /// This is the single dispatch point; the `print_*` helpers below are
-    /// convenience wrappers. On native hosts printing is currently a no-op
-    /// (the engine bridge surface is WASM-first).
+    #[inline(always)]
     pub fn print(&self, target: crate::client::PrintTarget, msg: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            use crate::bindings::goldsrc::engine::api as host;
-            match target {
-                crate::client::PrintTarget::Console => host::host_print_console(self.index, msg),
-                crate::client::PrintTarget::Center => host::host_print_center(self.index, msg),
-                crate::client::PrintTarget::Notify => host::host_print_notify(self.index, msg),
-                // Chat and ColoredChat share the SayText transport; the colored
-                // variant only documents that ^1/^3/^4 escapes are meaningful.
-                crate::client::PrintTarget::Chat | crate::client::PrintTarget::ColoredChat => {
-                    host::host_print_chat(self.index, msg)
-                }
-            }
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Ok(lock) = NATIVE_PRINT_HOOK.read()
-                && let Some(hook) = *lock
-            {
-                hook(self.index, target, msg);
-            }
-        }
+        self.act(crate::action::action::Print {
+            target,
+            message: msg.to_string(),
+        });
     }
 
     /// Prints a message to the player's game console.
+    #[inline(always)]
     pub fn print_console(&self, msg: &str) {
-        self.print(crate::client::PrintTarget::Console, msg);
+        self.act(crate::action::action::Print::console(msg));
     }
 
     /// Prints a developer notification (top-left screen con_notify area) to the player.
+    #[inline(always)]
     pub fn print_notify(&self, msg: &str) {
-        self.print(crate::client::PrintTarget::Notify, msg);
+        self.act(crate::action::action::Print::notify(msg));
     }
 
     /// Prints a chat message to the player.
+    #[inline(always)]
     pub fn print_chat(&self, msg: &str) {
-        self.print(crate::client::PrintTarget::Chat, msg);
+        self.act(crate::action::action::Print::chat(msg));
     }
 
     /// Prints a center notification message to the player.
+    #[inline(always)]
     pub fn print_center(&self, msg: &str) {
-        self.print(crate::client::PrintTarget::Center, msg);
+        self.act(crate::action::action::Print::center(msg));
     }
 
     /// Prints a colorized chat message (`^1` default, `^3` team, `^4` green).
-    /// Color escapes render in CS 1.6 / CZ clients only.
+    #[inline(always)]
     pub fn print_color(&self, msg: &str) {
-        self.print(crate::client::PrintTarget::ColoredChat, msg);
+        self.act(crate::action::action::Print::colored_chat(msg));
     }
 
     /// Plays a dynamic sound effect to the player (e.g. `"buttons/button10.wav"`).
+    #[inline(always)]
     pub fn play_sound(&self, sample: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_emit_sound(
-                self.index, 0, // CHAN_AUTO
-                sample, 1.0, // VOL_NORM
-                1.0, // ATTN_NORM
-                0, 100, // PITCH_NORM
-            );
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = sample;
-        }
+        self.act(crate::action::action::PlaySound::new(sample));
     }
 
-    /// Spawns an item/weapon entity by classname (e.g. `"weapon_m4a1"`) and
-    /// delivers it to this player via the real GameDLL's spawn + touch flow,
-    /// mirroring AMX Mod X's `give_item`: create → position at player →
-    /// DispatchSpawn → force Touch.
-    ///
-    /// Returns the new entity index. Requires a backend with GameDLL access
-    /// (standalone proxy); on backends without it the entity is not created.
+    /// Spawns an item/weapon entity by classname and delivers it to this player.
+    #[inline(always)]
     pub fn give_item(&self, item: &str) -> Option<i32> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            use crate::bindings::goldsrc::engine::api as host;
-            let ent = host::host_create_named_entity(item)?;
-            let o = host::host_entity_origin(self.index);
-            host::host_entity_set_origin(
-                ent,
-                crate::bindings::goldsrc::engine::api::Vector3 {
-                    x: o.x,
-                    y: o.y,
-                    z: o.z,
-                },
-            );
-            host::host_dispatch_spawn(ent);
-            host::host_dispatch_touch(ent, self.index);
-            Some(ent)
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = item;
-            None
-        }
+        self.act(crate::action::action::GiveItem::new(item))
     }
 
     /// Displays a raw `ShowMenu` dialog to the player.
+    #[inline(always)]
     pub fn show_raw_menu(&self, keys_mask: i32, timeout: i32, text: &str) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            crate::bindings::goldsrc::engine::api::host_show_menu(
-                self.index, keys_mask, timeout, text,
-            );
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = (self.index, keys_mask, timeout, text);
-        }
+        self.act(crate::action::action::ShowRawMenu {
+            keys_mask,
+            timeout,
+            text,
+        });
     }
 
     /// Sends a screen HUD / DHUD message to the player.
+    #[inline(always)]
     pub fn send_hud(&self, msg: &crate::hud::HudMessage) {
-        let (effect_val, fade_in, fade_out, hold_time) = match msg.effect {
-            crate::hud::HudEffect::FadeInOut {
-                fade_in,
-                fade_out,
-                hold_time,
-            } => (0, fade_in, fade_out, hold_time),
-            crate::hud::HudEffect::Flicker {
-                fx_time: _,
-                hold_time,
-            } => (1, 0.0, 0.0, hold_time),
-            crate::hud::HudEffect::Typewriter {
-                char_time: _,
-                fade_out,
-                hold_time,
-            } => (2, 0.05, fade_out, hold_time),
-        };
-
-        match msg.kind {
-            crate::hud::HudKind::Classic { channel } => {
-                #[cfg(target_arch = "wasm32")]
-                {
-                    crate::bindings::goldsrc::engine::api::host_send_hud_message(
-                        self.index,
-                        channel as i32,
-                        msg.position.x,
-                        msg.position.y,
-                        msg.color.r as i32,
-                        msg.color.g as i32,
-                        msg.color.b as i32,
-                        msg.color.a as i32,
-                        effect_val,
-                        fade_in,
-                        fade_out,
-                        hold_time,
-                        &msg.text,
-                    );
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let _ = (channel, effect_val, fade_in, fade_out, hold_time);
-                }
-            }
-            crate::hud::HudKind::Dhud => {
-                #[cfg(target_arch = "wasm32")]
-                {
-                    crate::bindings::goldsrc::engine::api::host_send_dhud_message(
-                        self.index,
-                        msg.position.x,
-                        msg.position.y,
-                        msg.color.r as i32,
-                        msg.color.g as i32,
-                        msg.color.b as i32,
-                        msg.color.a as i32,
-                        effect_val,
-                        fade_in,
-                        fade_out,
-                        hold_time,
-                        &msg.text,
-                    );
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let _ = (effect_val, fade_in, fade_out, hold_time);
-                }
-            }
-        }
+        self.act(crate::action::action::SendHud::new(msg));
     }
 
     /// Renders and opens a declarative `Menu` for this player.
+    #[inline(always)]
     pub fn open_menu(&self, menu: &crate::menu::Menu) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Ok(lock) = OPEN_MENU_HOOK.read()
-                && let Some(hook) = *lock
-            {
-                hook(self.index, menu);
-                return;
-            }
-        }
-        let total_players = crate::auth::Auth::total_players();
-        let ctx = crate::menu::MenuContext {
-            player_index: self.index,
-            round_number: 1,
-            round_time_elapsed: 0.0,
-            is_alive: self.health() > 0.0,
-            players_count: if total_players > 0 {
-                total_players as u32
-            } else {
-                1
-            },
-        };
-        if let Some(rendered) = menu.render_page(&ctx, 0) {
-            match rendered.renderer {
-                crate::menu::MenuRendererKind::Text => {
-                    self.show_raw_menu(rendered.keys_mask as i32, rendered.timeout, &rendered.text);
-                }
-                crate::menu::MenuRendererKind::Dhud {
-                    position,
-                    color,
-                    effect,
-                } => {
-                    let hud_msg = crate::hud::HudMessage {
-                        text: rendered.text.clone(),
-                        kind: crate::hud::HudKind::Dhud,
-                        color,
-                        color2: color,
-                        position,
-                        effect,
-                    };
-                    self.send_hud(&hud_msg);
-                    self.show_raw_menu(rendered.keys_mask as i32, rendered.timeout, "");
-                }
-            }
-        }
+        self.act(crate::action::action::ShowMenu::new(menu));
+    }
+
+    /// Displays a menu for the player.
+    #[inline(always)]
+    pub fn show_menu(&self, menu: &crate::menu::Menu) {
+        self.open_menu(menu);
     }
 
     /// Closes any currently displayed menu on the player's client.
+    #[inline(always)]
     pub fn close_menu(&self) {
-        self.show_raw_menu(0, 0, "");
+        self.act(crate::action::action::CloseMenu);
     }
 
     /// Checks if the player has the specified capability.
+    #[inline(always)]
     pub fn has_capability(&self, name: &str) -> bool {
-        crate::auth::Auth::has_capability(self.index, name)
+        self.get_prop(crate::property::prop::Capability(name))
     }
 
     /// Grants a capability to the player dynamically.
+    #[inline(always)]
     pub fn grant_capability(&self, name: &str) -> bool {
-        crate::auth::Auth::grant_capability(self.index, name)
+        self.act(crate::action::action::GrantCapability::new(name))
     }
 
     /// Revokes a capability from the player dynamically.
+    #[inline(always)]
     pub fn revoke_capability(&self, name: &str) -> bool {
-        crate::auth::Auth::revoke_capability(self.index, name)
+        self.act(crate::action::action::RevokeCapability::new(name))
     }
 
     /// Returns the raw `edict_t` pointer, or null if the handle is stale.
@@ -749,6 +450,36 @@ unsafe impl Sync for Player {}
 
 /// Extension trait providing ergonomic shortcuts over `get`, `set`, and `act`.
 pub trait PlayerExt {
+    /// Returns the player's current health.
+    fn health(&self) -> f32;
+    /// Sets the player's health.
+    fn set_health(&mut self, health: f32);
+    /// Returns the player's armor value.
+    fn armorvalue(&self) -> f32;
+    /// Sets the player's armor value.
+    fn set_armorvalue(&mut self, armor: f32);
+    /// Returns the player's world origin.
+    fn origin(&self) -> Vector3;
+    /// Sets the player's world origin.
+    fn set_origin(&mut self, pos: Vector3);
+    /// Returns the player's velocity.
+    fn velocity(&self) -> Vector3;
+    /// Sets the player's velocity.
+    fn set_velocity(&mut self, vel: Vector3);
+    /// Returns the player's rotation angles (pitch, yaw, roll).
+    fn angles(&self) -> Vector3;
+    /// Sets the player's rotation angles.
+    fn set_angles(&mut self, angles: Vector3);
+    /// Returns the player's current game team.
+    fn team(&self) -> crate::client::Team;
+    /// Returns the player's current life state.
+    fn life_state(&self) -> crate::client::LifeState;
+    /// Returns `true` if the player is currently alive.
+    fn is_alive(&self) -> bool;
+    /// Returns the player's display name, if set.
+    fn name(&self) -> Option<String>;
+    /// Returns the player's preferred language code.
+    fn lang(&self) -> String;
     /// Prints a message to player's chat.
     fn print_chat(&self, msg: impl Into<String>);
     /// Prints a center notification message to player's screen.
@@ -757,6 +488,8 @@ pub trait PlayerExt {
     fn print_console(&self, msg: impl Into<String>);
     /// Prints a top-left notification to player's screen.
     fn print_notify(&self, msg: impl Into<String>);
+    /// Prints a colorized chat message.
+    fn print_color(&self, msg: impl Into<String>);
     /// Plays an audio sound effect for this player.
     fn play_sound(&self, sample: impl Into<String>);
     /// Opens an interactive declarative menu for this player.
@@ -777,6 +510,81 @@ pub trait PlayerExt {
 
 impl PlayerExt for Player {
     #[inline(always)]
+    fn health(&self) -> f32 {
+        self.get::<crate::property::prop::Health>()
+    }
+
+    #[inline(always)]
+    fn set_health(&mut self, health: f32) {
+        self.set::<crate::property::prop::Health>(health);
+    }
+
+    #[inline(always)]
+    fn armorvalue(&self) -> f32 {
+        self.get::<crate::property::prop::Armor>()
+    }
+
+    #[inline(always)]
+    fn set_armorvalue(&mut self, armor: f32) {
+        self.set::<crate::property::prop::Armor>(armor);
+    }
+
+    #[inline(always)]
+    fn origin(&self) -> Vector3 {
+        self.get::<crate::property::prop::Origin>()
+    }
+
+    #[inline(always)]
+    fn set_origin(&mut self, pos: Vector3) {
+        self.set::<crate::property::prop::Origin>(pos);
+    }
+
+    #[inline(always)]
+    fn velocity(&self) -> Vector3 {
+        self.get::<crate::property::prop::Velocity>()
+    }
+
+    #[inline(always)]
+    fn set_velocity(&mut self, vel: Vector3) {
+        self.set::<crate::property::prop::Velocity>(vel);
+    }
+
+    #[inline(always)]
+    fn angles(&self) -> Vector3 {
+        self.get::<crate::property::prop::Angles>()
+    }
+
+    #[inline(always)]
+    fn set_angles(&mut self, angles: Vector3) {
+        self.set::<crate::property::prop::Angles>(angles);
+    }
+
+    #[inline(always)]
+    fn team(&self) -> crate::client::Team {
+        self.get::<crate::property::prop::PlayerTeam>()
+    }
+
+    #[inline(always)]
+    fn life_state(&self) -> crate::client::LifeState {
+        self.get::<crate::property::prop::PlayerLifeState>()
+    }
+
+    #[inline(always)]
+    fn is_alive(&self) -> bool {
+        self.health() > 0.0
+    }
+
+    #[inline(always)]
+    fn name(&self) -> Option<String> {
+        self.get::<crate::property::prop::Name>()
+    }
+
+    #[inline(always)]
+    fn lang(&self) -> String {
+        self.get::<crate::property::prop::Lang>()
+    }
+
+    #[inline(always)]
     fn print_chat(&self, msg: impl Into<String>) {
         self.act(crate::action::action::Print::chat(msg));
     }
@@ -794,6 +602,11 @@ impl PlayerExt for Player {
     #[inline(always)]
     fn print_notify(&self, msg: impl Into<String>) {
         self.act(crate::action::action::Print::notify(msg));
+    }
+
+    #[inline(always)]
+    fn print_color(&self, msg: impl Into<String>) {
+        self.act(crate::action::action::Print::colored_chat(msg));
     }
 
     #[inline(always)]
@@ -823,7 +636,7 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn has_capability(&self, name: &str) -> bool {
-        crate::auth::Auth::has_capability(self.index, name)
+        self.get_prop(crate::property::prop::Capability(name))
     }
 
     #[inline(always)]

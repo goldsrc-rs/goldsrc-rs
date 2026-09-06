@@ -34,14 +34,31 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.health()
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_entity_health(target.index)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.health().unwrap_or(0.0)
+            }
         }
     }
 
     impl MutProperty<Player> for Health {
         #[inline(always)]
         fn set(&self, target: &mut Player, val: Self::Value) {
-            target.set_health(val);
+            if !val.is_finite() {
+                return;
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_entity_set_health(target.index, val);
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.set_health(val);
+            }
         }
     }
 
@@ -94,14 +111,40 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.origin()
+            #[cfg(target_arch = "wasm32")]
+            {
+                let v = crate::bindings::goldsrc::engine::api::host_entity_origin(target.index);
+                Vector3 {
+                    x: v.x,
+                    y: v.y,
+                    z: v.z,
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.origin().unwrap_or([0.0, 0.0, 0.0]).into()
+            }
         }
     }
 
     impl MutProperty<Player> for Origin {
         #[inline(always)]
         fn set(&self, target: &mut Player, val: Self::Value) {
-            target.set_origin(val);
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_entity_set_origin(
+                    target.index,
+                    crate::bindings::goldsrc::engine::api::Vector3 {
+                        x: val.x,
+                        y: val.y,
+                        z: val.z,
+                    },
+                );
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.set_origin(val.into());
+            }
         }
     }
 
@@ -114,14 +157,40 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.velocity()
+            #[cfg(target_arch = "wasm32")]
+            {
+                let v = crate::bindings::goldsrc::engine::api::host_entity_velocity(target.index);
+                Vector3 {
+                    x: v.x,
+                    y: v.y,
+                    z: v.z,
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.velocity().unwrap_or([0.0, 0.0, 0.0]).into()
+            }
         }
     }
 
     impl MutProperty<Player> for Velocity {
         #[inline(always)]
         fn set(&self, target: &mut Player, val: Self::Value) {
-            target.set_velocity(val);
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_entity_set_velocity(
+                    target.index,
+                    crate::bindings::goldsrc::engine::api::Vector3 {
+                        x: val.x,
+                        y: val.y,
+                        z: val.z,
+                    },
+                );
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.set_velocity(val.into());
+            }
         }
     }
 
@@ -134,14 +203,40 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.angles()
+            #[cfg(target_arch = "wasm32")]
+            {
+                let v = crate::bindings::goldsrc::engine::api::host_entity_angles(target.index);
+                Vector3 {
+                    x: v.x,
+                    y: v.y,
+                    z: v.z,
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.angles().unwrap_or([0.0, 0.0, 0.0]).into()
+            }
         }
     }
 
     impl MutProperty<Player> for Angles {
         #[inline(always)]
         fn set(&self, target: &mut Player, val: Self::Value) {
-            target.set_angles(val);
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_entity_set_angles(
+                    target.index,
+                    crate::bindings::goldsrc::engine::api::Vector3 {
+                        x: val.x,
+                        y: val.y,
+                        z: val.z,
+                    },
+                );
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.set_angles(val.into());
+            }
         }
     }
 
@@ -154,7 +249,21 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.team()
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::client::Team::from(crate::bindings::goldsrc::engine::api::host_player_team(
+                    target.index,
+                ))
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if let Ok(lock) = crate::client::player::PLAYER_TEAM_RESOLVER_HOOK.read()
+                    && let Some(resolver) = *lock
+                {
+                    return resolver(target.index).into();
+                }
+                target.inner.team().unwrap_or(0).into()
+            }
         }
     }
 
@@ -167,7 +276,14 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.life_state()
+            if !target.is_valid() {
+                return LifeState::Dead;
+            }
+            if target.get::<Health>() > 0.0 {
+                LifeState::Alive
+            } else {
+                LifeState::Dead
+            }
         }
     }
 
@@ -180,7 +296,20 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.name()
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_player_name(target.index)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if let Ok(lock) = crate::client::player::PLAYER_NAME_RESOLVER_HOOK.read()
+                    && let Some(resolver) = *lock
+                    && let Some(name) = resolver(target.index)
+                {
+                    return Some(name);
+                }
+                target.inner.netname()
+            }
         }
     }
 
@@ -193,7 +322,41 @@ pub mod prop {
 
         #[inline(always)]
         fn get(&self, target: &Player) -> Self::Value {
-            target.lang()
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_player_lang(target.index)
+                    .unwrap_or_else(|| "en".to_string())
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if let Ok(lock) = crate::client::player::PLAYER_LANG_RESOLVER_HOOK.read()
+                    && let Some(resolver) = *lock
+                    && let Some(lang) = resolver(target.index)
+                {
+                    return lang;
+                }
+                "en".to_string()
+            }
+        }
+    }
+
+    /// Entity class name (`Option<String>` / Read-Only).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub struct Classname;
+
+    impl Property<Player> for Classname {
+        type Value = Option<String>;
+
+        #[inline(always)]
+        fn get(&self, target: &Player) -> Self::Value {
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_entity_classname(target.index)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                target.inner.classname()
+            }
         }
     }
 
@@ -202,9 +365,9 @@ pub mod prop {
     /// Evaluates or modifies capabilities via `Auth::has_capability`,
     /// `Auth::grant_capability` and `Auth::revoke_capability`.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct Capability(pub &'static str);
+    pub struct Capability<'a>(pub &'a str);
 
-    impl Property<Player> for Capability {
+    impl<'a> Property<Player> for Capability<'a> {
         type Value = bool;
 
         #[inline(always)]
@@ -213,7 +376,7 @@ pub mod prop {
         }
     }
 
-    impl MutProperty<Player> for Capability {
+    impl<'a> MutProperty<Player> for Capability<'a> {
         #[inline(always)]
         fn set(&self, target: &mut Player, val: Self::Value) {
             if val {

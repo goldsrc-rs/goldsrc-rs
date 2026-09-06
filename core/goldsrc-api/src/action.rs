@@ -1,17 +1,20 @@
-//! Universal Entity and Player Action System (`PlayerAction` & Value Objects).
+//! Universal Entity and Player Action System and Value Objects.
 //!
-//! Models all side-effects and engine operations performed on entities as explicit
-//! command objects, enabling centralized interception, auditing, and lifecycle cancellation.
+//! Encapsulates all side-effectual operations, state transitions, audio emissions,
+//! menu interactions, and engine commands into strongly typed Value Objects.
+//! Ensures Command-Query Separation (CQS) where queries (`get::<P>()`) are pure
+//! and side-effects are routed through `player.act(Action)`.
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::client::{Player, PrintTarget};
 use crate::hud::HudMessage;
 use crate::menu::Menu;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Trait implemented by any executable command or side-effect on a `Player`.
+/// Trait for executable actions applied to a `Target` (e.g. `Player`).
 pub trait PlayerAction {
-    /// Result produced by executing the action.
+    /// Type of the result or token returned upon action completion.
     type Output;
 
     /// Executes the action against the given player handle.
@@ -92,6 +95,14 @@ pub mod action {
                 message: msg.into(),
             }
         }
+
+        /// Creates a colored chat message action.
+        pub fn colored_chat(msg: impl Into<String>) -> Self {
+            Self {
+                target: PrintTarget::ColoredChat,
+                message: msg.into(),
+            }
+        }
     }
 
     impl PlayerAction for Print {
@@ -99,7 +110,26 @@ pub mod action {
 
         #[inline(always)]
         fn execute(self, player: &Player) -> Self::Output {
-            player.print(self.target, &self.message);
+            #[cfg(target_arch = "wasm32")]
+            {
+                use crate::bindings::goldsrc::engine::api as host;
+                match self.target {
+                    PrintTarget::Console => host::host_print_console(player.index, &self.message),
+                    PrintTarget::Center => host::host_print_center(player.index, &self.message),
+                    PrintTarget::Notify => host::host_print_notify(player.index, &self.message),
+                    PrintTarget::Chat | PrintTarget::ColoredChat => {
+                        host::host_print_chat(player.index, &self.message)
+                    }
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if let Ok(lock) = crate::client::player::NATIVE_PRINT_HOOK.read()
+                    && let Some(hook) = *lock
+                {
+                    hook(player.index, self.target, &self.message);
+                }
+            }
         }
     }
 
@@ -107,7 +137,10 @@ pub mod action {
     #[derive(Debug, Clone, PartialEq)]
     pub struct PlaySound {
         pub sound_path: String,
+        pub channel: i32,
         pub volume: f32,
+        pub attenuation: f32,
+        pub flags: i32,
         pub pitch: i32,
     }
 
@@ -116,9 +149,18 @@ pub mod action {
         pub fn new(path: impl Into<String>) -> Self {
             Self {
                 sound_path: path.into(),
+                channel: 0,
                 volume: 1.0,
+                attenuation: 1.0,
+                flags: 0,
                 pitch: 100,
             }
+        }
+
+        /// Sets audio channel (e.g. `CHAN_AUTO = 0`, `CHAN_VOICE = 2`).
+        pub fn channel(mut self, ch: i32) -> Self {
+            self.channel = ch;
+            self
         }
 
         /// Sets audio volume in range `0.0..=1.0`.
@@ -139,7 +181,22 @@ pub mod action {
 
         #[inline(always)]
         fn execute(self, player: &Player) -> Self::Output {
-            player.play_sound(&self.sound_path);
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::bindings::goldsrc::engine::api::host_emit_sound(
+                    player.index,
+                    self.channel,
+                    &self.sound_path,
+                    self.volume,
+                    self.attenuation,
+                    self.flags,
+                    self.pitch,
+                );
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let _ = (player, self);
+            }
         }
     }
 
@@ -161,7 +218,83 @@ pub mod action {
 
         #[inline(always)]
         fn execute(self, player: &Player) -> Self::Output {
-            player.open_menu(self.menu);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if let Ok(lock) = crate::client::player::OPEN_MENU_HOOK.read()
+                    && let Some(hook) = *lock
+                {
+                    hook(player.index, self.menu);
+                    return;
+                }
+            }
+            let total_players = crate::auth::Auth::total_players();
+            let ctx = crate::menu::MenuContext {
+                player_index: player.index,
+                round_number: 1,
+                round_time_elapsed: 0.0,
+                is_alive: player.get::<crate::property::prop::Health>() > 0.0,
+                players_count: if total_players > 0 {
+                    total_players as u32
+                } else {
+                    1
+                },
+            };
+            if let Some(rendered) = self.menu.render_page(&ctx, 0) {
+                match rendered.renderer {
+                    crate::menu::MenuRendererKind::Text => {
+                        player.act(ShowRawMenu {
+                            keys_mask: rendered.keys_mask as i32,
+                            timeout: rendered.timeout,
+                            text: &rendered.text,
+                        });
+                    }
+                    crate::menu::MenuRendererKind::Dhud {
+                        position,
+                        color,
+                        effect,
+                    } => {
+                        let hud_msg = crate::hud::HudMessage {
+                            text: rendered.text.clone(),
+                            kind: crate::hud::HudKind::Dhud,
+                            color,
+                            color2: color,
+                            position,
+                            effect,
+                        };
+                        player.act(SendHud::new(&hud_msg));
+                        player.act(ShowRawMenu {
+                            keys_mask: rendered.keys_mask as i32,
+                            timeout: rendered.timeout,
+                            text: "",
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// Displays a raw `ShowMenu` dialog to the player.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct ShowRawMenu<'a> {
+        pub keys_mask: i32,
+        pub timeout: i32,
+        pub text: &'a str,
+    }
+
+    impl<'a> PlayerAction for ShowRawMenu<'a> {
+        type Output = ();
+
+        #[inline(always)]
+        fn execute(self, player: &Player) -> Self::Output {
+            #[cfg(target_arch = "wasm32")]
+            crate::bindings::goldsrc::engine::api::host_show_menu(
+                player.index,
+                self.keys_mask,
+                self.timeout,
+                self.text,
+            );
+            #[cfg(not(target_arch = "wasm32"))]
+            let _ = (player, self.keys_mask, self.timeout, self.text);
         }
     }
 
@@ -174,7 +307,11 @@ pub mod action {
 
         #[inline(always)]
         fn execute(self, player: &Player) -> Self::Output {
-            player.close_menu();
+            player.act(ShowRawMenu {
+                keys_mask: 0,
+                timeout: 0,
+                text: "",
+            });
         }
     }
 
@@ -196,7 +333,72 @@ pub mod action {
 
         #[inline(always)]
         fn execute(self, player: &Player) -> Self::Output {
-            player.send_hud(self.message);
+            let (effect_val, fade_in, fade_out, hold_time) = match self.message.effect {
+                crate::hud::HudEffect::FadeInOut {
+                    fade_in,
+                    fade_out,
+                    hold_time,
+                } => (0, fade_in, fade_out, hold_time),
+                crate::hud::HudEffect::Flicker {
+                    fx_time: _,
+                    hold_time,
+                } => (1, 0.0, 0.0, hold_time),
+                crate::hud::HudEffect::Typewriter {
+                    char_time: _,
+                    fade_out,
+                    hold_time,
+                } => (2, 0.05, fade_out, hold_time),
+            };
+
+            match self.message.kind {
+                crate::hud::HudKind::Classic { channel } => {
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        crate::bindings::goldsrc::engine::api::host_send_hud_message(
+                            player.index,
+                            channel as i32,
+                            self.message.position.x,
+                            self.message.position.y,
+                            self.message.color.r as i32,
+                            self.message.color.g as i32,
+                            self.message.color.b as i32,
+                            self.message.color.a as i32,
+                            effect_val,
+                            fade_in,
+                            fade_out,
+                            hold_time,
+                            &self.message.text,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let _ = (channel, effect_val, fade_in, fade_out, hold_time);
+                    }
+                }
+                crate::hud::HudKind::Dhud => {
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        crate::bindings::goldsrc::engine::api::host_send_dhud_message(
+                            player.index,
+                            self.message.position.x,
+                            self.message.position.y,
+                            self.message.color.r as i32,
+                            self.message.color.g as i32,
+                            self.message.color.b as i32,
+                            self.message.color.a as i32,
+                            effect_val,
+                            fade_in,
+                            fade_out,
+                            hold_time,
+                            &self.message.text,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let _ = (player, effect_val, fade_in, fade_out, hold_time);
+                    }
+                }
+            }
         }
     }
 
@@ -220,7 +422,28 @@ pub mod action {
 
         #[inline(always)]
         fn execute(self, player: &Player) -> Self::Output {
-            player.give_item(&self.classname)
+            #[cfg(target_arch = "wasm32")]
+            {
+                use crate::bindings::goldsrc::engine::api as host;
+                let ent = host::host_create_named_entity(&self.classname)?;
+                let o = host::host_entity_origin(player.index);
+                host::host_entity_set_origin(
+                    ent,
+                    crate::bindings::goldsrc::engine::api::Vector3 {
+                        x: o.x,
+                        y: o.y,
+                        z: o.z,
+                    },
+                );
+                host::host_dispatch_spawn(ent);
+                host::host_dispatch_touch(ent, player.index);
+                Some(ent)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let _ = (player, self);
+                None
+            }
         }
     }
 
