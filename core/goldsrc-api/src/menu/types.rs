@@ -470,6 +470,16 @@ impl MenuItem {
         self
     }
 
+    /// Attaches a type-level specification requirement on [`crate::client::Player`].
+    pub fn require_spec<S: crate::spec::Spec<crate::client::Player> + 'static>(mut self) -> Self {
+        self.conditions
+            .push(Condition::Custom(std::sync::Arc::new(|ctx| {
+                let player = crate::client::Player::new(ctx.player_index);
+                S::check(&player).map_err(|e| e.to_string())
+            })));
+        self
+    }
+
     /// Configures the deny policy on condition failure.
     pub fn on_deny(mut self, policy: DenyPolicy) -> Self {
         self.deny_policy = policy;
@@ -972,5 +982,26 @@ impl Menu {
             timeout: self.timeout_seconds,
             renderer: self.renderer.clone(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::markers::Alive;
+
+    #[test]
+    fn test_menu_item_require_spec() {
+        let item = MenuItem::new("Test Action", 1).require_spec::<Alive>();
+
+        assert_eq!(item.conditions.len(), 1);
+        let ctx = MenuContext {
+            player_index: 1,
+            round_number: 1,
+            round_time_elapsed: 0.0,
+            is_alive: true,
+            players_count: 10,
+        };
+        let _ = item.conditions[0].check(&ctx);
     }
 }
