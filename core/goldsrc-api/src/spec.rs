@@ -26,6 +26,8 @@ pub enum SpecError {
     NotHuman,
     /// Client is not a spectator.
     NotSpectator,
+    /// Client is not an HLTV proxy.
+    NotHltv,
     /// Entity is not valid or not spawned in the engine.
     InvalidEntity,
     /// Entity is not solid.
@@ -45,6 +47,7 @@ impl fmt::Display for SpecError {
             Self::NotBot => write!(f, "client is not a bot"),
             Self::NotHuman => write!(f, "client is not a human player"),
             Self::NotSpectator => write!(f, "client is not a spectator"),
+            Self::NotHltv => write!(f, "client is not an HLTV proxy"),
             Self::InvalidEntity => write!(f, "entity handle is invalid or unspawned"),
             Self::NotSolid => write!(f, "entity is not solid"),
             Self::AnyFailed(errs) => {
@@ -284,7 +287,7 @@ impl<T> RefineExt for T {}
 // --- Domain Zero-Sized Types (ZST) Markers ---
 
 pub mod markers {
-    /// Typestate marker or container indicating a living player character (`health > 0`).
+    /// Typestate marker indicating a living player character (`health > 0`).
     ///
     /// # Invariants
     /// Verifies both:
@@ -292,19 +295,19 @@ pub mod markers {
     ///    `EDict::generation == current_map_generation()`, and `edict_t.free == 0` (preventing UAF on recycled slots).
     /// 2. Vital state via `target.is_alive()` (`health > 0.0` and `life_state == ALIVE`).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Alive<T = ()>(pub T);
+    pub struct Alive;
 
-    /// Typestate marker or container indicating a dead player character.
+    /// Typestate marker indicating a dead player character.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Dead<T = ()>(pub T);
+    pub struct Dead;
 
-    /// Typestate marker or container indicating an AI bot client (`FL_FAKECLIENT`).
+    /// Typestate marker indicating an AI bot client (`FL_FAKECLIENT`).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Bot<T = ()>(pub T);
+    pub struct Bot;
 
-    /// Typestate marker or container indicating a spectator client.
+    /// Typestate marker indicating a spectator client.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Spectator<T = ()>(pub T);
+    pub struct Spectator;
 
     /// Typestate marker indicating a connected player client slot (1..=32).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -325,9 +328,13 @@ pub mod markers {
     /// Typestate marker indicating an entity with collision geometry.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     pub struct Solid;
+
+    /// Typestate marker indicating an HLTV relay proxy client (`FL_PROXY`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub struct Hltv;
 }
 
-pub use markers::{Alive, Bot, Connected, Dead, Dormant, Human, Solid, Spawned, Spectator};
+pub use markers::{Alive, Bot, Connected, Dead, Dormant, Hltv, Human, Solid, Spawned, Spectator};
 
 // --- Spec Implementations for Domain Markers ---
 
@@ -372,7 +379,7 @@ impl Spec<Player> for Connected {
 
 /// Alive check: verifies both entity validity via `EDict::is_valid()` (ptr != 0,
 /// generation == current_map_generation, serial == *ptr.serial, free == 0) and vital state (`health > 0.0` and `life_state == ALIVE`).
-impl<T> Spec<Player> for Alive<T> {
+impl Spec<Player> for Alive {
     type Error = SpecError;
 
     #[inline(always)]
@@ -385,7 +392,7 @@ impl<T> Spec<Player> for Alive<T> {
     }
 }
 
-impl<T> Spec<Player> for Dead<T> {
+impl Spec<Player> for Dead {
     type Error = SpecError;
 
     #[inline(always)]
@@ -398,7 +405,23 @@ impl<T> Spec<Player> for Dead<T> {
     }
 }
 
-impl<T> Spec<Player> for Bot<T> {
+impl Spec<Player> for Hltv {
+    type Error = SpecError;
+
+    #[inline(always)]
+    fn check(target: &Player) -> Result<(), Self::Error> {
+        if !target.is_valid() {
+            return Err(SpecError::NotConnected);
+        }
+        if target.is_hltv() {
+            Ok(())
+        } else {
+            Err(SpecError::NotHltv)
+        }
+    }
+}
+
+impl Spec<Player> for Bot {
     type Error = SpecError;
 
     #[inline(always)]
@@ -424,7 +447,7 @@ impl Spec<Player> for Human {
     }
 }
 
-impl<T> Spec<Player> for Spectator<T> {
+impl Spec<Player> for Spectator {
     type Error = SpecError;
 
     #[inline(always)]

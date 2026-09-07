@@ -173,32 +173,8 @@ impl AsLangCode for &crate::client::Player {
     }
 }
 
-impl<T: AsLangCode> AsLangCode for crate::client::Alive<T> {
+impl<'a, Target: AsLangCode, S> AsLangCode for crate::spec::Refined<'a, Target, S> {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl<T: AsLangCode> AsLangCode for crate::client::Dead<T> {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::Spectator {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::Bot {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::Hltv {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
+        self.inner.as_lang_code()
     }
 }

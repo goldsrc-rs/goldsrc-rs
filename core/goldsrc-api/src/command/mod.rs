@@ -11,8 +11,7 @@ pub use registry::{
     register_command,
 };
 
-use crate::client::{Alive, Dead, Player};
-use crate::property::Health;
+use crate::client::Player;
 
 /// Scope for in-game chat command execution (`say` vs `say_team`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,34 +138,6 @@ impl FromArg for Player {
             }
         }
         Err(format!("player with index '{token}' is not connected"))
-    }
-}
-
-impl FromArg for Alive<Player> {
-    fn from_arg(token: &str) -> Result<Self, String> {
-        let p = Player::from_arg(token)?;
-        if p.get::<Health>().is_alive() {
-            Ok(Alive(p))
-        } else {
-            Err(format!(
-                "player '{}' is dead (expected living player)",
-                token
-            ))
-        }
-    }
-}
-
-impl FromArg for Dead<Player> {
-    fn from_arg(token: &str) -> Result<Self, String> {
-        let p = Player::from_arg(token)?;
-        if p.get::<Health>().is_dead() {
-            Ok(Dead(p))
-        } else {
-            Err(format!(
-                "player '{}' is alive (expected dead player)",
-                token
-            ))
-        }
     }
 }
 

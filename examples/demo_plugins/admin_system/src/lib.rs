@@ -49,7 +49,7 @@ impl AdminSystem {
         description = "Instantly slays a target player",
         usage = "admin_slay <player_index>"
     )]
-    fn handle_slay(mut target: Alive<Player>) {
+    fn handle_slay(mut target: Refined<'_, Player, Alive>) {
         target.set_health(0.0);
         let name = target
             .name()

@@ -76,7 +76,7 @@ impl VipCore {
         description = "Restores target living player health to 100 HP",
         usage = "vip_heal <player_index>"
     )]
-    fn handle_vip_heal(mut player: Alive<Player>) {
+    fn handle_vip_heal(mut player: Refined<'_, Player, Alive>) {
         player.set_health(100.0);
         log_info!("[VIP Core] Healed player #{} to 100 HP", player.index());
     }
@@ -88,7 +88,7 @@ impl VipCore {
         description = "Restores target living player armor to 100 AP",
         usage = "vip_armor <player_index>"
     )]
-    fn handle_give_armor(mut player: Alive<Player>) {
+    fn handle_give_armor(mut player: Refined<'_, Player, Alive>) {
         player.give_item("item_assaultsuit");
         player.set_armorvalue(100.0);
         log_info!("[VIP Core] Given 100 armor to player #{}", player.index());
