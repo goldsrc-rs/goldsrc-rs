@@ -139,9 +139,9 @@ mod tests {
         assert!(find_command_spec("plugins").is_some());
         assert!(find_command_spec("pl").is_some());
         assert!(find_command_spec("p").is_some());
-        assert!(find_command_spec("ps").is_some());
-        assert!(find_command_spec("rld").is_some());
-        assert!(find_command_spec("reload").is_some());
+        assert!(find_command_spec("ps").is_none());
+        assert!(find_command_spec("rld").is_none());
+        assert!(find_command_spec("reload").is_none());
         assert!(find_command_spec("watchers").is_some());
         assert!(find_command_spec("watch").is_some());
         assert!(find_command_spec("w").is_some());
@@ -269,13 +269,17 @@ mod tests {
         });
         assert!(out_w.contains("Watchers (0)"));
 
-        // Test `grs ps` top-level shortcut
-        let mut out_ps = String::new();
-        let args_ps = vec![OsString::from("grs"), OsString::from("ps")];
-        dispatch_host_command(args_ps, None, ("0.10.0", "abc", "x86"), |s| {
-            out_ps.push_str(s)
+        // Test `grs plugins list` hierarchical command
+        let mut out_pl = String::new();
+        let args_pl = vec![
+            OsString::from("grs"),
+            OsString::from("plugins"),
+            OsString::from("list"),
+        ];
+        dispatch_host_command(args_pl, None, ("0.10.0", "abc", "x86"), |s| {
+            out_pl.push_str(s)
         });
-        assert!(out_ps.contains("WASM Host not initialized.") || out_ps.contains("WASM plugins"));
+        assert!(out_pl.contains("WASM Host not initialized.") || out_pl.contains("WASM plugins"));
 
         // Test `grs pl ps` (plugins alias + ps list subcommand)
         let mut out_pl_ps = String::new();

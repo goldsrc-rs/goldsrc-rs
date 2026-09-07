@@ -314,7 +314,7 @@ pub fn handle_reload<F: FnMut(&str)>(
         out(&crate::cli::CliResponse::error("WASM Host not initialized.").format_console());
         return;
     };
-    if all || (spec.name == "rld" && targets.is_empty()) {
+    if all {
         let msg = manager.reload_all_plugins();
         out(&crate::cli::CliResponse::success(msg).format_console());
     } else if !targets.is_empty() {

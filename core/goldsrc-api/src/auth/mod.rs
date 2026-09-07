@@ -145,15 +145,15 @@ impl Auth {
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
-mod tests {
-    use super::Auth;
-    use std::sync::Mutex;
+pub(crate) static AUTH_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::{AUTH_TEST_LOCK, Auth};
 
     #[test]
     fn capability_lifecycle() {
-        let _guard = TEST_LOCK.lock().unwrap();
+        let _guard = AUTH_TEST_LOCK.lock().unwrap();
         Auth::register_capability("test_admin_cap", "test capability");
         Auth::remove_player(10);
         assert!(!Auth::has_capability(10, "test_admin_cap"));
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_wildcard_and_eviction_lifecycle() {
-        let _guard = TEST_LOCK.lock().unwrap();
+        let _guard = AUTH_TEST_LOCK.lock().unwrap();
         Auth::register_capability("vip.heal", "heal ability");
         Auth::grant_capability(2, "vip.*");
 

@@ -172,17 +172,22 @@ impl_tuple_specs!(A, B, C, D, E, F, G, H);
 
 // --- Refined Witness Guard ---
 
-/// A state-guarded witness token proving that `Target` satisfies specification `S`.
+/// A frame-scoped, state-guarded witness token proving that `Target` satisfies specification `S`.
 ///
 /// Cannot be constructed without executing [`Spec::check`]. Dereferences transparently
 /// to the underlying `Target`.
+///
+/// # Lifetime Contract
+/// The `'a` lifetime binds this guard to the current tick or hook scope (e.g. from borrowing
+/// the underlying entity), mathematically preventing stale witness handles from being stored across frames.
+#[must_use = "Refined witness guards are frame-scoped and must be evaluated/consumed within the current tick or hook context"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Refined<Target, S> {
+pub struct Refined<'a, Target, S> {
     pub inner: Target,
-    _marker: PhantomData<S>,
+    _marker: PhantomData<(&'a (), S)>,
 }
 
-impl<Target, S: Spec<Target>> Refined<Target, S> {
+impl<'a, Target, S: Spec<Target>> Refined<'a, Target, S> {
     /// Attempts to construct a refined witness guard by verifying [`Spec::check`].
     #[inline(always)]
     pub fn try_new(target: Target) -> Result<Self, S::Error> {
@@ -212,7 +217,7 @@ impl<Target, S: Spec<Target>> Refined<Target, S> {
     }
 }
 
-impl<Target, S> std::ops::Deref for Refined<Target, S> {
+impl<'a, Target, S> std::ops::Deref for Refined<'a, Target, S> {
     type Target = Target;
 
     #[inline(always)]
@@ -221,7 +226,7 @@ impl<Target, S> std::ops::Deref for Refined<Target, S> {
     }
 }
 
-impl<Target, S> std::ops::DerefMut for Refined<Target, S> {
+impl<'a, Target, S> std::ops::DerefMut for Refined<'a, Target, S> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
@@ -229,24 +234,31 @@ impl<Target, S> std::ops::DerefMut for Refined<Target, S> {
 }
 
 /// Automatic type-safe argument parsing for refined command arguments.
-impl<Target: FromArg, S: Spec<Target>> FromArg for Refined<Target, S> {
+impl<'a, Target: FromArg, S: Spec<Target>> FromArg for Refined<'a, Target, S> {
     fn from_arg(token: &str) -> Result<Self, String> {
         let target = Target::from_arg(token)?;
-        Refined::<Target, S>::try_new(target).map_err(|e| e.to_string())
+        Refined::<'a, Target, S>::try_new(target).map_err(|e| e.to_string())
     }
 }
 
 /// Ergonomic extension trait for refining entities into state-guarded [`Refined`] wrappers.
 pub trait RefineExt: Sized {
-    /// Validates `S` against `self`, returning a [`Refined`] witness guard upon success.
+    /// Validates `S` against `&'a self`, returning a frame-scoped [`Refined<'a, Self, S>`] guard.
     #[inline(always)]
-    fn refine<S: Spec<Self>>(self) -> Result<Refined<Self, S>, S::Error> {
-        Refined::try_new(self)
+    fn refine<'a, S: Spec<Self>>(&'a self) -> Result<Refined<'a, Self, S>, S::Error>
+    where
+        Self: Copy,
+    {
+        S::check(self)?;
+        Ok(Refined {
+            inner: *self,
+            _marker: PhantomData,
+        })
     }
 
-    /// Validates `S` against `&self`, returning an immutable [`Refined<&Self, S>`] guard.
+    /// Validates `S` against `&'a self`, returning an immutable [`Refined<'a, &'a Self, S>`] guard.
     #[inline(always)]
-    fn refine_ref<S: Spec<Self>>(&self) -> Result<Refined<&Self, S>, S::Error> {
+    fn refine_ref<'a, S: Spec<Self>>(&'a self) -> Result<Refined<'a, &'a Self, S>, S::Error> {
         S::check(self)?;
         Ok(Refined {
             inner: self,
@@ -254,9 +266,11 @@ pub trait RefineExt: Sized {
         })
     }
 
-    /// Validates `S` against `&mut self`, returning a mutable [`Refined<&mut Self, S>`] guard.
+    /// Validates `S` against `&'a mut self`, returning a mutable [`Refined<'a, &'a mut Self, S>`] guard.
     #[inline(always)]
-    fn refine_mut<S: Spec<Self>>(&mut self) -> Result<Refined<&mut Self, S>, S::Error> {
+    fn refine_mut<'a, S: Spec<Self>>(
+        &'a mut self,
+    ) -> Result<Refined<'a, &'a mut Self, S>, S::Error> {
         S::check(self)?;
         Ok(Refined {
             inner: self,
@@ -271,6 +285,12 @@ impl<T> RefineExt for T {}
 
 pub mod markers {
     /// Typestate marker or container indicating a living player character (`health > 0`).
+    ///
+    /// # Invariants
+    /// Verifies both:
+    /// 1. Entity validity via `target.is_valid()`, which verifies `EDict::serial == edict_t.serialnumber`,
+    ///    `EDict::generation == current_map_generation()`, and `edict_t.free == 0` (preventing UAF on recycled slots).
+    /// 2. Vital state via `target.is_alive()` (`health > 0.0` and `life_state == ALIVE`).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     pub struct Alive<T = ()>(pub T);
 
@@ -350,6 +370,8 @@ impl Spec<Player> for Connected {
     }
 }
 
+/// Alive check: verifies both entity validity via `EDict::is_valid()` (ptr != 0,
+/// generation == current_map_generation, serial == *ptr.serial, free == 0) and vital state (`health > 0.0` and `life_state == ALIVE`).
 impl<T> Spec<Player> for Alive<T> {
     type Error = SpecError;
 

@@ -311,6 +311,7 @@ mod tests {
 
     #[test]
     fn test_player_action_dispatch() {
+        let _guard = crate::auth::AUTH_TEST_LOCK.lock().unwrap();
         crate::auth::Auth::register_capability("action.test.unique_jump", "double jump");
         let player = Player::new(77);
         crate::auth::Auth::remove_player(77);

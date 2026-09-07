@@ -176,6 +176,16 @@ impl PluginManager {
         self.plugin_dirs.push(dir);
     }
 
+    /// Returns a clone of the underlying Wasmtime Engine.
+    pub fn wasm_engine(&self) -> Engine {
+        self.engine.clone()
+    }
+
+    /// Returns a clone of the GoldsrcEngine ops trait object.
+    pub fn engine_ops(&self) -> Arc<dyn GoldsrcEngine> {
+        self.engine_ops.clone()
+    }
+
     /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
     pub fn instantiate_plugin<P: AsRef<Path>>(&self, path: P) -> Result<LoadedPlugin, LoadError> {
         loader::instantiate_plugin(&self.engine, &self.engine_ops, path)
@@ -378,6 +388,59 @@ impl PluginManager {
             .map_err(|source| CommandError::Load { name, source })
     }
 
+    /// Unloads a plugin matching `path` if currently loaded (e.g. when its file is removed from disk).
+    pub fn unload_plugin_by_path(&mut self, path: &Path) -> Option<String> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if let Some(idx) = self
+            .plugins
+            .iter()
+            .position(|p| p.path == path || p.path.canonicalize().is_ok_and(|c| c == canonical))
+        {
+            let name = self.plugins[idx].name.clone();
+            self.unload_plugin_at(idx);
+            crate::host_log(&format!(
+                "Plugin '{name}' file was deleted; unloaded plugin"
+            ));
+            Some(name)
+        } else {
+            None
+        }
+    }
+
+    /// Commits a pre-compiled and instantiated plugin into the manager.
+    /// Executes `on_load`, unloads any previous version at matching path, and registers commands.
+    pub fn commit_reloaded_plugin(
+        &mut self,
+        mut new_plugin: LoadedPlugin,
+        path: &Path,
+    ) -> Result<String, LoadError> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let name = new_plugin.name.clone();
+
+        if let Err(e) = new_plugin.call_on_load() {
+            crate::host_log(&format!("Hot-reload on_load of '{}' failed: {e}", name));
+            return Err(LoadError::LoadPanic(e.to_string()));
+        }
+
+        if let Some(idx) = self
+            .plugins
+            .iter()
+            .position(|p| p.path == path || p.path.canonicalize().is_ok_and(|c| c == canonical))
+        {
+            self.unload_plugin_at(idx);
+        }
+
+        let new_idx = self.plugins.len();
+        if let Some(meta) = &new_plugin.metadata {
+            self.command_registry
+                .register_commands(new_idx, &meta.commands);
+        }
+        self.plugins.push(new_plugin);
+        self.recalculate_dependency_states();
+        crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
+        Ok(name)
+    }
+
     /// Reloads the plugin whose recorded path matches `path`, or loads it if newly discovered.
     pub fn reload_plugin_path(&mut self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -388,6 +451,14 @@ impl PluginManager {
         {
             let name = self.plugins[idx].name.clone();
             let old_path = self.plugins[idx].path.clone();
+
+            if !path.exists() && !old_path.exists() {
+                self.unload_plugin_at(idx);
+                crate::host_log(&format!(
+                    "Plugin '{name}' file was deleted; unloaded plugin"
+                ));
+                return;
+            }
 
             match self.instantiate_plugin(&old_path) {
                 Ok(mut new_plugin) => {
@@ -402,6 +473,7 @@ impl PluginManager {
                             .register_commands(new_idx, &meta.commands);
                     }
                     self.plugins.push(new_plugin);
+                    self.recalculate_dependency_states();
                     crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
                 }
                 Err(e) => {
@@ -412,6 +484,9 @@ impl PluginManager {
                 }
             }
         } else {
+            if !path.exists() {
+                return;
+            }
             match self.load_plugin(path) {
                 Ok(msg) => crate::host_log(&format!("Discovered and loaded new plugin: {msg}")),
                 Err(e) => crate::host_log(&format!("Failed to load new plugin at {:?}: {e}", path)),

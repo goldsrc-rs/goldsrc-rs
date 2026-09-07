@@ -698,16 +698,6 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             });
         }
-        "ps" => {
-            with_manager_or_host(manager, |m| {
-                handlers::handle_list(spec, parser, m, &mut out)
-            });
-        }
-        "rld" => {
-            with_manager_or_host(manager, |m| {
-                handlers::handle_reload(spec, parser, m, &mut out)
-            });
-        }
         "watchers" => {
             let sub_arg = match parser.next() {
                 Ok(Some(Arg::Value(val))) => val.to_string_lossy().to_lowercase(),
