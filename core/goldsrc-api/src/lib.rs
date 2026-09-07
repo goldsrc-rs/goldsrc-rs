@@ -23,8 +23,6 @@ pub mod cvar;
 pub mod dag;
 /// Unified Expression DSL lexer, parser, and grammar primitives.
 pub mod dsl;
-/// Validated `edict_t` handle.
-pub mod edict;
 /// Modular engine sub-system traits, unified engine bridge, and API facade.
 pub mod engine;
 /// Safe wrapper around engine entities and entity extension traits.
@@ -35,8 +33,6 @@ pub mod event;
 pub mod gamedata;
 /// Screen HUD and DHUD message builders and styling.
 pub mod hud;
-/// Mod descriptor manifest (`liblist.gam`) parser and model.
-pub mod liblist;
 /// Declarative multi-page menu system.
 pub mod menu;
 /// Commutative state modifiers and typed context blackboard.
@@ -75,7 +71,7 @@ pub use command::{
 pub use cvar::{Cvar, CvarFlags};
 pub use dag::{DagError, EventPhase, NodeBuilder, OrderNode, Phase, PhasedDag, PluginTier};
 pub use dsl::{Lexer, Token};
-pub use edict::EDict;
+
 pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
     EnginePrecache, EngineSound, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
@@ -93,7 +89,7 @@ pub use hud::{
     FadeFlags, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ScreenFade,
     ScreenFadeBuilder, ScreenShake, ScreenShakeBuilder,
 };
-pub use liblist::{LIBLIST_FILENAME, LibList};
+
 pub use menu::{
     AntiSpamAction, Condition, DenyAction, DenyPolicy, ExitBehavior, Feedback, ItemKind, ItemTitle,
     Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext, MenuItem,
@@ -118,4 +114,4 @@ pub use spec::{
     SpecError,
 };
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
-pub use types::Vector3;
+pub use types::{EDict, LIBLIST_FILENAME, LibList, Vector3, bump_map_generation};

@@ -1,7 +1,7 @@
 //! Safe wrapper around player entities with serial-validated edict access.
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::edict::EDict;
+use crate::types::EDict;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::RwLock;
 
