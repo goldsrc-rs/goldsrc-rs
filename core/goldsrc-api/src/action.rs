@@ -281,15 +281,6 @@ impl Action<Player> for GiveItem {
     }
 }
 
-/// Standard engine actions namespace for backward compatibility (`crate::action::action::*`).
-#[allow(clippy::module_inception)]
-pub mod action {
-    pub use super::{
-        CloseMenu, GiveItem, GrantCapability, PlaySound, Print, RevokeCapability, SendHud,
-        ShowMenu, ShowRawMenu,
-    };
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

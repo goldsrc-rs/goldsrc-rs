@@ -1,7 +1,9 @@
 //! Core Entity handle and extension trait for GoldSrc world and dynamic entities.
 
 pub mod ext;
+pub mod property;
 pub use ext::EntityExt;
+pub use property::Classname;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::types::EDict;
@@ -9,7 +11,7 @@ use crate::types::EDict;
 use crate::action::Action;
 #[allow(unused_imports)]
 use crate::bindings::goldsrc::engine::api as host_api;
-use crate::property::{Property, PropertyGetter, PropertySetter};
+use crate::property::{Prop, PropGet, PropSet};
 
 /// Validated handle to an active GoldSrc engine entity (world, items, physics, monsters, players).
 #[repr(C)]
@@ -71,19 +73,19 @@ impl Entity {
 
     /// Queries a property of type `T` from this entity.
     #[inline(always)]
-    pub fn get<T: PropertyGetter<Entity>>(&self) -> T {
+    pub fn get<T: PropGet<Entity>>(&self) -> T {
         T::get_from(self)
     }
 
     /// Mutates a property of type `T` on this entity.
     #[inline(always)]
-    pub fn set<T: PropertySetter<Entity>>(&mut self, val: T) {
+    pub fn set<T: PropSet<Entity>>(&mut self, val: T) {
         val.set_on(self);
     }
 
     /// In-place mutation of a property on this entity.
     #[inline(always)]
-    pub fn modify<T: Property<Entity>>(&mut self, f: impl FnOnce(&mut T)) {
+    pub fn modify<T: Prop<Entity>>(&mut self, f: impl FnOnce(&mut T)) {
         let mut val = self.get::<T>();
         f(&mut val);
         self.set(val);

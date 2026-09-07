@@ -217,7 +217,7 @@ graph TD
 2. **Symmetrical Command-Query Separation (CQS)**:
    - `PropGet<Target>`: Pure, non-mutating reading of engine properties.
    - `PropSet<Target>`: Explicit mutation that safely orchestrates engine side effects (e.g. updating BSP collision nodes on `Origin` mutation).
-   - `Property<Target>`: Blanket trait for symmetric read-write properties (`PropGet + PropSet`).
+   - `Prop<Target>`: Blanket trait for symmetric read-write properties (`PropGet + PropSet`).
 3. **Compile-Time Specifications & Zero-Sized Typestate (ZST)**:
    - State phases (`Alive`, `Dead`, `Connected`, `InBuyZone`) are Zero-Sized Types (`size_of::<T>() == 0`), incurring zero runtime memory overhead.
    - Compound invariants use tuple-based variadic specifications: `All<(Alive, Connected, InBuyZone)>`.

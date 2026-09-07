@@ -108,8 +108,7 @@ pub use placeholders::{
     dispatch_local_placeholder, parse_placeholder_call, register_placeholder,
 };
 pub use property::{
-    Angles, Armor, Capability, Classname, Health, Origin, Prop, PropGet, PropSet, Property,
-    PropertyGetter, PropertySetter, Velocity, prop,
+    Angles, Armor, Capability, Classname, Health, Origin, Prop, PropGet, PropSet, Velocity, prop,
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};

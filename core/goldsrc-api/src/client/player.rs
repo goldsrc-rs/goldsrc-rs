@@ -8,7 +8,7 @@ use std::sync::RwLock;
 use crate::action::Action;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::client::PrintTarget;
-use crate::property::{Property, PropertyGetter, PropertySetter};
+use crate::property::{Prop, PropGet, PropSet};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub type NativePrintHook = fn(i32, PrintTarget, &str);
@@ -172,19 +172,19 @@ impl Player {
 
     /// Queries a property of type `T` from this player.
     #[inline(always)]
-    pub fn get<T: PropertyGetter<Player>>(&self) -> T {
+    pub fn get<T: PropGet<Player>>(&self) -> T {
         T::get_from(self)
     }
 
     /// Mutates a property of type `T` on this player.
     #[inline(always)]
-    pub fn set<T: PropertySetter<Player>>(&mut self, val: T) {
+    pub fn set<T: PropSet<Player>>(&mut self, val: T) {
         val.set_on(self);
     }
 
     /// In-place mutation of a property on this player.
     #[inline(always)]
-    pub fn modify<T: Property<Player>>(&mut self, f: impl FnOnce(&mut T)) {
+    pub fn modify<T: Prop<Player>>(&mut self, f: impl FnOnce(&mut T)) {
         let mut val = self.get::<T>();
         f(&mut val);
         self.set(val);

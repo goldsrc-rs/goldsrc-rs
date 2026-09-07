@@ -250,13 +250,12 @@ pub use goldsrc_api::{
     ModifierContribution, NodeBuilder, NoneOf, Not, OrderNode, Origin, Phase, PhasedDag, Pipeline,
     PipelineFlow, Placeholder, PlaceholderBuilder, PlaceholderCall, PlaceholderHandler,
     PlaceholderMetadata, PlaceholderRegistry, Player, PlayerAction, PlayerExt, PlayerStateFilter,
-    PluginTier, PrintTarget, Prop, PropGet, PropSet, Property, PropertyGetter, PropertySetter,
-    RefineExt, Refined, RenderedMenuPage, SlotAction, Solid, Spawned, Spec, SpecError, Spectator,
-    SqlDatabase, StorageError, StorageProvider, Team, TypedBlackboard, Vector3, Velocity,
-    VisualDeny, clear_commands, clear_events, clear_menu_actions, clear_placeholders,
-    dispatch_command, dispatch_event, dispatch_local_placeholder, dispatch_menu_action,
-    register_command, register_menu_action_id, register_menu_action_name, register_placeholder,
-    split_command_args, subscribe_event,
+    PluginTier, PrintTarget, Prop, PropGet, PropSet, RefineExt, Refined, RenderedMenuPage,
+    SlotAction, Solid, Spawned, Spec, SpecError, Spectator, SqlDatabase, StorageError,
+    StorageProvider, Team, TypedBlackboard, Vector3, Velocity, VisualDeny, clear_commands,
+    clear_events, clear_menu_actions, clear_placeholders, dispatch_command, dispatch_event,
+    dispatch_local_placeholder, dispatch_menu_action, register_command, register_menu_action_id,
+    register_menu_action_name, register_placeholder, split_command_args, subscribe_event,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
@@ -282,10 +281,9 @@ pub mod prelude {
         LifeState, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRendererKind,
         MenuStyle, ModifierContribution, NoneOf, Not, Origin, Pipeline, PipelineFlow, Placeholder,
         PlaceholderBuilder, Player, PlayerAction, PlayerExt, PlayerStateFilter, PrintTarget, Prop,
-        PropGet, PropSet, Property, PropertyGetter, PropertySetter, RefineExt, Refined,
-        RenderedMenuPage, SlotAction, Solid, Spawned, Spec, SpecError, Spectator, SqlDatabase,
-        StorageError, StorageProvider, System, SystemBuilder, Team, TypedBlackboard, Vector3,
-        Velocity, VisualDeny, action, prop,
+        PropGet, PropSet, RefineExt, Refined, RenderedMenuPage, SlotAction, Solid, Spawned, Spec,
+        SpecError, Spectator, SqlDatabase, StorageError, StorageProvider, System, SystemBuilder,
+        Team, TypedBlackboard, Vector3, Velocity, VisualDeny, action, prop,
     };
     pub use crate::{
         chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,

@@ -3,7 +3,7 @@
 #[allow(unused_imports)]
 use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::{LifeState, Player, Team};
-use crate::property::{Health, PropertyGetter};
+use crate::property::{Health, PropGet};
 
 /// Player display name (`Option<String>` / Read-Only).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -37,7 +37,7 @@ impl From<Name> for Option<String> {
     }
 }
 
-impl PropertyGetter<Player> for Name {
+impl PropGet<Player> for Name {
     #[inline(always)]
     fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
@@ -97,7 +97,7 @@ impl std::ops::Deref for Lang {
     }
 }
 
-impl PropertyGetter<Player> for Lang {
+impl PropGet<Player> for Lang {
     #[inline(always)]
     fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
@@ -117,7 +117,7 @@ impl PropertyGetter<Player> for Lang {
     }
 }
 
-impl PropertyGetter<Player> for Team {
+impl PropGet<Player> for Team {
     #[inline(always)]
     fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
@@ -136,7 +136,7 @@ impl PropertyGetter<Player> for Team {
     }
 }
 
-impl PropertyGetter<Player> for LifeState {
+impl PropGet<Player> for LifeState {
     #[inline(always)]
     fn get_from(target: &Player) -> Self {
         if !target.is_valid() {
@@ -149,9 +149,3 @@ impl PropertyGetter<Player> for LifeState {
         }
     }
 }
-
-/// Type alias for `Team` property query for backward compatibility.
-pub type PlayerTeam = Team;
-
-/// Type alias for `LifeState` property query for backward compatibility.
-pub type PlayerLifeState = LifeState;

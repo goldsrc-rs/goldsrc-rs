@@ -280,3 +280,90 @@ impl std::ops::Sub<f32> for Armor {
         Self::new(self.0 - rhs)
     }
 }
+
+// --- Property System Integrations ---
+
+use crate::Entity;
+use crate::client::Player;
+use crate::property::{PropGet, PropSet};
+
+impl PropGet<Entity> for Health {
+    #[inline(always)]
+    fn get_from(target: &Entity) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let cur = crate::bindings::goldsrc::engine::api::host_entity_health(target.index);
+            Self::new(cur, 100.0)
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let cur = target.inner.health().unwrap_or(0.0);
+            Self::new(cur, 100.0)
+        }
+    }
+}
+
+impl PropSet<Entity> for Health {
+    #[inline(always)]
+    fn set_on(self, target: &mut Entity) {
+        if !self.current.is_finite() {
+            return;
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_entity_set_health(
+                target.index,
+                self.current,
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            target.inner.set_health(self.current);
+        }
+    }
+}
+
+impl PropGet<Player> for Health {
+    #[inline(always)]
+    fn get_from(target: &Player) -> Self {
+        PropGet::<Entity>::get_from(target)
+    }
+}
+
+impl PropSet<Player> for Health {
+    #[inline(always)]
+    fn set_on(self, target: &mut Player) {
+        PropSet::<Entity>::set_on(self, target);
+    }
+}
+
+impl PropGet<Player> for Armor {
+    #[inline(always)]
+    fn get_from(target: &Player) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self::new(crate::bindings::goldsrc::engine::api::host_player_armorvalue(target.index))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self::new(target.inner.armorvalue().unwrap_or(0.0))
+        }
+    }
+}
+
+impl PropSet<Player> for Armor {
+    #[inline(always)]
+    fn set_on(self, target: &mut Player) {
+        if !self.0.is_finite() {
+            return;
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_player_set_armorvalue(target.index, self.0);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            target.inner.set_armorvalue(self.0);
+        }
+    }
+}

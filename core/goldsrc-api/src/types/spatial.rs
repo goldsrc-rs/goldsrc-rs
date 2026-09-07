@@ -142,3 +142,171 @@ impl std::ops::DerefMut for Angles {
         &mut self.0
     }
 }
+
+// --- Property System Integrations ---
+
+use crate::Entity;
+use crate::client::Player;
+use crate::property::{PropGet, PropSet};
+
+impl PropGet<Entity> for Origin {
+    #[inline(always)]
+    fn get_from(target: &Entity) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let v = crate::bindings::goldsrc::engine::api::host_entity_origin(target.index);
+            Self(Vector3 {
+                x: v.x,
+                y: v.y,
+                z: v.z,
+            })
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self(target.inner.origin().unwrap_or([0.0, 0.0, 0.0]).into())
+        }
+    }
+}
+
+impl PropSet<Entity> for Origin {
+    #[inline(always)]
+    fn set_on(self, target: &mut Entity) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_entity_set_origin(
+                target.index,
+                crate::bindings::goldsrc::engine::api::Vector3 {
+                    x: self.0.x,
+                    y: self.0.y,
+                    z: self.0.z,
+                },
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            target.inner.set_origin(self.0.into());
+        }
+    }
+}
+
+impl PropGet<Player> for Origin {
+    #[inline(always)]
+    fn get_from(target: &Player) -> Self {
+        PropGet::<Entity>::get_from(target)
+    }
+}
+
+impl PropSet<Player> for Origin {
+    #[inline(always)]
+    fn set_on(self, target: &mut Player) {
+        PropSet::<Entity>::set_on(self, target);
+    }
+}
+
+impl PropGet<Entity> for Velocity {
+    #[inline(always)]
+    fn get_from(target: &Entity) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let v = crate::bindings::goldsrc::engine::api::host_entity_velocity(target.index);
+            Self(Vector3 {
+                x: v.x,
+                y: v.y,
+                z: v.z,
+            })
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self(target.inner.velocity().unwrap_or([0.0, 0.0, 0.0]).into())
+        }
+    }
+}
+
+impl PropSet<Entity> for Velocity {
+    #[inline(always)]
+    fn set_on(self, target: &mut Entity) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_entity_set_velocity(
+                target.index,
+                crate::bindings::goldsrc::engine::api::Vector3 {
+                    x: self.0.x,
+                    y: self.0.y,
+                    z: self.0.z,
+                },
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            target.inner.set_velocity(self.0.into());
+        }
+    }
+}
+
+impl PropGet<Player> for Velocity {
+    #[inline(always)]
+    fn get_from(target: &Player) -> Self {
+        PropGet::<Entity>::get_from(target)
+    }
+}
+
+impl PropSet<Player> for Velocity {
+    #[inline(always)]
+    fn set_on(self, target: &mut Player) {
+        PropSet::<Entity>::set_on(self, target);
+    }
+}
+
+impl PropGet<Entity> for Angles {
+    #[inline(always)]
+    fn get_from(target: &Entity) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let v = crate::bindings::goldsrc::engine::api::host_entity_angles(target.index);
+            Self(Vector3 {
+                x: v.x,
+                y: v.y,
+                z: v.z,
+            })
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self(target.inner.angles().unwrap_or([0.0, 0.0, 0.0]).into())
+        }
+    }
+}
+
+impl PropSet<Entity> for Angles {
+    #[inline(always)]
+    fn set_on(self, target: &mut Entity) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_entity_set_angles(
+                target.index,
+                crate::bindings::goldsrc::engine::api::Vector3 {
+                    x: self.0.x,
+                    y: self.0.y,
+                    z: self.0.z,
+                },
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            target.inner.set_angles(self.0.into());
+        }
+    }
+}
+
+impl PropGet<Player> for Angles {
+    #[inline(always)]
+    fn get_from(target: &Player) -> Self {
+        PropGet::<Entity>::get_from(target)
+    }
+}
+
+impl PropSet<Player> for Angles {
+    #[inline(always)]
+    fn set_on(self, target: &mut Player) {
+        PropSet::<Entity>::set_on(self, target);
+    }
+}

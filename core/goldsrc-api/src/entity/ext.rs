@@ -1,5 +1,6 @@
 //! Extension trait providing spatial, physics, vital, and identity shortcuts on entities.
 
+use crate::client::Player;
 use crate::entity::Entity;
 use crate::property::{Angles, Classname, Health, Origin, Velocity};
 use crate::types::Vector3;
@@ -87,7 +88,7 @@ impl EntityExt for Entity {
     }
 }
 
-impl EntityExt for crate::client::Player {
+impl EntityExt for Player {
     #[inline(always)]
     fn origin(&self) -> Vector3 {
         self.get::<Origin>().0
