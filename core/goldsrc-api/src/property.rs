@@ -3,7 +3,6 @@
 //! Provides a symmetrical, type-safe CQS property querying (`get::<T>()`), mutation (`set(val)`),
 //! and in-place updating (`modify::<T>(f)`) model with rich domain models (`Health`, `Armor`, `Origin`, `Velocity`, `Angles`).
 
-pub use crate::auth::property::Capability;
 pub use crate::client::property::{Lang, Name};
 pub use crate::entity::Classname;
 pub use crate::types::spatial::{Angles, Origin, Velocity};
@@ -28,7 +27,7 @@ impl<T, Target> Prop<Target> for T where T: PropGet<Target> + PropSet<Target> {}
 
 /// Standard engine properties namespace (`crate::property::prop::*`).
 pub mod prop {
-    pub use super::{Angles, Armor, Capability, Classname, Health, Lang, Name, Origin, Velocity};
+    pub use super::{Angles, Armor, Classname, Health, Lang, Name, Origin, Velocity};
 }
 
 #[cfg(test)]

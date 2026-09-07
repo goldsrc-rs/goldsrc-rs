@@ -1,8 +1,8 @@
 //! Extension traits providing client and gameplay shortcuts (slots 1..=32: Player, Bot, HLTV).
 
 use crate::action::{
-    CloseMenu, GiveItem, GrantCapability, PlaySound, Print, RevokeCapability, SendHud, ShowMenu,
-    ShowRawMenu,
+    CheckCapability, CloseMenu, GiveItem, GrantCapability, PlaySound, Print, RevokeCapability,
+    SendHud, ShowMenu, ShowRawMenu,
 };
 use crate::client::property::{Lang, Name};
 use crate::client::{ClientKind, LifeState, Player, PrintTarget, Team};
@@ -11,7 +11,7 @@ use crate::consts::{FL_FAKECLIENT, FL_PROXY};
 use crate::entity::EntityExt;
 use crate::hud::HudMessage;
 use crate::menu::Menu;
-use crate::property::{Armor, Capability};
+use crate::property::Armor;
 
 /// Extension trait providing client-specific queries and actions (slots 1..=32: Player, Bot, HLTV).
 pub trait ClientExt: EntityExt {
@@ -240,7 +240,7 @@ impl PlayerExt for Player {
 
     #[inline(always)]
     fn has_capability(&self, name: &str) -> bool {
-        self.act(Capability(name))
+        self.act(CheckCapability(name))
     }
 
     #[inline(always)]

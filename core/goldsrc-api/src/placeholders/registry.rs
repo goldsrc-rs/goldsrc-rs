@@ -1,12 +1,12 @@
 //! In-memory placeholder registry, fluent builder, and guest dispatcher.
 
+use crate::action::CheckCapability;
 #[allow(unused_imports)]
 use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::placeholders::{
     PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, parse_placeholder_call,
 };
-use crate::property::Capability;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -45,7 +45,7 @@ impl PlaceholderRegistry {
 
         // Capability check if configured
         if let Some(cap) = &meta.capability
-            && !caller.act(Capability(cap))
+            && !caller.act(CheckCapability(cap))
         {
             return None;
         }

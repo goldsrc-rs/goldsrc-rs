@@ -14,7 +14,7 @@ use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::player::NATIVE_PRINT_HOOK;
 use crate::client::{Player, PrintTarget};
 
-pub use crate::auth::action::{GrantCapability, RevokeCapability};
+pub use crate::auth::action::{CheckCapability, GrantCapability, RevokeCapability};
 pub use crate::hud::action::SendHud;
 pub use crate::menu::action::{CloseMenu, ShowMenu, ShowRawMenu};
 

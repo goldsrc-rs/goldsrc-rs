@@ -1,7 +1,22 @@
-//! Capability authorization modification actions (GrantCapability, RevokeCapability).
+//! Capability authorization modification and query actions (CheckCapability, GrantCapability, RevokeCapability).
 
 use crate::action::Action;
 use crate::client::Player;
+
+/// Dynamic authorization capability check action.
+///
+/// Returns `true` if the player possesses the specified capability flag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CheckCapability<'a>(pub &'a str);
+
+impl<'a> Action<Player> for CheckCapability<'a> {
+    type Output = bool;
+
+    #[inline(always)]
+    fn execute(self, player: &Player) -> Self::Output {
+        crate::auth::Auth::has_capability(player.index, self.0)
+    }
+}
 
 /// Grants a dynamic authorization capability to the player.
 #[derive(Debug, Clone, PartialEq, Eq)]

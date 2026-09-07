@@ -57,7 +57,7 @@ pub mod storage;
 pub mod types;
 
 pub use action::{Action, CancellationToken, PlayerAction};
-pub use auth::{Auth, CapExpr, CapabilityRegistry};
+pub use auth::{Auth, CapExpr, CapabilityRegistry, CheckCapability};
 pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
     Alive, AsLangCode, Bot, ClientExt, ClientKind, ConnectionState, Dead, Hltv, LifeState, Player,
@@ -104,7 +104,7 @@ pub use placeholders::{
     dispatch_local_placeholder, parse_placeholder_call, register_placeholder,
 };
 pub use property::{
-    Angles, Armor, Capability, Classname, Health, Origin, Prop, PropGet, PropSet, Velocity, prop,
+    Angles, Armor, Classname, Health, Origin, Prop, PropGet, PropSet, Velocity, prop,
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};

@@ -2,12 +2,10 @@
 
 pub mod action;
 pub mod dsl;
-pub mod property;
 pub mod registry;
 
-pub use action::{GrantCapability, RevokeCapability};
+pub use action::{CheckCapability, GrantCapability, RevokeCapability};
 pub use dsl::CapExpr;
-pub use property::Capability;
 pub use registry::{CAPS, CapabilityRegistry};
 
 #[cfg(not(target_arch = "wasm32"))]
