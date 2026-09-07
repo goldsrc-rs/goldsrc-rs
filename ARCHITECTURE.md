@@ -191,12 +191,12 @@ graph TD
 
         Markers --> Specs
         Properties -->|inspected by| Specs
-        Specs -->|proven via try_new()| Refined
+        Specs -->|proven via try_new| Refined
         Target -->|borrowed by| Refined
     end
 
     subgraph ControlFlow ["3. Control Flow & Interceptor Pipeline"]
-        Pipeline["Interceptor Pipeline (Chain of Responsibility)\n(Validation -> Cooldown -> Audit -> Execution)"]
+        Pipeline["Interceptor Pipeline (Chain of Responsibility)\n(Validation / Cooldown / Audit / Execution)"]
         Actions["Actions & State Transitions\n(DamageAction, BuyWeaponAction, Teleport)"]
         Engine["Engine C-ABI Boundary\n(g_engfuncs.pfnSetOrigin, TakeDamage)"]
 
@@ -233,4 +233,3 @@ graph TD
   Calling an `Action` that invokes native C-ABI functions (e.g. `TakeDamage`) can synchronously trigger recursive engine hooks before the initial call returns. Interceptors and actions must release internal mutexes/locks prior to crossing the FFI boundary.
 - **Entity Generation / Serial Number Tracking**:
   Entity slot indices ($1..32$ for players, $33..N$ for entities) are recycled by GoldSrc upon deletion. All `Spec` verifications must check generation serial counters to prevent operations against resurrected entity handles.
-
