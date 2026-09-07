@@ -12,15 +12,11 @@ pub enum PrintTarget {
     Console = 0,
     /// Center-screen notice. Plain text only.
     Center = 1,
-    /// Chat area via the `SayText` user message.
+    /// Chat area via the `SayText` user message (supports embedded color tags in compatible games).
+    #[default]
     Chat = 2,
     /// Top-left developer notification area (print_notify = 3).
     Notify = 3,
-    /// Chat area with color escapes: `^1` default, `^3` team, `^4` green.
-    /// Colors render only in mods whose client parses SayText markup
-    /// (CS 1.6 / CZ); elsewhere codes appear as literal text.
-    #[default]
-    ColoredChat = 4,
 }
 
 /// Client classification kind.

@@ -109,7 +109,7 @@ impl Print {
     /// Creates a colored chat message action.
     pub fn colored_chat(msg: impl Into<String>) -> Self {
         Self {
-            target: PrintTarget::ColoredChat,
+            target: PrintTarget::Chat,
             message: msg.into(),
         }
     }
@@ -163,16 +163,6 @@ impl Action<Player> for Print {
                     && let Some(hook) = *lock
                 {
                     hook(player.index, PrintTarget::Notify, &self.message);
-                }
-            }
-            PrintTarget::ColoredChat => {
-                #[cfg(target_arch = "wasm32")]
-                host_api::host_print_chat(player.index, &self.message);
-                #[cfg(not(target_arch = "wasm32"))]
-                if let Ok(lock) = NATIVE_PRINT_HOOK.read()
-                    && let Some(hook) = *lock
-                {
-                    hook(player.index, PrintTarget::ColoredChat, &self.message);
                 }
             }
         }

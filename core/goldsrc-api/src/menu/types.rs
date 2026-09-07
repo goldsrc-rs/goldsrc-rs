@@ -82,7 +82,7 @@ impl Feedback {
 
     pub fn chat(msg: impl Into<String>) -> Self {
         Self {
-            message: Some((crate::client::PrintTarget::ColoredChat, msg.into())),
+            message: Some((crate::client::PrintTarget::Chat, msg.into())),
             sound: None,
         }
     }
