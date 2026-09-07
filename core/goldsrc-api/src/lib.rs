@@ -66,7 +66,7 @@ pub use client::{
 pub use command::{
     Command, CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry,
     CommandResult, CommandTarget, FromArg, PlayerStateFilter, clear_commands, dispatch_command,
-    register_command, split_command_args,
+    register_command, split_command_args, use_command_interceptor,
 };
 pub use cvar::{Cvar, CvarFlags};
 pub use dag::{DagError, EventPhase, NodeBuilder, OrderNode, Phase, PhasedDag, PluginTier};

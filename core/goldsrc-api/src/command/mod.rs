@@ -8,7 +8,7 @@ pub use builder::{Command, CommandBuilder};
 pub use error::{CommandContext, CommandError, CommandResult};
 pub use registry::{
     CommandHandler, CommandRegistry, RegisteredCommand, clear_commands, dispatch_command,
-    register_command,
+    register_command, use_command_interceptor,
 };
 
 use crate::client::Player;

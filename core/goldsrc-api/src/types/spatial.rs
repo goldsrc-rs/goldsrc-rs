@@ -1,6 +1,7 @@
 //! Spatial orientation and kinematic value objects (`Origin`, `Velocity`, `Angles`).
 
 use crate::types::Vector3;
+use std::ops::{Deref, DerefMut};
 
 /// Entity or player 3D world origin coordinates (`Vector3`).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -34,7 +35,7 @@ impl From<Origin> for Vector3 {
     }
 }
 
-impl std::ops::Deref for Origin {
+impl Deref for Origin {
     type Target = Vector3;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -42,7 +43,7 @@ impl std::ops::Deref for Origin {
     }
 }
 
-impl std::ops::DerefMut for Origin {
+impl DerefMut for Origin {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
@@ -81,7 +82,7 @@ impl From<Velocity> for Vector3 {
     }
 }
 
-impl std::ops::Deref for Velocity {
+impl Deref for Velocity {
     type Target = Vector3;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -89,7 +90,7 @@ impl std::ops::Deref for Velocity {
     }
 }
 
-impl std::ops::DerefMut for Velocity {
+impl DerefMut for Velocity {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
@@ -128,7 +129,7 @@ impl From<Angles> for Vector3 {
     }
 }
 
-impl std::ops::Deref for Angles {
+impl Deref for Angles {
     type Target = Vector3;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -136,7 +137,7 @@ impl std::ops::Deref for Angles {
     }
 }
 
-impl std::ops::DerefMut for Angles {
+impl DerefMut for Angles {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
