@@ -1,6 +1,8 @@
 //! Interactive and raw menu display and closure actions.
 
 use crate::action::Action;
+#[allow(unused_imports)]
+use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::hud::{HudKind, HudMessage, SendHud};
 use crate::menu::{Menu, MenuContext, MenuRendererKind};
@@ -110,12 +112,7 @@ impl<'a> Action<Player> for ShowRawMenu<'a> {
 
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_show_menu(
-                player.index,
-                self.keys_mask,
-                self.timeout,
-                self.text,
-            );
+            host_api::host_show_menu(player.index, self.keys_mask, self.timeout, self.text);
         }
 
         #[cfg(not(target_arch = "wasm32"))]

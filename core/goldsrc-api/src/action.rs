@@ -8,6 +8,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::Entity;
+#[allow(unused_imports)]
+use crate::bindings::goldsrc::engine::api as host_api;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::client::player::NATIVE_PRINT_HOOK;
 use crate::client::{Player, PrintTarget};
 
 pub use crate::auth::action::{GrantCapability, RevokeCapability};
@@ -123,12 +127,9 @@ impl Action<Player> for Print {
         match self.target {
             PrintTarget::Console => {
                 #[cfg(target_arch = "wasm32")]
-                crate::bindings::goldsrc::engine::api::host_print_console(
-                    player.index,
-                    &self.message,
-                );
+                host_api::host_print_console(player.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Ok(lock) = crate::client::player::NATIVE_PRINT_HOOK.read()
+                if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
                     hook(player.index, PrintTarget::Console, &self.message);
@@ -136,12 +137,9 @@ impl Action<Player> for Print {
             }
             PrintTarget::Center => {
                 #[cfg(target_arch = "wasm32")]
-                crate::bindings::goldsrc::engine::api::host_print_center(
-                    player.index,
-                    &self.message,
-                );
+                host_api::host_print_center(player.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Ok(lock) = crate::client::player::NATIVE_PRINT_HOOK.read()
+                if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
                     hook(player.index, PrintTarget::Center, &self.message);
@@ -149,9 +147,9 @@ impl Action<Player> for Print {
             }
             PrintTarget::Chat => {
                 #[cfg(target_arch = "wasm32")]
-                crate::bindings::goldsrc::engine::api::host_print_chat(player.index, &self.message);
+                host_api::host_print_chat(player.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Ok(lock) = crate::client::player::NATIVE_PRINT_HOOK.read()
+                if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
                     hook(player.index, PrintTarget::Chat, &self.message);
@@ -159,12 +157,9 @@ impl Action<Player> for Print {
             }
             PrintTarget::Notify => {
                 #[cfg(target_arch = "wasm32")]
-                crate::bindings::goldsrc::engine::api::host_print_notify(
-                    player.index,
-                    &self.message,
-                );
+                host_api::host_print_notify(player.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Ok(lock) = crate::client::player::NATIVE_PRINT_HOOK.read()
+                if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
                     hook(player.index, PrintTarget::Notify, &self.message);
@@ -172,9 +167,9 @@ impl Action<Player> for Print {
             }
             PrintTarget::ColoredChat => {
                 #[cfg(target_arch = "wasm32")]
-                crate::bindings::goldsrc::engine::api::host_print_chat(player.index, &self.message);
+                host_api::host_print_chat(player.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Ok(lock) = crate::client::player::NATIVE_PRINT_HOOK.read()
+                if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
                     hook(player.index, PrintTarget::ColoredChat, &self.message);
@@ -211,7 +206,7 @@ impl Action<Entity> for PlaySound {
 
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_emit_sound(
+            host_api::host_emit_sound(
                 entity.index,
                 0, // CHAN_AUTO
                 &self.sample,
@@ -263,19 +258,18 @@ impl Action<Player> for GiveItem {
 
         #[cfg(target_arch = "wasm32")]
         {
-            use crate::bindings::goldsrc::engine::api as host;
-            let ent = host::host_create_named_entity(&self.item)?;
-            let o = host::host_entity_origin(player.index);
-            host::host_entity_set_origin(
+            let ent = host_api::host_create_named_entity(&self.item)?;
+            let o = host_api::host_entity_origin(player.index);
+            host_api::host_entity_set_origin(
                 ent,
-                crate::bindings::goldsrc::engine::api::Vector3 {
+                host_api::Vector3 {
                     x: o.x,
                     y: o.y,
                     z: o.z,
                 },
             );
-            host::host_dispatch_spawn(ent);
-            host::host_dispatch_touch(ent, player.index);
+            host_api::host_dispatch_spawn(ent);
+            host_api::host_dispatch_touch(ent, player.index);
             Some(ent)
         }
 

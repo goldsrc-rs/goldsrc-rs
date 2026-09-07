@@ -7,6 +7,8 @@ pub use ext::EntityExt;
 use crate::types::EDict;
 
 use crate::action::Action;
+#[allow(unused_imports)]
+use crate::bindings::goldsrc::engine::api as host_api;
 use crate::property::{Property, PropertyGetter, PropertySetter};
 
 /// Validated handle to an active GoldSrc engine entity (world, items, physics, monsters, players).
@@ -59,7 +61,7 @@ impl Entity {
     pub fn is_valid(&self) -> bool {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_entity_is_valid(self.index)
+            host_api::host_entity_is_valid(self.index)
         }
         #[cfg(not(target_arch = "wasm32"))]
         {

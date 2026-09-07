@@ -1,5 +1,6 @@
 //! In-memory runtime command registry and invocation dispatcher.
 
+use crate::auth::CapExpr;
 use crate::command::Command;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
@@ -12,7 +13,7 @@ pub type CommandHandler = Arc<dyn Fn(i32, &str) -> bool + Send + Sync + 'static>
 pub struct RegisteredCommand {
     pub descriptor: Command,
     pub handler: CommandHandler,
-    pub parsed_cap: Option<crate::auth::CapExpr>,
+    pub parsed_cap: Option<CapExpr>,
 }
 
 /// Thread-safe in-memory command registry for dynamic command routing.
@@ -38,7 +39,7 @@ impl CommandRegistry {
         }
 
         let parsed_cap = if let Some(cap) = &descriptor.capability {
-            match crate::auth::CapExpr::parse(cap) {
+            match CapExpr::parse(cap) {
                 Ok(expr) => Some(expr),
                 Err(err) => {
                     log::error!(

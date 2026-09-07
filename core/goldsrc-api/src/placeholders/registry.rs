@@ -1,5 +1,7 @@
 //! In-memory placeholder registry, fluent builder, and guest dispatcher.
 
+#[allow(unused_imports)]
+use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::placeholders::{
     PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, parse_placeholder_call,
@@ -74,7 +76,7 @@ where
 {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_register_placeholder(name, description);
+        host_api::host_register_placeholder(name, description);
     }
     let meta = PlaceholderMetadata {
         name: name.to_string(),
@@ -158,10 +160,7 @@ impl PlaceholderBuilder {
     {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_register_placeholder(
-                &self.metadata.name,
-                &self.metadata.description,
-            );
+            host_api::host_register_placeholder(&self.metadata.name, &self.metadata.description);
         }
         GLOBAL_REGISTRY
             .write()

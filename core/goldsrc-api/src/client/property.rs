@@ -1,5 +1,7 @@
 //! Player identity and state properties (`Name`, `Lang`, `Team`, `LifeState`).
 
+#[allow(unused_imports)]
+use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::{LifeState, Player, Team};
 use crate::property::{Health, PropertyGetter};
 
@@ -40,9 +42,7 @@ impl PropertyGetter<Player> for Name {
     fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
-            Self(crate::bindings::goldsrc::engine::api::host_player_name(
-                target.index,
-            ))
+            Self(host_api::host_player_name(target.index))
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -102,10 +102,7 @@ impl PropertyGetter<Player> for Lang {
     fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
-            Self(
-                crate::bindings::goldsrc::engine::api::host_player_lang(target.index)
-                    .unwrap_or_else(|| "en".to_string()),
-            )
+            Self(host_api::host_player_lang(target.index).unwrap_or_else(|| "en".to_string()))
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -125,9 +122,7 @@ impl PropertyGetter<Player> for Team {
     fn get_from(target: &Player) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::client::Team::from(crate::bindings::goldsrc::engine::api::host_player_team(
-                target.index,
-            ))
+            crate::client::Team::from(host_api::host_player_team(target.index))
         }
         #[cfg(not(target_arch = "wasm32"))]
         {

@@ -10,6 +10,8 @@ use goldsrc_api::{
     EngineSound,
 };
 use goldsrc_sys::enginefuncs_t;
+use std::collections::{BTreeSet, HashMap};
+use std::sync::{LazyLock, Mutex, RwLock};
 
 /// Standard `Engine` implementation parameterized by the engfunc source.
 #[derive(Clone, Copy)]
@@ -105,13 +107,12 @@ impl EngineBackend {
     }
 }
 
-static PRECACHE_SOUNDS: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
-static PRECACHE_MODELS: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
-static PRECACHE_GENERICS: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::BTreeSet<String>>,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
+static PRECACHE_SOUNDS: LazyLock<Mutex<BTreeSet<String>>> =
+    LazyLock::new(|| Mutex::new(BTreeSet::new()));
+static PRECACHE_MODELS: LazyLock<Mutex<BTreeSet<String>>> =
+    LazyLock::new(|| Mutex::new(BTreeSet::new()));
+static PRECACHE_GENERICS: LazyLock<Mutex<BTreeSet<String>>> =
+    LazyLock::new(|| Mutex::new(BTreeSet::new()));
 
 impl EngineBackend {
     /// Precaches all pending/registered resources during map spawn phase.
@@ -189,9 +190,8 @@ impl EnginePrecache for EngineBackend {
     }
 }
 
-static USER_MSG_REGISTRY: std::sync::LazyLock<
-    std::sync::RwLock<std::collections::HashMap<String, i32>>,
-> = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+static USER_MSG_REGISTRY: LazyLock<RwLock<HashMap<String, i32>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 pub type UserMsgResolverFn = fn(&str) -> i32;
 pub type MapNameResolverFn = fn() -> Option<String>;
@@ -237,8 +237,7 @@ pub fn register_user_msg_id(name: &str, id: i32) {
 }
 
 static ACTIVE_MSG_TYPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
-static ACTIVE_MSG_STRINGS: std::sync::LazyLock<std::sync::Mutex<Vec<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
+static ACTIVE_MSG_STRINGS: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 impl EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {

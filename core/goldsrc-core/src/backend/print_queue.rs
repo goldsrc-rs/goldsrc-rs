@@ -1,12 +1,15 @@
 //! Deferred server-print queue and safe formatting utilities.
 
+use std::collections::VecDeque;
+use std::sync::Mutex;
+
 /// Deferred server-print queue.
 ///
 /// Printing is deferred to the post-start-frame hook because the engine is
 /// unstable if a plugin prints mid-frame. Also escapes fmtlib-sensitive
 /// characters (`%`, `{`, `}`) — ReHLDS routes `ServerPrint` through fmtlib
 /// and unescaped braces would crash the server.
-pub struct PrintQueue(std::sync::Mutex<std::collections::VecDeque<String>>);
+pub struct PrintQueue(Mutex<VecDeque<String>>);
 
 /// Helper to escape format specifiers and braces for ReHLDS fmtlib safety.
 ///
@@ -68,7 +71,7 @@ impl Default for PrintQueue {
 impl PrintQueue {
     /// Create an empty print queue.
     pub const fn new() -> Self {
-        Self(std::sync::Mutex::new(std::collections::VecDeque::new()))
+        Self(Mutex::new(VecDeque::new()))
     }
 
     /// Add a message to the back of the queue.

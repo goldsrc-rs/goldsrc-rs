@@ -1,6 +1,8 @@
 //! Screen HUD and DHUD rendering actions.
 
 use crate::action::Action;
+#[allow(unused_imports)]
+use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 
 /// Sends a screen HUD or DHUD message to the player.
@@ -47,7 +49,7 @@ impl<'a> Action<Player> for SendHud<'a> {
             crate::hud::HudKind::Classic { channel } => {
                 #[cfg(target_arch = "wasm32")]
                 {
-                    crate::bindings::goldsrc::engine::api::host_send_hud_message(
+                    host_api::host_send_hud_message(
                         player.index,
                         channel as i32,
                         self.message.position.x,
@@ -71,7 +73,7 @@ impl<'a> Action<Player> for SendHud<'a> {
             crate::hud::HudKind::Dhud => {
                 #[cfg(target_arch = "wasm32")]
                 {
-                    crate::bindings::goldsrc::engine::api::host_send_dhud_message(
+                    host_api::host_send_dhud_message(
                         player.index,
                         self.message.position.x,
                         self.message.position.y,

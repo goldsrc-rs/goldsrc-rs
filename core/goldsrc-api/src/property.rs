@@ -33,6 +33,15 @@ pub trait Property<Target>: PropertyGetter<Target> + PropertySetter<Target> {}
 
 impl<T, Target> Property<Target> for T where T: PropertyGetter<Target> + PropertySetter<Target> {}
 
+/// Idiomatic Rust alias for [`PropertyGetter`].
+pub use PropertyGetter as PropGet;
+
+/// Idiomatic Rust alias for [`PropertySetter`].
+pub use PropertySetter as PropSet;
+
+/// Idiomatic Rust alias for [`Property`].
+pub use Property as Prop;
+
 // --- Spatial Properties ---
 
 impl PropertyGetter<Entity> for Origin {

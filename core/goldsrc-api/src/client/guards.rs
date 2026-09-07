@@ -1,10 +1,12 @@
 //! Typestate zero-cost wrappers and state-verified guards.
 
 use crate::Vector3;
-use crate::client::{ClientExt, EntityExt, Player, PlayerExt};
+use crate::client::{ClientExt, EntityExt, PlayerExt};
+use crate::client::{ClientKind, LifeState, PrintTarget, Team};
 use crate::hud::HudMessage;
 use crate::menu::Menu;
 use crate::property::{Armor, Health};
+use crate::{Entity, client::Player};
 use std::ops::{Deref, DerefMut};
 
 /// Typestate extractor guaranteeing that the wrapped player/entity is currently alive (`health > 0`).
@@ -85,7 +87,7 @@ impl<T: ClientExt> ClientExt for Alive<T> {
         self.0.lang()
     }
     #[inline(always)]
-    fn client_kind(&self) -> crate::client::ClientKind {
+    fn client_kind(&self) -> ClientKind {
         self.0.client_kind()
     }
     #[inline(always)]
@@ -124,15 +126,15 @@ impl<T: PlayerExt> PlayerExt for Alive<T> {
         self.0.set_armor(armor);
     }
     #[inline(always)]
-    fn team(&self) -> crate::client::Team {
+    fn team(&self) -> Team {
         self.0.team()
     }
     #[inline(always)]
-    fn life_state(&self) -> crate::client::LifeState {
+    fn life_state(&self) -> LifeState {
         self.0.life_state()
     }
     #[inline(always)]
-    fn print(&self, target: crate::client::PrintTarget, msg: impl Into<String>) {
+    fn print(&self, target: PrintTarget, msg: impl Into<String>) {
         self.0.print(target, msg);
     }
     #[inline(always)]
@@ -267,7 +269,7 @@ impl<T: ClientExt> ClientExt for Dead<T> {
         self.0.lang()
     }
     #[inline(always)]
-    fn client_kind(&self) -> crate::client::ClientKind {
+    fn client_kind(&self) -> ClientKind {
         self.0.client_kind()
     }
     #[inline(always)]
@@ -306,15 +308,15 @@ impl<T: PlayerExt> PlayerExt for Dead<T> {
         self.0.set_armor(armor);
     }
     #[inline(always)]
-    fn team(&self) -> crate::client::Team {
+    fn team(&self) -> Team {
         self.0.team()
     }
     #[inline(always)]
-    fn life_state(&self) -> crate::client::LifeState {
+    fn life_state(&self) -> LifeState {
         self.0.life_state()
     }
     #[inline(always)]
-    fn print(&self, target: crate::client::PrintTarget, msg: impl Into<String>) {
+    fn print(&self, target: PrintTarget, msg: impl Into<String>) {
         self.0.print(target, msg);
     }
     #[inline(always)]
@@ -449,7 +451,7 @@ impl ClientExt for Spectator {
         self.0.lang()
     }
     #[inline(always)]
-    fn client_kind(&self) -> crate::client::ClientKind {
+    fn client_kind(&self) -> ClientKind {
         self.0.client_kind()
     }
     #[inline(always)]
@@ -488,15 +490,15 @@ impl PlayerExt for Spectator {
         self.0.set_armor(armor);
     }
     #[inline(always)]
-    fn team(&self) -> crate::client::Team {
+    fn team(&self) -> Team {
         self.0.team()
     }
     #[inline(always)]
-    fn life_state(&self) -> crate::client::LifeState {
+    fn life_state(&self) -> LifeState {
         self.0.life_state()
     }
     #[inline(always)]
-    fn print(&self, target: crate::client::PrintTarget, msg: impl Into<String>) {
+    fn print(&self, target: PrintTarget, msg: impl Into<String>) {
         self.0.print(target, msg);
     }
     #[inline(always)]
@@ -631,8 +633,8 @@ impl ClientExt for Bot {
         self.0.lang()
     }
     #[inline(always)]
-    fn client_kind(&self) -> crate::client::ClientKind {
-        crate::client::ClientKind::Bot
+    fn client_kind(&self) -> ClientKind {
+        ClientKind::Bot
     }
     #[inline(always)]
     fn is_bot(&self) -> bool {
@@ -670,15 +672,15 @@ impl PlayerExt for Bot {
         self.0.set_armor(armor);
     }
     #[inline(always)]
-    fn team(&self) -> crate::client::Team {
+    fn team(&self) -> Team {
         self.0.team()
     }
     #[inline(always)]
-    fn life_state(&self) -> crate::client::LifeState {
+    fn life_state(&self) -> LifeState {
         self.0.life_state()
     }
     #[inline(always)]
-    fn print(&self, target: crate::client::PrintTarget, msg: impl Into<String>) {
+    fn print(&self, target: PrintTarget, msg: impl Into<String>) {
         self.0.print(target, msg);
     }
     #[inline(always)]
@@ -744,7 +746,7 @@ impl PlayerExt for Bot {
 pub struct Hltv(pub Player);
 
 impl Deref for Hltv {
-    type Target = crate::Entity;
+    type Target = Entity;
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -758,9 +760,9 @@ impl DerefMut for Hltv {
     }
 }
 
-impl AsRef<crate::Entity> for Hltv {
+impl AsRef<Entity> for Hltv {
     #[inline(always)]
-    fn as_ref(&self) -> &crate::Entity {
+    fn as_ref(&self) -> &Entity {
         &self.0
     }
 }
@@ -826,8 +828,8 @@ impl ClientExt for Hltv {
         self.0.lang()
     }
     #[inline(always)]
-    fn client_kind(&self) -> crate::client::ClientKind {
-        crate::client::ClientKind::Hltv
+    fn client_kind(&self) -> ClientKind {
+        ClientKind::Hltv
     }
     #[inline(always)]
     fn is_bot(&self) -> bool {
@@ -894,7 +896,7 @@ mod tests {
         assert_eq!(hltv.client_index(), 32);
         assert!(hltv.is_hltv());
         assert!(!hltv.is_bot());
-        assert_eq!(hltv.client_kind(), crate::client::ClientKind::Hltv);
+        assert_eq!(hltv.client_kind(), ClientKind::Hltv);
         assert_eq!(hltv.origin(), Vector3::new(0.0, 0.0, 0.0));
     }
 

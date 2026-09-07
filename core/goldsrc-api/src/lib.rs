@@ -41,6 +41,8 @@ pub mod liblist;
 pub mod menu;
 /// Commutative state modifiers and typed context blackboard.
 pub mod modifiers;
+/// Universal Interceptor Pipeline and Chain of Responsibility Pattern.
+pub mod pipeline;
 /// Dynamic contextual placeholders and function calls.
 pub mod placeholders;
 /// Universal Entity and Player Property System (`Property` & `MutProperty`).
@@ -51,6 +53,8 @@ pub mod reapi;
 pub mod requirements;
 /// Generic Reactive Rule & Provider Engine.
 pub mod rules;
+/// Compile-time specifications, logical combinators, and state-guarded refinement.
+pub mod spec;
 /// Dual Storage Port Abstraction & Typed Bucket Facade.
 pub mod storage;
 /// Fundamental game data types, spatial mathematics, and engine descriptors.
@@ -97,17 +101,22 @@ pub use menu::{
     clear_menu_actions, dispatch_menu_action, register_menu_action_id, register_menu_action_name,
 };
 pub use modifiers::{BlackboardValue, CommutativeModifier, ModifierContribution, TypedBlackboard};
+pub use pipeline::{Interceptor, Pipeline, PipelineFlow};
 pub use placeholders::{
     CallArg, Placeholder, PlaceholderBuilder, PlaceholderCall, PlaceholderHandler,
     PlaceholderMetadata, PlaceholderRegistry, PlayerTarget, clear_placeholders,
     dispatch_local_placeholder, parse_placeholder_call, register_placeholder,
 };
 pub use property::{
-    Angles, Armor, Capability, Classname, Health, Origin, Property, PropertyGetter, PropertySetter,
-    Velocity, prop,
+    Angles, Armor, Capability, Classname, Health, Origin, Prop, PropGet, PropSet, Property,
+    PropertyGetter, PropertySetter, Velocity, prop,
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};
+pub use spec::{
+    All, Any, Connected, Dormant, Human, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec,
+    SpecError,
+};
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
 pub use types::Vector3;

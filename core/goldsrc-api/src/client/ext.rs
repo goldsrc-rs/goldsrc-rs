@@ -4,7 +4,10 @@ use crate::action::{
     CloseMenu, GiveItem, GrantCapability, PlaySound, Print, RevokeCapability, SendHud, ShowMenu,
     ShowRawMenu,
 };
+use crate::client::property::{Lang, Name};
 use crate::client::{ClientKind, LifeState, Player, PrintTarget, Team};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::consts::{FL_FAKECLIENT, FL_PROXY};
 use crate::entity::EntityExt;
 use crate::hud::HudMessage;
 use crate::menu::Menu;
@@ -82,12 +85,12 @@ impl ClientExt for Player {
 
     #[inline(always)]
     fn name(&self) -> Option<String> {
-        self.get::<crate::client::property::Name>().0
+        self.get::<Name>().0
     }
 
     #[inline(always)]
     fn lang(&self) -> String {
-        self.get::<crate::client::property::Lang>().0
+        self.get::<Lang>().0
     }
 
     #[inline(always)]
@@ -106,7 +109,7 @@ impl ClientExt for Player {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if let Some(flags) = self.inner.flags() {
-                return (flags & crate::consts::FL_FAKECLIENT) != 0;
+                return (flags & FL_FAKECLIENT) != 0;
             }
             false
         }
@@ -121,7 +124,7 @@ impl ClientExt for Player {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if let Some(flags) = self.inner.flags() {
-                return (flags & crate::consts::FL_PROXY) != 0;
+                return (flags & FL_PROXY) != 0;
             }
             false
         }

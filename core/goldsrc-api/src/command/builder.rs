@@ -1,6 +1,7 @@
 //! Programmatic builder API for runtime command registration.
 
 use crate::command::CommandTarget;
+use crate::command::register_command;
 
 /// Runtime representation of a registered command.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,7 +31,7 @@ impl Command {
     where
         F: Fn(i32, &str) -> bool + Send + Sync + 'static,
     {
-        crate::command::register_command(self, handler);
+        register_command(self, handler);
     }
 }
 

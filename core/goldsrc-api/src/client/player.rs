@@ -6,10 +6,12 @@ use crate::edict::EDict;
 use std::sync::RwLock;
 
 use crate::action::Action;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::client::PrintTarget;
 use crate::property::{Property, PropertyGetter, PropertySetter};
 
 #[cfg(not(target_arch = "wasm32"))]
-pub type NativePrintHook = fn(i32, crate::client::PrintTarget, &str);
+pub type NativePrintHook = fn(i32, PrintTarget, &str);
 
 #[cfg(not(target_arch = "wasm32"))]
 pub type PlayerResolverHook = fn(i32) -> Option<Player>;

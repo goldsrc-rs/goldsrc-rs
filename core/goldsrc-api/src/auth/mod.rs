@@ -10,6 +10,9 @@ pub use dsl::CapExpr;
 pub use property::Capability;
 pub use registry::{CAPS, CapabilityRegistry};
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::hash_map::Entry;
+
 #[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api;
 
@@ -32,9 +35,7 @@ impl Auth {
             if caps.registered.len() >= 1024 {
                 return false;
             }
-            if let std::collections::hash_map::Entry::Vacant(e) =
-                caps.registered.entry(name.to_string())
-            {
+            if let Entry::Vacant(e) = caps.registered.entry(name.to_string()) {
                 e.insert(description.to_string());
                 true
             } else {
@@ -146,8 +147,9 @@ impl Auth {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::Auth;
+    use std::sync::Mutex;
 
-    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn capability_lifecycle() {
