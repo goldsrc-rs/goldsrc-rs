@@ -29,15 +29,7 @@ impl VipCore {
         player.grant_capability("vip.give_armor");
         player.grant_capability("vip.heal");
 
-        engine::emit_sound(
-            player.index(),
-            0,
-            "items/suitchargeno1.wav",
-            1.0,
-            0.8,
-            0,
-            100,
-        );
+        player.play_sound("items/suitchargeno1.wav");
 
         let name = player
             .name()
@@ -98,10 +90,11 @@ impl VipCore {
     #[system(stage = "post_think", phase = "modify")]
     fn vip_passive_regen(player: &mut Player) {
         if player.is_alive() && player.has_capability("vip.access") {
-            let hp = player.health();
-            if hp > 0.0 && hp < 100.0 {
-                player.set_health((hp + 0.1).min(100.0));
-            }
+            player.modify::<Health>(|hp| {
+                if hp.is_alive() && hp.current() < 100.0 {
+                    hp.heal(0.1);
+                }
+            });
         }
     }
 }

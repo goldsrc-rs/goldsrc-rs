@@ -285,7 +285,7 @@ pub mod prelude {
         PlayerStateFilter, PrintTarget, Prop, PropGet, PropSet, RefineExt, Refined,
         RenderedMenuPage, SlotAction, Solid, Spawned, Spec, SpecError, Spectator, SqlDatabase,
         StorageError, StorageProvider, System, SystemBuilder, Team, TypedBlackboard, Vector3,
-        Velocity, VisualDeny, action, prop,
+        Velocity, VisualDeny, action, prop, use_command_interceptor,
     };
     pub use crate::{
         chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,
