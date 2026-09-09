@@ -1,8 +1,8 @@
 //! Player identity and state properties (`Name`, `Lang`, `Team`, `LifeState`).
 
-#[allow(unused_imports)]
+#[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
-use crate::client::{LifeState, Player, Team};
+use crate::client::{Client, LifeState, Player, Team};
 use crate::property::{Health, PropGet};
 
 /// Player display name (`Option<String>` / Read-Only).
@@ -37,9 +37,9 @@ impl From<Name> for Option<String> {
     }
 }
 
-impl PropGet<Player> for Name {
+impl PropGet<Client> for Name {
     #[inline(always)]
-    fn get_from(target: &Player) -> Self {
+    fn get_from(target: &Client) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
             Self(host_api::host_player_name(target.index))
@@ -54,6 +54,13 @@ impl PropGet<Player> for Name {
             }
             Self(target.inner.netname())
         }
+    }
+}
+
+impl PropGet<Player> for Name {
+    #[inline(always)]
+    fn get_from(target: &Player) -> Self {
+        target.client().get::<Name>()
     }
 }
 
@@ -97,9 +104,9 @@ impl std::ops::Deref for Lang {
     }
 }
 
-impl PropGet<Player> for Lang {
+impl PropGet<Client> for Lang {
     #[inline(always)]
-    fn get_from(target: &Player) -> Self {
+    fn get_from(target: &Client) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
             Self(host_api::host_player_lang(target.index).unwrap_or_else(|| "en".to_string()))
@@ -117,9 +124,16 @@ impl PropGet<Player> for Lang {
     }
 }
 
-impl PropGet<Player> for Team {
+impl PropGet<Player> for Lang {
     #[inline(always)]
     fn get_from(target: &Player) -> Self {
+        target.client().get::<Lang>()
+    }
+}
+
+impl PropGet<Client> for Team {
+    #[inline(always)]
+    fn get_from(target: &Client) -> Self {
         #[cfg(target_arch = "wasm32")]
         {
             crate::client::Team::from(host_api::host_player_team(target.index))
@@ -133,6 +147,13 @@ impl PropGet<Player> for Team {
             }
             target.inner.team().unwrap_or(0).into()
         }
+    }
+}
+
+impl PropGet<Player> for Team {
+    #[inline(always)]
+    fn get_from(target: &Player) -> Self {
+        target.client().get::<Team>()
     }
 }
 

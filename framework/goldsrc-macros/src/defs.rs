@@ -36,5 +36,7 @@ pub struct SystemDefInfo {
     pub after: Vec<String>,
     pub ident: syn::Ident,
     pub inputs_len: usize,
-    pub takes_player: bool,
+    pub target_ty_name: String,
+    pub refined_specs: Vec<syn::Type>,
+    pub takes_refined_directly: bool,
 }

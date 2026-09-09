@@ -5,7 +5,7 @@ use crate::action::{
     SendHud, ShowMenu, ShowRawMenu,
 };
 use crate::client::property::{Lang, Name};
-use crate::client::{ClientKind, LifeState, Player, PrintTarget, Team};
+use crate::client::{Client, ClientKind, LifeState, Player, PrintTarget, Team};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::consts::{FL_FAKECLIENT, FL_PROXY};
 use crate::entity::EntityExt;
@@ -27,10 +27,22 @@ pub trait ClientExt: EntityExt {
     fn is_bot(&self) -> bool;
     /// Returns `true` if this client is an HLTV proxy (`FL_PROXY`).
     fn is_hltv(&self) -> bool;
+    /// Returns the client's current game team.
+    fn team(&self) -> Team;
+    /// Prints a message to the specified target.
+    fn print(&self, target: PrintTarget, msg: impl Into<String>);
     /// Prints a message to client's console.
     fn print_console(&self, msg: impl Into<String>);
+    /// Prints a message to client's chat.
+    fn print_chat(&self, msg: impl Into<String>);
+    /// Prints a center notification message to client's screen.
+    fn print_center(&self, msg: impl Into<String>);
+    /// Prints a colorized chat message.
+    fn print_color(&self, msg: impl Into<String>);
     /// Prints a top-left notification to client's screen.
     fn print_notify(&self, msg: impl Into<String>);
+    /// Plays an audio sound effect for this client.
+    fn play_sound(&self, sample: impl Into<String>);
 }
 
 /// Extension trait providing gameplay combatant operations (Human Player, Bot).
@@ -43,20 +55,8 @@ pub trait PlayerExt: ClientExt {
     fn armor(&self) -> Armor;
     /// Sets the player's armor points.
     fn set_armor(&mut self, armor: impl Into<Armor>);
-    /// Returns the player's current game team.
-    fn team(&self) -> Team;
     /// Returns the player's current life state.
     fn life_state(&self) -> LifeState;
-    /// Prints a message to the specified target.
-    fn print(&self, target: PrintTarget, msg: impl Into<String>);
-    /// Prints a message to player's chat.
-    fn print_chat(&self, msg: impl Into<String>);
-    /// Prints a center notification message to player's screen.
-    fn print_center(&self, msg: impl Into<String>);
-    /// Prints a colorized chat message.
-    fn print_color(&self, msg: impl Into<String>);
-    /// Plays an audio sound effect for this player.
-    fn play_sound(&self, sample: impl Into<String>);
     /// Opens an interactive declarative menu for this player.
     fn open_menu(&self, menu: &Menu);
     /// Displays a menu for the player.
@@ -77,7 +77,7 @@ pub trait PlayerExt: ClientExt {
     fn revoke_capability(&self, name: impl Into<String>) -> bool;
 }
 
-impl ClientExt for Player {
+impl ClientExt for Client {
     #[inline(always)]
     fn client_index(&self) -> i32 {
         self.index
@@ -135,13 +135,118 @@ impl ClientExt for Player {
     }
 
     #[inline(always)]
+    fn team(&self) -> Team {
+        self.get::<Team>()
+    }
+
+    #[inline(always)]
+    fn print(&self, target: PrintTarget, msg: impl Into<String>) {
+        self.act(Print {
+            target,
+            message: msg.into(),
+        });
+    }
+
+    #[inline(always)]
     fn print_console(&self, msg: impl Into<String>) {
         self.act(Print::console(msg));
     }
 
     #[inline(always)]
+    fn print_chat(&self, msg: impl Into<String>) {
+        self.act(Print::chat(msg));
+    }
+
+    #[inline(always)]
+    fn print_center(&self, msg: impl Into<String>) {
+        self.act(Print::center(msg));
+    }
+
+    #[inline(always)]
+    fn print_color(&self, msg: impl Into<String>) {
+        self.act(Print::colored_chat(msg));
+    }
+
+    #[inline(always)]
     fn print_notify(&self, msg: impl Into<String>) {
         self.act(Print::notify(msg));
+    }
+
+    #[inline(always)]
+    fn play_sound(&self, sample: impl Into<String>) {
+        self.act(PlaySound::new(sample));
+    }
+}
+
+impl ClientExt for Player {
+    #[inline(always)]
+    fn client_index(&self) -> i32 {
+        self.client().client_index()
+    }
+
+    #[inline(always)]
+    fn name(&self) -> Option<String> {
+        self.client().name()
+    }
+
+    #[inline(always)]
+    fn lang(&self) -> String {
+        self.client().lang()
+    }
+
+    #[inline(always)]
+    fn client_kind(&self) -> ClientKind {
+        self.client().client_kind()
+    }
+
+    #[inline(always)]
+    fn is_bot(&self) -> bool {
+        self.client().is_bot()
+    }
+
+    #[inline(always)]
+    fn is_hltv(&self) -> bool {
+        self.client().is_hltv()
+    }
+
+    #[inline(always)]
+    fn team(&self) -> Team {
+        self.client().team()
+    }
+
+    #[inline(always)]
+    fn print(&self, target: PrintTarget, msg: impl Into<String>) {
+        self.client().print(target, msg);
+    }
+
+    #[inline(always)]
+    fn print_console(&self, msg: impl Into<String>) {
+        self.client().print_console(msg);
+    }
+
+    #[inline(always)]
+    fn print_chat(&self, msg: impl Into<String>) {
+        self.client().print_chat(msg);
+    }
+
+    #[inline(always)]
+    fn print_center(&self, msg: impl Into<String>) {
+        self.client().print_center(msg);
+    }
+
+    #[inline(always)]
+    fn print_color(&self, msg: impl Into<String>) {
+        self.client().print_color(msg);
+    }
+
+    #[inline(always)]
+    fn print_notify(&self, msg: impl Into<String>) {
+        self.client().print_notify(msg);
+    }
+
+    #[inline(always)]
+    fn play_sound(&self, sample: impl Into<String>) {
+        self.client().play_sound(sample);
     }
 }
 
@@ -167,41 +272,8 @@ impl PlayerExt for Player {
     }
 
     #[inline(always)]
-    fn team(&self) -> Team {
-        self.get::<Team>()
-    }
-
-    #[inline(always)]
     fn life_state(&self) -> LifeState {
         self.get::<LifeState>()
-    }
-
-    #[inline(always)]
-    fn print(&self, target: PrintTarget, msg: impl Into<String>) {
-        self.act(Print {
-            target,
-            message: msg.into(),
-        });
-    }
-
-    #[inline(always)]
-    fn print_chat(&self, msg: impl Into<String>) {
-        self.act(Print::chat(msg));
-    }
-
-    #[inline(always)]
-    fn print_center(&self, msg: impl Into<String>) {
-        self.act(Print::center(msg));
-    }
-
-    #[inline(always)]
-    fn print_color(&self, msg: impl Into<String>) {
-        self.act(Print::colored_chat(msg));
-    }
-
-    #[inline(always)]
-    fn play_sound(&self, sample: impl Into<String>) {
-        self.act(PlaySound::new(sample));
     }
 
     #[inline(always)]

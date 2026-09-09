@@ -1,7 +1,7 @@
 //! Interactive and raw menu display and closure actions.
 
 use crate::action::Action;
-#[allow(unused_imports)]
+#[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::hud::{HudKind, HudMessage, SendHud};

@@ -11,7 +11,7 @@ pub use registry::{
     register_command, use_command_interceptor,
 };
 
-use crate::client::Player;
+use crate::client::{Client, Player};
 
 /// Scope for in-game chat command execution (`say` vs `say_team`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +138,18 @@ impl FromArg for Player {
             }
         }
         Err(format!("player with index '{token}' is not connected"))
+    }
+}
+
+impl FromArg for Client {
+    fn from_arg(token: &str) -> Result<Self, String> {
+        if let Ok(idx) = token.parse::<i32>() {
+            let c = Client::new(idx);
+            if c.is_valid() {
+                return Ok(c);
+            }
+        }
+        Err(format!("client with slot index '{token}' is not connected"))
     }
 }
 

@@ -1,7 +1,7 @@
 //! In-memory placeholder registry, fluent builder, and guest dispatcher.
 
 use crate::action::CheckCapability;
-#[allow(unused_imports)]
+#[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::placeholders::{

@@ -6,6 +6,7 @@ use crate::types::EDict;
 use std::sync::RwLock;
 
 use crate::action::Action;
+use crate::client::Client;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::client::PrintTarget;
 use crate::property::{Prop, PropGet, PropSet};
@@ -207,23 +208,49 @@ impl Player {
     pub fn edict(&self) -> EDict {
         self.inner
     }
+
+    /// Borrows this player as a generic [`Client`] slot.
+    #[inline(always)]
+    pub fn client(&self) -> &Client {
+        self
+    }
+
+    /// Borrows this player mutably as a generic [`Client`] slot.
+    #[inline(always)]
+    pub fn client_mut(&mut self) -> &mut Client {
+        self
+    }
 }
 
 impl std::ops::Deref for Player {
-    type Target = crate::Entity;
+    type Target = Client;
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        // SAFETY: Player and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict).
-        unsafe { &*(self as *const Player as *const crate::Entity) }
+        // SAFETY: Player and Client have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        unsafe { &*(self as *const Player as *const Client) }
     }
 }
 
 impl std::ops::DerefMut for Player {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: Player and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict).
-        unsafe { &mut *(self as *mut Player as *mut crate::Entity) }
+        // SAFETY: Player and Client have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        unsafe { &mut *(self as *mut Player as *mut Client) }
+    }
+}
+
+impl AsRef<Client> for Player {
+    #[inline(always)]
+    fn as_ref(&self) -> &Client {
+        self
+    }
+}
+
+impl AsMut<Client> for Player {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut Client {
+        self
     }
 }
 
@@ -241,9 +268,28 @@ impl AsMut<crate::Entity> for Player {
     }
 }
 
+impl From<Player> for Client {
+    #[inline(always)]
+    fn from(p: Player) -> Self {
+        *p
+    }
+}
+
+impl From<Client> for Player {
+    #[inline(always)]
+    fn from(c: Client) -> Self {
+        Player {
+            index: c.index,
+            #[cfg(not(target_arch = "wasm32"))]
+            inner: c.inner,
+        }
+    }
+}
+
 impl From<Player> for crate::Entity {
+    #[inline(always)]
     fn from(player: Player) -> Self {
-        *player
+        **player
     }
 }
 

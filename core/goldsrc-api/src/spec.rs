@@ -6,10 +6,7 @@
 use std::fmt;
 use std::marker::PhantomData;
 
-use crate::Entity;
-use crate::client::{ClientExt, LifeState, Player, PlayerExt};
 use crate::command::FromArg;
-use crate::entity::EntityExt;
 
 /// Standard error returned when a [`Spec`] check fails.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -284,182 +281,17 @@ pub trait RefineExt: Sized {
 
 impl<T> RefineExt for T {}
 
-// --- Domain Zero-Sized Types (ZST) Markers ---
+// --- Domain Zero-Sized Types (ZST) Markers & Re-exports ---
+
+pub use crate::client::spec::{
+    Alive, Bot, Connected, ConnectedClient, Dead, DeadPlayer, Hltv, Human, HumanClient,
+    LivingHuman, LivingPlayer, SpectatingPlayer, Spectator,
+};
+pub use crate::entity::spec::{Dormant, Solid, SolidEntity, Spawned, SpawnedEntity};
 
 pub mod markers {
-    /// Typestate marker indicating a living player character (`health > 0`).
-    ///
-    /// # Invariants
-    /// Verifies both:
-    /// 1. Entity validity via `target.is_valid()`, which verifies `EDict::serial == edict_t.serialnumber`,
-    ///    `EDict::generation == current_map_generation()`, and `edict_t.free == 0` (preventing UAF on recycled slots).
-    /// 2. Vital state via `target.is_alive()` (`health > 0.0` and `life_state == ALIVE`).
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Alive;
-
-    /// Typestate marker indicating a dead player character.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Dead;
-
-    /// Typestate marker indicating an AI bot client (`FL_FAKECLIENT`).
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Bot;
-
-    /// Typestate marker indicating a spectator client.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Spectator;
-
-    /// Typestate marker indicating a connected player client slot (1..=32).
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Connected;
-
-    /// Typestate marker indicating a human player (non-bot, non-HLTV).
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Human;
-
-    /// Typestate marker indicating a spawned and valid entity.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Spawned;
-
-    /// Typestate marker indicating a dormant or inactive entity.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Dormant;
-
-    /// Typestate marker indicating an entity with collision geometry.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Solid;
-
-    /// Typestate marker indicating an HLTV relay proxy client (`FL_PROXY`).
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct Hltv;
-}
-
-pub use markers::{Alive, Bot, Connected, Dead, Dormant, Hltv, Human, Solid, Spawned, Spectator};
-
-// --- Spec Implementations for Domain Markers ---
-
-impl Spec<Entity> for Spawned {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Entity) -> Result<(), Self::Error> {
-        if target.is_valid() {
-            Ok(())
-        } else {
-            Err(SpecError::InvalidEntity)
-        }
-    }
-}
-
-impl Spec<Entity> for Solid {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Entity) -> Result<(), Self::Error> {
-        if target.is_valid() {
-            Ok(())
-        } else {
-            Err(SpecError::NotSolid)
-        }
-    }
-}
-
-impl Spec<Player> for Connected {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Player) -> Result<(), Self::Error> {
-        if target.is_valid() {
-            Ok(())
-        } else {
-            Err(SpecError::NotConnected)
-        }
-    }
-}
-
-/// Alive check: verifies both entity validity via `EDict::is_valid()` (ptr != 0,
-/// generation == current_map_generation, serial == *ptr.serial, free == 0) and vital state (`health > 0.0` and `life_state == ALIVE`).
-impl Spec<Player> for Alive {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Player) -> Result<(), Self::Error> {
-        if target.is_valid() && target.is_alive() {
-            Ok(())
-        } else {
-            Err(SpecError::NotAlive)
-        }
-    }
-}
-
-impl Spec<Player> for Dead {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Player) -> Result<(), Self::Error> {
-        if target.is_valid() && !target.is_alive() {
-            Ok(())
-        } else {
-            Err(SpecError::NotDead)
-        }
-    }
-}
-
-impl Spec<Player> for Hltv {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Player) -> Result<(), Self::Error> {
-        if !target.is_valid() {
-            return Err(SpecError::NotConnected);
-        }
-        if target.is_hltv() {
-            Ok(())
-        } else {
-            Err(SpecError::NotHltv)
-        }
-    }
-}
-
-impl Spec<Player> for Bot {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Player) -> Result<(), Self::Error> {
-        if target.is_valid() && target.is_bot() {
-            Ok(())
-        } else {
-            Err(SpecError::NotBot)
-        }
-    }
-}
-
-impl Spec<Player> for Human {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Player) -> Result<(), Self::Error> {
-        if target.is_valid() && !target.is_bot() && !target.is_hltv() {
-            Ok(())
-        } else {
-            Err(SpecError::NotHuman)
-        }
-    }
-}
-
-impl Spec<Player> for Spectator {
-    type Error = SpecError;
-
-    #[inline(always)]
-    fn check(target: &Player) -> Result<(), Self::Error> {
-        if target.is_valid()
-            && (target.life_state() == LifeState::Dead || target.team().is_spectator())
-        {
-            Ok(())
-        } else {
-            Err(SpecError::NotSpectator)
-        }
-    }
+    pub use crate::client::spec::{Alive, Bot, Connected, Dead, Hltv, Human, Spectator};
+    pub use crate::entity::spec::{Dormant, Solid, Spawned};
 }
 
 #[cfg(test)]

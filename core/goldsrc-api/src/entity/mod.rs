@@ -2,14 +2,17 @@
 
 pub mod ext;
 pub mod property;
+pub mod spec;
+
 pub use ext::EntityExt;
 pub use property::Classname;
+pub use spec::{Dormant, Solid, SolidEntity, Spawned, SpawnedEntity};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::types::EDict;
 
 use crate::action::Action;
-#[allow(unused_imports)]
+#[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
 use crate::property::{Prop, PropGet, PropSet};
 

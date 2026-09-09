@@ -60,8 +60,9 @@ pub use action::{Action, CancellationToken, PlayerAction};
 pub use auth::{Auth, CapExpr, CapabilityRegistry, CheckCapability};
 pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
-    Alive, AsLangCode, Bot, ClientExt, ClientKind, ConnectionState, Dead, Hltv, LifeState, Player,
-    PlayerExt, PrintTarget, Spectator, Team,
+    Alive, AsLangCode, Bot, Client, ClientExt, ClientKind, Connected, ConnectedClient,
+    ConnectionState, Dead, DeadPlayer, Hltv, Human, HumanClient, LifeState, LivingHuman,
+    LivingPlayer, Player, PlayerExt, PrintTarget, SpectatingPlayer, Spectator, Team,
 };
 pub use command::{
     Command, CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry,
@@ -79,7 +80,7 @@ pub use engine::{
     PRINT_CONSOLE, PRINT_NOTIFY, SAFE_SAYTEXT_LIMIT, TraceResult, cyrillic_to_latin, engine_api,
     format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
 };
-pub use entity::{Entity, EntityExt};
+pub use entity::{Entity, EntityExt, SolidEntity, SpawnedEntity};
 pub use event::{
     Event, EventHandler, EventRegistry, EventSubscriberBuilder, EventSubscription, clear_events,
     dispatch_event, subscribe_event,
@@ -110,8 +111,7 @@ pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};
 pub use spec::{
-    All, Any, Connected, Dormant, Human, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec,
-    SpecError,
+    All, Any, Dormant, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec, SpecError,
 };
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
 pub use types::{EDict, LIBLIST_FILENAME, LibList, Vector3, bump_map_generation};

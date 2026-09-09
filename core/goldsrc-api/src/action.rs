@@ -8,11 +8,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::Entity;
-#[allow(unused_imports)]
+#[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::client::player::NATIVE_PRINT_HOOK;
-use crate::client::{Player, PrintTarget};
+use crate::client::{Client, Player, PrintTarget};
 
 pub use crate::auth::action::{CheckCapability, GrantCapability, RevokeCapability};
 pub use crate::hud::action::SendHud;
@@ -115,57 +115,66 @@ impl Print {
     }
 }
 
-impl Action<Player> for Print {
+impl Action<Client> for Print {
     type Output = ();
 
     #[inline(always)]
-    fn execute(self, player: &Player) -> Self::Output {
-        if !player.is_valid() {
+    fn execute(self, client: &Client) -> Self::Output {
+        if !client.is_valid() {
             return;
         }
 
         match self.target {
             PrintTarget::Console => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_console(player.index, &self.message);
+                host_api::host_print_console(client.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(player.index, PrintTarget::Console, &self.message);
+                    hook(client.index, PrintTarget::Console, &self.message);
                 }
             }
             PrintTarget::Center => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_center(player.index, &self.message);
+                host_api::host_print_center(client.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(player.index, PrintTarget::Center, &self.message);
+                    hook(client.index, PrintTarget::Center, &self.message);
                 }
             }
             PrintTarget::Chat => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_chat(player.index, &self.message);
+                host_api::host_print_chat(client.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(player.index, PrintTarget::Chat, &self.message);
+                    hook(client.index, PrintTarget::Chat, &self.message);
                 }
             }
             PrintTarget::Notify => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_notify(player.index, &self.message);
+                host_api::host_print_notify(client.index, &self.message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(player.index, PrintTarget::Notify, &self.message);
+                    hook(client.index, PrintTarget::Notify, &self.message);
                 }
             }
         }
+    }
+}
+
+impl Action<Player> for Print {
+    type Output = ();
+
+    #[inline(always)]
+    fn execute(self, player: &Player) -> Self::Output {
+        self.execute(player.client())
     }
 }
 
@@ -214,12 +223,21 @@ impl Action<Entity> for PlaySound {
     }
 }
 
+impl Action<Client> for PlaySound {
+    type Output = ();
+
+    #[inline(always)]
+    fn execute(self, client: &Client) -> Self::Output {
+        self.execute(&**client)
+    }
+}
+
 impl Action<Player> for PlaySound {
     type Output = ();
 
     #[inline(always)]
     fn execute(self, player: &Player) -> Self::Output {
-        self.execute(&**player)
+        self.execute(player.client())
     }
 }
 

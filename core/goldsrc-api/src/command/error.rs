@@ -1,7 +1,7 @@
 //! Command execution error pipeline, result types, and invocation context.
 
 use crate::action::Print;
-#[allow(unused_imports)]
+#[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::command::CommandTarget;

@@ -1,6 +1,6 @@
 //! Entity identity and domain properties (`Classname`).
 
-#[allow(unused_imports)]
+#[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::entity::Entity;
