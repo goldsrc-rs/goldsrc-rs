@@ -3,6 +3,7 @@
 pub mod ext;
 pub mod player;
 pub mod property;
+pub mod slot;
 pub mod spec;
 pub mod types;
 
@@ -10,6 +11,7 @@ pub use crate::entity::EntityExt;
 pub use ext::{ClientExt, PlayerExt};
 pub use player::Player;
 pub use property::{Lang, Name};
+pub use slot::PlayerSlot;
 pub use spec::{
     Alive, Bot, Connected, ConnectedClient, Dead, DeadPlayer, Hltv, Human, HumanClient,
     LivingHuman, LivingPlayer, SpectatingPlayer, Spectator,
@@ -23,6 +25,7 @@ use crate::property::{Prop, PropGet, PropSet};
 use crate::types::EDict;
 
 /// Validated handle to an active GoldSrc engine client slot (1..=32: Player, Bot, HLTV).
+/// Strictly bound to the GoldSrc main thread (!Send, !Sync).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Client {
@@ -30,6 +33,7 @@ pub struct Client {
     pub index: i32,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) inner: EDict,
+    pub(crate) _marker: std::marker::PhantomData<*const ()>,
 }
 
 impl Client {
@@ -42,6 +46,7 @@ impl Client {
         Self {
             index,
             inner: unsafe { EDict::from_raw(index, edict) },
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -51,13 +56,17 @@ impl Client {
         Self {
             index,
             inner: EDict::invalid(),
+            _marker: std::marker::PhantomData,
         }
     }
 
     /// Creates a `Client` handle for `index`.
     #[cfg(target_arch = "wasm32")]
     pub fn new(index: i32) -> Self {
-        Self { index }
+        Self {
+            index,
+            _marker: std::marker::PhantomData,
+        }
     }
 
     /// Creates a `Client` handle for `index` with backing edict resolved via host engine if available.
@@ -72,6 +81,7 @@ impl Client {
         Self {
             index,
             inner: EDict::invalid(),
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -113,10 +123,17 @@ impl Client {
                 index: self.index,
                 #[cfg(not(target_arch = "wasm32"))]
                 inner: self.inner,
+                _marker: std::marker::PhantomData,
             })
         } else {
             None
         }
+    }
+
+    /// Returns the thread-safe copyable slot for off-thread communication.
+    #[inline(always)]
+    pub const fn slot(&self) -> PlayerSlot {
+        PlayerSlot(self.index)
     }
 
     /// Queries a property of type `T` from this client.
@@ -146,12 +163,17 @@ impl Client {
     }
 }
 
+const _: () = {
+    assert!(std::mem::size_of::<Client>() == std::mem::size_of::<Entity>());
+    assert!(std::mem::align_of::<Client>() == std::mem::align_of::<Entity>());
+};
+
 impl std::ops::Deref for Client {
     type Target = Entity;
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        // SAFETY: Client and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        // SAFETY: Client and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict, _marker).
         unsafe { &*(self as *const Client as *const Entity) }
     }
 }
@@ -159,7 +181,7 @@ impl std::ops::Deref for Client {
 impl std::ops::DerefMut for Client {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: Client and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        // SAFETY: Client and Entity have identical #[repr(C)] memory layout (index: i32, inner: EDict, _marker).
         unsafe { &mut *(self as *mut Client as *mut Entity) }
     }
 }
@@ -192,6 +214,6 @@ impl From<i32> for Client {
     }
 }
 
-// SAFETY: Client is a wrapper around raw pointers / integer index.
-unsafe impl Send for Client {}
-unsafe impl Sync for Client {}
+// Client is strictly bound to the GoldSrc engine main thread.
+// It contains PhantomData<*const ()>, making it !Send and !Sync by design.
+// Cross-thread communication must use PlayerSlot instead.

@@ -8,10 +8,15 @@ description = "Pure Rust traits (interfaces) for GoldSrc engine interaction"
 [dependencies]
 goldsrc-sys = { workspace = true, optional = true }
 wit-bindgen = { workspace = true }
-toml = { workspace = true }
-serde = { workspace = true }
+toml = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 log = { workspace = true }
 
 [features]
-default = []
+default = ["serde", "toml", "rules", "gamedata"]
+serde = ["dep:serde"]
+toml = ["dep:toml"]
+rules = ["serde", "toml"]
+gamedata = ["serde", "toml"]
 unsafe-sys = ["dep:goldsrc-sys"]
+

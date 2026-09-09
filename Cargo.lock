@@ -531,13 +531,12 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 name = "goldsrc"
 version = "0.17.0"
 dependencies = [
+ "crossbeam-channel",
  "goldsrc-api",
  "goldsrc-macros",
  "goldsrc-sys",
  "log",
  "serde",
- "serde_json",
- "toml",
 ]
 
 [[package]]

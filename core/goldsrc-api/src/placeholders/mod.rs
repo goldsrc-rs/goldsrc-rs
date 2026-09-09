@@ -204,21 +204,22 @@ impl PlayerTarget {
 }
 
 /// Metadata exported by a plugin for registered placeholders.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct PlaceholderMetadata {
     /// Primary placeholder identifier name (e.g. `rank`, `ip`, `kills`).
     pub name: String,
     /// Human-readable description.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub description: String,
     /// Usage example / parameter signature (e.g. `{rank(format='short')}`).
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub usage: String,
     /// List of alternative names or aliases.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub aliases: Vec<String>,
     /// Optional required capability for callers to resolve this placeholder.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub capability: Option<String>,
 }
 

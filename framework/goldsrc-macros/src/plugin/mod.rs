@@ -178,7 +178,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             }
 
             fn on_frame() {
-                ::goldsrc::ecs::run_frame_systems();
+                ::goldsrc::__plugin_frame_dispatch();
                 #on_frame_fn
             }
 
@@ -186,11 +186,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                 if name == "menu_select" && payload.len() >= 8 {
                     let caller = i32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
                     let action_id = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
-                    ::goldsrc::menu::dispatch_menu_action(
-                        ::goldsrc::Player::new(caller),
-                        Some(action_id),
-                        None,
-                    );
+                    ::goldsrc::__plugin_dispatch_menu_select(caller, action_id);
                 }
                 ::goldsrc::event::dispatch_event(&name, &payload);
             }
