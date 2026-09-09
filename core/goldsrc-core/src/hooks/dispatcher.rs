@@ -24,6 +24,7 @@ pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
         goldsrc_api::auth::Auth::remove_player(index);
         goldsrc_host_wasm::clear_active_menu_owner(index);
+        HostRuntime::on_client_disconnect(index);
         if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
             mgr.on_disconnect(index);
         }

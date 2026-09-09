@@ -14,6 +14,7 @@ pub struct HostRuntime {
     pub current_map: String,
     pub rule_orchestrator: crate::rules::RuleOrchestrator,
     pub watcher_service: crate::watcher::WatcherService,
+    pub sessions: crate::session::ClientSessionManager,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -21,9 +22,6 @@ use std::time::Instant;
 
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_api::Engine>> = OnceLock::new();
-static PLAYER_LANG_OVERRIDES: std::sync::LazyLock<
-    std::sync::RwLock<std::collections::HashMap<i32, String>>,
-> = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
 
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration, storage, i18n and hot reload watchers.
@@ -380,6 +378,7 @@ impl HostRuntime {
             current_map: String::new(),
             rule_orchestrator,
             watcher_service,
+            sessions: crate::session::ClientSessionManager::new(),
         };
         let _ = RUNTIME.set(Mutex::new(runtime));
 
@@ -509,15 +508,50 @@ impl HostRuntime {
         }
     }
 
+    /// Returns the session userinfo value for a connected client slot if overridden.
+    pub fn get_client_userinfo(slot: i32, key: &str) -> Option<String> {
+        RUNTIME.get().and_then(|lock| {
+            let guard = lock.lock().ok()?;
+            guard
+                .sessions
+                .get(slot)?
+                .get_userinfo(key)
+                .map(|s| s.to_string())
+        })
+    }
+
+    /// Sets or overrides a session userinfo value for a connected client slot.
+    pub fn set_client_userinfo(slot: i32, key: &str, value: &str) {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard
+                .sessions
+                .get_or_create_mut(slot)
+                .set_userinfo(key, value);
+        }
+    }
+
     /// Returns the session language override for player if one was explicitly set.
     pub fn get_player_language_override(index: i32) -> Option<String> {
-        PLAYER_LANG_OVERRIDES.read().ok()?.get(&index).cloned()
+        RUNTIME.get().and_then(|lock| {
+            let guard = lock.lock().ok()?;
+            guard.sessions.get(index)?.lang().map(|s| s.to_string())
+        })
     }
 
     /// Sets the session language override for player.
     pub fn set_player_language_override(index: i32, lang: &str) {
-        if let Ok(mut lock) = PLAYER_LANG_OVERRIDES.write() {
-            lock.insert(index, lang.to_lowercase());
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.sessions.get_or_create_mut(index).set_lang(lang);
+        }
+    }
+
+    /// Cleans up ephemeral session state when a client disconnects.
+    pub fn on_client_disconnect(slot: i32) {
+        if let Some(lock) = RUNTIME.get() {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            guard.sessions.on_disconnect(slot);
         }
     }
 

@@ -35,10 +35,13 @@ impl HostState {
         });
 
         if !has_perm {
-            crate::host_log(&format!(
-                "[Security Warning] Plugin '{}' denied permission '{}' (declared: {:?})",
-                self.plugin_name, perm, self.permissions
-            ));
+            let err = crate::error::SecurityError::PermissionDenied {
+                plugin: self.plugin_name.clone(),
+                permission: perm.to_string(),
+                declared: self.permissions.clone(),
+            };
+            log::warn!(target: goldsrc_api::consts::log_targets::AUTH, "{err}");
+            crate::host_log(&format!("[Security Warning] {err}"));
         }
         has_perm
     }
@@ -50,10 +53,12 @@ impl HostState {
             if self.shared_buckets.iter().any(|b| b == bucket) {
                 Some(bucket.to_string())
             } else {
-                crate::host_log(&format!(
-                    "[ERROR] Plugin '{}' attempted unauthorized access to shared bucket '{}'",
-                    self.plugin_name, bucket
-                ));
+                let err = crate::error::SecurityError::UnauthorizedBucketAccess {
+                    plugin: self.plugin_name.clone(),
+                    bucket: bucket.to_string(),
+                };
+                log::error!(target: goldsrc_api::consts::log_targets::STORAGE, "{err}");
+                crate::host_log(&format!("[Security Error] {err}"));
                 None
             }
         } else {

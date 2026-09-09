@@ -591,8 +591,11 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_lang(&self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+        if !(1..=32).contains(&index) {
             return None;
+        }
+        if let Some(session_lang) = crate::host::HostRuntime::get_player_language_override(index) {
+            return Some(session_lang);
         }
         unsafe {
             let funcs = (self.engfuncs)();

@@ -18,6 +18,7 @@ pub mod placeholders;
 pub mod plugins;
 pub mod reapi;
 pub mod rules;
+pub mod session;
 pub mod storage;
 pub mod watcher;
 
