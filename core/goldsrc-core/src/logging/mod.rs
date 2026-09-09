@@ -1,7 +1,4 @@
-//! Unified structured logger for GoldSrc.rs backends and transparent WASM guest logger.
-
-pub mod guest;
-pub use guest::init_guest_logger;
+//! Unified structured logger for GoldSrc.rs backends.
 
 use crate::paths::{BackendType, PathResolver};
 use serde::{Deserialize, Serialize};

@@ -1,6 +1,9 @@
 //! Programmatic builder API for runtime command registration.
 
+use crate::client::Player;
 use crate::command::CommandTarget;
+use crate::command::error::{CommandContext, CommandError, CommandResult};
+use crate::command::register_command;
 
 /// Runtime representation of a registered command.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,7 +33,32 @@ impl Command {
     where
         F: Fn(i32, &str) -> bool + Send + Sync + 'static,
     {
-        crate::command::register_command(self, handler);
+        register_command(self, handler);
+    }
+
+    /// Registers this command with a structured handler taking [`CommandContext`] and returning [`CommandResult`].
+    pub fn register_handler<F>(self, handler: F)
+    where
+        F: Fn(&mut CommandContext) -> CommandResult + Send + Sync + 'static,
+    {
+        let name = self.name.clone();
+        let target = self.target.clone();
+        self.register(move |caller, args| {
+            let player = if caller > 0 {
+                Some(Player::new(caller))
+            } else {
+                None
+            };
+            let mut ctx = CommandContext::new(player, target.clone(), &name, args);
+            match handler(&mut ctx) {
+                Ok(()) => true,
+                Err(CommandError::Silent) => false,
+                Err(err) => {
+                    ctx.reply(&err.to_string());
+                    false
+                }
+            }
+        });
     }
 }
 

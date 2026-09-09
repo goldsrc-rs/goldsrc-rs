@@ -34,6 +34,9 @@ pub const FL_CLIENT: i32 = 1 << 3;
 /// Entity flag indicating this edict is a simulated bot/fake client (`FL_FAKECLIENT` = `1 << 13`).
 pub const FL_FAKECLIENT: i32 = 1 << 13;
 
+/// Entity flag indicating this edict is an HLTV spectator proxy (`FL_PROXY` = `1 << 10`).
+pub const FL_PROXY: i32 = 1 << 10;
+
 // ----------------------------------------------------------------------------
 // File and Directory Names
 // ----------------------------------------------------------------------------

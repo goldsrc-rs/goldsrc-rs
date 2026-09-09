@@ -2,11 +2,14 @@
 
 pub use crate::Vector3;
 
+#[cfg(target_arch = "wasm32")]
+use crate::bindings::goldsrc::engine::api as host_api;
+
 /// Precache a model file (e.g. "models/player.mdl").
 pub fn precache_model(path: &str) -> i32 {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_precache_model(path)
+        host_api::host_precache_model(path)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -19,7 +22,7 @@ pub fn precache_model(path: &str) -> i32 {
 pub fn precache_sound(path: &str) -> i32 {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_precache_sound(path)
+        host_api::host_precache_sound(path)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -32,7 +35,7 @@ pub fn precache_sound(path: &str) -> i32 {
 pub fn precache_generic(path: &str) -> i32 {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_precache_generic(path)
+        host_api::host_precache_generic(path)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -53,15 +56,7 @@ pub fn emit_sound(
 ) {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_emit_sound(
-            entity,
-            channel,
-            sample,
-            volume,
-            attenuation,
-            flags,
-            pitch,
-        );
+        host_api::host_emit_sound(entity, channel, sample, volume, attenuation, flags, pitch);
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -73,7 +68,7 @@ pub fn emit_sound(
 pub fn cvar_get_float(name: &str) -> f32 {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_cvar_get_float(name)
+        host_api::host_cvar_get_float(name)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -86,7 +81,7 @@ pub fn cvar_get_float(name: &str) -> f32 {
 pub fn cvar_set_float(name: &str, val: f32) {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_cvar_set_float(name, val);
+        host_api::host_cvar_set_float(name, val);
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -98,7 +93,7 @@ pub fn cvar_set_float(name: &str, val: f32) {
 pub fn cvar_get_string(name: &str) -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_cvar_get_string(name)
+        host_api::host_cvar_get_string(name)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -111,7 +106,7 @@ pub fn cvar_get_string(name: &str) -> Option<String> {
 pub fn cvar_set_string(name: &str, val: &str) {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_cvar_set_string(name, val);
+        host_api::host_cvar_set_string(name, val);
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -123,7 +118,7 @@ pub fn cvar_set_string(name: &str, val: &str) {
 pub fn create_named_entity(classname: &str) -> Option<i32> {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_create_named_entity(classname)
+        host_api::host_create_named_entity(classname)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -136,7 +131,7 @@ pub fn create_named_entity(classname: &str) -> Option<i32> {
 pub fn remove_entity(entity: i32) {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_remove_entity(entity);
+        host_api::host_remove_entity(entity);
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -148,7 +143,7 @@ pub fn remove_entity(entity: i32) {
 pub fn drop_to_floor(entity: i32) -> i32 {
     #[cfg(target_arch = "wasm32")]
     {
-        crate::bindings::goldsrc::engine::api::host_drop_to_floor(entity)
+        host_api::host_drop_to_floor(entity)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {

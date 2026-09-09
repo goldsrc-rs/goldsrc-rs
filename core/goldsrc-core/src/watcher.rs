@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use goldsrc_api::consts::log_targets;
 use notify::Watcher;
 
 /// Standard default debounce delay between reloads of the same file (500ms).
@@ -96,11 +97,22 @@ impl WatchTarget {
                 let norm_expected = crate::paths::PathResolver::normalize_path(expected_file);
                 norm_event == norm_expected
                     || event_path == expected_file
+                    || (cfg!(windows)
+                        && norm_event
+                            .to_string_lossy()
+                            .eq_ignore_ascii_case(&norm_expected.to_string_lossy()))
                     || event_path
                         .canonicalize()
                         .ok()
                         .zip(expected_file.canonicalize().ok())
-                        .is_some_and(|(a, b)| a == b)
+                        .is_some_and(|(a, b)| {
+                            if cfg!(windows) {
+                                a.to_string_lossy()
+                                    .eq_ignore_ascii_case(&b.to_string_lossy())
+                            } else {
+                                a == b
+                            }
+                        })
             }
             Self::Directory {
                 path: base_dir,
@@ -108,11 +120,30 @@ impl WatchTarget {
                 ..
             } => {
                 let norm_base = crate::paths::PathResolver::normalize_path(base_dir);
-                if !norm_event.starts_with(&norm_base) && !event_path.starts_with(base_dir) {
+                let matched_base = if cfg!(windows) {
+                    norm_event.starts_with(&norm_base)
+                        || event_path.starts_with(base_dir)
+                        || norm_event
+                            .to_string_lossy()
+                            .to_ascii_lowercase()
+                            .starts_with(&norm_base.to_string_lossy().to_ascii_lowercase())
+                } else {
+                    norm_event.starts_with(&norm_base) || event_path.starts_with(base_dir)
+                };
+
+                if !matched_base {
                     if let (Ok(can_event), Ok(can_base)) =
                         (event_path.canonicalize(), base_dir.canonicalize())
                     {
-                        if !can_event.starts_with(&can_base) {
+                        let can_matched = if cfg!(windows) {
+                            can_event
+                                .to_string_lossy()
+                                .to_ascii_lowercase()
+                                .starts_with(&can_base.to_string_lossy().to_ascii_lowercase())
+                        } else {
+                            can_event.starts_with(&can_base)
+                        };
+                        if !can_matched {
                             return false;
                         }
                     } else {
@@ -285,15 +316,37 @@ impl WatcherService {
         let id_clone = spec.id.clone();
 
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if let Ok(event) = res {
-                for p in event.paths {
-                    let norm_p = crate::paths::PathResolver::normalize_path(&p);
-                    if target_clone.matches_event(&norm_p) {
-                        let _ = tx.send(WatcherEvent {
-                            watcher_id: id_clone.clone(),
-                            path: norm_p,
-                        });
+            match res {
+                Ok(event) => {
+                    // Ignore non-mutating events (access or other)
+                    match event.kind {
+                        notify::EventKind::Access(_) | notify::EventKind::Other => return,
+                        _ => {}
                     }
+
+                    for p in event.paths {
+                        let norm_p = crate::paths::PathResolver::normalize_path(&p);
+                        if target_clone.matches_event(&norm_p) {
+                            // If the path exists on disk, ensure it's not a 0-byte temporary file during atomic write/rename
+                            if norm_p.is_file()
+                                && let Ok(meta) = std::fs::metadata(&norm_p)
+                                && meta.len() == 0
+                            {
+                                continue;
+                            }
+                            let _ = tx.send(WatcherEvent {
+                                watcher_id: id_clone.clone(),
+                                path: norm_p,
+                            });
+                        }
+                    }
+                }
+                Err(err) => {
+                    log::warn!(
+                        target: log_targets::WATCHER,
+                        "Filesystem watcher error for '{}': {err}",
+                        id_clone
+                    );
                 }
             }
         })
@@ -509,12 +562,15 @@ mod tests {
             "cstrike/configs/plugins.toml"
         );
 
+        let temp_dir = std::env::temp_dir().join("goldsrc_test_watcher_spec");
+        let target_path = temp_dir.join(r"server\cstrike\plugins");
+
         let mut service = WatcherService::new();
         service
             .register(WatcherSpec {
                 id: "manual:raw".into(),
                 target: WatchTarget::Directory {
-                    path: PathBuf::from(r"server\cstrike\plugins"),
+                    path: target_path.clone(),
                     recursive: false,
                     filter: WatcherFilter::Any,
                 },
@@ -524,6 +580,8 @@ mod tests {
 
         let watchers = service.list_watchers();
         assert_eq!(watchers.len(), 1);
-        assert_eq!(watchers[0].path.to_str().unwrap(), "server/cstrike/plugins");
+        let expected = crate::paths::PathResolver::normalize_path(&target_path);
+        assert_eq!(watchers[0].path, expected);
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

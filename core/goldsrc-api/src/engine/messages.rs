@@ -190,11 +190,12 @@ impl Drop for MessageBuilder<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
     /// Records the sequence of message operations for assertions.
     #[derive(Default)]
     struct MockMessages {
-        ops: std::sync::Mutex<Vec<String>>,
+        ops: Mutex<Vec<String>>,
     }
 
     impl EngineMessages for MockMessages {

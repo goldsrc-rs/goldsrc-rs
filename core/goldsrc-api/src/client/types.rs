@@ -12,15 +12,11 @@ pub enum PrintTarget {
     Console = 0,
     /// Center-screen notice. Plain text only.
     Center = 1,
-    /// Chat area via the `SayText` user message.
+    /// Chat area via the `SayText` user message (supports embedded color tags in compatible games).
+    #[default]
     Chat = 2,
     /// Top-left developer notification area (print_notify = 3).
     Notify = 3,
-    /// Chat area with color escapes: `^1` default, `^3` team, `^4` green.
-    /// Colors render only in mods whose client parses SayText markup
-    /// (CS 1.6 / CZ); elsewhere codes appear as literal text.
-    #[default]
-    ColoredChat = 4,
 }
 
 /// Client classification kind.
@@ -31,7 +27,7 @@ pub enum ClientKind {
     /// Fake client / AI Bot (`FL_FAKECLIENT`).
     Bot,
     /// HLTV spectator proxy (`FL_PROXY`).
-    HLTV,
+    Hltv,
 }
 
 /// Network connection lifecycle of a client slot.
@@ -161,44 +157,32 @@ impl AsLangCode for &String {
     }
 }
 
+impl AsLangCode for crate::client::Client {
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Owned(self.get::<crate::client::property::Lang>().0)
+    }
+}
+
+impl AsLangCode for &crate::client::Client {
+    fn as_lang_code(&self) -> Cow<'_, str> {
+        Cow::Owned(self.get::<crate::client::property::Lang>().0)
+    }
+}
+
 impl AsLangCode for crate::client::Player {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        Cow::Owned(self.lang())
+        Cow::Owned(self.get::<crate::client::property::Lang>().0)
     }
 }
 
 impl AsLangCode for &crate::client::Player {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        Cow::Owned(self.lang())
+        Cow::Owned(self.get::<crate::client::property::Lang>().0)
     }
 }
 
-impl<T: AsLangCode> AsLangCode for crate::client::Alive<T> {
+impl<'a, Target: AsLangCode, S> AsLangCode for crate::spec::Refined<'a, Target, S> {
     fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl<T: AsLangCode> AsLangCode for crate::client::Dead<T> {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::Spectator {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::Bot {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
-    }
-}
-
-impl AsLangCode for crate::client::HLTV {
-    fn as_lang_code(&self) -> Cow<'_, str> {
-        self.0.as_lang_code()
+        self.inner.as_lang_code()
     }
 }

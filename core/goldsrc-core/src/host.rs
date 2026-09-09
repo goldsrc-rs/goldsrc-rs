@@ -17,6 +17,7 @@ pub struct HostRuntime {
 }
 
 use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
 
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_api::Engine>> = OnceLock::new();
@@ -521,8 +522,8 @@ impl HostRuntime {
         let fresh_config =
             crate::plugins_config::PluginsConfig::load_or_create(&plugins_config_path);
 
-        // 2. Snapshot engine, rules, config, and paused states under short lock
-        let (engine, mut plugins_config, mut paused_plugins, manual_overrides, effective_map) = {
+        // 2. Evaluate rules directly on the active RuleOrchestrator under lock
+        let results = {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             guard.plugins_config = fresh_config;
 
@@ -546,93 +547,47 @@ impl HostRuntime {
                 guard.current_map = resolved_map.clone();
             }
 
-            (
-                guard.engine.clone(),
-                guard.plugins_config.clone(),
-                guard.paused_plugins.clone(),
-                guard.rule_orchestrator.manual_overrides().clone(),
-                resolved_map,
-            )
-        };
+            let effective_map = guard.current_map.clone();
+            let manual_overrides = guard.rule_orchestrator.manual_overrides().clone();
+            let engine = guard.engine.clone();
 
-        // 3. Count matching rules for this scope
-        let registry = crate::rules::create_default_server_rule_registry();
-        let rules: Vec<goldsrc_api::rules::Rule> =
-            plugins_config.rules.iter().map(|r| r.to_rule()).collect();
-        let temp_engine = goldsrc_api::rules::RuleEngine::new(registry, rules);
-        let matching_rules_count = if scope == goldsrc_api::rules::RuleScope::All {
-            temp_engine.rules().len()
-        } else {
-            temp_engine
-                .rules()
-                .iter()
-                .filter(|r| temp_engine.resolve_rule_scopes(r).contains(&scope))
-                .count()
-        };
-
-        if matching_rules_count == 0 {
-            log::debug!(
-                target: log_targets::RULES,
-                "Skipping rule evaluation for scope '{}': no matching rules configured (map: '{}', players: {})",
-                scope,
-                effective_map,
-                player_count
-            );
-            return;
-        }
-
-        log::info!(
-            target: log_targets::RULES,
-            "Evaluating {} rules for scope '{}' (map: '{}', players: {})",
-            matching_rules_count,
-            scope,
-            effective_map,
-            player_count
-        );
-
-        // 4. Evaluate rules and execute actions OUTSIDE of the HostRuntime lock
-        {
-            let mut ctx = crate::rules::ServerRuleContext {
-                map_name: &effective_map,
-                player_count,
-                engine: engine.as_ref(),
-                plugins_config: &mut plugins_config,
-                paused_plugins: &mut paused_plugins,
-                manual_overrides: &manual_overrides,
-                execution_log: Vec::new(),
+            let rt = &mut *guard;
+            let results = {
+                let mut ctx = crate::rules::ServerRuleContext {
+                    map_name: &effective_map,
+                    player_count,
+                    engine: engine.as_ref(),
+                    plugins_config: &mut rt.plugins_config,
+                    paused_plugins: &mut rt.paused_plugins,
+                    manual_overrides: &manual_overrides,
+                    execution_log: Vec::new(),
+                };
+                rt.rule_orchestrator.evaluate_scope(&scope, &mut ctx)
             };
 
-            let results = temp_engine.evaluate_and_execute_scope(&mut ctx, &scope);
-            for (rule_name, res) in results {
-                match res {
-                    Ok(_) => {
-                        log::info!(target: log_targets::RULES, "Executed reactive rule '{}'", rule_name)
-                    }
-                    Err(errors) => log::warn!(
-                        target: log_targets::RULES,
-                        "Failed to execute rule '{}': {:?}",
-                        rule_name,
-                        errors
-                    ),
-                }
-            }
-        }
-        drop(temp_engine);
-
-        // 5. Re-acquire lock to commit updated paused states and synchronize via PluginOrchestrator
-        {
-            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
-            guard.paused_plugins = paused_plugins.clone();
-
-            let manual_overrides = guard.rule_orchestrator.manual_overrides().clone();
+            // Synchronize plugin states with WASM manager
             crate::plugins::PluginOrchestrator::sync_plugin_states(
-                &mut guard.manager,
-                &plugins_config,
-                &paused_plugins,
+                &mut rt.manager,
+                &rt.plugins_config,
+                &rt.paused_plugins,
                 &manual_overrides,
             );
 
-            guard.plugins_config = plugins_config;
+            results
+        };
+
+        for (rule_name, res) in results {
+            match res {
+                Ok(_) => {
+                    log::info!(target: log_targets::RULES, "Executed reactive rule '{}'", rule_name)
+                }
+                Err(errors) => log::warn!(
+                    target: log_targets::RULES,
+                    "Failed to execute rule '{}': {:?}",
+                    rule_name,
+                    errors
+                ),
+            }
         }
     }
 
@@ -653,11 +608,47 @@ impl HostRuntime {
                         "Detected change in plugin file \"{}\", reloading...",
                         crate::paths::PathResolver::normalize(&event.path)
                     );
-                    Self::with_manager(|m| {
-                        if let Some(manager) = m {
-                            manager.reload_plugin_path(&event.path);
-                        }
+                    let path = &event.path;
+                    if !path.exists() {
+                        Self::with_manager(|m| {
+                            if let Some(manager) = m {
+                                manager.unload_plugin_by_path(path);
+                            }
+                        });
+                        continue;
+                    }
+
+                    // 1. Snapshot engine pointers under brief lock
+                    let engines = Self::with_manager(|m| {
+                        m.map(|manager| (manager.wasm_engine(), manager.engine_ops()))
                     });
+
+                    let Some((wasm_engine, engine_ops)) = engines else {
+                        continue;
+                    };
+
+                    // 2. Heavy Cranelift compilation & component instantiation OUTSIDE lock (drop(guard))!
+                    match goldsrc_host_wasm::manager::loader::instantiate_plugin(
+                        &wasm_engine,
+                        &engine_ops,
+                        path,
+                    ) {
+                        Ok(new_plugin) => {
+                            // 3. Short lock re-acquisition to commit reloaded plugin and swap instances
+                            Self::with_manager(|m| {
+                                if let Some(manager) = m {
+                                    let _ = manager.commit_reloaded_plugin(new_plugin, path);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                target: log_targets::WASM,
+                                "Hot-reload instantiation of \"{}\" failed (previous version kept active): {e}",
+                                crate::paths::PathResolver::normalize(path)
+                            );
+                        }
+                    }
                 }
                 "core:configs" => {
                     let path = &event.path;
@@ -729,14 +720,12 @@ impl HostRuntime {
         }
 
         // Throttle disk flushing to at most once every second to prevent per-frame I/O stalls
-        static LAST_LOG_FLUSH: std::sync::OnceLock<std::sync::Mutex<std::time::Instant>> =
-            std::sync::OnceLock::new();
-        let tracker =
-            LAST_LOG_FLUSH.get_or_init(|| std::sync::Mutex::new(std::time::Instant::now()));
+        static LAST_LOG_FLUSH: OnceLock<Mutex<Instant>> = OnceLock::new();
+        let tracker = LAST_LOG_FLUSH.get_or_init(|| Mutex::new(Instant::now()));
         if let Ok(mut last) = tracker.try_lock()
             && last.elapsed() >= std::time::Duration::from_millis(1000)
         {
-            *last = std::time::Instant::now();
+            *last = Instant::now();
             crate::logging::flush();
         }
     }

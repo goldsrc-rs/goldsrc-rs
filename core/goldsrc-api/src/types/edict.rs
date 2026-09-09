@@ -306,6 +306,20 @@ impl EDict {
         }
     }
 
+    /// Entity flags (`FL_CLIENT`, `FL_FAKECLIENT`, `FL_PROXY`, etc.).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn flags(self) -> Option<i32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.flags })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
     /// Entity angles (pitch, yaw, roll).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn angles(self) -> Option<[f32; 3]> {

@@ -190,7 +190,7 @@ pub fn on_server_activate() {
 /// Invoked when the current server map is ending or server shutting down (ServerDeactivate).
 /// Advances map generation to invalidate cached EDicts and clears player capabilities and menu sessions.
 pub fn on_server_deactivate() {
-    goldsrc_api::edict::bump_map_generation();
+    goldsrc_api::bump_map_generation();
     goldsrc_api::auth::Auth::clear_all_players();
     goldsrc_host_wasm::clear_all_active_menu_owners();
     if let Ok(mut mgr) = crate::menu::menu_manager().lock() {

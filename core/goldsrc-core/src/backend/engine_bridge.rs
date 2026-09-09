@@ -2,8 +2,16 @@
 
 use crate::backend::print_queue::{PrintQueue, escape_server_print, sanitize_client_print};
 use crate::{call_engfunc, call_engfunc_ret};
-use goldsrc_api::{EngineCvars, EngineMessages};
+use goldsrc_api::client::Player;
+use goldsrc_api::consts::FL_CLIENT;
+use goldsrc_api::consts::log_targets::CORE;
+use goldsrc_api::{
+    EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
+    EngineSound,
+};
 use goldsrc_sys::enginefuncs_t;
+use std::collections::{BTreeSet, HashMap};
+use std::sync::{LazyLock, Mutex, RwLock};
 
 /// Standard `Engine` implementation parameterized by the engfunc source.
 #[derive(Clone, Copy)]
@@ -30,17 +38,17 @@ impl EngineBackend {
     /// engine slots without a connected client will not have this flag even when
     /// `edict.free == 0`, so we reject them here before handing off to
     /// `EDict::is_valid()` which only checks the serial number.
-    pub fn get_player(&self, index: i32) -> Option<goldsrc_api::Player> {
+    pub fn get_player(&self, index: i32) -> Option<Player> {
         unsafe {
             let funcs = (self.engfuncs)();
             let edict = (funcs.pfnPEntityOfEntIndex).and_then(|f| f(index).as_mut())?;
             if edict.free != 0 {
                 return None;
             }
-            if (1..=32).contains(&index) && edict.v.flags & goldsrc_api::consts::FL_CLIENT == 0 {
+            if (1..=32).contains(&index) && edict.v.flags & FL_CLIENT == 0 {
                 return None;
             }
-            Some(goldsrc_api::Player::from_raw(index, edict))
+            Some(Player::from_raw(index, edict))
         }
     }
 
@@ -99,13 +107,12 @@ impl EngineBackend {
     }
 }
 
-static PRECACHE_SOUNDS: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
-static PRECACHE_MODELS: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeSet<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
-static PRECACHE_GENERICS: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::BTreeSet<String>>,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeSet::new()));
+static PRECACHE_SOUNDS: LazyLock<Mutex<BTreeSet<String>>> =
+    LazyLock::new(|| Mutex::new(BTreeSet::new()));
+static PRECACHE_MODELS: LazyLock<Mutex<BTreeSet<String>>> =
+    LazyLock::new(|| Mutex::new(BTreeSet::new()));
+static PRECACHE_GENERICS: LazyLock<Mutex<BTreeSet<String>>> =
+    LazyLock::new(|| Mutex::new(BTreeSet::new()));
 
 impl EngineBackend {
     /// Precaches all pending/registered resources during map spawn phase.
@@ -151,7 +158,7 @@ impl EngineBackend {
     }
 }
 
-impl goldsrc_api::EnginePrecache for EngineBackend {
+impl EnginePrecache for EngineBackend {
     fn precache_model(&self, path: &str) -> i32 {
         if let Ok(mut set) = PRECACHE_MODELS.lock() {
             set.insert(path.to_string());
@@ -183,9 +190,8 @@ impl goldsrc_api::EnginePrecache for EngineBackend {
     }
 }
 
-static USER_MSG_REGISTRY: std::sync::LazyLock<
-    std::sync::RwLock<std::collections::HashMap<String, i32>>,
-> = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+static USER_MSG_REGISTRY: LazyLock<RwLock<HashMap<String, i32>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 pub type UserMsgResolverFn = fn(&str) -> i32;
 pub type MapNameResolverFn = fn() -> Option<String>;
@@ -231,10 +237,9 @@ pub fn register_user_msg_id(name: &str, id: i32) {
 }
 
 static ACTIVE_MSG_TYPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
-static ACTIVE_MSG_STRINGS: std::sync::LazyLock<std::sync::Mutex<Vec<String>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
+static ACTIVE_MSG_STRINGS: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
-impl goldsrc_api::EngineMessages for EngineBackend {
+impl EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
         if let Ok(map) = USER_MSG_REGISTRY.read()
             && let Some(&id) = map.get(name)
@@ -380,7 +385,7 @@ impl goldsrc_api::EngineMessages for EngineBackend {
     }
 }
 
-impl goldsrc_api::EngineConsole for EngineBackend {
+impl EngineConsole for EngineBackend {
     fn server_print(&self, message: &str) {
         unsafe {
             let funcs = (self.engfuncs)();
@@ -431,7 +436,7 @@ impl goldsrc_api::EngineConsole for EngineBackend {
     }
 }
 
-impl goldsrc_api::EngineEntities for EngineBackend {
+impl EngineEntities for EngineBackend {
     fn entity_is_valid(&self, index: i32) -> bool {
         unsafe {
             let funcs = (self.engfuncs)();
@@ -487,12 +492,14 @@ impl goldsrc_api::EngineEntities for EngineBackend {
     }
 
     fn entity_health(&self, index: i32) -> f32 {
-        self.get_player(index).map(|e| e.health()).unwrap_or(0.0)
+        self.get_player(index)
+            .map(|e| e.get::<goldsrc_api::Health>().current())
+            .unwrap_or(0.0)
     }
 
     fn entity_set_health(&self, index: i32, health: f32) {
         if let Some(mut e) = self.get_player(index) {
-            e.set_health(health);
+            e.set(goldsrc_api::Health::current_only(health));
             // Synchronize HUD health display for human and bot players
             if (1..=32).contains(&index) {
                 let health_msg_id = self.reg_user_msg("Health", 1);
@@ -512,37 +519,37 @@ impl goldsrc_api::EngineEntities for EngineBackend {
 
     fn entity_origin(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.origin().into())
+            .map(|e| e.get::<goldsrc_api::Origin>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_set_origin(&self, index: i32, pos: [f32; 3]) {
         if let Some(mut e) = self.get_player(index) {
-            e.set_origin(pos.into());
+            e.set(goldsrc_api::Origin(pos.into()));
         }
     }
 
     fn entity_velocity(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.velocity().into())
+            .map(|e| e.get::<goldsrc_api::Velocity>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_set_velocity(&self, index: i32, vel: [f32; 3]) {
         if let Some(mut e) = self.get_player(index) {
-            e.set_velocity(vel.into());
+            e.set(goldsrc_api::Velocity(vel.into()));
         }
     }
 
     fn entity_angles(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.angles().into())
+            .map(|e| e.get::<goldsrc_api::Angles>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_set_angles(&self, index: i32, angles: [f32; 3]) {
         if let Some(mut e) = self.get_player(index) {
-            e.set_angles(angles.into());
+            e.set(goldsrc_api::Angles(angles.into()));
         }
     }
 
@@ -630,13 +637,13 @@ impl goldsrc_api::EngineEntities for EngineBackend {
 
     fn player_armorvalue(&self, index: i32) -> f32 {
         self.get_player(index)
-            .map(|p| p.armorvalue())
+            .map(|p| p.get::<goldsrc_api::Armor>().value())
             .unwrap_or(0.0)
     }
 
     fn player_set_armorvalue(&self, index: i32, armor: f32) {
         if let Some(mut p) = self.get_player(index) {
-            p.set_armorvalue(armor);
+            p.set(goldsrc_api::Armor::new(armor));
             // Synchronize HUD armor display for human and bot players
             if (1..=32).contains(&index) {
                 let battery_msg_id = self.reg_user_msg("Battery", 2);
@@ -729,14 +736,14 @@ impl goldsrc_api::EngineEntities for EngineBackend {
             match (resolve(touched), resolve(other), GAME_DLL_TOUCH.get()) {
                 (Some(a), Some(b), Some(f)) => f(a, b),
                 _ => {
-                    log::debug!(target: goldsrc_api::consts::log_targets::CORE, "dispatch_touch({touched},{other}): no GameDLL bridge");
+                    log::debug!(target: CORE, "dispatch_touch({touched},{other}): no GameDLL bridge");
                 }
             }
         }
     }
 }
 
-impl goldsrc_api::EngineCvars for EngineBackend {
+impl EngineCvars for EngineBackend {
     fn cvar_get_float(&self, name: &str) -> f32 {
         unsafe {
             let cname = std::ffi::CString::new(name).unwrap_or_default();
@@ -794,7 +801,7 @@ impl goldsrc_api::EngineCvars for EngineBackend {
     }
 }
 
-impl goldsrc_api::EnginePhysics for EngineBackend {
+impl EnginePhysics for EngineBackend {
     fn point_contents(&self, point: [f32; 3]) -> i32 {
         unsafe { call_engfunc_ret!((self.engfuncs)().pfnPointContents, point.as_ptr()) }
     }
@@ -934,7 +941,7 @@ impl goldsrc_api::EnginePhysics for EngineBackend {
     }
 }
 
-impl goldsrc_api::EngineSound for EngineBackend {
+impl EngineSound for EngineBackend {
     fn emit_sound(
         &self,
         entity: i32,

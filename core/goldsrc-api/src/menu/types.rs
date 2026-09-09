@@ -1,5 +1,6 @@
 //! Core domain types for the interactive GoldSrc.rs Menu System.
 
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::sync::Arc;
 
 /// Context passed to dynamic menu item formatters and conditions during page evaluation.
@@ -50,8 +51,8 @@ pub enum VisualDeny {
     Hide,
 }
 
-impl std::fmt::Debug for VisualDeny {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for VisualDeny {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Dimmed => write!(f, "VisualDeny::Dimmed"),
             Self::Replace(s) => write!(f, "VisualDeny::Replace({s:?})"),
@@ -82,7 +83,7 @@ impl Feedback {
 
     pub fn chat(msg: impl Into<String>) -> Self {
         Self {
-            message: Some((crate::client::PrintTarget::ColoredChat, msg.into())),
+            message: Some((crate::client::PrintTarget::Chat, msg.into())),
             sound: None,
         }
     }
@@ -170,8 +171,8 @@ impl From<Feedback> for DenyAction {
     }
 }
 
-impl std::fmt::Debug for DenyAction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for DenyAction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Disabled => write!(f, "DenyAction::Disabled"),
             Self::Noop => write!(f, "DenyAction::Noop"),
@@ -300,8 +301,8 @@ impl Condition {
     }
 }
 
-impl std::fmt::Debug for Condition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for Condition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Capability(c) => write!(f, "Condition::Capability({c:?})"),
             Self::MinRound(r) => write!(f, "Condition::MinRound({r})"),
@@ -330,8 +331,8 @@ impl ItemTitle {
     }
 }
 
-impl std::fmt::Debug for ItemTitle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for ItemTitle {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Static(s) => write!(f, "ItemTitle::Static({s:?})"),
             Self::Dynamic(_) => write!(f, "ItemTitle::Dynamic(<fn>)"),
@@ -358,8 +359,8 @@ pub enum ItemKind {
     Divider(String),
 }
 
-impl std::fmt::Debug for ItemKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for ItemKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Action { id, action_name } => {
                 write!(
@@ -467,6 +468,16 @@ impl MenuItem {
     /// Attaches an access condition.
     pub fn requires(mut self, condition: Condition) -> Self {
         self.conditions.push(condition);
+        self
+    }
+
+    /// Attaches a type-level specification requirement on [`crate::client::Player`].
+    pub fn require_spec<S: crate::spec::Spec<crate::client::Player> + 'static>(mut self) -> Self {
+        self.conditions
+            .push(Condition::Custom(std::sync::Arc::new(|ctx| {
+                let player = crate::client::Player::new(ctx.player_index);
+                S::check(&player).map_err(|e| e.to_string())
+            })));
         self
     }
 
@@ -655,8 +666,8 @@ impl Default for MenuStyle {
     }
 }
 
-impl std::fmt::Debug for MenuStyle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for MenuStyle {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("MenuStyle")
             .field("items_per_page", &self.items_per_page)
             .field("back_text", &self.back_text)
@@ -972,5 +983,26 @@ impl Menu {
             timeout: self.timeout_seconds,
             renderer: self.renderer.clone(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::markers::Alive;
+
+    #[test]
+    fn test_menu_item_require_spec() {
+        let item = MenuItem::new("Test Action", 1).require_spec::<Alive>();
+
+        assert_eq!(item.conditions.len(), 1);
+        let ctx = MenuContext {
+            player_index: 1,
+            round_number: 1,
+            round_time_elapsed: 0.0,
+            is_alive: true,
+            players_count: 10,
+        };
+        let _ = item.conditions[0].check(&ctx);
     }
 }

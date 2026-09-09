@@ -5,6 +5,8 @@
 //! - 1..=32: Players (Max clients)
 //! - 33..=2048: Map entities & edicts
 
+use goldsrc_api::consts::MAX_PLAYERS;
+use goldsrc_api::dag::Phase;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
@@ -18,7 +20,7 @@ impl EntityId {
 
     /// Check if entity is a player (index 1 to 32).
     pub fn is_player(self) -> bool {
-        (1..=goldsrc_api::consts::MAX_PLAYERS).contains(&self.0)
+        (1..=MAX_PLAYERS).contains(&self.0)
     }
 
     /// Check if entity is the world (index 0).
@@ -224,7 +226,7 @@ impl std::str::FromStr for SystemPhase {
     }
 }
 
-impl goldsrc_api::dag::Phase for SystemPhase {
+impl Phase for SystemPhase {
     fn name(&self) -> &'static str {
         self.as_str()
     }

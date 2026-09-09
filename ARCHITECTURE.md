@@ -169,3 +169,67 @@ flowchart TB
    `goldsrc-core` and `goldsrc-api` contain zero game-specific assumptions (no CS 1.6 specific weapons, teams, or buyzone rules). Mod-specific features reside in dedicated extension crates (e.g. `goldsrc-game-cstrike`).
 5. **Defensive Resource Management & Narrow Lock Scopes**:
    Re-entrant mutex calls are actively guarded (`HostRuntime::with_manager`). Long operations (rule evaluation, file reading) drop locks before execution.
+
+---
+
+## 6. State-Guarded Engine Boundary Architecture
+
+GoldSrc.rs enforces a mathematically coherent, type-safe boundary over the unsafe, mutable C-ABI memory of the GoldSrc/ReHLDS engine (`edict_t*`, `entvars_t*`). This architecture eliminates whole classes of server-crashing bugs (null pointer dereferences, accessing disconnected players, and order-dependent hook conflicts) via zero-cost compiler proofs.
+
+```mermaid
+graph TD
+    subgraph StateSpace ["1. State Space & Dimensions"]
+        Target["Domain Entity / Player Handle\n(Entity, Player)"]
+        Properties["Value Objects: Property&lt;Target&gt;\n(Health, Armor, Origin, Velocity)"]
+        Target -->|queries / mutates via CQS| Properties
+    end
+
+    subgraph Verification ["2. Compile-Time Invariants & Specifications"]
+        Markers["ZST Typestate Markers\n(Alive, Dead, Connected, InBuyZone)"]
+        Specs["Specifications: Spec&lt;Target&gt;\n(All&lt;(Alive, Connected)&gt;, Any&lt;...&gt;)"]
+        Refined["Witness Token: Refined&lt;'a, Target, S&gt;\n(Frame-scoped lifetime 'a)"]
+
+        Markers --> Specs
+        Properties -->|inspected by| Specs
+        Specs -->|proven via try_new| Refined
+        Target -->|borrowed by| Refined
+    end
+
+    subgraph ControlFlow ["3. Control Flow & Interceptor Pipeline"]
+        Pipeline["Interceptor Pipeline (Chain of Responsibility)\n(Validation / Cooldown / Audit / Execution)"]
+        Actions["Actions & State Transitions\n(DamageAction, BuyWeaponAction, Teleport)"]
+        Engine["Engine C-ABI Boundary\n(g_engfuncs.pfnSetOrigin, TakeDamage)"]
+
+        Pipeline -->|intercepts / authorizes / modifies| Actions
+        Refined -->|passed as required witness| Actions
+        Actions -->|applies final mutation via PropSet| Engine
+    end
+
+    style StateSpace fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff
+    style Verification fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#fff
+    style ControlFlow fill:#18181b,stroke:#f59e0b,stroke-width:2px,color:#fff
+```
+
+### 6.1. The Four Pillars
+
+1. **Rich Value Objects over Naked Primitives**:
+   Measurements (`Health`, `Armor`, `Origin`, `Velocity`) are self-validating newtypes. Passing an `Armor` value into a `Health` parameter is rejected at compile time.
+2. **Symmetrical Command-Query Separation (CQS)**:
+   - `PropGet<Target>`: Pure, non-mutating reading of engine properties.
+   - `PropSet<Target>`: Explicit mutation that safely orchestrates engine side effects (e.g. updating BSP collision nodes on `Origin` mutation).
+   - `Prop<Target>`: Blanket trait for symmetric read-write properties (`PropGet + PropSet`).
+3. **Compile-Time Specifications & Zero-Sized Typestate (ZST)**:
+   - State phases (`Alive`, `Dead`, `Connected`, `InBuyZone`) are Zero-Sized Types (`size_of::<T>() == 0`), incurring zero runtime memory overhead.
+   - Compound invariants use tuple-based variadic specifications: `All<(Alive, Connected, InBuyZone)>`.
+   - Functions requiring preconditions accept a `Refined<'a, Target, Spec>`, guaranteeing that runtime checks occur once at the handler boundary and are completely elided inside leaf functions.
+4. **Universal Interceptor Pipeline (Chain of Responsibility)**:
+   A composable `Pipeline<Ctx>` with `Interceptor<Ctx>` middleware wraps engine hooks, action dispatches, and property mutations. Interceptors can inspect, modify (e.g. via `CommutativeModifier`), bypass (`Handled`), or completely suppress (`Block` / `MRES_SUPERCEDE`) execution.
+
+### 6.2. Engine Invariant Defense Rules
+
+- **Frame-Scoped Lifetimes (`'a`)**:
+  `Refined<'a, Target, S>` guards must never be stored across frame ticks. Entities in GoldSrc can be recycled or disconnected by engine callbacks at any microsecond; long-term references must store stable `EntityIndex` or serial handles and re-validate via `refine::<Spec>()` on subsequent ticks.
+- **Re-entrancy Safety**:
+  Calling an `Action` that invokes native C-ABI functions (e.g. `TakeDamage`) can synchronously trigger recursive engine hooks before the initial call returns. Interceptors and actions must release internal mutexes/locks prior to crossing the FFI boundary.
+- **Entity Generation / Serial Number Tracking**:
+  Entity slot indices ($1..32$ for players, $33..N$ for entities) are recycled by GoldSrc upon deletion. All `Spec` verifications must check generation serial counters to prevent operations against resurrected entity handles.
