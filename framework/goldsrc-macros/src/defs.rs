@@ -40,3 +40,17 @@ pub struct SystemDefInfo {
     pub refined_specs: Vec<syn::Type>,
     pub takes_refined_directly: bool,
 }
+
+/// Constant names for method marker attributes recognized by `#[plugin]`.
+pub mod markers {
+    pub const ON_LOAD: &str = "on_load";
+    pub const ON_UNLOAD: &str = "on_unload";
+    pub const ON_FRAME: &str = "on_frame";
+    pub const PERMISSIONS: &str = "permissions";
+    pub const PERMISSION: &str = "permission";
+    pub const EVENT: &str = "event";
+    pub const COMMAND: &str = "command";
+    pub const SYSTEM: &str = "system";
+    pub const MENU_ACTION: &str = "menu_action";
+    pub const REFINED: &str = "refined";
+}

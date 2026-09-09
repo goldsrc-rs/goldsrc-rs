@@ -61,7 +61,7 @@ pub fn parse_system(attr: &syn::Attribute, sig: &mut syn::Signature) -> syn::Res
 
     if let Some(syn::FnArg::Typed(pat_type)) = sig.inputs.first_mut() {
         pat_type.attrs.retain(|attr| {
-            if attr.path().is_ident("refined") {
+            if attr.path().is_ident(crate::defs::markers::REFINED) {
                 if let Ok(types) = attr.parse_args_with(
                     syn::punctuated::Punctuated::<syn::Type, syn::Token![,]>::parse_terminated,
                 ) {
@@ -225,10 +225,45 @@ pub fn generate_system_registrations(
             }}
         };
 
+        let stage_ident = match stage_str.as_str() {
+            "startup" => quote!(::goldsrc::ecs::Stage::Startup),
+            "server_activate" => quote!(::goldsrc::ecs::Stage::ServerActivate),
+            "frame" => quote!(::goldsrc::ecs::Stage::Frame),
+            "post_think" => quote!(::goldsrc::ecs::Stage::PostThink),
+            "player_connect" => quote!(::goldsrc::ecs::Stage::PlayerConnect),
+            "player_disconnect" => quote!(::goldsrc::ecs::Stage::PlayerDisconnect),
+            "entity_spawn" => quote!(::goldsrc::ecs::Stage::EntitySpawn),
+            "take_damage" => quote!(::goldsrc::ecs::Stage::TakeDamage),
+            "entity_killed" => quote!(::goldsrc::ecs::Stage::EntityKilled),
+            "round_start" => quote!(::goldsrc::ecs::Stage::RoundStart),
+            "round_end" => quote!(::goldsrc::ecs::Stage::RoundEnd),
+            "round_freeze_end" => quote!(::goldsrc::ecs::Stage::RoundFreezeEnd),
+            other => {
+                let err = format!(
+                    "unknown ECS stage '{other}'. Expected one of: startup, server_activate, frame, post_think, player_connect, player_disconnect, entity_spawn, take_damage, entity_killed, round_start, round_end, round_freeze_end"
+                );
+                return vec![syn::Error::new_spanned(sys_ident, err).to_compile_error()];
+            }
+        };
+
+        let phase_ident = match phase_str.as_str() {
+            "validate" => quote!(::goldsrc::ecs::SystemPhase::Validate),
+            "modify" => quote!(::goldsrc::ecs::SystemPhase::Modify),
+            "execute" => quote!(::goldsrc::ecs::SystemPhase::Execute),
+            "react" => quote!(::goldsrc::ecs::SystemPhase::React),
+            "monitor" => quote!(::goldsrc::ecs::SystemPhase::Monitor),
+            other => {
+                let err = format!(
+                    "unknown ECS phase '{other}'. Expected one of: validate, modify, execute, react, monitor"
+                );
+                return vec![syn::Error::new_spanned(sys_ident, err).to_compile_error()];
+            }
+        };
+
         registrations.push(quote! {
             ::goldsrc::ecs::System::builder(#sys_name)
-                .stage(#stage_str.parse::<::goldsrc::ecs::Stage>().unwrap_or(::goldsrc::ecs::Stage::Frame))
-                .phase(#phase_str.parse::<::goldsrc::ecs::SystemPhase>().unwrap_or(::goldsrc::ecs::SystemPhase::Execute))
+                .stage(#stage_ident)
+                .phase(#phase_ident)
                 .before(vec![#(#before_strs),*])
                 .after(vec![#(#after_strs),*])
                 .register(#runner_fn);

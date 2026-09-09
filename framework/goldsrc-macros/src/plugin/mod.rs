@@ -45,17 +45,17 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             let sig = &mut method.sig;
             // Retain attributes that are NOT our custom ones
             method.attrs.retain(|fn_attr| {
-                if fn_attr.path().is_ident("on_load") {
+                if fn_attr.path().is_ident(crate::defs::markers::ON_LOAD) {
                     is_on_load = true;
                     false
-                } else if fn_attr.path().is_ident("on_unload") {
+                } else if fn_attr.path().is_ident(crate::defs::markers::ON_UNLOAD) {
                     is_on_unload = true;
                     false
-                } else if fn_attr.path().is_ident("on_frame") {
+                } else if fn_attr.path().is_ident(crate::defs::markers::ON_FRAME) {
                     is_on_frame = true;
                     false
-                } else if fn_attr.path().is_ident("permissions")
-                    || fn_attr.path().is_ident("permission")
+                } else if fn_attr.path().is_ident(crate::defs::markers::PERMISSIONS)
+                    || fn_attr.path().is_ident(crate::defs::markers::PERMISSION)
                 {
                     if let Ok(exprs) = fn_attr.parse_args_with(
                         syn::punctuated::Punctuated::<Expr, syn::Token![,]>::parse_terminated,
@@ -70,7 +70,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                         }
                     }
                     false
-                } else if fn_attr.path().is_ident("event") {
+                } else if fn_attr.path().is_ident(crate::defs::markers::EVENT) {
                     match parse_event(fn_attr, sig) {
                         Ok(handler) => {
                             if !registered_events.insert(handler.name.clone()) {
@@ -85,7 +85,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                         Err(e) => macro_error = Some(e),
                     }
                     false
-                } else if fn_attr.path().is_ident("command") {
+                } else if fn_attr.path().is_ident(crate::defs::markers::COMMAND) {
                     match parse_command(fn_attr) {
                         Ok(cmd_def) => {
                             current_cmd_def = Some(cmd_def);
@@ -93,13 +93,13 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                         Err(e) => macro_error = Some(e),
                     }
                     false
-                } else if fn_attr.path().is_ident("system") {
+                } else if fn_attr.path().is_ident(crate::defs::markers::SYSTEM) {
                     match parse_system(fn_attr, sig) {
                         Ok(sys) => system_handlers.push(sys),
                         Err(e) => macro_error = Some(e),
                     }
                     false
-                } else if fn_attr.path().is_ident("menu_action") {
+                } else if fn_attr.path().is_ident(crate::defs::markers::MENU_ACTION) {
                     match parse_menu_action(fn_attr, sig) {
                         Ok(action) => menu_action_matchers.push(action),
                         Err(e) => macro_error = Some(e),

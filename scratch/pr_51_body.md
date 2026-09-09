@@ -1,9 +1,11 @@
 ### Summary
+
 This PR implements the comprehensive Entity-Property-Action architectural refactoring, introduces the foundational `Client` struct, vertical slice domain specifications, typestate sugar `#[refined(...)]`, and decomposes the procedural macro generation subsystem into modular submodules.
 
 ### Changes
 
 #### 1. Core API & Domain Vertical Slice Architecture
+
 - **Titular `struct Client` (`core/goldsrc-api/src/client/mod.rs`)**:
   - Encapsulates validated GoldSrc client slots `1..=32` (Player, Bot, HLTV proxy).
   - Establishes zero-cost Deref hierarchy: `Player` $\to$ `Client` $\to$ `Entity`.
@@ -22,6 +24,7 @@ This PR implements the comprehensive Entity-Property-Action architectural refact
   - Replaced all raw `#[allow(unused_imports)]` with surgical `#[cfg(target_arch = "wasm32")]` across 9 files in `goldsrc-api`.
 
 #### 2. Procedural Macros Modularization (`goldsrc-macros`)
+
 - **Decomposed `plugin/mod.rs` into SRP Submodules**:
   - `plugin/attr.rs`: `#[plugin(...)]` attribute and manifest parsing.
   - `plugin/command.rs`: `#[command]` attribute parsing, argument bindings, and dispatch code generation.
@@ -36,10 +39,12 @@ This PR implements the comprehensive Entity-Property-Action architectural refact
   - Modernized `vip_core` demo to use `#[refined(Alive)] player: &mut Player` without manual runtime checks.
 
 #### 3. Codebase Hygiene & Cleanup
+
 - Removed duplicate dead file `core/goldsrc-core/src/logging/guest.rs` (was 100% duplicate of `framework/goldsrc/src/logging/guest.rs`).
 - Removed redundant `examples/demo_plugins/vip_core/.gitignore`.
 
 ### Verification
+
 - `cargo fmt --check`: Passed (clean formatting across workspace).
 - `cargo clippy --workspace --all-targets -- -D warnings`: Passed (0 errors, 0 warnings).
 - `cargo test --workspace`: Passed (137 tests passing).
