@@ -25,6 +25,7 @@ pub type StorageSetCallback = fn(&str, &str, &[u8]) -> bool;
 pub type StorageDeleteCallback = fn(&str, &str) -> bool;
 pub type StorageFetchAddCallback = fn(&str, &str, i64) -> i64;
 pub type TranslateCallback = fn(&str, &str, &str, &str) -> String;
+pub type FormatPlaceholdersCallback = fn(i32, &str) -> String;
 
 static PRINT_CALLBACK: std::sync::RwLock<Option<PrintCallback>> = std::sync::RwLock::new(None);
 static SHOW_MENU_CALLBACK: std::sync::RwLock<Option<ShowMenuCallback>> =
@@ -36,6 +37,25 @@ static STORAGE_DELETE_CB: std::sync::RwLock<Option<StorageDeleteCallback>> =
 static STORAGE_FETCH_ADD_CB: std::sync::RwLock<Option<StorageFetchAddCallback>> =
     std::sync::RwLock::new(None);
 static TRANSLATE_CB: std::sync::RwLock<Option<TranslateCallback>> = std::sync::RwLock::new(None);
+static FORMAT_PLACEHOLDERS_CB: std::sync::RwLock<Option<FormatPlaceholdersCallback>> =
+    std::sync::RwLock::new(None);
+
+/// Set global callback for formatting placeholders in host messages.
+pub fn set_format_placeholders_callback(f: FormatPlaceholdersCallback) {
+    if let Ok(mut lock) = FORMAT_PLACEHOLDERS_CB.write() {
+        *lock = Some(f);
+    }
+}
+
+pub(crate) fn format_message_placeholders(player_index: i32, message: &str) -> String {
+    if let Ok(lock) = FORMAT_PLACEHOLDERS_CB.read()
+        && let Some(cb) = *lock
+    {
+        cb(player_index, message)
+    } else {
+        message.to_string()
+    }
+}
 
 /// Set global callback for WASM server_print calls.
 pub fn set_print_callback(f: PrintCallback) {

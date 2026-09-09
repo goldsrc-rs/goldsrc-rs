@@ -109,10 +109,14 @@ pub fn drain_main_tasks(max_tasks: usize) -> usize {
 mod tests {
     use super::*;
     use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_task_dispatch_and_drain() {
+        let _guard = TEST_LOCK.lock().unwrap();
         static HIT_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
         dispatch(|| {
@@ -129,6 +133,7 @@ mod tests {
 
     #[test]
     fn test_task_spawn_and_drain() {
+        let _guard = TEST_LOCK.lock().unwrap();
         let counter = Arc::new(AtomicUsize::new(0));
         let c_clone = counter.clone();
 

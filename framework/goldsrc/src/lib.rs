@@ -191,7 +191,7 @@ macro_rules! chat_print {
 #[macro_export]
 macro_rules! chat_broadcast {
     ($fmt:expr) => {
-        $crate::engine::client_print(0, $crate::engine::PRINT_CHAT, $fmt)
+        $crate::Player::new(0).print($crate::PrintTarget::Chat, $fmt)
     };
     ($fmt:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
         let __owned_vals = [ $( $v.to_string() ),* ];
@@ -200,7 +200,7 @@ macro_rules! chat_broadcast {
             $( (stringify!($k), __owned_iter.next().unwrap().as_str()) ),*
         ];
         let __s = $crate::substitute_named($fmt, __named);
-        $crate::engine::client_print(0, $crate::engine::PRINT_CHAT, &__s)
+        $crate::Player::new(0).print($crate::PrintTarget::Chat, &__s)
     }};
 }
 

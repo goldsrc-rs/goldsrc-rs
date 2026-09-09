@@ -21,6 +21,9 @@ use std::time::Instant;
 
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_api::Engine>> = OnceLock::new();
+static PLAYER_LANG_OVERRIDES: std::sync::LazyLock<
+    std::sync::RwLock<std::collections::HashMap<i32, String>>,
+> = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
 
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration, storage, i18n and hot reload watchers.
@@ -64,6 +67,15 @@ impl HostRuntime {
             crate::i18n::I18nService::translate_with_caller(caller, dict, lang, key, &[], &[])
         });
 
+        goldsrc_host_wasm::set_format_placeholders_callback(|player_idx, text| {
+            let player = if player_idx > 0 {
+                goldsrc_api::Player::new(player_idx)
+            } else {
+                goldsrc_api::Player::new(0)
+            };
+            crate::placeholders::format_placeholders(text, player)
+        });
+
         goldsrc_api::client::player::set_player_resolver_hook(|index| {
             if let Some(engine) = HostRuntime::engine() {
                 engine.player_handle(index)
@@ -86,7 +98,9 @@ impl HostRuntime {
             }
         });
         goldsrc_api::client::player::set_player_lang_hook(|index| {
-            if let Some(engine) = HostRuntime::engine() {
+            if let Some(override_lang) = HostRuntime::get_player_language_override(index) {
+                Some(override_lang)
+            } else if let Some(engine) = HostRuntime::engine() {
                 engine.player_lang(index)
             } else {
                 None
@@ -492,6 +506,18 @@ impl HostRuntime {
             f(Some(&mut guard.watcher_service))
         } else {
             f(None)
+        }
+    }
+
+    /// Returns the session language override for player if one was explicitly set.
+    pub fn get_player_language_override(index: i32) -> Option<String> {
+        PLAYER_LANG_OVERRIDES.read().ok()?.get(&index).cloned()
+    }
+
+    /// Sets the session language override for player.
+    pub fn set_player_language_override(index: i32, lang: &str) {
+        if let Ok(mut lock) = PLAYER_LANG_OVERRIDES.write() {
+            lock.insert(index, lang.to_lowercase());
         }
     }
 
