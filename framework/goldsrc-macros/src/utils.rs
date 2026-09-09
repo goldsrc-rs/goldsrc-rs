@@ -22,11 +22,16 @@ pub fn marker_outside_plugin(name: &str) -> TokenStream {
 
 /// Verifies that a handler method accepts an allowed number of arguments.
 pub fn check_handler_args(method: &ImplItemFn, name: &str, allowed: &[usize]) -> syn::Result<()> {
-    let count = method.sig.inputs.len();
+    check_sig_args(&method.sig, name, allowed)
+}
+
+/// Verifies that a function signature accepts an allowed number of arguments.
+pub fn check_sig_args(sig: &syn::Signature, name: &str, allowed: &[usize]) -> syn::Result<()> {
+    let count = sig.inputs.len();
     if !allowed.contains(&count) {
         let allowed_str: Vec<String> = allowed.iter().map(|n| n.to_string()).collect();
         return Err(syn::Error::new_spanned(
-            &method.sig,
+            sig,
             format!(
                 "handler for '{name}' must take {} arguments, but takes {count}",
                 allowed_str.join(" or ")

@@ -1,9 +1,11 @@
 //! Declarative, multi-page Menu System for GoldSrc.rs.
 
+pub mod action;
 pub mod action_registry;
 pub mod builder;
 pub mod types;
 
+pub use action::{CloseMenu, ShowMenu, ShowRawMenu};
 pub use action_registry::{
     MenuActionHandler, MenuActionRegistry, clear_menu_actions, dispatch_menu_action,
     register_menu_action_id, register_menu_action_name,

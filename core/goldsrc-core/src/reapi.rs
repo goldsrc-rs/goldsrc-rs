@@ -4,7 +4,7 @@
 //! dynamically on module load, and verifies major/minor version compatibility.
 
 use goldsrc_api::consts::log_targets;
-use goldsrc_api::reapi::ReApiStatus;
+use goldsrc_api::reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 use goldsrc_sys::reapi::{
     CreateInterfaceFn, IReGameApi, IRehldsApi, REGAMEDLL_API_VERSION_MAJOR,
     REGAMEDLL_API_VERSION_MINOR, REHLDS_API_VERSION_MAJOR, REHLDS_API_VERSION_MINOR, ReGameFuncs_t,
@@ -181,7 +181,7 @@ impl ReApiBridge {
     }
 }
 
-impl goldsrc_api::reapi::RehldsCapabilities for ReApiBridge {
+impl RehldsCapabilities for ReApiBridge {
     fn is_rehlds(&self) -> bool {
         Self::status().rehlds_active
     }
@@ -195,7 +195,7 @@ impl goldsrc_api::reapi::RehldsCapabilities for ReApiBridge {
     }
 }
 
-impl goldsrc_api::reapi::ReGameCapabilities for ReApiBridge {
+impl ReGameCapabilities for ReApiBridge {
     fn is_regamedll(&self) -> bool {
         Self::status().regamedll_active
     }

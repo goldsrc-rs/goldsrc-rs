@@ -72,28 +72,6 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         ],
     },
     CommandSpec {
-        name: "ps",
-        aliases: &["list", "ls"],
-        category: "plugin:lifecycle",
-        summary: "List loaded plugins (fast shortcut for 'grs plugins list')",
-        usage: "grs ps [OPTIONS]",
-        options: &[
-            ("--flat", "Print flat, unformatted list"),
-            ("-p, --paused", "Show only paused plugins"),
-            ("-a, --active", "Show only running/active plugins"),
-        ],
-        examples: &["grs ps", "grs ps --flat", "grs ps -p"],
-    },
-    CommandSpec {
-        name: "reload",
-        aliases: &["rld"],
-        category: "plugin:lifecycle",
-        summary: "Reload WASM plugins from disk (fast shortcut for 'grs plugins reload')",
-        usage: "grs reload [TARGET...] [-a|--all]",
-        options: &[("-a, --all", "Reload all plugins")],
-        examples: &["grs reload --all", "grs reload vip_core"],
-    },
-    CommandSpec {
         name: "watchers",
         aliases: &["watch", "w"],
         category: "watcher:fs",

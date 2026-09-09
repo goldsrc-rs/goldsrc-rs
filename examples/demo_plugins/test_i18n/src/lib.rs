@@ -62,12 +62,12 @@ impl TestI18n {
         target.print_chat(&welcome);
         target.print_chat(&reward);
         target.print_chat(&alert);
-        target.print_chat(&format!(
+        target.print_chat(format!(
             "^3[Player Lang ({} Defaults)]^1 {}",
             target.lang(),
             player_default_msg
         ));
-        target.print_chat(&format!(
+        target.print_chat(format!(
             "^3[Common Fallback]^1 OK: \x04{btn_confirm}\x01 | Cancel: \x04{btn_cancel}\x01"
         ));
 

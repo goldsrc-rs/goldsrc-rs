@@ -1,5 +1,8 @@
 //! Command execution error pipeline, result types, and invocation context.
 
+use crate::action::Print;
+#[cfg(target_arch = "wasm32")]
+use crate::bindings::goldsrc::engine::api as host_api;
 use crate::client::Player;
 use crate::command::CommandTarget;
 
@@ -165,7 +168,7 @@ impl CommandContext {
     fn print_server(message: &str) {
         #[cfg(target_arch = "wasm32")]
         {
-            crate::bindings::goldsrc::engine::api::host_log(message);
+            host_api::host_log(message);
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -177,9 +180,11 @@ impl CommandContext {
     pub fn reply(&self, message: &str) {
         if let Some(player) = &self.player {
             match self.target {
-                CommandTarget::Chat { .. } => player.print_chat(message),
+                CommandTarget::Chat { .. } => {
+                    player.act(Print::chat(message));
+                }
                 _ => {
-                    player.print_chat(message);
+                    player.act(Print::chat(message));
                 }
             }
         } else {
@@ -190,7 +195,7 @@ impl CommandContext {
     /// Explicitly send a reply to the caller's in-game chat.
     pub fn reply_chat(&self, message: &str) {
         if let Some(player) = &self.player {
-            player.print_chat(message);
+            player.act(Print::chat(message));
         } else {
             Self::print_server(message);
         }

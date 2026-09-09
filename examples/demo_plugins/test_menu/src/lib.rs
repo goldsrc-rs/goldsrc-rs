@@ -32,8 +32,16 @@ impl TestMenu {
 
         let menu = Menu::builder("Главное Тестовое Меню")
             .style(MenuStyle::brackets())
-            .item(MenuItem::new("Пополнить здоровье (+100 HP)", 101).keep_open())
-            .item(MenuItem::new("Пополнить броню (+100 AP)", 102).keep_open())
+            .item(
+                MenuItem::new("Пополнить здоровье (+100 HP)", 101)
+                    .require_spec::<Alive>()
+                    .keep_open(),
+            )
+            .item(
+                MenuItem::new("Пополнить броню (+100 AP)", 102)
+                    .require_spec::<Alive>()
+                    .keep_open(),
+            )
             .item(("Выдать AWP", 103))
             .item(("Выдать Deagle", 104))
             .page(|page| {
@@ -72,8 +80,16 @@ impl TestMenu {
                     hold_time: 5.0,
                 },
             })
-            .item(MenuItem::new("Пополнить здоровье (+100 HP)", 101).keep_open())
-            .item(MenuItem::new("Пополнить броню (+100 AP)", 102).keep_open())
+            .item(
+                MenuItem::new("Пополнить здоровье (+100 HP)", 101)
+                    .require_spec::<Alive>()
+                    .keep_open(),
+            )
+            .item(
+                MenuItem::new("Пополнить броню (+100 AP)", 102)
+                    .require_spec::<Alive>()
+                    .keep_open(),
+            )
             .item(("Телепорт вверх (+100 Z)", 107))
             .build();
 
@@ -83,15 +99,13 @@ impl TestMenu {
 
     #[menu_action(id = 101)]
     fn on_menu_heal(player: &mut Player) {
-        let cur = player.health();
-        player.set_health(cur + 100.0);
+        player.modify::<Health>(|hp| hp.heal(100.0));
         player.print_center("[Test Menu] Здоровье пополнено (+100 HP)");
     }
 
     #[menu_action(id = 102)]
     fn on_menu_armor(player: &mut Player) {
-        let cur = player.armorvalue();
-        player.set_armorvalue(cur + 100.0);
+        player.modify::<Armor>(|ar| ar.add(100.0));
         player.print_center("[Test Menu] Броня пополнена (+100 AP)");
     }
 
@@ -202,8 +216,7 @@ impl TestMenu {
 
     #[menu_action(id = 201)]
     fn on_lang_menu_heal(player: &mut Player) {
-        let cur = player.health();
-        player.set_health(cur + 100.0);
+        player.modify::<Health>(|hp| hp.heal(100.0));
         let name = player.name().unwrap_or_else(|| "Player".to_string());
         let msg = tr!(
             "test_i18n",
@@ -217,8 +230,7 @@ impl TestMenu {
 
     #[menu_action(id = 202)]
     fn on_lang_menu_armor(player: &mut Player) {
-        let cur = player.armorvalue();
-        player.set_armorvalue(cur + 100.0);
+        player.modify::<Armor>(|ar| ar.add(100.0));
         let name = player.name().unwrap_or_else(|| "Player".to_string());
         let msg = tr!(
             "test_i18n",

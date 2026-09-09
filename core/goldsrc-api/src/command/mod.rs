@@ -8,10 +8,10 @@ pub use builder::{Command, CommandBuilder};
 pub use error::{CommandContext, CommandError, CommandResult};
 pub use registry::{
     CommandHandler, CommandRegistry, RegisteredCommand, clear_commands, dispatch_command,
-    register_command,
+    register_command, use_command_interceptor,
 };
 
-use crate::client::{Alive, Dead, Player};
+use crate::client::{Client, Player};
 
 /// Scope for in-game chat command execution (`say` vs `say_team`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,31 +141,15 @@ impl FromArg for Player {
     }
 }
 
-impl FromArg for Alive<Player> {
+impl FromArg for Client {
     fn from_arg(token: &str) -> Result<Self, String> {
-        let p = Player::from_arg(token)?;
-        if p.is_alive() {
-            Ok(Alive(p))
-        } else {
-            Err(format!(
-                "player '{}' is dead (expected living player)",
-                token
-            ))
+        if let Ok(idx) = token.parse::<i32>() {
+            let c = Client::new(idx);
+            if c.is_valid() {
+                return Ok(c);
+            }
         }
-    }
-}
-
-impl FromArg for Dead<Player> {
-    fn from_arg(token: &str) -> Result<Self, String> {
-        let p = Player::from_arg(token)?;
-        if !p.is_alive() {
-            Ok(Dead(p))
-        } else {
-            Err(format!(
-                "player '{}' is alive (expected dead player)",
-                token
-            ))
-        }
+        Err(format!("client with slot index '{token}' is not connected"))
     }
 }
 

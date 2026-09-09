@@ -43,7 +43,7 @@ impl NetworkMessageDispatcher {
 
                 Self::send_text_msg(engine, player_index, msg_dest, &formatted);
             }
-            PrintTarget::Chat | PrintTarget::ColoredChat => {
+            PrintTarget::Chat => {
                 Self::send_say_text(engine, player_index, player_index, message);
             }
         }

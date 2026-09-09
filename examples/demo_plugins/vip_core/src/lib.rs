@@ -29,15 +29,7 @@ impl VipCore {
         player.grant_capability("vip.give_armor");
         player.grant_capability("vip.heal");
 
-        engine::emit_sound(
-            player.index(),
-            0,
-            "items/suitchargeno1.wav",
-            1.0,
-            0.8,
-            0,
-            100,
-        );
+        player.play_sound("items/suitchargeno1.wav");
 
         let name = player
             .name()
@@ -76,7 +68,7 @@ impl VipCore {
         description = "Restores target living player health to 100 HP",
         usage = "vip_heal <player_index>"
     )]
-    fn handle_vip_heal(mut player: Alive<Player>) {
+    fn handle_vip_heal(mut player: Refined<'_, Player, Alive>) {
         player.set_health(100.0);
         log_info!("[VIP Core] Healed player #{} to 100 HP", player.index());
     }
@@ -88,7 +80,7 @@ impl VipCore {
         description = "Restores target living player armor to 100 AP",
         usage = "vip_armor <player_index>"
     )]
-    fn handle_give_armor(mut player: Alive<Player>) {
+    fn handle_give_armor(mut player: Refined<'_, Player, Alive>) {
         player.give_item("item_assaultsuit");
         player.set_armorvalue(100.0);
         log_info!("[VIP Core] Given 100 armor to player #{}", player.index());
@@ -96,12 +88,13 @@ impl VipCore {
 
     /// Passive ECS system running during player post-think to regenerate health for VIPs below 100 HP.
     #[system(stage = "post_think", phase = "modify")]
-    fn vip_passive_regen(player: &mut Player) {
-        if player.is_alive() && player.has_capability("vip.access") {
-            let hp = player.health();
-            if hp > 0.0 && hp < 100.0 {
-                player.set_health((hp + 0.1).min(100.0));
-            }
+    fn vip_passive_regen(#[refined(Alive)] player: &mut Player) {
+        if player.has_capability("vip.access") {
+            player.modify::<Health>(|hp| {
+                if hp.current() < 100.0 {
+                    hp.heal(0.1);
+                }
+            });
         }
     }
 }

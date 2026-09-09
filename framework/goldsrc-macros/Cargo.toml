@@ -9,7 +9,7 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
-syn = { version = "3.0.3", features = ["full", "extra-traits"] }
-quote = "1.0"
-proc-macro2 = "1.0"
+syn = { version = "3.0.5", features = ["full", "extra-traits"] }
+quote = "1.0.47"
+proc-macro2 = "1.0.107"
 goldsrc-api = { path = "../../core/goldsrc-api", default-features = false }

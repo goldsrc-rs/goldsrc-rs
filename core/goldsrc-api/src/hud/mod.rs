@@ -1,6 +1,8 @@
+pub mod action;
 pub mod effects;
 pub mod types;
 
+pub use action::SendHud;
 pub use effects::{FadeFlags, ScreenFade, ScreenFadeBuilder, ScreenShake, ScreenShakeBuilder};
 pub use types::{HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder};
 

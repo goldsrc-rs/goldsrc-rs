@@ -99,7 +99,7 @@ pub enum HudKind {
 }
 
 /// A declarative screen HUD / DHUD message descriptor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HudMessage {
     pub text: String,
     pub kind: HudKind,

@@ -51,8 +51,7 @@ impl TestChatPlugin {
         aliases = ["/testchat", "!testchat"],
         description = "Tests chat formatting, placeholders, and long text chunking"
     )]
-    fn handle_test_chat(caller: i32) {
-        let player = Player::new(caller);
+    fn handle_test_chat(player: Player) {
         chat_print!(
             player,
             "^4[test_chat]^1 Hello {name}! Your tag: {server_tag}, kills: {kills}"

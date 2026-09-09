@@ -671,7 +671,10 @@ mod tests {
 
         // 4. Test Player as AsLangCode in tr! macro
         let player = goldsrc_api::client::Player::new(1);
-        assert_eq!(player.lang(), "en");
+        assert_eq!(
+            player.get::<goldsrc_api::client::property::Lang>().as_str(),
+            "en"
+        );
         let player_welcome = tr!("demo_i18n", &player, "welcome_msg", name = "TestUser");
         assert_eq!(
             player_welcome,

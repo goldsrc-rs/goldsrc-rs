@@ -1,10 +1,15 @@
 //! Capability-based access control, registry, and hierarchical DSL.
 
+pub mod action;
 pub mod dsl;
 pub mod registry;
 
+pub use action::{CheckCapability, GrantCapability, RevokeCapability};
 pub use dsl::CapExpr;
 pub use registry::{CAPS, CapabilityRegistry};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::hash_map::Entry;
 
 #[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api;
@@ -28,9 +33,7 @@ impl Auth {
             if caps.registered.len() >= 1024 {
                 return false;
             }
-            if let std::collections::hash_map::Entry::Vacant(e) =
-                caps.registered.entry(name.to_string())
-            {
+            if let Entry::Vacant(e) = caps.registered.entry(name.to_string()) {
                 e.insert(description.to_string());
                 true
             } else {
@@ -140,14 +143,15 @@ impl Auth {
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
-mod tests {
-    use super::Auth;
+pub(crate) static AUTH_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::{AUTH_TEST_LOCK, Auth};
 
     #[test]
     fn capability_lifecycle() {
-        let _guard = TEST_LOCK.lock().unwrap();
+        let _guard = AUTH_TEST_LOCK.lock().unwrap();
         Auth::register_capability("test_admin_cap", "test capability");
         Auth::remove_player(10);
         assert!(!Auth::has_capability(10, "test_admin_cap"));
@@ -160,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_wildcard_and_eviction_lifecycle() {
-        let _guard = TEST_LOCK.lock().unwrap();
+        let _guard = AUTH_TEST_LOCK.lock().unwrap();
         Auth::register_capability("vip.heal", "heal ability");
         Auth::grant_capability(2, "vip.*");
 

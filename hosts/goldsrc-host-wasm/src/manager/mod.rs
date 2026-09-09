@@ -176,6 +176,16 @@ impl PluginManager {
         self.plugin_dirs.push(dir);
     }
 
+    /// Returns a clone of the underlying Wasmtime Engine.
+    pub fn wasm_engine(&self) -> Engine {
+        self.engine.clone()
+    }
+
+    /// Returns a clone of the GoldsrcEngine ops trait object.
+    pub fn engine_ops(&self) -> Arc<dyn GoldsrcEngine> {
+        self.engine_ops.clone()
+    }
+
     /// Compiles and instantiates a WASM plugin component without registering or running `on_load`.
     pub fn instantiate_plugin<P: AsRef<Path>>(&self, path: P) -> Result<LoadedPlugin, LoadError> {
         loader::instantiate_plugin(&self.engine, &self.engine_ops, path)
@@ -378,6 +388,59 @@ impl PluginManager {
             .map_err(|source| CommandError::Load { name, source })
     }
 
+    /// Unloads a plugin matching `path` if currently loaded (e.g. when its file is removed from disk).
+    pub fn unload_plugin_by_path(&mut self, path: &Path) -> Option<String> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if let Some(idx) = self
+            .plugins
+            .iter()
+            .position(|p| p.path == path || p.path.canonicalize().is_ok_and(|c| c == canonical))
+        {
+            let name = self.plugins[idx].name.clone();
+            self.unload_plugin_at(idx);
+            crate::host_log(&format!(
+                "Plugin '{name}' file was deleted; unloaded plugin"
+            ));
+            Some(name)
+        } else {
+            None
+        }
+    }
+
+    /// Commits a pre-compiled and instantiated plugin into the manager.
+    /// Executes `on_load`, unloads any previous version at matching path, and registers commands.
+    pub fn commit_reloaded_plugin(
+        &mut self,
+        mut new_plugin: LoadedPlugin,
+        path: &Path,
+    ) -> Result<String, LoadError> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let name = new_plugin.name.clone();
+
+        if let Err(e) = new_plugin.call_on_load() {
+            crate::host_log(&format!("Hot-reload on_load of '{}' failed: {e}", name));
+            return Err(LoadError::LoadPanic(e.to_string()));
+        }
+
+        if let Some(idx) = self
+            .plugins
+            .iter()
+            .position(|p| p.path == path || p.path.canonicalize().is_ok_and(|c| c == canonical))
+        {
+            self.unload_plugin_at(idx);
+        }
+
+        let new_idx = self.plugins.len();
+        if let Some(meta) = &new_plugin.metadata {
+            self.command_registry
+                .register_commands(new_idx, &meta.commands);
+        }
+        self.plugins.push(new_plugin);
+        self.recalculate_dependency_states();
+        crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
+        Ok(name)
+    }
+
     /// Reloads the plugin whose recorded path matches `path`, or loads it if newly discovered.
     pub fn reload_plugin_path(&mut self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -388,6 +451,14 @@ impl PluginManager {
         {
             let name = self.plugins[idx].name.clone();
             let old_path = self.plugins[idx].path.clone();
+
+            if !path.exists() && !old_path.exists() {
+                self.unload_plugin_at(idx);
+                crate::host_log(&format!(
+                    "Plugin '{name}' file was deleted; unloaded plugin"
+                ));
+                return;
+            }
 
             match self.instantiate_plugin(&old_path) {
                 Ok(mut new_plugin) => {
@@ -402,6 +473,7 @@ impl PluginManager {
                             .register_commands(new_idx, &meta.commands);
                     }
                     self.plugins.push(new_plugin);
+                    self.recalculate_dependency_states();
                     crate::host_log(&format!("Hot-reloaded plugin '{}'", name));
                 }
                 Err(e) => {
@@ -412,6 +484,9 @@ impl PluginManager {
                 }
             }
         } else {
+            if !path.exists() {
+                return;
+            }
             match self.load_plugin(path) {
                 Ok(msg) => crate::host_log(&format!("Discovered and loaded new plugin: {msg}")),
                 Err(e) => crate::host_log(&format!("Failed to load new plugin at {:?}: {e}", path)),
@@ -565,10 +640,14 @@ pub fn register_host_placeholder(name: &str, plugin_name: &str) {
 mod tests {
     use super::*;
     use crate::bindings::goldsrc::engine::api::Host;
+    use goldsrc_api::{
+        EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
+        EngineSound, TraceResult,
+    };
 
     struct NoopEngineOps;
 
-    impl goldsrc_api::EnginePrecache for NoopEngineOps {
+    impl EnginePrecache for NoopEngineOps {
         fn precache_model(&self, _path: &str) -> i32 {
             0
         }
@@ -580,7 +659,7 @@ mod tests {
         }
     }
 
-    impl goldsrc_api::EngineMessages for NoopEngineOps {
+    impl EngineMessages for NoopEngineOps {
         fn reg_user_msg(&self, _name: &str, _size: i32) -> i32 {
             0
         }
@@ -604,13 +683,13 @@ mod tests {
         fn write_entity(&self, _val: i32) {}
     }
 
-    impl goldsrc_api::EngineConsole for NoopEngineOps {
+    impl EngineConsole for NoopEngineOps {
         fn server_print(&self, _message: &str) {}
         fn client_print(&self, _client_index: i32, _print_type: i32, _message: &str) {}
         fn server_command(&self, _command: &str) {}
     }
 
-    impl goldsrc_api::EngineEntities for NoopEngineOps {
+    impl EngineEntities for NoopEngineOps {
         fn entity_is_valid(&self, _index: i32) -> bool {
             false
         }
@@ -653,7 +732,7 @@ mod tests {
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
 
-    impl goldsrc_api::EngineCvars for NoopEngineOps {
+    impl EngineCvars for NoopEngineOps {
         fn cvar_get_float(&self, _name: &str) -> f32 {
             0.0
         }
@@ -664,7 +743,7 @@ mod tests {
         fn cvar_set_string(&self, _name: &str, _val: &str) {}
     }
 
-    impl goldsrc_api::EnginePhysics for NoopEngineOps {
+    impl EnginePhysics for NoopEngineOps {
         fn point_contents(&self, _point: [f32; 3]) -> i32 {
             0
         }
@@ -674,8 +753,8 @@ mod tests {
             _end: [f32; 3],
             _flags: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
         fn trace_hull(
             &self,
@@ -684,12 +763,12 @@ mod tests {
             _flags: i32,
             _hull_number: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
     }
 
-    impl goldsrc_api::EngineSound for NoopEngineOps {
+    impl EngineSound for NoopEngineOps {
         fn emit_sound(
             &self,
             _entity: i32,
@@ -829,7 +908,7 @@ mod tests {
         ended: std::sync::Mutex<usize>,
     }
 
-    impl goldsrc_api::EnginePrecache for MockMessageEngine {
+    impl EnginePrecache for MockMessageEngine {
         fn precache_model(&self, _path: &str) -> i32 {
             0
         }
@@ -841,7 +920,7 @@ mod tests {
         }
     }
 
-    impl goldsrc_api::EngineMessages for MockMessageEngine {
+    impl EngineMessages for MockMessageEngine {
         fn reg_user_msg(&self, _name: &str, _size: i32) -> i32 {
             75
         }
@@ -874,13 +953,13 @@ mod tests {
         fn write_entity(&self, _val: i32) {}
     }
 
-    impl goldsrc_api::EngineConsole for MockMessageEngine {
+    impl EngineConsole for MockMessageEngine {
         fn server_print(&self, _message: &str) {}
         fn client_print(&self, _client_index: i32, _print_type: i32, _message: &str) {}
         fn server_command(&self, _command: &str) {}
     }
 
-    impl goldsrc_api::EngineEntities for MockMessageEngine {
+    impl EngineEntities for MockMessageEngine {
         fn entity_is_valid(&self, index: i32) -> bool {
             (1..=32).contains(&index)
         }
@@ -923,7 +1002,7 @@ mod tests {
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
 
-    impl goldsrc_api::EngineCvars for MockMessageEngine {
+    impl EngineCvars for MockMessageEngine {
         fn cvar_get_float(&self, _name: &str) -> f32 {
             0.0
         }
@@ -934,7 +1013,7 @@ mod tests {
         fn cvar_set_string(&self, _name: &str, _val: &str) {}
     }
 
-    impl goldsrc_api::EnginePhysics for MockMessageEngine {
+    impl EnginePhysics for MockMessageEngine {
         fn point_contents(&self, _point: [f32; 3]) -> i32 {
             0
         }
@@ -944,8 +1023,8 @@ mod tests {
             _end: [f32; 3],
             _flags: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
         fn trace_hull(
             &self,
@@ -954,12 +1033,12 @@ mod tests {
             _flags: i32,
             _hull_number: i32,
             _ignore_ent: i32,
-        ) -> goldsrc_api::TraceResult {
-            goldsrc_api::TraceResult::default()
+        ) -> TraceResult {
+            TraceResult::default()
         }
     }
 
-    impl goldsrc_api::EngineSound for MockMessageEngine {
+    impl EngineSound for MockMessageEngine {
         fn emit_sound(
             &self,
             _entity: i32,
