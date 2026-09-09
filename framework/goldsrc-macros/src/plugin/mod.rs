@@ -185,8 +185,8 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             fn on_event(name: String, payload: Vec<u8>) {
                 if name == "menu_select" && payload.len() >= 8 {
                     let caller = i32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-                    let action_id = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
-                    ::goldsrc::__plugin_dispatch_menu_select(caller, action_id);
+                    let slot = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
+                    ::goldsrc::__plugin_dispatch_menu_select(caller, slot);
                 }
                 ::goldsrc::event::dispatch_event(&name, &payload);
             }
@@ -199,8 +199,8 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                 ::goldsrc::placeholders::dispatch_local_placeholder(&name, caller, &param)
             }
 
-            fn on_chat(_sender: i32, _text: String, _is_team: bool) -> Option<String> {
-                None
+            fn on_chat(sender: i32, text: String, is_team: bool) -> Option<String> {
+                ::goldsrc::chat::dispatch_local_chat(sender, &text, is_team)
             }
         }
 

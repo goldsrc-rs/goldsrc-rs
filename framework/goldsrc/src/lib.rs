@@ -72,11 +72,16 @@ pub fn __plugin_frame_dispatch() {
 /// Internal helper for menu selection event dispatch.
 #[doc(hidden)]
 #[inline(always)]
-pub fn __plugin_dispatch_menu_select(caller: i32, action_id: u32) {
+pub fn __plugin_dispatch_menu_select(caller: i32, slot: u32) {
     #[cfg(feature = "menu")]
-    crate::menu::dispatch_menu_action(crate::Player::new(caller), Some(action_id), None);
+    {
+        let handled = crate::menu::handle_player_menu_select(caller, slot as u8);
+        if !handled {
+            crate::menu::dispatch_menu_action(crate::Player::new(caller), Some(slot), None);
+        }
+    }
     #[cfg(not(feature = "menu"))]
-    let _ = (caller, action_id);
+    let _ = (caller, slot);
 }
 
 /// Performs single-pass substitution of named `{key}` placeholders without intermediate string reallocations.
@@ -201,13 +206,48 @@ macro_rules! chat_broadcast {
 
 pub mod chat {
     pub use goldsrc_api::chat::*;
+    use std::sync::RwLock;
+
+    type ChatMiddlewareFn = Box<dyn Fn(&mut ChatMessage) -> bool + Send + Sync + 'static>;
+    static CHAT_MIDDLEWARE: RwLock<Vec<ChatMiddlewareFn>> = RwLock::new(Vec::new());
 
     /// Registers a local chat middleware inside a WASM plugin.
-    pub fn register_chat_middleware<F>(_middleware: F)
+    pub fn register_chat_middleware<F>(middleware: F)
     where
         F: Fn(&mut ChatMessage) -> bool + Send + Sync + 'static,
     {
-        // Handled transparently by runtime dispatcher
+        if let Ok(mut list) = CHAT_MIDDLEWARE.write() {
+            list.push(Box::new(middleware));
+        }
+    }
+
+    /// Dispatches incoming chat through local middleware pipeline.
+    /// Returns Some(final_text) if allowed, or None if blocked/suppressed.
+    pub fn dispatch_local_chat(sender: i32, text: &str, is_team: bool) -> Option<String> {
+        let Ok(list) = CHAT_MIDDLEWARE.read() else {
+            return Some(text.to_string());
+        };
+        if list.is_empty() {
+            return Some(text.to_string());
+        }
+        let scope = if is_team {
+            ChatScope::same_team()
+        } else {
+            ChatScope::all()
+        };
+        let mut msg = ChatMessage::new(crate::Player::new(sender), text, scope);
+        for mw in list.iter() {
+            let allow = mw(&mut msg);
+            if !allow || msg.is_blocked {
+                return None;
+            }
+        }
+        let final_text = if let Some(ref p) = msg.prefix {
+            format!("{p}{}", msg.formatted_text)
+        } else {
+            msg.formatted_text
+        };
+        Some(final_text)
     }
 }
 
