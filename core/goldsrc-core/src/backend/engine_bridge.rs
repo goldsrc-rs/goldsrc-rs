@@ -594,7 +594,12 @@ impl EngineEntities for EngineBackend {
         if !(1..=32).contains(&index) {
             return None;
         }
-        if let Some(session_lang) = crate::host::HostRuntime::get_player_language_override(index) {
+        if let Some(session_lang) = crate::host::HostRuntime::with_sessions(|s| {
+            s.get(index)
+                .and_then(|sess| sess.lang().map(str::to_string))
+        })
+        .flatten()
+        {
             return Some(session_lang);
         }
         unsafe {

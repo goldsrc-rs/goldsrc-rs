@@ -1,6 +1,6 @@
 //! Centralized event and command dispatcher for backends and WASM plugins.
 
-use crate::host::HostRuntime;
+use crate::host::{HostEvent, HostRuntime};
 use goldsrc_api::consts::log_targets;
 
 /// Dispatches an event with an optional payload to all loaded WASM plugins.
@@ -22,37 +22,17 @@ pub fn emit_event(name: &str, payload: &[u8]) -> bool {
 /// Returns `true` if the host runtime is active and processed the event.
 pub fn emit_player_event(name: &str, index: i32) -> bool {
     if name == "client_disconnect" {
-        goldsrc_api::auth::Auth::remove_player(index);
-        goldsrc_host_wasm::clear_active_menu_owner(index);
-        HostRuntime::on_client_disconnect(index);
-        if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
-            mgr.on_disconnect(index);
-        }
+        HostRuntime::on(HostEvent::ClientDisconnect { slot: index });
+    } else if name == "client_connect" {
+        HostRuntime::on(HostEvent::ClientConnect { slot: index });
     }
-    let res = emit_event(name, &index.to_le_bytes());
-
-    if name == "client_connect" || name == "client_disconnect" {
-        let player_count = goldsrc_api::auth::Auth::total_players();
-        let current_map = HostRuntime::current_map();
-        HostRuntime::evaluate_rules_scoped(
-            goldsrc_api::rules::RuleScope::PlayerCount,
-            &current_map,
-            player_count,
-        );
-    }
-
-    res
+    emit_event(name, &index.to_le_bytes())
 }
 
 /// Dispatches client userinfo change event and updates active player menu if open.
 pub fn on_client_user_info_changed(player_idx: i32) {
+    HostRuntime::on(HostEvent::ClientUserInfoChanged { slot: player_idx });
     emit_player_event("client_user_info_changed", player_idx);
-    if let Some(engine) = HostRuntime::engine() {
-        let current_time = HostRuntime::current_time();
-        if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
-            mgr.refresh_player_menu(player_idx, engine.as_ref(), current_time);
-        }
-    }
 }
 
 /// Dispatches a console / client command to the WASM host.
@@ -172,36 +152,18 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
 
 /// Invoked when a new server map is activated (ServerActivate).
 pub fn on_server_activate() {
-    let now = HostRuntime::current_time();
-    if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
-        mgr.on_round_start(1, now);
-    }
+    HostRuntime::on(HostEvent::ServerActivate);
     emit_event("server_activate", &[]);
-    if let Some(engine) = HostRuntime::engine() {
-        let map_name = engine.cvar_get_string("mapname").unwrap_or_default();
-        let player_count = goldsrc_api::auth::Auth::total_players();
-        HostRuntime::evaluate_rules_scoped(
-            goldsrc_api::rules::RuleScope::MapChange,
-            &map_name,
-            player_count,
-        );
-    }
 }
 
 /// Invoked when the current server map is ending or server shutting down (ServerDeactivate).
 /// Advances map generation to invalidate cached EDicts and clears player capabilities and menu sessions.
 pub fn on_server_deactivate() {
-    goldsrc_api::bump_map_generation();
-    goldsrc_api::auth::Auth::clear_all_players();
-    goldsrc_host_wasm::clear_all_active_menu_owners();
-    if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
-        mgr.on_map_change();
-    }
-    HostRuntime::on_map_change();
+    HostRuntime::on(HostEvent::ServerDeactivate);
     emit_event("server_deactivate", &[]);
 }
 
 /// Ticks the frame event in the WASM host.
 pub fn on_server_frame() {
-    HostRuntime::on_server_frame();
+    HostRuntime::on(HostEvent::ServerFrame);
 }

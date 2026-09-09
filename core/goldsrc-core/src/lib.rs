@@ -28,7 +28,7 @@ pub use config::plugins as plugins_config;
 pub use config::{
     HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
 };
-pub use host::HostRuntime;
+pub use host::{HostEvent, HostRuntime};
 pub use i18n::I18nService;
 pub use net::NetworkMessageDispatcher;
 pub use paths::PathResolver;
