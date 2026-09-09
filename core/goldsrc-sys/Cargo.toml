@@ -7,7 +7,7 @@ description = "Raw FFI bindings for GoldSrc engine and Metamod (generated via bi
 links = "goldsrc"
 
 [build-dependencies]
-bindgen = "0.72"
+bindgen = "0.73"
 cc = "1.0"
 
 [package.metadata.docs.rs]
