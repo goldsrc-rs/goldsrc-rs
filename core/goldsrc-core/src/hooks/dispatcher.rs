@@ -3,36 +3,25 @@
 use crate::host::{HostEvent, HostRuntime};
 use goldsrc_api::consts::log_targets;
 
-/// Dispatches an event with an optional payload to all loaded WASM plugins.
+/// Dispatches any engine event to the host runtime and all loaded WASM plugins.
 /// Returns `true` if the host runtime is active and processed the event.
-pub fn emit_event(name: &str, payload: &[u8]) -> bool {
+pub fn emit(event: HostEvent<'_>) -> bool {
+    // 1. CQS internal runtime reaction
+    HostRuntime::on(event);
+
+    // 2. Deliver to WASM plugins
+    let name = event.name();
+    let payload = event.payload();
     HostRuntime::with_manager(|m| match m {
         Some(manager) => {
-            manager.call_on_event(name, payload);
+            manager.call_on_event(name, &payload);
             true
         }
         None => {
-            log::trace!(target: log_targets::CORE, "emit_event('{name}') skipped: WASM host not initialized");
+            log::trace!(target: log_targets::CORE, "emit('{name}') skipped: WASM host not initialized");
             false
         }
     })
-}
-
-/// Dispatches a player-indexed event (payload is player index as 4-byte LE).
-/// Returns `true` if the host runtime is active and processed the event.
-pub fn emit_player_event(name: &str, index: i32) -> bool {
-    if name == "client_disconnect" {
-        HostRuntime::on(HostEvent::ClientDisconnect { slot: index });
-    } else if name == "client_connect" {
-        HostRuntime::on(HostEvent::ClientConnect { slot: index });
-    }
-    emit_event(name, &index.to_le_bytes())
-}
-
-/// Dispatches client userinfo change event and updates active player menu if open.
-pub fn on_client_user_info_changed(player_idx: i32) {
-    HostRuntime::on(HostEvent::ClientUserInfoChanged { slot: player_idx });
-    emit_player_event("client_user_info_changed", player_idx);
 }
 
 /// Dispatches a console / client command to the WASM host.
@@ -82,7 +71,10 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         };
 
         if !targeted {
-            emit_event("menu_select", &payload);
+            emit(HostEvent::Custom {
+                name: "menu_select",
+                payload: &payload,
+            });
         }
 
         return true;
@@ -148,22 +140,4 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         // Direct client console command
         manager.dispatch_command(cmd, player_idx, raw_args)
     })
-}
-
-/// Invoked when a new server map is activated (ServerActivate).
-pub fn on_server_activate() {
-    HostRuntime::on(HostEvent::ServerActivate);
-    emit_event("server_activate", &[]);
-}
-
-/// Invoked when the current server map is ending or server shutting down (ServerDeactivate).
-/// Advances map generation to invalidate cached EDicts and clears player capabilities and menu sessions.
-pub fn on_server_deactivate() {
-    HostRuntime::on(HostEvent::ServerDeactivate);
-    emit_event("server_deactivate", &[]);
-}
-
-/// Ticks the frame event in the WASM host.
-pub fn on_server_frame() {
-    HostRuntime::on(HostEvent::ServerFrame);
 }

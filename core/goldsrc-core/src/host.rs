@@ -23,6 +23,62 @@ use std::time::Instant;
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_api::Engine>> = OnceLock::new();
 
+/// Player-specific gameplay and lifecycle events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerEvent {
+    Connect,
+    Disconnect,
+    PutInServer,
+    UserInfoChanged,
+    PreThink,
+    PostThink,
+    CmdEnd,
+    Kill,
+    SpectatorConnect,
+    SpectatorDisconnect,
+    SpectatorThink,
+}
+
+impl PlayerEvent {
+    /// Returns the canonical event name string for WASM plugins.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Connect => "client_connect",
+            Self::Disconnect => "client_disconnect",
+            Self::PutInServer => "client_put_in_server",
+            Self::UserInfoChanged => "client_user_info_changed",
+            Self::PreThink => "player_pre_think",
+            Self::PostThink => "player_post_think",
+            Self::CmdEnd => "cmd_end",
+            Self::Kill => "client_kill",
+            Self::SpectatorConnect => "spectator_connect",
+            Self::SpectatorDisconnect => "spectator_disconnect",
+            Self::SpectatorThink => "spectator_think",
+        }
+    }
+}
+
+/// Inline fixed-capacity buffer for event payloads to eliminate heap allocations.
+#[derive(Debug, Clone, Copy)]
+pub enum EventPayload<'a> {
+    Empty,
+    Borrowed(&'a [u8]),
+    Inline4([u8; 4]),
+    Inline8([u8; 8]),
+}
+
+impl<'a> std::ops::Deref for EventPayload<'a> {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Empty => &[],
+            Self::Borrowed(s) => s,
+            Self::Inline4(s) => s,
+            Self::Inline8(s) => s,
+        }
+    }
+}
+
 /// Lifecycle and gameplay events originating from the game engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostEvent<'a> {
@@ -32,14 +88,63 @@ pub enum HostEvent<'a> {
     ServerActivate,
     /// Server map deactivation / map end / shutdown (ServerDeactivate).
     ServerDeactivate,
-    /// Player joined or connected to a slot (1..=32).
-    ClientConnect { slot: i32 },
-    /// Player disconnected from a slot (1..=32).
-    ClientDisconnect { slot: i32 },
-    /// Player userinfo/cvar changed.
-    ClientUserInfoChanged { slot: i32 },
     /// Map changed explicitly.
     MapChange { map_name: &'a str },
+
+    /// Player-specific event with slot index (1..=32).
+    Player { slot: i32, event: PlayerEvent },
+
+    /// User command execution start with buttons bitmask.
+    CmdStart { slot: i32, buttons: u16 },
+
+    /// Entity touch event.
+    EntityTouch { touched: i32, other: i32 },
+
+    /// Entity use event.
+    EntityUse { used: i32, other: i32 },
+
+    /// Custom or generic event with explicit name and byte payload.
+    Custom { name: &'a str, payload: &'a [u8] },
+}
+
+impl<'a> HostEvent<'a> {
+    /// Returns the canonical event name string for WASM plugins.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::ServerFrame => "server_frame",
+            Self::ServerActivate => "server_activate",
+            Self::ServerDeactivate => "server_deactivate",
+            Self::MapChange { .. } => "map_change",
+            Self::Player { event, .. } => event.as_str(),
+            Self::CmdStart { .. } => "cmd_start",
+            Self::EntityTouch { .. } => "entity_touch",
+            Self::EntityUse { .. } => "entity_use",
+            Self::Custom { name, .. } => name,
+        }
+    }
+
+    /// Encodes the binary payload for WASM plugins on the stack with zero heap allocation.
+    pub fn payload(&self) -> EventPayload<'a> {
+        match self {
+            Self::ServerFrame | Self::ServerActivate | Self::ServerDeactivate => {
+                EventPayload::Empty
+            }
+            Self::MapChange { map_name } => EventPayload::Borrowed(map_name.as_bytes()),
+            Self::Player { slot, .. } => EventPayload::Inline4(slot.to_le_bytes()),
+            Self::CmdStart { slot, buttons } => {
+                let mut buf = [0u8; 8];
+                buf[0..4].copy_from_slice(&slot.to_le_bytes());
+                buf[4..6].copy_from_slice(&buttons.to_le_bytes());
+                EventPayload::Inline8(buf)
+            }
+            Self::EntityTouch { touched, other }
+            | Self::EntityUse {
+                used: touched,
+                other,
+            } => EventPayload::Inline8(crate::api_registry::pack_two_i32(*touched, *other)),
+            Self::Custom { payload, .. } => EventPayload::Borrowed(payload),
+        }
+    }
 }
 
 impl HostRuntime {
@@ -477,11 +582,6 @@ impl HostRuntime {
         }
     }
 
-    /// Clears temporary rule pause overrides, client sessions, and flushes storage on map change.
-    pub fn on_map_change() {
-        Self::on(HostEvent::MapChange { map_name: "" });
-    }
-
     fn handle_map_change() {
         if let Some(lock) = RUNTIME.get() {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -587,50 +687,57 @@ impl HostRuntime {
                 }
                 Self::handle_map_change();
             }
-            HostEvent::ClientConnect { slot: _ } => {
-                let player_count = goldsrc_api::auth::Auth::total_players();
-                let current_map = Self::current_map();
-                Self::evaluate_rules_scoped(
-                    goldsrc_api::rules::RuleScope::PlayerCount,
-                    &current_map,
-                    player_count,
-                );
-            }
-            HostEvent::ClientDisconnect { slot } => {
-                // 1. Session cleanup
-                let _ = Self::with_sessions_mut(|s| {
-                    s.on_disconnect(slot);
-                });
-                // 2. Active menu cleanup
-                goldsrc_host_wasm::clear_active_menu_owner(slot);
-                if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
-                    mgr.on_disconnect(slot);
-                }
-                // 3. Auth registration cleanup
-                goldsrc_api::auth::Auth::remove_player(slot);
-                // 4. Reactive rules recalculation
-                let player_count = goldsrc_api::auth::Auth::total_players();
-                let current_map = Self::current_map();
-                Self::evaluate_rules_scoped(
-                    goldsrc_api::rules::RuleScope::PlayerCount,
-                    &current_map,
-                    player_count,
-                );
-            }
-            HostEvent::ClientUserInfoChanged { slot } => {
-                if let Some(engine) = Self::engine() {
-                    let current_time = Self::current_time();
-                    if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
-                        mgr.refresh_player_menu(slot, engine.as_ref(), current_time);
-                    }
-                }
-            }
             HostEvent::MapChange { map_name } => {
                 if !map_name.is_empty() {
                     Self::set_current_map(map_name);
                 }
                 Self::handle_map_change();
             }
+            HostEvent::Player { slot, event } => match event {
+                PlayerEvent::Connect => {
+                    let player_count = goldsrc_api::auth::Auth::total_players();
+                    let current_map = Self::current_map();
+                    Self::evaluate_rules_scoped(
+                        goldsrc_api::rules::RuleScope::PlayerCount,
+                        &current_map,
+                        player_count,
+                    );
+                }
+                PlayerEvent::Disconnect => {
+                    // 1. Session cleanup
+                    let _ = Self::with_sessions_mut(|s| {
+                        s.on_disconnect(slot);
+                    });
+                    // 2. Active menu cleanup
+                    goldsrc_host_wasm::clear_active_menu_owner(slot);
+                    if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                        mgr.on_disconnect(slot);
+                    }
+                    // 3. Auth registration cleanup
+                    goldsrc_api::auth::Auth::remove_player(slot);
+                    // 4. Reactive rules recalculation
+                    let player_count = goldsrc_api::auth::Auth::total_players();
+                    let current_map = Self::current_map();
+                    Self::evaluate_rules_scoped(
+                        goldsrc_api::rules::RuleScope::PlayerCount,
+                        &current_map,
+                        player_count,
+                    );
+                }
+                PlayerEvent::UserInfoChanged => {
+                    if let Some(engine) = Self::engine() {
+                        let current_time = Self::current_time();
+                        if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                            mgr.refresh_player_menu(slot, engine.as_ref(), current_time);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            HostEvent::CmdStart { .. }
+            | HostEvent::EntityTouch { .. }
+            | HostEvent::EntityUse { .. }
+            | HostEvent::Custom { .. } => {}
         }
     }
 
@@ -728,11 +835,6 @@ impl HostRuntime {
                 ),
             }
         }
-    }
-
-    /// Tick plugins frame event and drain debounced watcher events.
-    pub fn on_server_frame() {
-        Self::on(HostEvent::ServerFrame);
     }
 
     fn handle_server_frame() {
@@ -881,13 +983,29 @@ mod tests {
     #[test]
     fn test_host_event_variants() {
         let ev1 = HostEvent::ServerFrame;
-        let ev2 = HostEvent::ClientDisconnect { slot: 5 };
+        let ev2 = HostEvent::Player {
+            slot: 5,
+            event: PlayerEvent::Disconnect,
+        };
         let ev3 = HostEvent::MapChange {
             map_name: "de_dust2",
         };
+        let ev4 = HostEvent::CmdStart {
+            slot: 3,
+            buttons: 0x0001,
+        };
 
         assert_eq!(ev1, HostEvent::ServerFrame);
-        assert_ne!(ev1, ev2);
-        assert_eq!(format!("{ev3:?}"), "MapChange { map_name: \"de_dust2\" }");
+        assert_eq!(ev1.name(), "server_frame");
+        assert!(ev1.payload().is_empty());
+
+        assert_eq!(ev2.name(), "client_disconnect");
+        assert_eq!(&*ev2.payload(), &5i32.to_le_bytes());
+
+        assert_eq!(ev3.name(), "map_change");
+        assert_eq!(&*ev3.payload(), b"de_dust2");
+
+        assert_eq!(ev4.name(), "cmd_start");
+        assert_eq!(ev4.payload().len(), 8);
     }
 }

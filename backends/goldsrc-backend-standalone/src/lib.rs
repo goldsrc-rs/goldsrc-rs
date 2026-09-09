@@ -21,6 +21,7 @@ mod proxy;
 
 use goldsrc_core::backend::EngineBackend;
 use goldsrc_core::log;
+use goldsrc_core::{HostEvent, PlayerEvent};
 use goldsrc_sys::ffi::catch_ffi_panic;
 use goldsrc_sys::{DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
 
@@ -134,12 +135,12 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
         client_max: i32,
     ) {
         proxy::forward_server_activate(edict_list, edict_count, client_max);
-        goldsrc_core::hooks::on_server_activate();
+        goldsrc_core::hooks::emit(HostEvent::ServerActivate);
     }
 
     fn server_deactivate(&self) {
         proxy::forward_server_deactivate();
-        goldsrc_core::hooks::on_server_deactivate();
+        goldsrc_core::hooks::emit(HostEvent::ServerDeactivate);
     }
 
     fn client_connect(
@@ -152,14 +153,20 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
     ) -> i32 {
         let result = proxy::forward_client_connect(edict, name, address, reject_reason);
         if result != 0 {
-            goldsrc_core::hooks::emit_player_event("client_connect", index);
+            goldsrc_core::hooks::emit(HostEvent::Player {
+                slot: index,
+                event: PlayerEvent::Connect,
+            });
         }
         result as i32
     }
 
     fn client_disconnect(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_client_disconnect(edict);
-        goldsrc_core::hooks::emit_player_event("client_disconnect", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::Disconnect,
+        });
     }
 
     fn client_command(
@@ -178,18 +185,24 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
 
     fn start_frame(&self) {
         proxy::forward_start_frame();
-        goldsrc_core::hooks::on_server_frame();
+        goldsrc_core::hooks::emit(HostEvent::ServerFrame);
         crate::backend().drain_prints();
     }
 
     fn player_pre_think(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_player_pre_think(edict);
-        goldsrc_core::hooks::emit_player_event("player_pre_think", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::PreThink,
+        });
     }
 
     fn player_post_think(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_player_post_think(edict);
-        goldsrc_core::hooks::emit_player_event("player_post_think", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::PostThink,
+        });
     }
 
     fn cmd_start(
@@ -200,20 +213,23 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
         random_seed: u32,
     ) {
         proxy::forward_cmd_start(player, cmd, random_seed);
-        if !cmd.is_null() {
-            let buttons = unsafe { (*cmd).buttons };
-            let mut payload = [0u8; 8];
-            payload[0..4].copy_from_slice(&index.to_le_bytes());
-            payload[4..6].copy_from_slice(&buttons.to_le_bytes());
-            goldsrc_core::hooks::emit_event("cmd_start", &payload);
+        let buttons = if !cmd.is_null() {
+            unsafe { (*cmd).buttons }
         } else {
-            goldsrc_core::hooks::emit_player_event("cmd_start", index);
-        }
+            0
+        };
+        goldsrc_core::hooks::emit(HostEvent::CmdStart {
+            slot: index,
+            buttons,
+        });
     }
 
     fn cmd_end(&self, player: *const goldsrc_sys::edict_t, index: i32) {
         proxy::forward_cmd_end(player);
-        goldsrc_core::hooks::emit_player_event("cmd_end", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::CmdEnd,
+        });
     }
 
     fn add_to_full_pack(
@@ -231,7 +247,10 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
 
     fn client_kill(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_client_kill(edict);
-        goldsrc_core::hooks::emit_player_event("client_kill", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::Kill,
+        });
     }
 
     fn touch(
@@ -242,10 +261,10 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
         other_idx: i32,
     ) {
         proxy::forward_touch(touched, other);
-        goldsrc_core::hooks::emit_event(
-            "entity_touch",
-            &goldsrc_core::api_registry::pack_two_i32(touched_idx, other_idx),
-        );
+        goldsrc_core::hooks::emit(HostEvent::EntityTouch {
+            touched: touched_idx,
+            other: other_idx,
+        });
     }
 
     fn entity_use(
@@ -256,15 +275,18 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
         other_idx: i32,
     ) {
         proxy::forward_use(used, other);
-        goldsrc_core::hooks::emit_event(
-            "entity_use",
-            &goldsrc_core::api_registry::pack_two_i32(used_idx, other_idx),
-        );
+        goldsrc_core::hooks::emit(HostEvent::EntityUse {
+            used: used_idx,
+            other: other_idx,
+        });
     }
 
     fn client_put_in_server(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_client_put_in_server(edict);
-        goldsrc_core::hooks::emit_player_event("client_put_in_server", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::PutInServer,
+        });
     }
 
     fn client_user_info_changed(
@@ -315,17 +337,26 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
 
     fn spectator_connect(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_spectator_connect(edict);
-        goldsrc_core::hooks::emit_player_event("spectator_connect", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::SpectatorConnect,
+        });
     }
 
     fn spectator_disconnect(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_spectator_disconnect(edict);
-        goldsrc_core::hooks::emit_player_event("spectator_disconnect", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::SpectatorDisconnect,
+        });
     }
 
     fn spectator_think(&self, edict: *mut goldsrc_sys::edict_t, index: i32) {
         proxy::forward_spectator_think(edict);
-        goldsrc_core::hooks::emit_player_event("spectator_think", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::SpectatorThink,
+        });
     }
 
     fn sys_error(&self, error_string: &str) {
