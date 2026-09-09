@@ -159,6 +159,8 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             };
 
+            let mut pause_overrides: Vec<(String, bool)> = Vec::new();
+
             with_manager_or_host(manager, |manager| match sub_arg.as_str() {
                 "list" | "ls" | "ps" => handlers::handle_list(spec, parser, manager, &mut out),
                 "info" => {
@@ -413,7 +415,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     if all {
                         let outcome = manager.pause_all_plugins(true);
                         for info in manager.get_plugins_info() {
-                            crate::host::HostRuntime::set_manual_pause_override(&info.name, true);
+                            pause_overrides.push((info.name.clone(), true));
                         }
                         if outcome.changed > 0 {
                             out(&CliResponse::success(outcome.to_string()).format_console());
@@ -424,10 +426,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         for t in targets {
                             match manager.pause_plugin(&t, true) {
                                 Ok(outcome) => {
-                                    crate::host::HostRuntime::set_manual_pause_override(
-                                        outcome.name(),
-                                        true,
-                                    );
+                                    pause_overrides.push((outcome.name().to_string(), true));
                                     if outcome.changed() {
                                         out(&CliResponse::success(outcome.to_string())
                                             .format_console());
@@ -466,7 +465,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     if all {
                         let outcome = manager.pause_all_plugins(false);
                         for info in manager.get_plugins_info() {
-                            crate::host::HostRuntime::set_manual_pause_override(&info.name, false);
+                            pause_overrides.push((info.name.clone(), false));
                         }
                         if outcome.changed > 0 {
                             out(&CliResponse::success(outcome.to_string()).format_console());
@@ -477,10 +476,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         for t in targets {
                             match manager.pause_plugin(&t, false) {
                                 Ok(outcome) => {
-                                    crate::host::HostRuntime::set_manual_pause_override(
-                                        outcome.name(),
-                                        false,
-                                    );
+                                    pause_overrides.push((outcome.name().to_string(), false));
                                     if outcome.changed() {
                                         out(&CliResponse::success(outcome.to_string())
                                             .format_console());
@@ -697,6 +693,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     }
                 }
             });
+
+            for (plugin_name, is_paused) in pause_overrides {
+                crate::host::HostRuntime::set_manual_pause_override(&plugin_name, is_paused);
+            }
         }
         "watchers" => {
             let sub_arg = match parser.next() {

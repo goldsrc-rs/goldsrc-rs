@@ -120,49 +120,51 @@ impl Action<Client> for Print {
 
     #[inline(always)]
     fn execute(self, client: &Client) -> Self::Output {
-        if !client.is_valid() {
+        if client.index != 0 && !client.is_valid() {
             return;
         }
+
+        let message = crate::placeholders::format_local_placeholders(&self.message, client.index);
 
         match self.target {
             PrintTarget::Console => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_console(client.index, &self.message);
+                host_api::host_print_console(client.index, &message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(client.index, PrintTarget::Console, &self.message);
+                    hook(client.index, PrintTarget::Console, &message);
                 }
             }
             PrintTarget::Center => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_center(client.index, &self.message);
+                host_api::host_print_center(client.index, &message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(client.index, PrintTarget::Center, &self.message);
+                    hook(client.index, PrintTarget::Center, &message);
                 }
             }
             PrintTarget::Chat => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_chat(client.index, &self.message);
+                host_api::host_print_chat(client.index, &message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(client.index, PrintTarget::Chat, &self.message);
+                    hook(client.index, PrintTarget::Chat, &message);
                 }
             }
             PrintTarget::Notify => {
                 #[cfg(target_arch = "wasm32")]
-                host_api::host_print_notify(client.index, &self.message);
+                host_api::host_print_notify(client.index, &message);
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Ok(lock) = NATIVE_PRINT_HOOK.read()
                     && let Some(hook) = *lock
                 {
-                    hook(client.index, PrintTarget::Notify, &self.message);
+                    hook(client.index, PrintTarget::Notify, &message);
                 }
             }
         }

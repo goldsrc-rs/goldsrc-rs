@@ -660,7 +660,10 @@ pub unsafe extern "C" fn api_client_put_in_server(p_entity: *mut edict_t) {
         }
         let index = unsafe { edict_index(p_entity) };
         if (1..=32).contains(&index) {
-            crate::hooks::dispatcher::emit_player_event("client_put_in_server", index);
+            crate::hooks::dispatcher::emit(crate::host::HostEvent::Player {
+                slot: index,
+                event: crate::host::PlayerEvent::PutInServer,
+            });
         }
     });
 }
@@ -678,7 +681,10 @@ pub unsafe extern "C" fn api_client_user_info_changed(
         }
         let index = unsafe { edict_index(p_entity) };
         if (1..=32).contains(&index) {
-            crate::hooks::dispatcher::on_client_user_info_changed(index);
+            crate::hooks::dispatcher::emit(crate::host::HostEvent::Player {
+                slot: index,
+                event: crate::host::PlayerEvent::UserInfoChanged,
+            });
         }
     });
 }

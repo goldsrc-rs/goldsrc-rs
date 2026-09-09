@@ -591,8 +591,16 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_lang(&self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+        if !(1..=32).contains(&index) {
             return None;
+        }
+        if let Some(session_lang) = crate::host::HostRuntime::with_sessions(|s| {
+            s.get(index)
+                .and_then(|sess| sess.lang().map(str::to_string))
+        })
+        .flatten()
+        {
+            return Some(session_lang);
         }
         unsafe {
             let funcs = (self.engfuncs)();
@@ -604,13 +612,16 @@ impl EngineEntities for EngineBackend {
                 && let Some(infokey_val) = funcs.pfnInfoKeyValue
             {
                 let buffer = get_infokey(pedict);
-                for key_name in ["_lang", "_cl_lang", "lang", "cl_lang"] {
+                for key_name in ["_lang", "lang", "_cl_lang", "cl_lang", "language"] {
                     let key = std::ffi::CString::new(key_name).unwrap_or_default();
                     let val_ptr = infokey_val(buffer, key.as_ptr());
                     if let Some(lang) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 16) {
                         return Some(lang.to_lowercase());
                     }
                 }
+            }
+            if let Some(amx_lang) = self.cvar_get_string("amx_language") {
+                return Some(amx_lang.to_lowercase());
             }
             self.cvar_get_string("server_language")
         }

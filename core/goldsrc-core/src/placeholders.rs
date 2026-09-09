@@ -19,6 +19,17 @@ pub struct RegistryEntry {
     pub handler: Arc<dyn PlaceholderHandler>,
 }
 
+/// Errors raised during placeholder lookup and evaluation.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PlaceholderError {
+    #[error("placeholder '{{{domain}:{ident}}}' not found in plugin '{domain}'")]
+    DomainNotFound { domain: String, ident: String },
+    #[error("ambiguous placeholder '{{{ident}}}' registered by multiple plugins: {plugins:?}")]
+    Ambiguous { ident: String, plugins: Vec<String> },
+    #[error("unknown placeholder '{{{ident}}}'")]
+    Unknown { ident: String },
+}
+
 /// Dynamic placeholder registry supporting scoped (`plugin:name`) and global (`name`) resolution.
 pub struct PlaceholderRegistry {
     entries: HashMap<(String, String), RegistryEntry>, // (plugin_name, placeholder_name) -> Entry
@@ -200,7 +211,11 @@ impl PlaceholderRegistry {
     }
 
     /// Resolves and formats a placeholder call string.
-    pub fn evaluate_call(&self, caller: Player, call: &PlaceholderCall) -> Result<String, String> {
+    pub fn evaluate_call(
+        &self,
+        caller: Player,
+        call: &PlaceholderCall,
+    ) -> Result<String, PlaceholderError> {
         let ident_lower = call.ident.to_lowercase();
 
         // 1. If explicit domain is given (e.g. {stats:rank})
@@ -212,10 +227,10 @@ impl PlaceholderRegistry {
             {
                 return Ok(entry.handler.evaluate(caller, call));
             }
-            return Err(format!(
-                "Placeholder '{{{}: {}}}' not found in plugin '{}'",
-                domain, call.ident, domain
-            ));
+            return Err(PlaceholderError::DomainNotFound {
+                domain: domain.clone(),
+                ident: call.ident.clone(),
+            });
         }
 
         // 2. Short name / alias lookup (e.g. {rank} or {hp})
@@ -239,14 +254,16 @@ impl PlaceholderRegistry {
                     }
                 }
             } else if plugins.len() > 1 {
-                return Err(format!(
-                    "Ambiguous placeholder '{{{}}}' registered by multiple plugins: {:?}. Use fully-qualified format '{{{}: ...}}'",
-                    call.ident, plugins, plugins[0]
-                ));
+                return Err(PlaceholderError::Ambiguous {
+                    ident: call.ident.clone(),
+                    plugins: plugins.clone(),
+                });
             }
         }
 
-        Err(format!("Unknown placeholder '{{{}}}'", call.ident))
+        Err(PlaceholderError::Unknown {
+            ident: call.ident.clone(),
+        })
     }
 }
 

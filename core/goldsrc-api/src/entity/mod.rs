@@ -4,6 +4,7 @@ pub mod ext;
 pub mod property;
 pub mod spec;
 
+pub use crate::client::slot::EntityId;
 pub use ext::EntityExt;
 pub use property::Classname;
 pub use spec::{Dormant, Solid, SolidEntity, Spawned, SpawnedEntity};
@@ -17,6 +18,7 @@ use crate::bindings::goldsrc::engine::api as host_api;
 use crate::property::{Prop, PropGet, PropSet};
 
 /// Validated handle to an active GoldSrc engine entity (world, items, physics, monsters, players).
+/// Strictly bound to the GoldSrc main thread (!Send, !Sync).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Entity {
@@ -24,6 +26,7 @@ pub struct Entity {
     pub index: i32,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) inner: EDict,
+    pub(crate) _marker: std::marker::PhantomData<*const ()>,
 }
 
 impl Entity {
@@ -37,13 +40,17 @@ impl Entity {
         Self {
             index,
             inner: unsafe { EDict::from_raw(index, edict) },
+            _marker: std::marker::PhantomData,
         }
     }
 
     /// Creates an `Entity` handle for `index`.
     #[cfg(target_arch = "wasm32")]
     pub fn new(index: i32) -> Self {
-        Self { index }
+        Self {
+            index,
+            _marker: std::marker::PhantomData,
+        }
     }
 
     /// Creates an `Entity` handle for `index` with an invalid backing edict
@@ -53,6 +60,7 @@ impl Entity {
         Self {
             index,
             inner: EDict::invalid(),
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -111,9 +119,14 @@ impl Entity {
     pub fn edict(&self) -> EDict {
         self.inner
     }
+
+    /// Returns the thread-safe copyable entity ID for off-thread communication.
+    #[inline(always)]
+    pub const fn id(&self) -> EntityId {
+        EntityId(self.index)
+    }
 }
 
-// SAFETY: Entity is just a wrapper around raw pointers / integer index.
-// The caller must ensure the pointer is valid when used.
-unsafe impl Send for Entity {}
-unsafe impl Sync for Entity {}
+// Entity is strictly bound to the GoldSrc engine main thread.
+// It contains PhantomData<*const ()>, making it !Send and !Sync by design.
+// Cross-thread communication must use EntityId instead.

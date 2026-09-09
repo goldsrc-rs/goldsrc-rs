@@ -200,7 +200,10 @@ impl MenuSessionManager {
                 let mut payload = Vec::with_capacity(8);
                 payload.extend_from_slice(&player_idx.to_le_bytes());
                 payload.extend_from_slice(&id.to_le_bytes());
-                crate::hooks::emit_event("menu_select", &payload);
+                crate::hooks::emit(crate::host::HostEvent::Custom {
+                    name: "menu_select",
+                    payload: &payload,
+                });
 
                 // Also trigger client command if action name is non-empty
                 if !action_name.is_empty() {

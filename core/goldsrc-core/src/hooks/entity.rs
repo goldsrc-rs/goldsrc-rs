@@ -167,7 +167,10 @@ impl EntityHookRegistry {
         payload[8..12].copy_from_slice(&ctx.attacker.to_le_bytes());
         payload[12..16].copy_from_slice(&ctx.damage.to_le_bytes());
         payload[16..20].copy_from_slice(&ctx.bits_damage_type.to_le_bytes());
-        crate::hooks::dispatcher::emit_event(event_name, &payload);
+        crate::hooks::dispatcher::emit(crate::host::HostEvent::Custom {
+            name: event_name,
+            payload: &payload,
+        });
 
         final_result
     }
@@ -197,7 +200,10 @@ impl EntityHookRegistry {
         payload[0..4].copy_from_slice(&ctx.victim.to_le_bytes());
         payload[4..8].copy_from_slice(&ctx.attacker.to_le_bytes());
         payload[8..12].copy_from_slice(&ctx.gib_mode.to_le_bytes());
-        crate::hooks::dispatcher::emit_event(event_name, &payload);
+        crate::hooks::dispatcher::emit(crate::host::HostEvent::Custom {
+            name: event_name,
+            payload: &payload,
+        });
 
         final_result
     }
