@@ -99,6 +99,16 @@ To maintain architectural purity and prevent God Objects, GoldSrc.rs strictly en
 | **`Router`** | Input argument parser and direct endpoint dispatcher. | Parses incoming raw command lines, text tokens, or network inputs and routes to matching handlers. | `CliRouter` (`dispatch_host_command`), `CommandRouter` (chat `/cmd` and console dispatch). |
 | **`Bridge`** | Technical adapter across foreign runtime or ABI boundaries. | Connects two fundamentally different environments (e.g. C/C++ FFI, WIT component interfaces, or OS-level bindings). | `ReApiBridge` (ReHLDS/ReGameDLL FFI), `MetamodBridge`, `EngineBridge`. |
 
+### 3.1 Entity Identity & Handle Taxonomy
+
+To guarantee impenetrable engine thread-safety, zero-cost abstractions, and eliminate Slot Recycling Hazards (e.g. background tasks resolving recycled slots), GoldSrc.rs strictly categorizes entity and client identifiers:
+
+| Concept / Suffix | Concurrency & Threading | Lifetime & Invariants | Resolution & Purpose | Examples |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Handle`** | Strictly Main Thread (`!Send`, `!Sync`, `PhantomData<*const ()>`) | Frame-local, direct engine binding. Read/write validates `serialnumber` against host `edict_t`. | Direct CQS operations (`get`, `set`, `act`, `modify`). Never stored across long async intervals. | `Player`, `Client`, `Entity`, `EDict` |
+| **`Slot`** / **`Id`** | Thread-Safe POD (`Copy`, `Clone`, `Send`, `Sync`) | Ephemeral slot index (`1..=32` or `0..=MAX_EDICTS`). Does not track entity lifecycles across disconnects. | Fast lightweight referencing, frame parameters, array indexing. Resolves via `.resolve() -> Option<Handle>`. | `PlayerSlot`, `EntityId` |
+| **`Token`** / **`Session`** | Thread-Safe Generational (`Copy`, `Clone`, `Send`, `Sync`) | Long-lived identity bound to a specific generation (`user_id`, `serial`, `map_generation`). Immune to slot recycling (Alice $\to$ Bob). | Multi-thread workers (`goldsrc::task::spawn`), delayed callbacks. Implements `GenerationalToken` with `is_valid(&self) -> bool`. | `PlayerSession`, `EntityToken` |
+
 ---
 
 ## 4. Key Runtime Data Flows

@@ -158,6 +158,23 @@ impl TestEcs {
             ECS_WORLD.lock().unwrap().as_mut(),
             ECS_REGISTRY.lock().unwrap().as_mut(),
         ) {
+            let entity = EntityId(1);
+            let player = Player::new(1);
+            if player.is_valid() {
+                let live_hp = player.health().current.max(1.0) as i32;
+                world.insert(entity, Health(live_hp));
+                world.insert(entity, DamageBuffer(15));
+                world.insert(entity, Score(10));
+                log_info!(
+                    "[Test ECS] Synced Entity #1 with Player #1 live engine state (HP={})",
+                    live_hp
+                );
+            } else {
+                world.insert(entity, Health(100));
+                world.insert(entity, DamageBuffer(15));
+                world.insert(entity, Score(10));
+            }
+
             PHASE_TRACE.lock().unwrap().clear();
             registry.run_stage(Stage::Frame, world, None);
 

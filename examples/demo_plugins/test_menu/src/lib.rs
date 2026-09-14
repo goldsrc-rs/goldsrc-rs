@@ -1,4 +1,8 @@
 use goldsrc::prelude::*;
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+static PLAYER_MENU_LANG: Mutex<Option<HashMap<i32, String>>> = Mutex::new(None);
 
 pub struct TestMenu;
 
@@ -202,6 +206,11 @@ impl TestMenu {
             .item((item_deagle, 206))
             .build();
 
+        if let Ok(mut lock) = PLAYER_MENU_LANG.lock() {
+            let map = lock.get_or_insert_with(HashMap::new);
+            map.insert(player.index(), lang_code.clone());
+        }
+
         player.open_menu(&menu);
         let name = player
             .name()
@@ -214,13 +223,22 @@ impl TestMenu {
         );
     }
 
+    fn active_player_lang(player: &Player) -> String {
+        PLAYER_MENU_LANG
+            .lock()
+            .ok()
+            .and_then(|lock| lock.as_ref().and_then(|m| m.get(&player.index()).cloned()))
+            .unwrap_or_else(|| player.lang())
+    }
+
     #[menu_action(id = 201)]
     fn on_lang_menu_heal(player: &mut Player) {
         player.modify::<Health>(|hp| hp.heal(100.0));
         let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let lang = Self::active_player_lang(player);
         let msg = tr!(
             "test_i18n",
-            player,
+            &lang,
             "menu_action_reward",
             name = name,
             item = "+100 HP"
@@ -232,9 +250,10 @@ impl TestMenu {
     fn on_lang_menu_armor(player: &mut Player) {
         player.modify::<Armor>(|ar| ar.add(100.0));
         let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let lang = Self::active_player_lang(player);
         let msg = tr!(
             "test_i18n",
-            player,
+            &lang,
             "menu_action_reward",
             name = name,
             item = "+100 AP"
@@ -246,9 +265,10 @@ impl TestMenu {
     fn on_lang_menu_m4a1(player: &mut Player) {
         player.give_item("weapon_m4a1");
         let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let lang = Self::active_player_lang(player);
         let msg = tr!(
             "test_i18n",
-            player,
+            &lang,
             "menu_action_reward",
             name = name,
             item = "M4A1 Carbine"
@@ -260,9 +280,10 @@ impl TestMenu {
     fn on_lang_menu_ak47(player: &mut Player) {
         player.give_item("weapon_ak47");
         let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let lang = Self::active_player_lang(player);
         let msg = tr!(
             "test_i18n",
-            player,
+            &lang,
             "menu_action_reward",
             name = name,
             item = "AK-47 Kalashnikov"
@@ -274,9 +295,10 @@ impl TestMenu {
     fn on_lang_menu_awp(player: &mut Player) {
         player.give_item("weapon_awp");
         let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let lang = Self::active_player_lang(player);
         let msg = tr!(
             "test_i18n",
-            player,
+            &lang,
             "menu_action_reward",
             name = name,
             item = "AWP Sniper"
@@ -288,9 +310,10 @@ impl TestMenu {
     fn on_lang_menu_deagle(player: &mut Player) {
         player.give_item("weapon_deagle");
         let name = player.name().unwrap_or_else(|| "Player".to_string());
+        let lang = Self::active_player_lang(player);
         let msg = tr!(
             "test_i18n",
-            player,
+            &lang,
             "menu_action_reward",
             name = name,
             item = "Desert Eagle"

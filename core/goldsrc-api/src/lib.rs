@@ -30,6 +30,7 @@ pub mod entity;
 /// Event subscription, priority ordering, and local guest event dispatching.
 pub mod event;
 /// Gamedata definitions, signature scanning, and VTable offset configurations.
+#[cfg(feature = "gamedata")]
 pub mod gamedata;
 /// Screen HUD and DHUD message builders and styling.
 pub mod hud;
@@ -48,6 +49,7 @@ pub mod reapi;
 /// Unified requirements DSL.
 pub mod requirements;
 /// Generic Reactive Rule & Provider Engine.
+#[cfg(feature = "rules")]
 pub mod rules;
 /// Compile-time specifications, logical combinators, and state-guarded refinement.
 pub mod spec;
@@ -62,7 +64,7 @@ pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunk
 pub use client::{
     Alive, AsLangCode, Bot, Client, ClientExt, ClientKind, Connected, ConnectedClient,
     ConnectionState, Dead, DeadPlayer, Hltv, Human, HumanClient, LifeState, LivingHuman,
-    LivingPlayer, Player, PlayerExt, PrintTarget, SpectatingPlayer, Spectator, Team,
+    LivingPlayer, Player, PlayerExt, PlayerSlot, PrintTarget, SpectatingPlayer, Spectator, Team,
 };
 pub use command::{
     Command, CommandBuilder, CommandContext, CommandError, CommandHandler, CommandRegistry,
@@ -80,11 +82,12 @@ pub use engine::{
     PRINT_CONSOLE, PRINT_NOTIFY, SAFE_SAYTEXT_LIMIT, TraceResult, cyrillic_to_latin, engine_api,
     format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
 };
-pub use entity::{Entity, EntityExt, SolidEntity, SpawnedEntity};
+pub use entity::{Entity, EntityExt, EntityId, SolidEntity, SpawnedEntity};
 pub use event::{
     Event, EventHandler, EventRegistry, EventSubscriberBuilder, EventSubscription, clear_events,
     dispatch_event, subscribe_event,
 };
+#[cfg(feature = "gamedata")]
 pub use gamedata::{GameData, MemorySignature, VTableFunc};
 pub use hud::{
     FadeFlags, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ScreenFade,
@@ -109,6 +112,7 @@ pub use property::{
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
+#[cfg(feature = "rules")]
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};
 pub use spec::{
     All, Any, Dormant, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec, SpecError,

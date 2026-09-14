@@ -47,6 +47,8 @@ pub struct EDict {
     serial: i32,
     /// Map session generation at creation time to prevent cross-map UAF.
     generation: u64,
+    /// Bounds this engine handle strictly to the GoldSrc main thread (!Send, !Sync).
+    _marker: std::marker::PhantomData<*const ()>,
 }
 
 impl EDict {
@@ -72,6 +74,7 @@ impl EDict {
             ptr: edict as usize,
             serial,
             generation: current_map_generation(),
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -82,6 +85,7 @@ impl EDict {
             ptr: 0,
             serial: -1,
             generation: 0,
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -353,11 +357,9 @@ impl EDict {
     }
 }
 
-// EDict is just two integers + a pointer-width integer. Thread-safety is
-// the caller's responsibility (same as all engine interaction).
-// SAFETY: See module-level safety contract.
-unsafe impl Send for EDict {}
-unsafe impl Sync for EDict {}
+// EDict is strictly bound to the GoldSrc engine main thread.
+// It contains PhantomData<*const ()>, making it !Send and !Sync by design.
+// Cross-thread communication must use PlayerSlot or EntityId instead.
 
 // ============================================================================
 // Unit tests (host-only)

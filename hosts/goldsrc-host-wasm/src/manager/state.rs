@@ -35,10 +35,13 @@ impl HostState {
         });
 
         if !has_perm {
-            crate::host_log(&format!(
-                "[Security Warning] Plugin '{}' denied permission '{}' (declared: {:?})",
-                self.plugin_name, perm, self.permissions
-            ));
+            let err = crate::error::SecurityError::PermissionDenied {
+                plugin: self.plugin_name.clone(),
+                permission: perm.to_string(),
+                declared: self.permissions.clone(),
+            };
+            log::warn!(target: goldsrc_api::consts::log_targets::AUTH, "{err}");
+            crate::host_log(&format!("[Security Warning] {err}"));
         }
         has_perm
     }
@@ -50,10 +53,12 @@ impl HostState {
             if self.shared_buckets.iter().any(|b| b == bucket) {
                 Some(bucket.to_string())
             } else {
-                crate::host_log(&format!(
-                    "[ERROR] Plugin '{}' attempted unauthorized access to shared bucket '{}'",
-                    self.plugin_name, bucket
-                ));
+                let err = crate::error::SecurityError::UnauthorizedBucketAccess {
+                    plugin: self.plugin_name.clone(),
+                    bucket: bucket.to_string(),
+                };
+                log::error!(target: goldsrc_api::consts::log_targets::STORAGE, "{err}");
+                crate::host_log(&format!("[Security Error] {err}"));
                 None
             }
         } else {
@@ -201,44 +206,78 @@ impl api::Host for HostState {
     }
 
     fn host_print_chat(&mut self, player_index: i32, message: String) {
-        if !(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index) {
+        if player_index < 0 {
+            self.engine.server_print(&format!("[Chat] {message}\n"));
+            return;
+        }
+
+        if player_index != 0
+            && (!(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index))
+        {
             self.engine
                 .server_print(&format!("[Chat to #{player_index}] {message}\n"));
             return;
         }
-        let formatted = goldsrc_api::format_say_text(&message);
-        let say_text_id = self.engine.reg_user_msg("SayText", -1);
-        let msg_id = if say_text_id <= 0 { 76 } else { say_text_id };
-        self.engine.message_begin(
-            goldsrc_api::MessageDest::One as i32,
-            msg_id,
-            None,
-            Some(player_index),
-        );
-        // In GoldSrc CS 1.6 SayText, first byte is the sender entity index (1..32 for player colors, or 0)
-        self.engine.write_byte(player_index);
-        // Truncate message if oversized to prevent buffer overflow (SayText payload max 192 bytes)
-        let safe_msg = if formatted.len() > goldsrc_api::consts::SAFE_SAYTEXT_LIMIT {
-            let mut end = goldsrc_api::consts::SAFE_SAYTEXT_LIMIT;
-            while end > 0 && !formatted.is_char_boundary(end) {
-                end -= 1;
-            }
-            &formatted[..end]
+
+        let expanded = crate::format_message_placeholders(player_index, &message);
+        let chunks = goldsrc_api::chat::split_chat_chunks(&expanded);
+        let chunks = if chunks.is_empty() {
+            vec![expanded]
         } else {
-            &formatted
+            chunks
         };
-        // SayText string must be sent without extra trailing newline
-        self.engine.write_string(safe_msg);
-        self.engine.message_end();
+
+        let dest = if player_index == 0 {
+            goldsrc_api::MessageDest::All as i32
+        } else {
+            goldsrc_api::MessageDest::One as i32
+        };
+        let target_edict = if player_index == 0 {
+            None
+        } else {
+            Some(player_index)
+        };
+        let sender_id = if player_index == 0 { 1 } else { player_index };
+
+        for chunk in chunks {
+            let formatted = goldsrc_api::format_say_text(&chunk);
+            let say_text_id = self.engine.reg_user_msg("SayText", -1);
+            let msg_id = if say_text_id <= 0 { 76 } else { say_text_id };
+            self.engine.message_begin(dest, msg_id, None, target_edict);
+            // In GoldSrc CS 1.6 SayText, first byte is the sender entity index (1..32 for player colors, or 0)
+            self.engine.write_byte(sender_id);
+
+            // CS 1.6 client requires leading color byte \x01 if no color prefix is present
+            let payload = if !formatted.starts_with(['\x01', '\x02', '\x03', '\x04']) {
+                format!("\x01{formatted}")
+            } else {
+                formatted
+            };
+
+            // Truncate message if oversized to prevent buffer overflow (SayText payload max 192 bytes)
+            let safe_msg = if payload.len() > goldsrc_api::consts::SAFE_SAYTEXT_LIMIT {
+                let mut end = goldsrc_api::consts::SAFE_SAYTEXT_LIMIT;
+                while end > 0 && !payload.is_char_boundary(end) {
+                    end -= 1;
+                }
+                &payload[..end]
+            } else {
+                &payload
+            };
+            // SayText string must be sent without extra trailing newline
+            self.engine.write_string(safe_msg);
+            self.engine.message_end();
+        }
     }
 
     fn host_print_center(&mut self, player_index: i32, message: String) {
+        let expanded = crate::format_message_placeholders(player_index, &message);
         if player_index < 0 {
-            self.engine.server_print(&format!("[Center] {message}\n"));
+            self.engine.server_print(&format!("[Center] {expanded}\n"));
             return;
         }
 
-        let formatted = goldsrc_api::format_center_text(&message);
+        let formatted = goldsrc_api::format_center_text(&expanded);
         let text_msg_id = self.engine.reg_user_msg("TextMsg", -1);
         let msg_id = if text_msg_id <= 0 { 75 } else { text_msg_id };
 

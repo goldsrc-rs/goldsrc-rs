@@ -25,20 +25,9 @@ pub trait Phase: Copy + Eq + Ord + Hash + Display + Send + Sync + 'static {
 }
 
 /// Standard architectural layers for plugin loading.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Default,
-    serde::Serialize,
-    serde::Deserialize,
-)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum PluginTier {
     /// 1. Core foundation: authorization, security, basic framework infrastructure.
     Core = 10,

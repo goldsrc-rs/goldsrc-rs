@@ -204,21 +204,22 @@ impl PlayerTarget {
 }
 
 /// Metadata exported by a plugin for registered placeholders.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct PlaceholderMetadata {
     /// Primary placeholder identifier name (e.g. `rank`, `ip`, `kills`).
     pub name: String,
     /// Human-readable description.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub description: String,
     /// Usage example / parameter signature (e.g. `{rank(format='short')}`).
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub usage: String,
     /// List of alternative names or aliases.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub aliases: Vec<String>,
     /// Optional required capability for callers to resolve this placeholder.
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub capability: Option<String>,
 }
 
@@ -235,6 +236,69 @@ where
     fn evaluate(&self, caller: Player, call: &PlaceholderCall) -> String {
         self(caller, call)
     }
+}
+
+/// Formats local placeholders registered in the current plugin/guest process.
+/// Placeholders that cannot be resolved locally are preserved as `{...}` so host can resolve them.
+pub fn format_local_placeholders(template: &str, caller_idx: i32) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut chars = template.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(&next) = chars.peek()
+                && (next == '{' || next == '}' || next == '\\')
+            {
+                out.push(next);
+                chars.next();
+                continue;
+            }
+            out.push('\\');
+        } else if c == '{' {
+            let mut inner = String::new();
+            let mut closed = false;
+            for ic in chars.by_ref() {
+                if ic == '}' {
+                    closed = true;
+                    break;
+                }
+                inner.push(ic);
+            }
+
+            if !closed {
+                out.push('{');
+                out.push_str(&inner);
+                continue;
+            }
+
+            match parse_placeholder_call(&inner) {
+                Ok(call) => {
+                    let param = call
+                        .get_positional(0)
+                        .or_else(|| call.get_named("target"))
+                        .unwrap_or_default();
+                    if let Some(val) = dispatch_local_placeholder(&call.ident, caller_idx, param) {
+                        out.push_str(&val);
+                    } else if let Some(ref def) = call.default {
+                        out.push_str(def);
+                    } else {
+                        out.push('{');
+                        out.push_str(&inner);
+                        out.push('}');
+                    }
+                }
+                Err(_) => {
+                    out.push('{');
+                    out.push_str(&inner);
+                    out.push('}');
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+
+    out
 }
 
 #[cfg(test)]
@@ -262,5 +326,12 @@ mod tests {
         let p4 = parse_placeholder_call("name='Guest'").unwrap();
         assert_eq!(p4.ident, "name");
         assert_eq!(p4.default.as_deref(), Some("Guest"));
+    }
+
+    #[test]
+    fn test_format_local_placeholders() {
+        register_placeholder("custom_tag", "Tag", |_, _| "MyServer".to_string());
+        let res = format_local_placeholders("Hello {name}! Tag: {custom_tag}", 1);
+        assert_eq!(res, "Hello {name}! Tag: MyServer");
     }
 }

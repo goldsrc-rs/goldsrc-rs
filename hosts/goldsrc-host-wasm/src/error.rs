@@ -52,3 +52,17 @@ pub enum HostError {
     #[error("failed to create PluginManager: {0}")]
     Manager(String),
 }
+
+/// Security and permission violations raised during WASM host calls.
+#[derive(Debug, thiserror::Error)]
+pub enum SecurityError {
+    #[error("plugin '{plugin}' attempted unauthorized access to shared bucket '{bucket}'")]
+    UnauthorizedBucketAccess { plugin: String, bucket: String },
+
+    #[error("plugin '{plugin}' denied permission '{permission}' (declared: {declared:?})")]
+    PermissionDenied {
+        plugin: String,
+        permission: String,
+        declared: Vec<String>,
+    },
+}

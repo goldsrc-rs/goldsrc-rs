@@ -24,7 +24,12 @@ impl TestI18n {
         usage = "test_lang <player_index> <lang_code>"
     )]
     fn test_language(target: Player, lang: String) {
-        let lang_code = lang.to_lowercase();
+        let clean = lang.trim();
+        let lang_code = if clean.is_empty() || clean.parse::<i32>().is_ok() {
+            target.lang()
+        } else {
+            clean.to_lowercase()
+        };
         let target_idx = target.index();
         let player_name = target
             .name()

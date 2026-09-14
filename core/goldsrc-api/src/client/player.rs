@@ -109,6 +109,7 @@ pub struct Player {
     pub index: i32,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) inner: EDict,
+    pub(crate) _marker: std::marker::PhantomData<*const ()>,
 }
 
 impl Player {
@@ -121,6 +122,7 @@ impl Player {
         Self {
             index,
             inner: unsafe { EDict::from_raw(index, edict) },
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -130,13 +132,17 @@ impl Player {
         Self {
             index,
             inner: EDict::invalid(),
+            _marker: std::marker::PhantomData,
         }
     }
 
     /// Creates a `Player` handle for `index`.
     #[cfg(target_arch = "wasm32")]
     pub fn new(index: i32) -> Self {
-        Self { index }
+        Self {
+            index,
+            _marker: std::marker::PhantomData,
+        }
     }
 
     /// Creates a `Player` handle for `index` with backing edict resolved via host engine if available.
@@ -151,7 +157,14 @@ impl Player {
         Self {
             index,
             inner: EDict::invalid(),
+            _marker: std::marker::PhantomData,
         }
+    }
+
+    /// Returns the thread-safe copyable slot for off-thread communication.
+    #[inline(always)]
+    pub const fn slot(&self) -> crate::client::PlayerSlot {
+        crate::client::PlayerSlot(self.index)
     }
 
     /// Returns the player index (1-based).
@@ -222,12 +235,17 @@ impl Player {
     }
 }
 
+const _: () = {
+    assert!(std::mem::size_of::<Player>() == std::mem::size_of::<Client>());
+    assert!(std::mem::align_of::<Player>() == std::mem::align_of::<Client>());
+};
+
 impl std::ops::Deref for Player {
     type Target = Client;
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        // SAFETY: Player and Client have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        // SAFETY: Player and Client have identical #[repr(C)] memory layout (index: i32, inner: EDict, _marker).
         unsafe { &*(self as *const Player as *const Client) }
     }
 }
@@ -235,7 +253,7 @@ impl std::ops::Deref for Player {
 impl std::ops::DerefMut for Player {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: Player and Client have identical #[repr(C)] memory layout (index: i32, inner: EDict).
+        // SAFETY: Player and Client have identical #[repr(C)] memory layout (index: i32, inner: EDict, _marker).
         unsafe { &mut *(self as *mut Player as *mut Client) }
     }
 }
@@ -282,6 +300,7 @@ impl From<Client> for Player {
             index: c.index,
             #[cfg(not(target_arch = "wasm32"))]
             inner: c.inner,
+            _marker: std::marker::PhantomData,
         }
     }
 }
@@ -311,7 +330,6 @@ impl From<&mut Player> for Player {
     }
 }
 
-// SAFETY: Player is just a wrapper around raw pointers / integer index.
-// The caller must ensure the pointer is valid when used.
-unsafe impl Send for Player {}
-unsafe impl Sync for Player {}
+// Player is strictly bound to the GoldSrc engine main thread.
+// It contains PhantomData<*const ()>, making it !Send and !Sync by design.
+// Cross-thread communication must use PlayerSlot instead.

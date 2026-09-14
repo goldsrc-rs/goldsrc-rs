@@ -9,11 +9,17 @@ description = "Public framework (SDK) for GoldSrc.rs plugin developers"
 goldsrc-sys = { workspace = true, optional = true }
 goldsrc-api = { workspace = true }
 goldsrc-macros = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-toml = { workspace = true }
+crossbeam-channel = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 log = { workspace = true }
 
 [features]
-default = []
+default = ["ecs", "menu", "task", "serde"]
+ecs = []
+menu = []
+task = ["dep:crossbeam-channel"]
+serde = ["dep:serde", "goldsrc-api/serde"]
+rules = ["goldsrc-api/rules"]
+gamedata = ["goldsrc-api/gamedata"]
 unsafe-sys = ["dep:goldsrc-sys", "goldsrc-api/unsafe-sys"]
+

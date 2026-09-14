@@ -281,7 +281,8 @@ impl<'a> Lexer<'a> {
 }
 
 /// Represents an argument in a function call node: `fn(arg1, key='val')`.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CallArg {
     /// Positional argument.
     Positional(String),
@@ -290,7 +291,8 @@ pub enum CallArg {
 }
 
 /// Canonical AST node representation in the Universal Unified DSL Engine.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ExprNode {
     /// Exact, hierarchical, or wildcard resource path.
     ///

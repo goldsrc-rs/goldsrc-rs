@@ -4,7 +4,11 @@
 //! ergonomic abstractions, macros, ECS, and helpers for writing plugins.
 
 /// Flat ECS for plugin state storage.
+#[cfg(feature = "ecs")]
 pub mod ecs;
+
+/// Foolproof asynchronous task dispatch and worker synchronization.
+pub mod task;
 
 /// Unified structured logger for plugins and transparent WASM guest logger.
 pub mod logging;
@@ -52,6 +56,32 @@ macro_rules! log_debug {
             $crate::log::debug!(target: $crate::api::consts::log_targets::PLUGIN, $($arg)*)
         }
     };
+}
+
+/// Internal helper for plugin frame hook dispatch (ECS and task queue).
+#[doc(hidden)]
+#[inline(always)]
+pub fn __plugin_frame_dispatch() {
+    #[cfg(feature = "task")]
+    crate::task::drain_main_tasks(64);
+
+    #[cfg(feature = "ecs")]
+    crate::ecs::run_frame_systems();
+}
+
+/// Internal helper for menu selection event dispatch.
+#[doc(hidden)]
+#[inline(always)]
+pub fn __plugin_dispatch_menu_select(caller: i32, slot: u32) {
+    #[cfg(feature = "menu")]
+    {
+        let handled = crate::menu::handle_player_menu_select(caller, slot as u8);
+        if !handled {
+            crate::menu::dispatch_menu_action(crate::Player::new(caller), Some(slot), None);
+        }
+    }
+    #[cfg(not(feature = "menu"))]
+    let _ = (caller, slot);
 }
 
 /// Performs single-pass substitution of named `{key}` placeholders without intermediate string reallocations.
@@ -161,7 +191,7 @@ macro_rules! chat_print {
 #[macro_export]
 macro_rules! chat_broadcast {
     ($fmt:expr) => {
-        $crate::engine::client_print(0, $crate::engine::PRINT_CHAT, $fmt)
+        $crate::Player::new(0).print($crate::PrintTarget::Chat, $fmt)
     };
     ($fmt:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
         let __owned_vals = [ $( $v.to_string() ),* ];
@@ -170,19 +200,54 @@ macro_rules! chat_broadcast {
             $( (stringify!($k), __owned_iter.next().unwrap().as_str()) ),*
         ];
         let __s = $crate::substitute_named($fmt, __named);
-        $crate::engine::client_print(0, $crate::engine::PRINT_CHAT, &__s)
+        $crate::Player::new(0).print($crate::PrintTarget::Chat, &__s)
     }};
 }
 
 pub mod chat {
     pub use goldsrc_api::chat::*;
+    use std::sync::RwLock;
+
+    type ChatMiddlewareFn = Box<dyn Fn(&mut ChatMessage) -> bool + Send + Sync + 'static>;
+    static CHAT_MIDDLEWARE: RwLock<Vec<ChatMiddlewareFn>> = RwLock::new(Vec::new());
 
     /// Registers a local chat middleware inside a WASM plugin.
-    pub fn register_chat_middleware<F>(_middleware: F)
+    pub fn register_chat_middleware<F>(middleware: F)
     where
         F: Fn(&mut ChatMessage) -> bool + Send + Sync + 'static,
     {
-        // Handled transparently by runtime dispatcher
+        if let Ok(mut list) = CHAT_MIDDLEWARE.write() {
+            list.push(Box::new(middleware));
+        }
+    }
+
+    /// Dispatches incoming chat through local middleware pipeline.
+    /// Returns Some(final_text) if allowed, or None if blocked/suppressed.
+    pub fn dispatch_local_chat(sender: i32, text: &str, is_team: bool) -> Option<String> {
+        let Ok(list) = CHAT_MIDDLEWARE.read() else {
+            return Some(text.to_string());
+        };
+        if list.is_empty() {
+            return Some(text.to_string());
+        }
+        let scope = if is_team {
+            ChatScope::same_team()
+        } else {
+            ChatScope::all()
+        };
+        let mut msg = ChatMessage::new(crate::Player::new(sender), text, scope);
+        for mw in list.iter() {
+            let allow = mw(&mut msg);
+            if !allow || msg.is_blocked {
+                return None;
+            }
+        }
+        let final_text = if let Some(ref p) = msg.prefix {
+            format!("{p}{}", msg.formatted_text)
+        } else {
+            msg.formatted_text
+        };
+        Some(final_text)
     }
 }
 
@@ -214,6 +279,14 @@ pub mod modifiers {
     pub use goldsrc_api::modifiers::*;
 }
 
+pub mod client {
+    pub use goldsrc_api::client::*;
+}
+
+pub mod entity {
+    pub use goldsrc_api::entity::*;
+}
+
 pub mod action {
     pub use goldsrc_api::action::*;
 }
@@ -227,6 +300,7 @@ pub mod property {
 }
 
 pub use ::log;
+#[cfg(feature = "ecs")]
 pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
@@ -243,7 +317,7 @@ pub use goldsrc_api::{
     ClientKind, Command, CommandBuilder, CommandContext, CommandError, CommandHandler,
     CommandRegistry, CommandResult, CommandTarget, CommutativeModifier, Condition, Connected,
     ConnectedClient, ConnectionState, DagError, Dead, DeadPlayer, DenyAction, DenyPolicy, Dormant,
-    Engine, Entity, EntityExt, Event, EventHandler, EventPhase, EventRegistry,
+    Engine, Entity, EntityExt, EntityId, Event, EventHandler, EventPhase, EventRegistry,
     EventSubscriberBuilder, EventSubscription, ExitBehavior, Feedback, FromArg, Health, Hltv,
     HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, Human, HumanClient,
     Interceptor, ItemKind, ItemTitle, LifeState, LivingHuman, LivingPlayer, Menu,
@@ -251,13 +325,14 @@ pub use goldsrc_api::{
     MenuRendererKind, MenuStyle, ModifierContribution, NodeBuilder, NoneOf, Not, OrderNode, Origin,
     Phase, PhasedDag, Pipeline, PipelineFlow, Placeholder, PlaceholderBuilder, PlaceholderCall,
     PlaceholderHandler, PlaceholderMetadata, PlaceholderRegistry, Player, PlayerAction, PlayerExt,
-    PlayerStateFilter, PluginTier, PrintTarget, Prop, PropGet, PropSet, RefineExt, Refined,
-    RenderedMenuPage, SlotAction, Solid, SolidEntity, Spawned, SpawnedEntity, Spec, SpecError,
-    SpectatingPlayer, Spectator, SqlDatabase, StorageError, StorageProvider, Team, TypedBlackboard,
-    Vector3, Velocity, VisualDeny, clear_commands, clear_events, clear_menu_actions,
-    clear_placeholders, dispatch_command, dispatch_event, dispatch_local_placeholder,
-    dispatch_menu_action, register_command, register_menu_action_id, register_menu_action_name,
-    register_placeholder, split_command_args, subscribe_event, use_command_interceptor,
+    PlayerSlot, PlayerStateFilter, PluginTier, PrintTarget, Prop, PropGet, PropSet, RefineExt,
+    Refined, RenderedMenuPage, SlotAction, Solid, SolidEntity, Spawned, SpawnedEntity, Spec,
+    SpecError, SpectatingPlayer, Spectator, SqlDatabase, StorageError, StorageProvider, Team,
+    TypedBlackboard, Vector3, Velocity, VisualDeny, clear_commands, clear_events,
+    clear_menu_actions, clear_placeholders, dispatch_command, dispatch_event,
+    dispatch_local_placeholder, dispatch_menu_action, register_command, register_menu_action_id,
+    register_menu_action_name, register_placeholder, split_command_args, subscribe_event,
+    use_command_interceptor,
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
@@ -266,11 +341,13 @@ pub use goldsrc_macros::{
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
+    #[cfg(feature = "ecs")]
     pub use crate::ecs::*;
     pub use crate::engine;
     pub use crate::hud_api as hud;
     pub use crate::menu_api;
     pub use crate::modifiers_api as modifiers;
+    pub use crate::task;
     pub use crate::tr;
     pub use crate::{
         Action, Alive, All, Angles, AntiSpamAction, Any, Armor, AsLangCode, Auth, BlackboardValue,
@@ -278,17 +355,16 @@ pub mod prelude {
         ClientKind, Command, CommandBuilder, CommandContext, CommandError, CommandHandler,
         CommandResult, CommandTarget, CommutativeModifier, Condition, Connected, ConnectedClient,
         ConnectionState, Dead, DeadPlayer, DenyAction, DenyPolicy, Dormant, Engine, Entity,
-        EntityExt, Event, EventHandler, EventPhase, EventSubscriberBuilder, ExitBehavior, Feedback,
-        FromArg, Health, Hltv, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
+        EntityExt, EntityId, Event, EventHandler, EventPhase, EventSubscriberBuilder, ExitBehavior,
+        Feedback, FromArg, Health, Hltv, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
         HudMessageBuilder, Human, HumanClient, Interceptor, ItemKind, ItemTitle, LifeState,
         LivingHuman, LivingPlayer, Menu, MenuBuilder, MenuContext, MenuItem, MenuPageBuilder,
         MenuRendererKind, MenuStyle, ModifierContribution, NoneOf, Not, Origin, Pipeline,
-        PipelineFlow, Placeholder, PlaceholderBuilder, Player, PlayerAction, PlayerExt,
+        PipelineFlow, Placeholder, PlaceholderBuilder, Player, PlayerAction, PlayerExt, PlayerSlot,
         PlayerStateFilter, PrintTarget, Prop, PropGet, PropSet, RefineExt, Refined,
         RenderedMenuPage, SlotAction, Solid, SolidEntity, Spawned, SpawnedEntity, Spec, SpecError,
-        SpectatingPlayer, Spectator, SqlDatabase, StorageError, StorageProvider, System,
-        SystemBuilder, Team, TypedBlackboard, Vector3, Velocity, VisualDeny, action, prop,
-        use_command_interceptor,
+        SpectatingPlayer, Spectator, SqlDatabase, StorageError, StorageProvider, Team,
+        TypedBlackboard, Vector3, Velocity, VisualDeny, action, prop, use_command_interceptor,
     };
     pub use crate::{
         chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load, on_unload,

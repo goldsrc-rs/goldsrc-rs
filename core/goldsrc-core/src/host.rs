@@ -14,6 +14,7 @@ pub struct HostRuntime {
     pub current_map: String,
     pub rule_orchestrator: crate::rules::RuleOrchestrator,
     pub watcher_service: crate::watcher::WatcherService,
+    pub sessions: crate::session::ClientSessionManager,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -21,6 +22,130 @@ use std::time::Instant;
 
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_api::Engine>> = OnceLock::new();
+
+/// Player-specific gameplay and lifecycle events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerEvent {
+    Connect,
+    Disconnect,
+    PutInServer,
+    UserInfoChanged,
+    PreThink,
+    PostThink,
+    CmdEnd,
+    Kill,
+    SpectatorConnect,
+    SpectatorDisconnect,
+    SpectatorThink,
+}
+
+impl PlayerEvent {
+    /// Returns the canonical event name string for WASM plugins.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Connect => "client_connect",
+            Self::Disconnect => "client_disconnect",
+            Self::PutInServer => "client_put_in_server",
+            Self::UserInfoChanged => "client_user_info_changed",
+            Self::PreThink => "player_pre_think",
+            Self::PostThink => "player_post_think",
+            Self::CmdEnd => "cmd_end",
+            Self::Kill => "client_kill",
+            Self::SpectatorConnect => "spectator_connect",
+            Self::SpectatorDisconnect => "spectator_disconnect",
+            Self::SpectatorThink => "spectator_think",
+        }
+    }
+}
+
+/// Inline fixed-capacity buffer for event payloads to eliminate heap allocations.
+#[derive(Debug, Clone, Copy)]
+pub enum EventPayload<'a> {
+    Empty,
+    Borrowed(&'a [u8]),
+    Inline4([u8; 4]),
+    Inline8([u8; 8]),
+}
+
+impl<'a> std::ops::Deref for EventPayload<'a> {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Empty => &[],
+            Self::Borrowed(s) => s,
+            Self::Inline4(s) => s,
+            Self::Inline8(s) => s,
+        }
+    }
+}
+
+/// Lifecycle and gameplay events originating from the game engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostEvent<'a> {
+    /// Server frame tick (occurs every engine frame).
+    ServerFrame,
+    /// Server map activation (ServerActivate).
+    ServerActivate,
+    /// Server map deactivation / map end / shutdown (ServerDeactivate).
+    ServerDeactivate,
+    /// Map changed explicitly.
+    MapChange { map_name: &'a str },
+
+    /// Player-specific event with slot index (1..=32).
+    Player { slot: i32, event: PlayerEvent },
+
+    /// User command execution start with buttons bitmask.
+    CmdStart { slot: i32, buttons: u16 },
+
+    /// Entity touch event.
+    EntityTouch { touched: i32, other: i32 },
+
+    /// Entity use event.
+    EntityUse { used: i32, other: i32 },
+
+    /// Custom or generic event with explicit name and byte payload.
+    Custom { name: &'a str, payload: &'a [u8] },
+}
+
+impl<'a> HostEvent<'a> {
+    /// Returns the canonical event name string for WASM plugins.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::ServerFrame => "server_frame",
+            Self::ServerActivate => "server_activate",
+            Self::ServerDeactivate => "server_deactivate",
+            Self::MapChange { .. } => "map_change",
+            Self::Player { event, .. } => event.as_str(),
+            Self::CmdStart { .. } => "cmd_start",
+            Self::EntityTouch { .. } => "entity_touch",
+            Self::EntityUse { .. } => "entity_use",
+            Self::Custom { name, .. } => name,
+        }
+    }
+
+    /// Encodes the binary payload for WASM plugins on the stack with zero heap allocation.
+    pub fn payload(&self) -> EventPayload<'a> {
+        match self {
+            Self::ServerFrame | Self::ServerActivate | Self::ServerDeactivate => {
+                EventPayload::Empty
+            }
+            Self::MapChange { map_name } => EventPayload::Borrowed(map_name.as_bytes()),
+            Self::Player { slot, .. } => EventPayload::Inline4(slot.to_le_bytes()),
+            Self::CmdStart { slot, buttons } => {
+                let mut buf = [0u8; 8];
+                buf[0..4].copy_from_slice(&slot.to_le_bytes());
+                buf[4..6].copy_from_slice(&buttons.to_le_bytes());
+                EventPayload::Inline8(buf)
+            }
+            Self::EntityTouch { touched, other }
+            | Self::EntityUse {
+                used: touched,
+                other,
+            } => EventPayload::Inline8(crate::api_registry::pack_two_i32(*touched, *other)),
+            Self::Custom { payload, .. } => EventPayload::Borrowed(payload),
+        }
+    }
+}
 
 impl HostRuntime {
     /// Initialize the host runtime, logger, configuration, storage, i18n and hot reload watchers.
@@ -64,6 +189,15 @@ impl HostRuntime {
             crate::i18n::I18nService::translate_with_caller(caller, dict, lang, key, &[], &[])
         });
 
+        goldsrc_host_wasm::set_format_placeholders_callback(|player_idx, text| {
+            let player = if player_idx > 0 {
+                goldsrc_api::Player::new(player_idx)
+            } else {
+                goldsrc_api::Player::new(0)
+            };
+            crate::placeholders::format_placeholders(text, player)
+        });
+
         goldsrc_api::client::player::set_player_resolver_hook(|index| {
             if let Some(engine) = HostRuntime::engine() {
                 engine.player_handle(index)
@@ -86,7 +220,14 @@ impl HostRuntime {
             }
         });
         goldsrc_api::client::player::set_player_lang_hook(|index| {
-            if let Some(engine) = HostRuntime::engine() {
+            if let Some(override_lang) = HostRuntime::with_sessions(|s| {
+                s.get(index)
+                    .and_then(|sess| sess.lang().map(str::to_string))
+            })
+            .flatten()
+            {
+                Some(override_lang)
+            } else if let Some(engine) = HostRuntime::engine() {
                 engine.player_lang(index)
             } else {
                 None
@@ -366,6 +507,7 @@ impl HostRuntime {
             current_map: String::new(),
             rule_orchestrator,
             watcher_service,
+            sessions: crate::session::ClientSessionManager::new(),
         };
         let _ = RUNTIME.set(Mutex::new(runtime));
 
@@ -440,14 +582,14 @@ impl HostRuntime {
         }
     }
 
-    /// Clears temporary rule pause overrides and flushes storage on map change.
-    pub fn on_map_change() {
+    fn handle_map_change() {
         if let Some(lock) = RUNTIME.get() {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             let _ = guard.storage.flush();
             guard.paused_plugins.clear();
             guard.current_map.clear();
             guard.rule_orchestrator.on_map_change();
+            guard.sessions.clear();
         }
         crate::logging::flush();
     }
@@ -492,6 +634,110 @@ impl HostRuntime {
             f(Some(&mut guard.watcher_service))
         } else {
             f(None)
+        }
+    }
+
+    /// Runs a closure with read-only access to [`ClientSessionManager`].
+    pub fn with_sessions<R>(
+        f: impl FnOnce(&crate::session::ClientSessionManager) -> R,
+    ) -> Option<R> {
+        RUNTIME.get().and_then(|lock| {
+            let guard = lock.lock().ok()?;
+            Some(f(&guard.sessions))
+        })
+    }
+
+    /// Runs a closure with mutable access to [`ClientSessionManager`].
+    pub fn with_sessions_mut<R>(
+        f: impl FnOnce(&mut crate::session::ClientSessionManager) -> R,
+    ) -> Option<R> {
+        RUNTIME.get().map(|lock| {
+            let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            f(&mut guard.sessions)
+        })
+    }
+
+    /// Dispatches and processes an engine lifecycle event across all host subsystems.
+    pub fn on(event: HostEvent<'_>) {
+        match event {
+            HostEvent::ServerFrame => {
+                Self::handle_server_frame();
+            }
+            HostEvent::ServerActivate => {
+                let now = Self::current_time();
+                if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                    mgr.on_round_start(1, now);
+                }
+                if let Some(engine) = Self::engine() {
+                    let map_name = engine.cvar_get_string("mapname").unwrap_or_default();
+                    let player_count = goldsrc_api::auth::Auth::total_players();
+                    Self::evaluate_rules_scoped(
+                        goldsrc_api::rules::RuleScope::MapChange,
+                        &map_name,
+                        player_count,
+                    );
+                }
+            }
+            HostEvent::ServerDeactivate => {
+                goldsrc_api::bump_map_generation();
+                goldsrc_api::auth::Auth::clear_all_players();
+                goldsrc_host_wasm::clear_all_active_menu_owners();
+                if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                    mgr.on_map_change();
+                }
+                Self::handle_map_change();
+            }
+            HostEvent::MapChange { map_name } => {
+                if !map_name.is_empty() {
+                    Self::set_current_map(map_name);
+                }
+                Self::handle_map_change();
+            }
+            HostEvent::Player { slot, event } => match event {
+                PlayerEvent::Connect => {
+                    let player_count = goldsrc_api::auth::Auth::total_players();
+                    let current_map = Self::current_map();
+                    Self::evaluate_rules_scoped(
+                        goldsrc_api::rules::RuleScope::PlayerCount,
+                        &current_map,
+                        player_count,
+                    );
+                }
+                PlayerEvent::Disconnect => {
+                    // 1. Session cleanup
+                    let _ = Self::with_sessions_mut(|s| {
+                        s.on_disconnect(slot);
+                    });
+                    // 2. Active menu cleanup
+                    goldsrc_host_wasm::clear_active_menu_owner(slot);
+                    if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                        mgr.on_disconnect(slot);
+                    }
+                    // 3. Auth registration cleanup
+                    goldsrc_api::auth::Auth::remove_player(slot);
+                    // 4. Reactive rules recalculation
+                    let player_count = goldsrc_api::auth::Auth::total_players();
+                    let current_map = Self::current_map();
+                    Self::evaluate_rules_scoped(
+                        goldsrc_api::rules::RuleScope::PlayerCount,
+                        &current_map,
+                        player_count,
+                    );
+                }
+                PlayerEvent::UserInfoChanged => {
+                    if let Some(engine) = Self::engine() {
+                        let current_time = Self::current_time();
+                        if let Ok(mut mgr) = crate::menu::menu_manager().lock() {
+                            mgr.refresh_player_menu(slot, engine.as_ref(), current_time);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            HostEvent::CmdStart { .. }
+            | HostEvent::EntityTouch { .. }
+            | HostEvent::EntityUse { .. }
+            | HostEvent::Custom { .. } => {}
         }
     }
 
@@ -591,8 +837,7 @@ impl HostRuntime {
         }
     }
 
-    /// Tick plugins frame event and drain debounced watcher events.
-    pub fn on_server_frame() {
+    fn handle_server_frame() {
         let events = if let Some(lock) = RUNTIME.get() {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             guard.watcher_service.drain_events()
@@ -728,5 +973,39 @@ impl HostRuntime {
             *last = Instant::now();
             crate::logging::flush();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_host_event_variants() {
+        let ev1 = HostEvent::ServerFrame;
+        let ev2 = HostEvent::Player {
+            slot: 5,
+            event: PlayerEvent::Disconnect,
+        };
+        let ev3 = HostEvent::MapChange {
+            map_name: "de_dust2",
+        };
+        let ev4 = HostEvent::CmdStart {
+            slot: 3,
+            buttons: 0x0001,
+        };
+
+        assert_eq!(ev1, HostEvent::ServerFrame);
+        assert_eq!(ev1.name(), "server_frame");
+        assert!(ev1.payload().is_empty());
+
+        assert_eq!(ev2.name(), "client_disconnect");
+        assert_eq!(&*ev2.payload(), &5i32.to_le_bytes());
+
+        assert_eq!(ev3.name(), "map_change");
+        assert_eq!(&*ev3.payload(), b"de_dust2");
+
+        assert_eq!(ev4.name(), "cmd_start");
+        assert_eq!(ev4.payload().len(), 8);
     }
 }

@@ -8,29 +8,47 @@ use lexopt::Arg;
 
 /// Calculates the Levenshtein edit distance between two ASCII strings using stack arrays without heap allocation.
 pub fn levenshtein_distance(a: &str, b: &str) -> usize {
-    let a_bytes = a.as_bytes();
-    let b_bytes = b.as_bytes();
-    let mut prev = [0usize; 32];
-    let mut curr = [0usize; 32];
+    const MAX_LEN: usize = 32;
 
-    if b_bytes.len() >= 32 || a_bytes.len() >= 32 {
+    let mut a_bytes = a.as_bytes();
+    let mut b_bytes = b.as_bytes();
+
+    if a_bytes.len() >= MAX_LEN || b_bytes.len() >= MAX_LEN {
         return usize::MAX;
     }
 
-    for (j, item) in prev.iter_mut().enumerate().take(b_bytes.len() + 1) {
+    if a_bytes.len() < b_bytes.len() {
+        std::mem::swap(&mut a_bytes, &mut b_bytes);
+    }
+
+    let b_len = b_bytes.len();
+    if b_len == 0 {
+        return a_bytes.len();
+    }
+
+    let mut dp = [0usize; MAX_LEN];
+    for (j, item) in dp[..=b_len].iter_mut().enumerate() {
         *item = j;
     }
 
-    for (i, &ca) in a_bytes.iter().enumerate() {
-        curr[0] = i + 1;
-        for (j, &cb) in b_bytes.iter().enumerate() {
-            let cost = if ca.eq_ignore_ascii_case(&cb) { 0 } else { 1 };
-            curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
+    for &ca in a_bytes {
+        let mut prev_diag = dp[0];
+        dp[0] += 1;
+
+        for j in 0..b_len {
+            let cb = b_bytes[j];
+            let cost = usize::from(!ca.eq_ignore_ascii_case(&cb));
+
+            let insertion = dp[j] + 1;
+            let deletion = dp[j + 1] + 1;
+            let substitution = prev_diag + cost;
+
+            prev_diag = dp[j + 1];
+            dp[j + 1] = insertion.min(deletion).min(substitution);
         }
-        prev[..=b_bytes.len()].copy_from_slice(&curr[..=b_bytes.len()]);
     }
 
-    prev[b_bytes.len()]
+    dp[b_len]
 }
 
 /// Suggests the closest matching command name from registered specs, if any.
@@ -158,6 +176,8 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     return;
                 }
             };
+
+            let mut pause_overrides: Vec<(String, bool)> = Vec::new();
 
             with_manager_or_host(manager, |manager| match sub_arg.as_str() {
                 "list" | "ls" | "ps" => handlers::handle_list(spec, parser, manager, &mut out),
@@ -413,7 +433,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     if all {
                         let outcome = manager.pause_all_plugins(true);
                         for info in manager.get_plugins_info() {
-                            crate::host::HostRuntime::set_manual_pause_override(&info.name, true);
+                            pause_overrides.push((info.name.clone(), true));
                         }
                         if outcome.changed > 0 {
                             out(&CliResponse::success(outcome.to_string()).format_console());
@@ -424,10 +444,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         for t in targets {
                             match manager.pause_plugin(&t, true) {
                                 Ok(outcome) => {
-                                    crate::host::HostRuntime::set_manual_pause_override(
-                                        outcome.name(),
-                                        true,
-                                    );
+                                    pause_overrides.push((outcome.name().to_string(), true));
                                     if outcome.changed() {
                                         out(&CliResponse::success(outcome.to_string())
                                             .format_console());
@@ -466,7 +483,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     if all {
                         let outcome = manager.pause_all_plugins(false);
                         for info in manager.get_plugins_info() {
-                            crate::host::HostRuntime::set_manual_pause_override(&info.name, false);
+                            pause_overrides.push((info.name.clone(), false));
                         }
                         if outcome.changed > 0 {
                             out(&CliResponse::success(outcome.to_string()).format_console());
@@ -477,10 +494,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                         for t in targets {
                             match manager.pause_plugin(&t, false) {
                                 Ok(outcome) => {
-                                    crate::host::HostRuntime::set_manual_pause_override(
-                                        outcome.name(),
-                                        false,
-                                    );
+                                    pause_overrides.push((outcome.name().to_string(), false));
                                     if outcome.changed() {
                                         out(&CliResponse::success(outcome.to_string())
                                             .format_console());
@@ -697,6 +711,10 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                     }
                 }
             });
+
+            for (plugin_name, is_paused) in pause_overrides {
+                crate::host::HostRuntime::set_manual_pause_override(&plugin_name, is_paused);
+            }
         }
         "watchers" => {
             let sub_arg = match parser.next() {

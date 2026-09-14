@@ -5,7 +5,8 @@
 //! either directly or in post-hooks. Command suppression is expressed via
 //! `MRES_SUPERCEDE` on the shared meta globals.
 
-use goldsrc_core::api_registry::{EntityHooks, pack_two_i32};
+use goldsrc_core::api_registry::EntityHooks;
+use goldsrc_core::{HostEvent, PlayerEvent};
 use goldsrc_sys::edict_t;
 
 use crate::{meta_globals, meta_types::MRES_SUPERCEDE};
@@ -16,11 +17,11 @@ pub struct MetamodHooks;
 impl EntityHooks for MetamodHooks {
     fn server_activate(&self, _edict_list: *mut edict_t, _edict_count: i32, _client_max: i32) {
         crate::ensure_game_dll_hooks();
-        goldsrc_core::hooks::on_server_activate();
+        goldsrc_core::hooks::emit(HostEvent::ServerActivate);
     }
 
     fn server_deactivate(&self) {
-        goldsrc_core::hooks::on_server_deactivate();
+        goldsrc_core::hooks::emit(HostEvent::ServerDeactivate);
     }
 
     fn client_command(&self, _edict: *mut edict_t, index: i32, cmd: &str, args: &str) -> bool {
@@ -32,7 +33,7 @@ impl EntityHooks for MetamodHooks {
     }
 
     fn start_frame(&self) {
-        goldsrc_core::hooks::on_server_frame();
+        goldsrc_core::hooks::emit(HostEvent::ServerFrame);
     }
 
     fn start_frame_post(&self) {
@@ -41,11 +42,17 @@ impl EntityHooks for MetamodHooks {
     }
 
     fn player_pre_think(&self, _edict: *mut edict_t, index: i32) {
-        goldsrc_core::hooks::emit_player_event("player_pre_think", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::PreThink,
+        });
     }
 
     fn player_post_think(&self, _edict: *mut edict_t, index: i32) {
-        goldsrc_core::hooks::emit_player_event("player_post_think", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::PostThink,
+        });
     }
 
     fn cmd_start(
@@ -55,23 +62,29 @@ impl EntityHooks for MetamodHooks {
         cmd: *const goldsrc_sys::usercmd_s,
         _random_seed: u32,
     ) {
-        if !cmd.is_null() {
-            let buttons = unsafe { (*cmd).buttons };
-            let mut payload = [0u8; 8];
-            payload[0..4].copy_from_slice(&index.to_le_bytes());
-            payload[4..6].copy_from_slice(&buttons.to_le_bytes());
-            goldsrc_core::hooks::emit_event("cmd_start", &payload);
+        let buttons = if !cmd.is_null() {
+            unsafe { (*cmd).buttons }
         } else {
-            goldsrc_core::hooks::emit_player_event("cmd_start", index);
-        }
+            0
+        };
+        goldsrc_core::hooks::emit(HostEvent::CmdStart {
+            slot: index,
+            buttons,
+        });
     }
 
     fn cmd_end(&self, _player: *const edict_t, index: i32) {
-        goldsrc_core::hooks::emit_player_event("cmd_end", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::CmdEnd,
+        });
     }
 
     fn client_kill(&self, _edict: *mut edict_t, index: i32) {
-        goldsrc_core::hooks::emit_player_event("client_kill", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::Kill,
+        });
     }
 
     fn touch(
@@ -81,23 +94,38 @@ impl EntityHooks for MetamodHooks {
         _other: *mut edict_t,
         other_idx: i32,
     ) {
-        goldsrc_core::hooks::emit_event("entity_touch", &pack_two_i32(touched_idx, other_idx));
+        goldsrc_core::hooks::emit(HostEvent::EntityTouch {
+            touched: touched_idx,
+            other: other_idx,
+        });
     }
 
     fn entity_use(&self, _used: *mut edict_t, used_idx: i32, _other: *mut edict_t, other_idx: i32) {
-        goldsrc_core::hooks::emit_event("entity_use", &pack_two_i32(used_idx, other_idx));
+        goldsrc_core::hooks::emit(HostEvent::EntityUse {
+            used: used_idx,
+            other: other_idx,
+        });
     }
 
     fn client_connect_post(&self, index: i32) {
-        goldsrc_core::hooks::emit_player_event("client_connect", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::Connect,
+        });
     }
 
     fn client_disconnect_post(&self, index: i32) {
-        goldsrc_core::hooks::emit_player_event("client_disconnect", index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::Disconnect,
+        });
     }
 
     fn client_user_info_changed_post(&self, index: i32) {
-        goldsrc_core::hooks::on_client_user_info_changed(index);
+        goldsrc_core::hooks::emit(HostEvent::Player {
+            slot: index,
+            event: PlayerEvent::UserInfoChanged,
+        });
     }
 }
 

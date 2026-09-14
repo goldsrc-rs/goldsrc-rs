@@ -5,7 +5,10 @@ pub mod action_registry;
 pub mod builder;
 pub mod types;
 
-pub use action::{CloseMenu, ShowMenu, ShowRawMenu};
+pub use action::{
+    CloseMenu, ShowMenu, ShowRawMenu, clear_active_player_menu, display_player_menu_page,
+    get_active_player_menu, handle_player_menu_select, set_active_player_menu,
+};
 pub use action_registry::{
     MenuActionHandler, MenuActionRegistry, clear_menu_actions, dispatch_menu_action,
     register_menu_action_id, register_menu_action_name,
