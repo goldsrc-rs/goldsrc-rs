@@ -29,6 +29,7 @@ tools/
 
 # Private data (local configs, agent work, personal files)
 private/
+scratch/
 
 # Environment
 .env
