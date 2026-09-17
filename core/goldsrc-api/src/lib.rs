@@ -73,7 +73,7 @@ pub use command::{
     CommandResult, CommandTarget, FromArg, PlayerStateFilter, clear_commands, dispatch_command,
     register_command, split_command_args, use_command_interceptor,
 };
-pub use cvar::{Cvar, CvarFlags};
+pub use cvar::{ConfigModel, Cvar, CvarField, CvarFlags};
 pub use dag::{DagError, EventPhase, NodeBuilder, OrderNode, Phase, PhasedDag, PluginTier};
 pub use dsl::{Lexer, Token};
 

@@ -295,8 +295,10 @@ pub mod prop {
     pub use goldsrc_api::prop::*;
 }
 
-pub mod property {
-    pub use goldsrc_api::property::*;
+pub mod property {}
+
+pub mod cvar {
+    pub use goldsrc_api::cvar::*;
 }
 
 pub use ::log;
@@ -336,11 +338,12 @@ pub use goldsrc_api::{
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
-    command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
+    ConfigModel, command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
 };
 
 /// Convenient prelude module for plugin authors.
 pub mod prelude {
+    pub use crate::cvar::{self, ConfigModel, Cvar, CvarFlags};
     #[cfg(feature = "ecs")]
     pub use crate::ecs::*;
     pub use crate::engine;
@@ -376,6 +379,7 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cvar::ConfigModel;
 
     #[test]
     fn test_substitute_named_replaces_keys_correctly() {
@@ -399,5 +403,31 @@ mod tests {
         let pos = &["Alice", "Bob", "AWP"];
         let res = substitute_positional(tmpl, pos);
         assert_eq!(res, "Player Alice killed Bob with AWP");
+    }
+
+    #[derive(Debug, Clone, PartialEq, ConfigModel)]
+    struct DemoVipConfig {
+        #[cvar(name = "vip_bonus_hp", flags = "archive", description = "Bonus HP")]
+        pub bonus_hp: i32,
+        #[cvar(name = "vip_tag", flags = "server", description = "VIP Tag")]
+        pub tag: String,
+    }
+
+    #[test]
+    fn test_derive_config_model_to_toml_and_cvars() {
+        let cfg = DemoVipConfig {
+            bonus_hp: 50,
+            tag: "VIP".to_string(),
+        };
+
+        let toml_str = cfg.to_toml();
+        assert!(toml_str.contains("# Bonus HP"));
+        assert!(toml_str.contains("bonus_hp = 50"));
+        assert!(toml_str.contains("# VIP Tag"));
+        assert!(toml_str.contains("tag = \"VIP\""));
+
+        let cvars_str = cfg.to_cvars();
+        assert!(cvars_str.contains("vip_bonus_hp \"50\" // Bonus HP"));
+        assert!(cvars_str.contains("vip_tag \"VIP\" // VIP Tag"));
     }
 }

@@ -27,7 +27,8 @@ pub use ::log;
 pub use chat::process_chat_message;
 pub use config::plugins as plugins_config;
 pub use config::{
-    HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
+    ConfigBinder, HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup,
+    PluginsConfig,
 };
 pub use host::{EventPayload, HostEvent, HostRuntime, PlayerEvent};
 pub use i18n::I18nService;
