@@ -35,6 +35,39 @@ pub trait EngineEntities: Send + Sync {
     /// Player display name (e.g. "Player").
     fn player_name(&self, index: i32) -> Option<String>;
 
+    /// Player authentication ID / SteamID (e.g. "STEAM_0:1:12345678").
+    fn player_auth_id(&self, _index: i32) -> Option<String> {
+        None
+    }
+
+    /// Server-assigned unique user ID (`pfnGetPlayerUserId`).
+    fn player_user_id(&self, _index: i32) -> u32 {
+        0
+    }
+
+    /// Player IP address string without port (e.g. "192.168.1.50").
+    fn player_ip(&self, _index: i32) -> Option<String> {
+        None
+    }
+
+    /// Comprehensive player identity record.
+    fn player_identity(&self, index: i32) -> crate::client::PlayerIdentity {
+        crate::client::PlayerIdentity {
+            slot: index,
+            user_id: self.player_user_id(index),
+            steam_id: self
+                .player_auth_id(index)
+                .as_deref()
+                .map(crate::client::SteamId::parse)
+                .unwrap_or_default(),
+            ip: self.player_ip(index),
+            ping: 0,
+            packet_loss: 0,
+            is_bot: false,
+            is_hltv: false,
+        }
+    }
+
     /// Player game team slot (0=Unassigned, 1=Terrorist, 2=CT, 3=Spectator).
     fn player_team(&self, _index: i32) -> i32 {
         0

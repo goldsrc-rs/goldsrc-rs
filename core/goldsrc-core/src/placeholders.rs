@@ -83,7 +83,11 @@ impl PlaceholderRegistry {
                 aliases: vec!["player_ip".to_string()],
                 capability: None,
             },
-            Arc::new(|_caller: Player, _call: &PlaceholderCall| "127.0.0.1".to_string()),
+            Arc::new(|caller: Player, call: &PlaceholderCall| {
+                use goldsrc_api::ClientExt;
+                let target_player = resolve_target(caller, call);
+                target_player.ip()
+            }),
         );
 
         // 3. {authid} / {id} / {steamid}
@@ -96,7 +100,28 @@ impl PlaceholderRegistry {
                 aliases: vec!["id".to_string(), "steamid".to_string()],
                 capability: None,
             },
-            Arc::new(|_caller: Player, _call: &PlaceholderCall| "STEAM_ID_PENDING".to_string()),
+            Arc::new(|caller: Player, call: &PlaceholderCall| {
+                use goldsrc_api::ClientExt;
+                let target_player = resolve_target(caller, call);
+                target_player.auth_id()
+            }),
+        );
+
+        // 3b. {userid} / {engine:userid}
+        self.register(
+            "engine",
+            PlaceholderMetadata {
+                name: "userid".to_string(),
+                description: "Returns player server unique user ID".to_string(),
+                usage: "{userid} or {userid(target=1..32)}".to_string(),
+                aliases: vec!["user_id".to_string()],
+                capability: None,
+            },
+            Arc::new(|caller: Player, call: &PlaceholderCall| {
+                use goldsrc_api::ClientExt;
+                let target_player = resolve_target(caller, call);
+                target_player.user_id().to_string()
+            }),
         );
 
         // 4. {health} / {hp}

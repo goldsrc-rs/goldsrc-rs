@@ -2,11 +2,41 @@
 
 use std::collections::HashMap;
 
+/// Strongly-typed generational token identifying a specific client connection.
+///
+/// Immune to Slot Recycling Hazards: if player Alice in slot 1 disconnects and player Bob
+/// connects to slot 1, Bob will have a higher generation count, invalidating Alice's tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct PlayerSessionToken {
+    /// Slot index of the client (1..=32).
+    pub slot: i32,
+    /// Monotonically increasing connection generation counter.
+    pub generation: u64,
+    /// Engine user ID (`pfnGetPlayerUserId`) if known.
+    pub user_id: u32,
+}
+
+impl PlayerSessionToken {
+    /// Creates a new session token.
+    #[inline(always)]
+    pub const fn new(slot: i32, generation: u64, user_id: u32) -> Self {
+        Self {
+            slot,
+            generation,
+            user_id,
+        }
+    }
+}
+
 /// Ephemeral session state for a connected client slot (1..=32).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ClientSession {
     /// Slot index of the client (1..=32).
     pub slot: i32,
+    /// Monotonically increasing connection generation counter.
+    pub generation: u64,
+    /// Engine user ID (`pfnGetPlayerUserId`) assigned by server.
+    pub user_id: u32,
     /// Overridden or cached userinfo key-value pairs (e.g. "_lang", "rate", "name").
     pub userinfo_overrides: HashMap<String, String>,
     /// Custom plugin/system metadata or tags associated with this session.
@@ -14,13 +44,21 @@ pub struct ClientSession {
 }
 
 impl ClientSession {
-    /// Creates a new empty session for the given player slot.
-    pub fn new(slot: i32) -> Self {
+    /// Creates a new empty session for the given player slot with initial generation.
+    pub fn new(slot: i32, generation: u64) -> Self {
         Self {
             slot,
+            generation,
+            user_id: 0,
             userinfo_overrides: HashMap::new(),
             metadata: HashMap::new(),
         }
+    }
+
+    /// Returns the generational session token for this client.
+    #[inline(always)]
+    pub fn token(&self) -> PlayerSessionToken {
+        PlayerSessionToken::new(self.slot, self.generation, self.user_id)
     }
 
     /// Gets an overridden userinfo value by key (case-insensitive).
@@ -61,6 +99,7 @@ impl ClientSession {
 #[derive(Debug, Default)]
 pub struct ClientSessionManager {
     sessions: HashMap<i32, ClientSession>,
+    generations: HashMap<i32, u64>,
 }
 
 impl ClientSessionManager {
@@ -68,6 +107,7 @@ impl ClientSessionManager {
     pub fn new() -> Self {
         Self {
             sessions: HashMap::new(),
+            generations: HashMap::new(),
         }
     }
 
@@ -76,11 +116,32 @@ impl ClientSessionManager {
         self.sessions.get(&slot)
     }
 
+    /// Verifies if a given generational token is still valid.
+    pub fn is_token_valid(&self, token: PlayerSessionToken) -> bool {
+        self.sessions
+            .get(&token.slot)
+            .map(|sess| sess.generation == token.generation)
+            .unwrap_or(false)
+    }
+
     /// Retrieves a mutable reference to the client session for the given slot, creating it if absent.
     pub fn get_or_create_mut(&mut self, slot: i32) -> &mut ClientSession {
-        self.sessions
-            .entry(slot)
-            .or_insert_with(|| ClientSession::new(slot))
+        let generations = &mut self.generations;
+        self.sessions.entry(slot).or_insert_with(|| {
+            let generation_counter = generations.entry(slot).or_insert(0);
+            *generation_counter += 1;
+            ClientSession::new(slot, *generation_counter)
+        })
+    }
+
+    /// Advances the generation counter on connect and initializes a fresh session.
+    pub fn on_connect(&mut self, slot: i32, user_id: u32) -> &mut ClientSession {
+        let generation_counter = self.generations.entry(slot).or_insert(0);
+        *generation_counter += 1;
+        let mut session = ClientSession::new(slot, *generation_counter);
+        session.user_id = user_id;
+        self.sessions.insert(slot, session);
+        self.sessions.get_mut(&slot).expect("session just inserted")
     }
 
     /// Removes session state when a client disconnects, preventing memory leaks.
@@ -114,5 +175,33 @@ mod tests {
 
         mgr.on_disconnect(1);
         assert!(mgr.get(1).is_none());
+    }
+
+    #[test]
+    fn test_generational_token_slot_recycling() {
+        let mut mgr = ClientSessionManager::new();
+
+        // Alice connects to slot 1
+        let alice_sess = mgr.on_connect(1, 1001);
+        let alice_token = alice_sess.token();
+        assert_eq!(alice_token.slot, 1);
+        assert_eq!(alice_token.generation, 1);
+        assert_eq!(alice_token.user_id, 1001);
+        assert!(mgr.is_token_valid(alice_token));
+
+        // Alice disconnects
+        mgr.on_disconnect(1);
+        assert!(!mgr.is_token_valid(alice_token));
+
+        // Bob connects to slot 1 (recycled slot)
+        let bob_sess = mgr.on_connect(1, 1002);
+        let bob_token = bob_sess.token();
+        assert_eq!(bob_token.slot, 1);
+        assert_eq!(bob_token.generation, 2);
+        assert_eq!(bob_token.user_id, 1002);
+
+        // Bob's token is valid, but Alice's token is now completely invalid!
+        assert!(mgr.is_token_valid(bob_token));
+        assert!(!mgr.is_token_valid(alice_token));
     }
 }

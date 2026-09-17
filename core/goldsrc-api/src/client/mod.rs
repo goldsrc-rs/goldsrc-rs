@@ -1,6 +1,7 @@
 //! Core player and client domain abstractions, states, and typestate guards.
 
 pub mod ext;
+pub mod identity;
 pub mod player;
 pub mod property;
 pub mod slot;
@@ -9,6 +10,7 @@ pub mod types;
 
 pub use crate::entity::EntityExt;
 pub use ext::{ClientExt, PlayerExt};
+pub use identity::{PlayerIdentity, SteamId};
 pub use player::Player;
 pub use property::{Lang, Name};
 pub use slot::PlayerSlot;

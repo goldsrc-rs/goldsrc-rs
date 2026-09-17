@@ -307,7 +307,70 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Implement `WatchTarget` Value Object (`File` vs `Directory`), multi-strategy `WatcherFilter` (`Any`, `Extension`, `Stem`, `ExactName`, `Pattern`), and per-watcher debounce windows.
   - Reorganize CLI under clean hierarchical namespaces: `grs plugins <list|info|load|unload|reload|pause|unpause|cmds>` and `grs watchers <list|pause|resume>` with zero legacy aliases.
 
-## v0.18.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
+## v0.18.0 — Engine Core Parity, Bundle Architecture & Hierarchical PBAC 📝 Planned
+
+**Goal:** Bridge the core gap with native engine runtime capabilities (Identity, Combat, UserMessages, Timers, CVARs), establish a secure Bundle Component Model with FS sandboxing, and deploy an ergonomic RBAC-on-PBAC access control system with zero-config self-healing deployment.
+
+### 1. Engine Core Mechanics & FFI Bridge Parity
+
+- [ ] **Real Network Identity & Session Tokens**:
+  - Wire `pfnGetPlayerAuthId`, `pfnGetPlayerUserId`, and `pfnInfoKeyValue` (IP address) to `EngineBridge` and `PlayerIdentity`.
+  - Connect dynamic template placeholders `{player:ip}`, `{player:authid}`, `{player:userid}` without mock fallbacks.
+  - Introduce thread-safe, generational `PlayerSession` tokens immune to Slot Recycling Hazards.
+- [ ] **Frame-Driven Task & Timer Service (`TimerService`)**:
+  - Implement tick-accurate `TimerService` inside `HostRuntime` driven by `on_server_frame` and `gpGlobals->time` / frame counters.
+  - Dual scheduling modes: continuous game time (`Duration`) and discrete physics frame intervals (`Ticks(u64)`).
+  - Replace blocking/panicking threads in WASM with safe client-bound builders: `task::after(Ticks(1) | Duration).spawn(...)` and `task::every(Ticks(64)).bound_to(session).spawn(...)` supporting next-frame deferrals and pause-resilient timers.
+- [ ] **Reactive CVAR & Config Adapter Engine (`ConfigModel` & `#[cvar]`)**:
+  - Unify CVARs and TOML files as decoupled I/O adapters over a single typed `PluginConfig` source of truth.
+  - Full FFI support for `pfnCVarRegister` with typed values (`Cvar<T>`), IDE-friendly `CvarFlags` bitmasks, and reactive `.on_change(|old, new| ...)` observer hooks.
+  - Bi-directional reactive synchronization: console/RCON mutations update in-memory state and disk TOML; disk changes update engine `cvar_t` via FFI without map restarts.
+  - Self-describing schema exports: automatic generation of documented `.toml` templates, engine `.cfg` files (`to_cvars`), and admin Markdown documentation.
+- [ ] **Engine Entity Lifecycle & Typed Builder (`EntityBuilder`)**:
+  - Universal `Entity::builder(classname)` with mandatory `pfnKeyValue` parameterization prior to `pfnSpawn`.
+  - Type-safe enumerations and constants for common keys (`keys::TARGET_NAME`, `RenderMode`, `SolidType`).
+- [ ] **Combat Hooking & User Message Interception (`CombatBridge` & `UserMessageDispatcher`)**:
+  - Dual-tier interception for `TakeDamage` and `Killed`: ReGameDLL API hooks (Tier 1) with VTable virtual hook fallback (Tier 2).
+  - Complete replacement of legacy AMXX forwards with phased event pipelines (`Filter` -> `Handle` -> `Observe`) with commutative modifiers.
+  - Connect engine user messages (`pfnMessageBegin`, `Write*`, `pfnMessageEnd`) enabling plugins to observe and mutate `ScreenFade`, `DeathMsg`, `CurWeapon`, and `Damage`.
+- [ ] **Extended Edict Properties (`pev` / `entvars_t`)**:
+  - Expand safe property triad (`get`/`set`/`modify`) with `Buttons` (`PlayerButtons` bitflags), `Flags` (`FL_ONGROUND`, `FL_DUCKING`), `MaxSpeed`, `Gravity`, `RenderEffect`, and `Model`.
+
+### 2. Autonomous Bundle Architecture & Sandbox Isolation
+
+- [ ] **Role-Based Component Model (`ComponentRole`)**:
+  - Taxonomy: `Coordinator` (root public facade, max 1 per bundle), `Service` (persistence/state), `Feature` (gameplay hooks), `Ui` (menu/chat), `Peer` (symmetric participant).
+  - Baked `.goldsrc.component.role` custom section metadata in WASM with `#[plugin(role = ...)]`.
+  - Handshake validation: graceful degradation to safe binary defaults with clear warnings if `bundle.toml` overrides violate binary capabilities.
+- [ ] **Decoupled Inter-Bundle Communication & Service Gateway**:
+  - Complete elimination of legacy AMXX natives: replace with zero-cost shared WIT component model linking intra-bundle.
+  - Inter-bundle: decoupled `BundleMessageBroker` request/response channels with contract versioning (`economy.v1`) and `ServiceUnavailable` resilience.
+- [ ] **Strict Filesystem Sandboxing (WASI Preopens)**:
+  - Strict path traversal prevention (`..` blocks).
+  - Absolute bundle isolation: write access jailed to `addons/goldsrc/data/<bundle_name>/`, read-only configs to `configs/<bundle_name>/`. Zero access outside the server root.
+- [ ] **Self-Healing Autonomous Configuration Engine**:
+  - Decentralized config ownership: Host (`goldsrc.toml`), Bundle (`bundles/<name>.toml`), and Plugin (`plugins/<name>.toml`).
+  - Zero-initial-config server deployment: auto-generation of missing default configs on boot with deep-merge schema updates and non-destructive preservation of admin edits.
+- [ ] **Deployment Layout Standardization (`bin` -> `lib`)**:
+  - Rename backend binary deployment path from `bin/` to `lib/` (`addons/goldsrc/lib/` and `goldsrc/lib/`) for strict semantic alignment with shared libraries (`.dll`/`.so`) and game hosting standards.
+
+### 3. Hierarchical PBAC, Granular DSL & Modular Administration
+
+- [ ] **Orthogonal Capability Namespaces & Generic Access Scopes**:
+  - Elimination of leaky abstraction names (`chat:admin_say` -> `chat:channel(admin)`, `menu:vip` -> `menu:scope(vip)`).
+  - Unification under root namespace containers (`engine:*`, `system:*`, `chat:*`, `menu:*`, `gameplay:*`, `bundle:<id>:*`).
+  - System ECS stages & phases guarded by capability checks (`system:stage.post_think.modify`).
+- [ ] **Compiler-Grade Capability DSL Semantic Validator**:
+  - Enforce strict separator semantics: `:` for namespace roots, `.` for hierarchical path traversal, `()` for parametric arguments (`gameplay:heal(max=150)`).
+  - Support `&` and `|` boolean operators inside Group Expansions `[...]` with `,` retained as conjunctive shorthand.
+  - Explanatory compiler warnings with reconstructed AST pretty-printing upon ambiguous grouping (e.g. `"... to clarify precedence. Treated as: (A & B) | C"`).
+- [ ] **Modular Administration Ecosystem (`admin_system` bundle)**:
+  - Preserve engine core purity: implement admin capabilities, bans, slaps, and voting purely as an external WASM plugin (`admin.wasm` / `admin_system` bundle) instead of hardcoding into `goldsrc-core`.
+  - Type-safe role aliases (`AdminCaps`, `VipCaps`) mapping to composite capability sets.
+
+---
+
+## v0.19.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
 
 **Goal:** Support polyglot plugin development by dynamically loading external language runtimes (Native Rust/C plugins via `goldsrc-host-native`, C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
 

@@ -233,6 +233,22 @@ impl HostRuntime {
                 None
             }
         });
+        goldsrc_api::client::player::set_player_identity_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_identity(index)
+            } else {
+                goldsrc_api::client::PlayerIdentity {
+                    slot: index,
+                    user_id: 0,
+                    steam_id: goldsrc_api::client::SteamId::Pending,
+                    ip: None,
+                    ping: 0,
+                    packet_loss: 0,
+                    is_bot: false,
+                    is_hltv: false,
+                }
+            }
+        });
         goldsrc_api::client::player::set_native_print_hook(|player_index, target, message| {
             if let Some(engine) = HostRuntime::engine() {
                 crate::net::NetworkMessageDispatcher::dispatch_player_print(

@@ -646,6 +646,123 @@ impl EngineEntities for EngineBackend {
         }
     }
 
+    fn player_auth_id(&self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return None;
+        }
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if pedict.is_null() {
+                return None;
+            }
+            if let Some(get_auth) = funcs.pfnGetPlayerAuthId {
+                let auth_ptr = get_auth(pedict);
+                if let Some(auth_str) = goldsrc_sys::ffi::cstr_to_string_bounded(auth_ptr, 64) {
+                    let trimmed = auth_str.trim();
+                    if !trimmed.is_empty() {
+                        return Some(trimmed.to_string());
+                    }
+                }
+            }
+            None
+        }
+    }
+
+    fn player_user_id(&self, index: i32) -> u32 {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return 0;
+        }
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = match funcs.pfnPEntityOfEntIndex {
+                Some(f) => f(index),
+                None => return 0,
+            };
+            if pedict.is_null() {
+                return 0;
+            }
+            if let Some(get_userid) = funcs.pfnGetPlayerUserId {
+                let uid = get_userid(pedict);
+                if uid > 0 {
+                    return uid as u32;
+                }
+            }
+            0
+        }
+    }
+
+    fn player_ip(&self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+            return None;
+        }
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pedict = (funcs.pfnPEntityOfEntIndex)?(index);
+            if pedict.is_null() {
+                return None;
+            }
+            if let Some(get_infokey) = funcs.pfnGetInfoKeyBuffer
+                && let Some(infokey_val) = funcs.pfnInfoKeyValue
+            {
+                let buffer = get_infokey(pedict);
+                let key = std::ffi::CString::new("ip").unwrap_or_default();
+                let val_ptr = infokey_val(buffer, key.as_ptr());
+                if let Some(raw_ip) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 64) {
+                    let cleaned = raw_ip.trim();
+                    if !cleaned.is_empty() {
+                        // Strip trailing port if present (e.g. "192.168.1.10:27005" -> "192.168.1.10")
+                        let ip_only = cleaned.split(':').next().unwrap_or(cleaned);
+                        return Some(ip_only.to_string());
+                    }
+                }
+            }
+            None
+        }
+    }
+
+    fn player_identity(&self, index: i32) -> goldsrc_api::client::PlayerIdentity {
+        let mut ping = 0;
+        let mut loss = 0;
+        let mut is_bot = false;
+        let mut is_hltv = false;
+
+        unsafe {
+            let funcs = (self.engfuncs)();
+            if let Some(pedict) = (funcs.pfnPEntityOfEntIndex).and_then(|f| f(index).as_mut()) {
+                if let Some(get_stats) = funcs.pfnGetPlayerStats {
+                    let mut p = 0;
+                    let mut l = 0;
+                    get_stats(pedict, &mut p, &mut l);
+                    ping = p;
+                    loss = l;
+                }
+                let flags = pedict.v.flags;
+                is_bot = (flags & goldsrc_api::consts::FL_FAKECLIENT) != 0;
+                is_hltv = (flags & goldsrc_api::consts::FL_PROXY) != 0;
+            }
+        }
+
+        let steam_id_raw = self.player_auth_id(index);
+        let steam_id = match steam_id_raw {
+            Some(raw) => goldsrc_api::client::SteamId::parse(&raw),
+            None if is_bot => goldsrc_api::client::SteamId::Bot,
+            None if is_hltv => goldsrc_api::client::SteamId::Server,
+            None => goldsrc_api::client::SteamId::Pending,
+        };
+
+        goldsrc_api::client::PlayerIdentity {
+            slot: index,
+            user_id: self.player_user_id(index),
+            steam_id,
+            ip: self.player_ip(index),
+            ping,
+            packet_loss: loss,
+            is_bot,
+            is_hltv,
+        }
+    }
+
     fn player_armorvalue(&self, index: i32) -> f32 {
         self.get_player(index)
             .map(|p| p.get::<goldsrc_api::Armor>().value())
