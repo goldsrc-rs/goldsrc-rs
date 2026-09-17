@@ -37,6 +37,8 @@ pub trait ClientExt: EntityExt {
     fn ip(&self) -> String {
         self.identity().ip_str().to_string()
     }
+    /// Returns the client's generational session token, if active.
+    fn session_token(&self) -> Option<crate::client::PlayerSessionToken>;
     /// Returns `true` if this client is an AI bot (`FL_FAKECLIENT`).
     fn is_bot(&self) -> bool;
     /// Returns `true` if this client is an HLTV proxy (`FL_PROXY`).
@@ -154,6 +156,23 @@ impl ClientExt for Client {
     }
 
     #[inline(always)]
+    fn session_token(&self) -> Option<crate::client::PlayerSessionToken> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(lock) = crate::client::player::PLAYER_SESSION_TOKEN_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+            {
+                return resolver(self.index);
+            }
+            None
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            None
+        }
+    }
+
+    #[inline(always)]
     fn is_bot(&self) -> bool {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -251,6 +270,11 @@ impl ClientExt for Player {
     #[inline(always)]
     fn identity(&self) -> crate::client::PlayerIdentity {
         self.client().identity()
+    }
+
+    #[inline(always)]
+    fn session_token(&self) -> Option<crate::client::PlayerSessionToken> {
+        self.client().session_token()
     }
 
     #[inline(always)]

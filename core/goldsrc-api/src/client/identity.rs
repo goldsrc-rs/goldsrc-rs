@@ -117,3 +117,48 @@ impl PlayerIdentity {
         self.ip.as_deref().unwrap_or("127.0.0.1")
     }
 }
+
+/// Strongly-typed generational token identifying a specific client connection.
+///
+/// Immune to Slot Recycling Hazards: if player Alice in slot 1 disconnects and player Bob
+/// connects to slot 1, Bob will have a higher generation count, invalidating Alice's tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PlayerSessionToken {
+    /// Slot index of the client (1..=32).
+    pub slot: i32,
+    /// Monotonically increasing connection generation counter.
+    pub generation: u64,
+    /// Engine user ID (`pfnGetPlayerUserId`) if known.
+    pub user_id: u32,
+}
+
+impl PlayerSessionToken {
+    /// Creates a new session token.
+    #[inline(always)]
+    pub const fn new(slot: i32, generation: u64, user_id: u32) -> Self {
+        Self {
+            slot,
+            generation,
+            user_id,
+        }
+    }
+
+    /// Slot index of the player (1..=32).
+    #[inline(always)]
+    pub const fn slot(&self) -> i32 {
+        self.slot
+    }
+
+    /// Generation counter for the connection.
+    #[inline(always)]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Engine user ID if assigned.
+    #[inline(always)]
+    pub const fn user_id(&self) -> u32 {
+        self.user_id
+    }
+}

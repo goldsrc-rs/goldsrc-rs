@@ -15,6 +15,7 @@ pub struct HostRuntime {
     pub rule_orchestrator: crate::rules::RuleOrchestrator,
     pub watcher_service: crate::watcher::WatcherService,
     pub sessions: crate::session::ClientSessionManager,
+    pub timer_service: std::sync::Arc<crate::timer::TimerService>,
 }
 
 use std::sync::{Mutex, OnceLock};
@@ -248,6 +249,9 @@ impl HostRuntime {
                     is_hltv: false,
                 }
             }
+        });
+        goldsrc_api::client::player::set_player_session_token_hook(|index| {
+            HostRuntime::with_sessions(|s| s.get(index).map(|sess| sess.token())).flatten()
         });
         goldsrc_api::client::player::set_native_print_hook(|player_index, target, message| {
             if let Some(engine) = HostRuntime::engine() {
@@ -524,6 +528,7 @@ impl HostRuntime {
             rule_orchestrator,
             watcher_service,
             sessions: crate::session::ClientSessionManager::new(),
+            timer_service: crate::timer::timer_service(),
         };
         let _ = RUNTIME.set(Mutex::new(runtime));
 
@@ -536,6 +541,11 @@ impl HostRuntime {
     /// Returns a clone of the Engine reference if initialized.
     pub fn engine() -> Option<std::sync::Arc<dyn goldsrc_api::Engine>> {
         ENGINE_INSTANCE.get().cloned()
+    }
+
+    /// Returns the global host `TimerService` instance.
+    pub fn timer_service() -> std::sync::Arc<crate::timer::TimerService> {
+        crate::timer::timer_service()
     }
 
     /// Returns monotonic server host uptime in seconds (f32).
@@ -973,7 +983,15 @@ impl HostRuntime {
             }
         });
 
+        // Advance frame tick and continuous clock in TimerService
+        static FRAME_TICK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let tick = FRAME_TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let now = Self::current_time();
+        let timer_svc = crate::timer::timer_service();
+        let _ = timer_svc.tick(tick, now as f64, |token| {
+            Self::with_sessions(|s| s.is_token_valid(token)).unwrap_or(false)
+        });
+
         if let Some(engine) = Self::engine()
             && let Ok(mut mgr) = crate::menu::menu_manager().lock()
         {

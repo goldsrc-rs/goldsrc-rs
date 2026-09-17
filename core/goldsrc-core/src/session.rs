@@ -2,31 +2,7 @@
 
 use std::collections::HashMap;
 
-/// Strongly-typed generational token identifying a specific client connection.
-///
-/// Immune to Slot Recycling Hazards: if player Alice in slot 1 disconnects and player Bob
-/// connects to slot 1, Bob will have a higher generation count, invalidating Alice's tokens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct PlayerSessionToken {
-    /// Slot index of the client (1..=32).
-    pub slot: i32,
-    /// Monotonically increasing connection generation counter.
-    pub generation: u64,
-    /// Engine user ID (`pfnGetPlayerUserId`) if known.
-    pub user_id: u32,
-}
-
-impl PlayerSessionToken {
-    /// Creates a new session token.
-    #[inline(always)]
-    pub const fn new(slot: i32, generation: u64, user_id: u32) -> Self {
-        Self {
-            slot,
-            generation,
-            user_id,
-        }
-    }
-}
+pub use goldsrc_api::client::PlayerSessionToken;
 
 /// Ephemeral session state for a connected client slot (1..=32).
 #[derive(Debug, Clone)]

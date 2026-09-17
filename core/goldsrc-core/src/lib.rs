@@ -20,6 +20,7 @@ pub mod reapi;
 pub mod rules;
 pub mod session;
 pub mod storage;
+pub mod timer;
 pub mod watcher;
 
 pub use ::log;
@@ -36,6 +37,7 @@ pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use plugins::PluginOrchestrator;
 pub use reapi::ReApiBridge;
 pub use storage::{Bucket, JsonFormat, SqliteStorageEngine, StorageFormat};
+pub use timer::TimerService;
 pub use watcher::{
     WatchTarget, WatcherEvent, WatcherFilter, WatcherService, WatcherSpec, WatcherStatus,
 };

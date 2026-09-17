@@ -10,7 +10,7 @@ pub mod types;
 
 pub use crate::entity::EntityExt;
 pub use ext::{ClientExt, PlayerExt};
-pub use identity::{PlayerIdentity, SteamId};
+pub use identity::{PlayerIdentity, PlayerSessionToken, SteamId};
 pub use player::Player;
 pub use property::{Lang, Name};
 pub use slot::PlayerSlot;

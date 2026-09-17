@@ -55,6 +55,8 @@ pub mod rules;
 pub mod spec;
 /// Dual Storage Port Abstraction & Typed Bucket Facade.
 pub mod storage;
+/// Discrete tick and continuous duration task scheduling abstractions.
+pub mod timer;
 /// Fundamental game data types, spatial mathematics, and engine descriptors.
 pub mod types;
 
@@ -118,4 +120,7 @@ pub use spec::{
     All, Any, Dormant, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec, SpecError,
 };
 pub use storage::{SqlDatabase, StorageError, StorageProvider};
+pub use timer::{
+    IntoScheduleDelay, ScheduleDelay, Ticks, TimerAction, TimerBound, TimerId, TimerMode,
+};
 pub use types::{EDict, LIBLIST_FILENAME, LibList, Vector3, bump_map_generation};
