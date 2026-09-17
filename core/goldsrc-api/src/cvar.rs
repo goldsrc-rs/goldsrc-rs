@@ -104,6 +104,24 @@ pub struct CvarField {
     pub flags: CvarFlags,
 }
 
+/// Abstract cvar operations required for ConfigModel synchronization.
+pub trait CvarEngine: Send + Sync {
+    /// Read a cvar value as a floating-point number.
+    fn cvar_get_float(&self, name: &str) -> f32;
+
+    /// Set a cvar value as a floating-point number.
+    fn cvar_set_float(&self, name: &str, val: f32);
+
+    /// Read a cvar value as a string.
+    fn cvar_get_string(&self, name: &str) -> Option<String>;
+
+    /// Set a cvar value as a string.
+    fn cvar_set_string(&self, name: &str, val: &str);
+
+    /// Registers an engine console variable with the given name, default string value, and behavior flags.
+    fn cvar_register(&self, name: &str, default_value: &str, flags: CvarFlags) -> bool;
+}
+
 /// Domain configuration model capable of bidirectional synchronization with
 /// engine CVARs and TOML disk formats.
 pub trait ConfigModel: Send + Sync {
@@ -114,13 +132,13 @@ pub trait ConfigModel: Send + Sync {
     fn to_cvars(&self) -> String;
 
     /// Registers all associated CVARs in the given engine interface.
-    fn register_cvars(&self, engine: &dyn crate::engine::Engine);
+    fn register_cvars(&self, engine: &dyn CvarEngine);
 
     /// Synchronizes local fields from the current engine CVAR values.
-    fn sync_from_cvars(&mut self, engine: &dyn crate::engine::Engine);
+    fn sync_from_cvars(&mut self, engine: &dyn CvarEngine);
 
     /// Writes local field values into the engine's CVARs.
-    fn sync_to_cvars(&self, engine: &dyn crate::engine::Engine);
+    fn sync_to_cvars(&self, engine: &dyn CvarEngine);
 }
 
 /// Type alias for an observer callback invoked when a [`Cvar`] value changes.
@@ -173,6 +191,59 @@ impl<T> Cvar<T> {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+use crate::bindings::goldsrc::engine::api as host_api;
+
+/// Read float console variable via host WASM or fallback mock.
+pub fn cvar_get_float(name: &str) -> f32 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        host_api::host_cvar_get_float(name)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = name;
+        800.0
+    }
+}
+
+/// Set float console variable via host WASM or fallback mock.
+pub fn cvar_set_float(name: &str, val: f32) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        host_api::host_cvar_set_float(name, val);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (name, val);
+    }
+}
+
+/// Read string console variable via host WASM or fallback mock.
+pub fn cvar_get_string(name: &str) -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        host_api::host_cvar_get_string(name)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = name;
+        None
+    }
+}
+
+/// Set string console variable via host WASM or fallback mock.
+pub fn cvar_set_string(name: &str, val: &str) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        host_api::host_cvar_set_string(name, val);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (name, val);
+    }
+}
+
 impl Cvar<i32> {
     /// Creates a new integer CVar definition.
     pub const fn new_int(
@@ -192,13 +263,13 @@ impl Cvar<i32> {
 
     /// Reads current integer value from the engine.
     pub fn get(&self) -> i32 {
-        crate::engine::api::cvar_get_float(self.name) as i32
+        cvar_get_float(self.name) as i32
     }
 
     /// Sets the integer value in the engine.
     pub fn set(&self, val: i32) {
         let old = self.get();
-        crate::engine::api::cvar_set_float(self.name, val as f32);
+        cvar_set_float(self.name, val as f32);
         if let Some(obs) = &self.on_change
             && let Ok(cb) = obs.lock()
         {
@@ -226,13 +297,13 @@ impl Cvar<f32> {
 
     /// Reads current float value from the engine.
     pub fn get(&self) -> f32 {
-        crate::engine::api::cvar_get_float(self.name)
+        cvar_get_float(self.name)
     }
 
     /// Sets the float value in the engine.
     pub fn set(&self, val: f32) {
         let old = self.get();
-        crate::engine::api::cvar_set_float(self.name, val);
+        cvar_set_float(self.name, val);
         if let Some(obs) = &self.on_change
             && let Ok(cb) = obs.lock()
         {
@@ -260,13 +331,13 @@ impl Cvar<String> {
 
     /// Reads current string value from the engine.
     pub fn get(&self) -> String {
-        crate::engine::api::cvar_get_string(self.name).unwrap_or_else(|| self.default_value.clone())
+        cvar_get_string(self.name).unwrap_or_else(|| self.default_value.clone())
     }
 
     /// Sets the string value in the engine.
     pub fn set(&self, val: &str) {
         let old = self.get();
-        crate::engine::api::cvar_set_string(self.name, val);
+        cvar_set_string(self.name, val);
         if let Some(obs) = &self.on_change
             && let Ok(cb) = obs.lock()
         {
@@ -333,73 +404,73 @@ impl ToTomlVal for f64 {
 /// Helper trait for reading and writing typed configuration values to/from the GoldSrc engine.
 pub trait FromCvarEngine {
     /// Reads current cvar value from the engine and updates `current`.
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self);
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self);
 
     /// Writes `self` into the engine cvar.
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str);
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str);
 }
 
 impl FromCvarEngine for i32 {
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self) {
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self) {
         *current = engine.cvar_get_float(name) as i32;
     }
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str) {
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str) {
         engine.cvar_set_float(name, *self as f32);
     }
 }
 
 impl FromCvarEngine for u32 {
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self) {
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self) {
         *current = engine.cvar_get_float(name) as u32;
     }
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str) {
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str) {
         engine.cvar_set_float(name, *self as f32);
     }
 }
 
 impl FromCvarEngine for usize {
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self) {
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self) {
         *current = engine.cvar_get_float(name) as usize;
     }
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str) {
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str) {
         engine.cvar_set_float(name, *self as f32);
     }
 }
 
 impl FromCvarEngine for f32 {
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self) {
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self) {
         *current = engine.cvar_get_float(name);
     }
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str) {
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str) {
         engine.cvar_set_float(name, *self);
     }
 }
 
 impl FromCvarEngine for f64 {
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self) {
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self) {
         *current = engine.cvar_get_float(name) as f64;
     }
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str) {
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str) {
         engine.cvar_set_float(name, *self as f32);
     }
 }
 
 impl FromCvarEngine for bool {
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self) {
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self) {
         *current = engine.cvar_get_float(name) > 0.0;
     }
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str) {
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str) {
         engine.cvar_set_float(name, if *self { 1.0 } else { 0.0 });
     }
 }
 
 impl FromCvarEngine for String {
-    fn read_cvar(engine: &dyn crate::engine::Engine, name: &str, current: &mut Self) {
+    fn read_cvar(engine: &dyn CvarEngine, name: &str, current: &mut Self) {
         if let Some(val) = engine.cvar_get_string(name) {
             *current = val;
         }
     }
-    fn write_cvar(&self, engine: &dyn crate::engine::Engine, name: &str) {
+    fn write_cvar(&self, engine: &dyn CvarEngine, name: &str) {
         engine.cvar_set_string(name, self);
     }
 }

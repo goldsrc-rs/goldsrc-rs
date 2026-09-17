@@ -11,7 +11,7 @@ pub mod storage;
 pub use auth::{AuthProvider, HandshakeContext, HandshakeDecision};
 pub use engine::{
     Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
-    EnginePrecache, EngineSound, MessageBuilder, MessageDest,
+    EnginePrecache, EngineSound, MessageBuilder, MessageDest, TraceResult,
 };
 pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use storage::{SqlDatabase, StorageError, StorageProvider};

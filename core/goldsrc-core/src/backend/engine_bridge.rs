@@ -5,9 +5,10 @@ use crate::{call_engfunc, call_engfunc_ret};
 use goldsrc_api::client::Player;
 use goldsrc_api::consts::FL_CLIENT;
 use goldsrc_api::consts::log_targets::CORE;
-use goldsrc_api::{
-    EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
-    EngineSound,
+use goldsrc_api::cvar::CvarEngine;
+use goldsrc_api::entity::EntitySpawner;
+use goldsrc_spi::engine::{
+    EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
 };
 use goldsrc_sys::enginefuncs_t;
 use std::collections::{BTreeSet, HashMap};
@@ -60,7 +61,7 @@ impl EngineBackend {
         }
         let mut count = 0;
         for i in 1..=(goldsrc_api::consts::MAX_PLAYERS as i32) {
-            if <Self as goldsrc_api::EngineEntities>::player_name(self, i).is_some() {
+            if <Self as EngineEntities>::player_name(self, i).is_some() {
                 count += 1;
             }
         }
@@ -86,12 +87,12 @@ impl EngineBackend {
 
     /// Prints a message to the server console.
     pub fn server_print(&self, message: &str) {
-        <Self as goldsrc_api::EngineConsole>::server_print(self, message);
+        <Self as EngineConsole>::server_print(self, message);
     }
 
     /// Executes a server command string.
     pub fn server_command(&self, command: &str) {
-        <Self as goldsrc_api::EngineConsole>::server_command(self, command);
+        <Self as EngineConsole>::server_command(self, command);
     }
 
     /// Drains the deferred server-print queue to the engine console with
@@ -587,7 +588,7 @@ impl EngineEntities for EngineBackend {
                 let health_msg_id = self.reg_user_msg("Health", 1);
                 if health_msg_id > 0 && health_msg_id != 255 {
                     self.message_begin(
-                        goldsrc_api::MessageDest::One as i32,
+                        goldsrc_spi::engine::MessageDest::One as i32,
                         health_msg_id,
                         None,
                         Some(index),
@@ -603,12 +604,6 @@ impl EngineEntities for EngineBackend {
         self.get_player(index)
             .map(|e| e.get::<goldsrc_api::Origin>().0.into())
             .unwrap_or([0.0; 3])
-    }
-
-    fn entity_set_origin(&self, index: i32, pos: [f32; 3]) {
-        if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::Origin(pos.into()));
-        }
     }
 
     fn entity_velocity(&self, index: i32) -> [f32; 3] {
@@ -627,12 +622,6 @@ impl EngineEntities for EngineBackend {
         self.get_player(index)
             .map(|e| e.get::<goldsrc_api::Angles>().0.into())
             .unwrap_or([0.0; 3])
-    }
-
-    fn entity_set_angles(&self, index: i32, angles: [f32; 3]) {
-        if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::Angles(angles.into()));
-        }
     }
 
     fn player_handle(&self, index: i32) -> Option<goldsrc_api::Player> {
@@ -914,7 +903,7 @@ impl EngineEntities for EngineBackend {
                 let battery_msg_id = self.reg_user_msg("Battery", 2);
                 if battery_msg_id > 0 && battery_msg_id != 255 {
                     self.message_begin(
-                        goldsrc_api::MessageDest::One as i32,
+                        goldsrc_spi::engine::MessageDest::One as i32,
                         battery_msg_id,
                         None,
                         Some(index),
@@ -923,24 +912,6 @@ impl EngineEntities for EngineBackend {
                     self.message_end();
                 }
             }
-        }
-    }
-
-    fn create_named_entity(&self, classname: &str) -> Option<i32> {
-        unsafe {
-            let funcs = (self.engfuncs)();
-            let cstr = std::ffi::CString::new(classname).ok()?;
-            let str_id = funcs.pfnAllocString.map(|f| f(cstr.as_ptr())).unwrap_or(0);
-            if str_id == 0 {
-                return None;
-            }
-            let pent = funcs.pfnCreateNamedEntity.map(|f| f(str_id))?;
-            if pent.is_null() {
-                return None;
-            }
-
-            let idx = crate::api_registry::edict_index(pent);
-            if idx > 0 { Some(idx) } else { None }
         }
     }
 
@@ -972,23 +943,6 @@ impl EngineEntities for EngineBackend {
         }
     }
 
-    fn dispatch_spawn(&self, index: i32) -> i32 {
-        unsafe {
-            let funcs = (self.engfuncs)();
-            let pent = funcs.pfnPEntityOfEntIndex.and_then(|f| {
-                let p = f(index);
-                if p.is_null() { None } else { Some(p) }
-            });
-            match (pent, GAME_DLL_SPAWN.get()) {
-                (Some(p), Some(f)) => f(p),
-                _ => {
-                    log::debug!(target: goldsrc_api::consts::log_targets::CORE, "dispatch_spawn({index}): no GameDLL bridge");
-                    0
-                }
-            }
-        }
-    }
-
     fn dispatch_touch(&self, touched: i32, other: i32) {
         unsafe {
             let funcs = (self.engfuncs)();
@@ -1006,6 +960,55 @@ impl EngineEntities for EngineBackend {
             }
         }
     }
+}
+
+impl EntitySpawner for EngineBackend {
+    fn create_named_entity(&self, classname: &str) -> Option<i32> {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let cstr = std::ffi::CString::new(classname).ok()?;
+            let str_id = funcs.pfnAllocString.map(|f| f(cstr.as_ptr())).unwrap_or(0);
+            if str_id == 0 {
+                return None;
+            }
+            let pent = funcs.pfnCreateNamedEntity.map(|f| f(str_id))?;
+            if pent.is_null() {
+                return None;
+            }
+
+            let idx = crate::api_registry::edict_index(pent);
+            if idx > 0 { Some(idx) } else { None }
+        }
+    }
+
+    fn entity_set_origin(&self, index: i32, pos: [f32; 3]) {
+        if let Some(mut e) = self.get_player(index) {
+            e.set(goldsrc_api::Origin(pos.into()));
+        }
+    }
+
+    fn entity_set_angles(&self, index: i32, angles: [f32; 3]) {
+        if let Some(mut e) = self.get_player(index) {
+            e.set(goldsrc_api::Angles(angles.into()));
+        }
+    }
+
+    fn dispatch_spawn(&self, index: i32) -> i32 {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pent = funcs.pfnPEntityOfEntIndex.and_then(|f| {
+                let p = f(index);
+                if p.is_null() { None } else { Some(p) }
+            });
+            match (pent, GAME_DLL_SPAWN.get()) {
+                (Some(p), Some(f)) => f(p),
+                _ => {
+                    log::debug!(target: goldsrc_api::consts::log_targets::CORE, "dispatch_spawn({index}): no GameDLL bridge");
+                    0
+                }
+            }
+        }
+    }
 
     fn entity_key_value(&self, index: i32, key: &str, value: &str) -> bool {
         unsafe {
@@ -1018,7 +1021,8 @@ impl EngineEntities for EngineBackend {
                 return false;
             }
 
-            let classname = self.entity_classname(index).unwrap_or_default();
+            let classname =
+                <Self as EngineEntities>::entity_classname(self, index).unwrap_or_default();
             let c_class = std::ffi::CString::new(classname).unwrap_or_default();
             let c_key = std::ffi::CString::new(key).unwrap_or_default();
             let c_val = std::ffi::CString::new(value).unwrap_or_default();
@@ -1040,7 +1044,7 @@ impl EngineEntities for EngineBackend {
     }
 }
 
-impl EngineCvars for EngineBackend {
+impl CvarEngine for EngineBackend {
     fn cvar_get_float(&self, name: &str) -> f32 {
         unsafe {
             let cname = std::ffi::CString::new(name).unwrap_or_default();
@@ -1175,7 +1179,7 @@ impl EnginePhysics for EngineBackend {
         end: [f32; 3],
         flags: i32,
         ignore_ent: i32,
-    ) -> goldsrc_api::TraceResult {
+    ) -> goldsrc_spi::engine::TraceResult {
         unsafe {
             let funcs = (self.engfuncs)();
             let mut raw_trace = std::mem::zeroed::<goldsrc_sys::TraceResult>();
@@ -1199,7 +1203,7 @@ impl EnginePhysics for EngineBackend {
                 crate::api_registry::edict_index(raw_trace.pHit)
             };
 
-            goldsrc_api::TraceResult {
+            goldsrc_spi::engine::TraceResult {
                 all_solid: raw_trace.fAllSolid != 0,
                 start_solid: raw_trace.fStartSolid != 0,
                 in_open: raw_trace.fInOpen != 0,
@@ -1219,7 +1223,7 @@ impl EnginePhysics for EngineBackend {
         flags: i32,
         hull_number: i32,
         ignore_ent: i32,
-    ) -> goldsrc_api::TraceResult {
+    ) -> goldsrc_spi::engine::TraceResult {
         unsafe {
             let funcs = (self.engfuncs)();
             let mut raw_trace = std::mem::zeroed::<goldsrc_sys::TraceResult>();
@@ -1244,7 +1248,7 @@ impl EnginePhysics for EngineBackend {
                 crate::api_registry::edict_index(raw_trace.pHit)
             };
 
-            goldsrc_api::TraceResult {
+            goldsrc_spi::engine::TraceResult {
                 all_solid: raw_trace.fAllSolid != 0,
                 start_solid: raw_trace.fStartSolid != 0,
                 in_open: raw_trace.fInOpen != 0,
@@ -1263,7 +1267,7 @@ impl EnginePhysics for EngineBackend {
         end: [f32; 3],
         flags: i32,
         ent_index: i32,
-    ) -> goldsrc_api::TraceResult {
+    ) -> goldsrc_spi::engine::TraceResult {
         unsafe {
             let funcs = (self.engfuncs)();
             let mut raw_trace = std::mem::zeroed::<goldsrc_sys::TraceResult>();
@@ -1287,7 +1291,7 @@ impl EnginePhysics for EngineBackend {
                     crate::api_registry::edict_index(raw_trace.pHit)
                 };
 
-                goldsrc_api::TraceResult {
+                goldsrc_spi::engine::TraceResult {
                     all_solid: raw_trace.fAllSolid != 0,
                     start_solid: raw_trace.fStartSolid != 0,
                     in_open: raw_trace.fInOpen != 0,

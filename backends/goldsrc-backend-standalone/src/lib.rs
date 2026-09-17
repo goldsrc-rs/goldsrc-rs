@@ -80,7 +80,7 @@ fn init_wasm_host() {
         None
     });
 
-    let engine: std::sync::Arc<dyn goldsrc_api::Engine> = std::sync::Arc::new(*backend());
+    let engine: std::sync::Arc<dyn goldsrc_spi::engine::Engine> = std::sync::Arc::new(*backend());
     if let Err(e) = goldsrc_core::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Standalone,
         |msg| {

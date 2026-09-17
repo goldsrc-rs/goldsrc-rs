@@ -162,15 +162,15 @@ pub fn expand_derive_config_model(input: DeriveInput) -> Result<TokenStream, Err
                 out
             }
 
-            fn register_cvars(&self, engine: &dyn ::goldsrc_api::engine::Engine) {
+            fn register_cvars(&self, engine: &dyn ::goldsrc_api::cvar::CvarEngine) {
                 #(#reg_lines)*
             }
 
-            fn sync_from_cvars(&mut self, engine: &dyn ::goldsrc_api::engine::Engine) {
+            fn sync_from_cvars(&mut self, engine: &dyn ::goldsrc_api::cvar::CvarEngine) {
                 #(#sync_from_lines)*
             }
 
-            fn sync_to_cvars(&self, engine: &dyn ::goldsrc_api::engine::Engine) {
+            fn sync_to_cvars(&self, engine: &dyn ::goldsrc_api::cvar::CvarEngine) {
                 #(#sync_to_lines)*
             }
         }

@@ -1,12 +1,31 @@
 //! Fluent entity instantiation builder for GoldSrc entities with keyvalues.
 
-use crate::engine::EngineEntities;
 use crate::entity::Entity;
 use crate::entity::keys;
 use crate::entity::types::{RenderFx, RenderMode, SolidType};
 
 #[cfg(target_arch = "wasm32")]
 use crate::bindings::goldsrc::engine::api as host_api;
+
+/// Abstract entity spawning operations required for [`EntityBuilder`].
+pub trait EntitySpawner: Send + Sync {
+    /// Creates a new named entity (e.g. "env_sprite", "info_target").
+    /// Returns the newly allocated entity index.
+    fn create_named_entity(&self, classname: &str) -> Option<i32>;
+
+    /// Sets an entity's world position.
+    fn entity_set_origin(&self, index: i32, pos: [f32; 3]);
+
+    /// Sets an entity's rotation angles.
+    fn entity_set_angles(&self, index: i32, angles: [f32; 3]);
+
+    /// Sets an entity key-value string property (`pfnKeyValue`).
+    /// Returns `true` if handled.
+    fn entity_key_value(&self, index: i32, key: &str, value: &str) -> bool;
+
+    /// Dispatches spawn call on the entity (`pfnSpawn`).
+    fn dispatch_spawn(&self, index: i32) -> i32;
+}
 
 /// Fluent builder for constructing and spawning GoldSrc entities with pre-spawn keyvalues.
 #[derive(Debug, Clone)]
@@ -96,8 +115,8 @@ impl EntityBuilder {
         self
     }
 
-    /// Builds and parameterizes the entity against an explicit [`EngineEntities`] implementation.
-    pub fn build_with<E: EngineEntities + ?Sized>(&self, engine: &E) -> Option<Entity> {
+    /// Builds and parameterizes the entity against an explicit [`EntitySpawner`] implementation.
+    pub fn build_with<E: EntitySpawner + ?Sized>(&self, engine: &E) -> Option<Entity> {
         let index = engine.create_named_entity(&self.classname)?;
         if let Some(pos) = self.origin {
             engine.entity_set_origin(index, pos);
@@ -108,11 +127,11 @@ impl EntityBuilder {
 
         // Engine Contract: pfnKeyValue MUST be called before pfnSpawn
         for (k, v) in &self.key_values {
-            engine.entity_key_value(index, k, v);
+            let _ = engine.entity_key_value(index, k, v);
         }
 
         if self.auto_spawn {
-            engine.dispatch_spawn(index);
+            let _ = engine.dispatch_spawn(index);
         }
 
         Some(Entity::new(index))

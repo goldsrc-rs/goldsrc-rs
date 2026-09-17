@@ -1,8 +1,8 @@
 //! Bidirectional configuration binder bridging disk TOML files, in-memory domain models,
 //! and GoldSrc engine console variables.
 
-use goldsrc_api::Engine;
 use goldsrc_api::cvar::ConfigModel;
+use goldsrc_spi::engine::Engine;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::fs;
@@ -121,6 +121,7 @@ impl<T: ConfigModel + Serialize + DeserializeOwned + Default> ConfigBinder<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use goldsrc_api::cvar::CvarEngine;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -147,7 +148,7 @@ mod tests {
             )
         }
 
-        fn register_cvars(&self, engine: &dyn Engine) {
+        fn register_cvars(&self, engine: &dyn CvarEngine) {
             engine.cvar_register(
                 "test_bonus_hp",
                 &self.bonus_hp.to_string(),
@@ -161,7 +162,7 @@ mod tests {
             );
         }
 
-        fn sync_from_cvars(&mut self, engine: &dyn Engine) {
+        fn sync_from_cvars(&mut self, engine: &dyn CvarEngine) {
             self.bonus_hp = engine.cvar_get_float("test_bonus_hp") as i32;
             if let Some(t) = engine.cvar_get_string("test_tag") {
                 self.tag = t;
@@ -169,7 +170,7 @@ mod tests {
             self.enabled = engine.cvar_get_float("test_enabled") > 0.0;
         }
 
-        fn sync_to_cvars(&self, engine: &dyn Engine) {
+        fn sync_to_cvars(&self, engine: &dyn CvarEngine) {
             engine.cvar_set_float("test_bonus_hp", self.bonus_hp as f32);
             engine.cvar_set_string("test_tag", &self.tag);
             engine.cvar_set_float("test_enabled", if self.enabled { 1.0 } else { 0.0 });

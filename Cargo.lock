@@ -555,6 +555,7 @@ version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
+ "goldsrc-spi",
  "goldsrc-sys",
  "libc",
  "windows-sys 0.61.2",
@@ -566,6 +567,7 @@ version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
+ "goldsrc-spi",
  "goldsrc-sys",
  "libloading 0.9.0",
 ]
@@ -595,6 +597,7 @@ name = "goldsrc-host-wasm"
 version = "0.17.0"
 dependencies = [
  "goldsrc-api",
+ "goldsrc-spi",
  "log",
  "serde",
  "thiserror",

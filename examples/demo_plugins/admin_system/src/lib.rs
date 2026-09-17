@@ -173,7 +173,7 @@ impl AdminSystem {
         usage = "admin_gravity <gravity_value>"
     )]
     fn handle_gravity(gravity: f32) {
-        engine::cvar_set_float("sv_gravity", gravity);
+        cvar::cvar_set_float("sv_gravity", gravity);
         log_info!("[Admin System] Set server sv_gravity to {:.0}", gravity);
     }
 }

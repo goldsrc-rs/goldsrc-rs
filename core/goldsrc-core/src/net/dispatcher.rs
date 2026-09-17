@@ -4,7 +4,8 @@
 //! and ensures strict adherence to GoldSrc buffer boundaries (185 bytes) and UTF-8 safety.
 
 use goldsrc_api::consts::SAFE_SAYTEXT_LIMIT;
-use goldsrc_api::{HUD_PRINTCENTER, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY, MessageDest, PrintTarget};
+use goldsrc_api::{HUD_PRINTCENTER, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY, PrintTarget};
+use goldsrc_spi::engine::MessageDest;
 
 /// Dispatcher responsible for formatting, chunking, and sending GoldSrc network user messages.
 pub struct NetworkMessageDispatcher;
@@ -12,7 +13,7 @@ pub struct NetworkMessageDispatcher;
 impl NetworkMessageDispatcher {
     /// Dispatches a formatted message to a player according to the target print channel.
     pub fn dispatch_player_print(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         player_index: i32,
         target: PrintTarget,
         message: &str,
@@ -51,7 +52,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `TextMsg` user message (console, notify, center text) to a single client.
     pub fn send_text_msg(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         player_index: i32,
         msg_dest: i32,
         formatted: &str,
@@ -94,7 +95,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `SayText` user message to a single client.
     pub fn send_say_text(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         receiver_index: i32,
         sender_index: i32,
         message: &str,
@@ -135,7 +136,11 @@ impl NetworkMessageDispatcher {
     }
 
     /// Broadcasts a `TextMsg` to all connected clients (`MessageDest::All`).
-    pub fn broadcast_text_msg(engine: &dyn goldsrc_api::Engine, msg_dest: i32, message: &str) {
+    pub fn broadcast_text_msg(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        msg_dest: i32,
+        message: &str,
+    ) {
         for idx in 1..=32 {
             if engine.entity_is_valid(idx) {
                 Self::send_text_msg(engine, idx, msg_dest, message);
@@ -144,7 +149,11 @@ impl NetworkMessageDispatcher {
     }
 
     /// Broadcasts a `SayText` message to all connected clients (`MessageDest::All`).
-    pub fn broadcast_say_text(engine: &dyn goldsrc_api::Engine, sender_index: i32, message: &str) {
+    pub fn broadcast_say_text(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        sender_index: i32,
+        message: &str,
+    ) {
         for idx in 1..=32 {
             if engine.entity_is_valid(idx) {
                 Self::send_say_text(engine, idx, sender_index, message);
@@ -154,7 +163,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `ScreenFade` user message to a specific player or broadcasts to all clients.
     pub fn send_screen_fade(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         target_player: Option<i32>,
         fade: &goldsrc_api::hud::ScreenFade,
     ) {
@@ -189,7 +198,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `DeathMsg` user message to a specific player or broadcasts to all clients.
     pub fn send_death_msg(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         target_player: Option<i32>,
         killer_index: i32,
         victim_index: i32,
@@ -221,7 +230,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `CurWeapon` user message to a specific player.
     pub fn send_cur_weapon(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         player_index: i32,
         is_active: bool,
         weapon_id: i32,
@@ -250,7 +259,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `Damage` user message to a specific player.
     pub fn send_damage(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         player_index: i32,
         save_damage: i32,
         take_damage: i32,
@@ -280,9 +289,11 @@ impl NetworkMessageDispatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use goldsrc_api::{
-        EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
-        EngineSound, TraceResult,
+    use goldsrc_api::cvar::{CvarEngine, CvarFlags};
+    use goldsrc_api::entity::EntitySpawner;
+    use goldsrc_spi::engine::{
+        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
+        TraceResult,
     };
     use std::sync::Mutex;
 
@@ -347,6 +358,20 @@ mod tests {
         }
     }
 
+    impl EntitySpawner for MockNetEngine {
+        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
+            None
+        }
+        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
+        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
+        fn entity_key_value(&self, _index: i32, _key: &str, _value: &str) -> bool {
+            false
+        }
+        fn dispatch_spawn(&self, _index: i32) -> i32 {
+            0
+        }
+    }
+
     impl EngineEntities for MockNetEngine {
         fn entity_is_valid(&self, index: i32) -> bool {
             (1..=32).contains(&index)
@@ -361,7 +386,6 @@ mod tests {
         fn entity_origin(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
         fn entity_velocity(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
@@ -369,7 +393,6 @@ mod tests {
         fn entity_angles(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
         fn player_name(&self, _index: i32) -> Option<String> {
             Some("Player".into())
         }
@@ -383,20 +406,14 @@ mod tests {
             0.0
         }
         fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
-        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
-            None
-        }
         fn remove_entity(&self, _index: i32) {}
         fn drop_to_floor(&self, _index: i32) -> i32 {
-            0
-        }
-        fn dispatch_spawn(&self, _index: i32) -> i32 {
             0
         }
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
 
-    impl EngineCvars for MockNetEngine {
+    impl CvarEngine for MockNetEngine {
         fn cvar_get_string(&self, _n: &str) -> Option<String> {
             None
         }
@@ -405,6 +422,9 @@ mod tests {
             0.0
         }
         fn cvar_set_float(&self, _n: &str, _v: f32) {}
+        fn cvar_register(&self, _name: &str, _default_value: &str, _flags: CvarFlags) -> bool {
+            true
+        }
     }
 
     impl EngineConsole for MockNetEngine {

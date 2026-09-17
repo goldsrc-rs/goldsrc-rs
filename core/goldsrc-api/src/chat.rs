@@ -179,7 +179,7 @@ pub fn split_chat_chunks_with_style(message: &str, style: &WrapStyle) -> Vec<Str
     };
     // Safe chat chunk budget aligned with NetworkMessageDispatcher SAFE_SAYTEXT_LIMIT (175)
     // reserving 1 byte for possible leading default color byte `\x01`.
-    let max_budget = crate::engine::SAFE_SAYTEXT_LIMIT.saturating_sub(1);
+    let max_budget = crate::consts::SAFE_SAYTEXT_LIMIT.saturating_sub(1);
     let chunk_limit = max_budget.saturating_sub(max_prefix_len);
 
     // 1. First split raw message by explicit newlines `\n` or `\r\n`

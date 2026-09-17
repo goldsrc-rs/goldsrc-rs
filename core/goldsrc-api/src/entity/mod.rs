@@ -8,7 +8,7 @@ pub mod spec;
 pub mod types;
 
 pub use crate::client::slot::EntityId;
-pub use builder::EntityBuilder;
+pub use builder::{EntityBuilder, EntitySpawner};
 pub use ext::EntityExt;
 pub use property::{
     Buttons, Classname, Flags, Gravity, MaxSpeed, MoveTypeProp, RenderAmt, RenderColor,
