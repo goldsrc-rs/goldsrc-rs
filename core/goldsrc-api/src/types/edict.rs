@@ -324,6 +324,312 @@ impl EDict {
         }
     }
 
+    /// Set entity flags.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_flags(self, flags: i32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.flags = flags };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = flags;
+            false
+        }
+    }
+
+    /// Entity input buttons bitmask (`IN_ATTACK`, `IN_JUMP`, etc.).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn button(self) -> Option<i32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.button })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity input buttons bitmask.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_button(self, button: i32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.button = button };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = button;
+            false
+        }
+    }
+
+    /// Maximum player/entity movement speed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn maxspeed(self) -> Option<f32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.maxspeed })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set maximum player/entity movement speed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_maxspeed(self, maxspeed: f32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.maxspeed = maxspeed };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = maxspeed;
+            false
+        }
+    }
+
+    /// Entity gravity scale multiplier (1.0 = default 800 units/s^2).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn gravity(self) -> Option<f32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.gravity })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity gravity scale multiplier.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_gravity(self, gravity: f32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.gravity = gravity };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = gravity;
+            false
+        }
+    }
+
+    /// Entity rendering mode (`rendermode`).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn rendermode(self) -> Option<i32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.rendermode })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity rendering mode.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_rendermode(self, mode: i32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.rendermode = mode };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = mode;
+            false
+        }
+    }
+
+    /// Entity render amount / opacity (0..=255).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn renderamt(self) -> Option<f32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.renderamt })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity render amount.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_renderamt(self, amt: f32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.renderamt = amt };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = amt;
+            false
+        }
+    }
+
+    /// Entity render color modulation (`rendercolor` [r, g, b]).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn rendercolor(self) -> Option<[f32; 3]> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.rendercolor })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity render color modulation.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_rendercolor(self, color: [f32; 3]) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.rendercolor = color };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = color;
+            false
+        }
+    }
+
+    /// Entity render special effects (`renderfx`).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn renderfx(self) -> Option<i32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.renderfx })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity render special effects.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_renderfx(self, fx: i32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.renderfx = fx };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = fx;
+            false
+        }
+    }
+
+    /// Entity collision solidity type (`solid`).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn solid(self) -> Option<i32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.solid })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity collision solidity type.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_solid(self, solid: i32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.solid = solid };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = solid;
+            false
+        }
+    }
+
+    /// Entity physics movement type (`movetype`).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn movetype(self) -> Option<i32> {
+        #[cfg(feature = "unsafe-sys")]
+        {
+            let ptr = self.raw_ptr()?;
+            Some(unsafe { (*ptr).v.movetype })
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            None
+        }
+    }
+
+    /// Set entity physics movement type.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_movetype(self, movetype: i32) -> bool {
+        #[cfg(feature = "unsafe-sys")]
+        match self.raw_ptr() {
+            Some(ptr) => {
+                unsafe { (*ptr).v.movetype = movetype };
+                true
+            }
+            None => false,
+        }
+        #[cfg(not(feature = "unsafe-sys"))]
+        {
+            let _ = movetype;
+            false
+        }
+    }
+
     /// Entity angles (pitch, yaw, roll).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn angles(self) -> Option<[f32; 3]> {

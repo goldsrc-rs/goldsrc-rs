@@ -1,13 +1,21 @@
 //! Core Entity handle and extension trait for GoldSrc world and dynamic entities.
 
+pub mod builder;
 pub mod ext;
+pub mod keys;
 pub mod property;
 pub mod spec;
+pub mod types;
 
 pub use crate::client::slot::EntityId;
+pub use builder::EntityBuilder;
 pub use ext::EntityExt;
-pub use property::Classname;
+pub use property::{
+    Buttons, Classname, Flags, Gravity, MaxSpeed, MoveTypeProp, RenderAmt, RenderColor,
+    RenderFxProp, RenderModeProp, SolidProp,
+};
 pub use spec::{Dormant, Solid, SolidEntity, Spawned, SpawnedEntity};
+pub use types::{MoveType, RenderFx, RenderMode, SolidType};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::types::EDict;
@@ -68,6 +76,12 @@ impl Entity {
     #[inline(always)]
     pub const fn index(&self) -> i32 {
         self.index
+    }
+
+    /// Creates an [`EntityBuilder`] for parameterizing and spawning a new entity.
+    #[inline]
+    pub fn builder(classname: impl Into<String>) -> EntityBuilder {
+        EntityBuilder::new(classname)
     }
 
     /// Returns `true` if the underlying edict slot is still valid.

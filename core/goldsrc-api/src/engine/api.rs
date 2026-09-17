@@ -151,3 +151,29 @@ pub fn drop_to_floor(entity: i32) -> i32 {
         1
     }
 }
+
+/// Sets a key-value attribute on an entity before or after spawning.
+pub fn entity_key_value(entity: i32, key: &str, value: &str) -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        host_api::host_entity_key_value(entity, key, value)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (entity, key, value);
+        false
+    }
+}
+
+/// Dispatches real GameDLL entity spawn logic.
+pub fn dispatch_spawn(entity: i32) -> i32 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        host_api::host_dispatch_spawn(entity)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = entity;
+        0
+    }
+}

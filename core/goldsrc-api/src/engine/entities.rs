@@ -99,6 +99,12 @@ pub trait EngineEntities: Send + Sync {
     /// Returns the GameDLL result (0 when no GameDLL bridge is available).
     fn dispatch_spawn(&self, index: i32) -> i32;
 
+    /// Sets a key-value attribute on an entity (dispatched via `pfnKeyValue`).
+    /// Returns `true` if handled by the GameDLL.
+    fn entity_key_value(&self, _index: i32, _key: &str, _value: &str) -> bool {
+        false
+    }
+
     /// Forces the real GameDLL's Touch between two entities
     /// (`touched` delivered into `other`, e.g. weapon → player).
     fn dispatch_touch(&self, touched: i32, other: i32);

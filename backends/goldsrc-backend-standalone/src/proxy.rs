@@ -394,6 +394,19 @@ pub fn real_touch()
     })
 }
 
+/// Returns the real GameDLL `KeyValue` pointer, if the DLL is loaded.
+pub fn real_key_value()
+-> Option<unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::KeyValueData)> {
+    PROXY.get().and_then(|lock| {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.loaded {
+            guard.dll_funcs.pfnKeyValue
+        } else {
+            None
+        }
+    })
+}
+
 /// Forward a client connect call to the real game DLL if loaded.
 pub fn forward_client_connect(
     edict: *mut goldsrc_sys::edict_t,

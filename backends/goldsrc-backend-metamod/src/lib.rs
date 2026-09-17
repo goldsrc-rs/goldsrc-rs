@@ -170,6 +170,9 @@ pub fn ensure_game_dll_hooks() {
                 if let Some(touch_fn) = (*dllapi).pfnTouch {
                     goldsrc_core::backend::set_game_dll_touch(touch_fn);
                 }
+                if let Some(kv_fn) = (*dllapi).pfnKeyValue {
+                    goldsrc_core::backend::set_game_dll_key_value(kv_fn);
+                }
             }
         }
     }

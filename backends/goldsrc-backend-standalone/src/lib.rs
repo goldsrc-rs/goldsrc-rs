@@ -434,6 +434,9 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
         if let Some(f) = proxy::real_touch() {
             goldsrc_core::backend::set_game_dll_touch(f);
         }
+        if let Some(f) = proxy::real_key_value() {
+            goldsrc_core::backend::set_game_dll_key_value(f);
+        }
     });
 }
 

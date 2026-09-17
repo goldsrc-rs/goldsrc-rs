@@ -207,9 +207,12 @@ pub fn set_map_name_resolver(resolver: MapNameResolverFn) {
 pub type GamedllSpawnFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> i32;
 pub type GamedllTouchFn =
     unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::edict_t);
+pub type GamedllKeyValueFn =
+    unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::KeyValueData);
 
 static GAME_DLL_SPAWN: std::sync::OnceLock<GamedllSpawnFn> = std::sync::OnceLock::new();
 static GAME_DLL_TOUCH: std::sync::OnceLock<GamedllTouchFn> = std::sync::OnceLock::new();
+static GAME_DLL_KEY_VALUE: std::sync::OnceLock<GamedllKeyValueFn> = std::sync::OnceLock::new();
 
 /// Registers the real GameDLL `DispatchSpawn` (call once after DLL load).
 pub fn set_game_dll_spawn(f: GamedllSpawnFn) {
@@ -219,6 +222,11 @@ pub fn set_game_dll_spawn(f: GamedllSpawnFn) {
 /// Registers the real GameDLL `Touch` (call once after DLL load).
 pub fn set_game_dll_touch(f: GamedllTouchFn) {
     let _ = GAME_DLL_TOUCH.set(f);
+}
+
+/// Registers the real GameDLL `KeyValue` (call once after DLL load).
+pub fn set_game_dll_key_value(f: GamedllKeyValueFn) {
+    let _ = GAME_DLL_KEY_VALUE.set(f);
 }
 
 /// Sets a backend-specific resolver for finding user message IDs.
@@ -237,7 +245,10 @@ pub fn register_user_msg_id(name: &str, id: i32) {
 }
 
 static ACTIVE_MSG_TYPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static ACTIVE_MSG_DEST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static ACTIVE_MSG_RECEIVER: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 static ACTIVE_MSG_STRINGS: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static ACTIVE_MSG_BYTES: LazyLock<Mutex<Vec<u8>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 impl EngineMessages for EngineBackend {
     fn reg_user_msg(&self, name: &str, size: i32) -> i32 {
@@ -281,7 +292,15 @@ impl EngineMessages for EngineBackend {
         edict_index: Option<i32>,
     ) {
         ACTIVE_MSG_TYPE.store(msg_type, std::sync::atomic::Ordering::Relaxed);
+        ACTIVE_MSG_DEST.store(msg_dest, std::sync::atomic::Ordering::Relaxed);
+        ACTIVE_MSG_RECEIVER.store(
+            edict_index.unwrap_or(0),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         if let Ok(mut list) = ACTIVE_MSG_STRINGS.lock() {
+            list.clear();
+        }
+        if let Ok(mut list) = ACTIVE_MSG_BYTES.lock() {
             list.clear();
         }
 
@@ -308,9 +327,33 @@ impl EngineMessages for EngineBackend {
     }
 
     fn message_end(&self) {
-        let _msg_type = ACTIVE_MSG_TYPE.swap(0, std::sync::atomic::Ordering::Relaxed);
+        let msg_type = ACTIVE_MSG_TYPE.swap(0, std::sync::atomic::Ordering::Relaxed);
+        let _msg_dest = ACTIVE_MSG_DEST.swap(0, std::sync::atomic::Ordering::Relaxed);
+        let _receiver = ACTIVE_MSG_RECEIVER.swap(0, std::sync::atomic::Ordering::Relaxed);
         if let Ok(mut list) = ACTIVE_MSG_STRINGS.lock() {
             list.clear();
+        }
+        let payload = if let Ok(mut list) = ACTIVE_MSG_BYTES.lock() {
+            std::mem::take(&mut *list)
+        } else {
+            Vec::new()
+        };
+
+        if msg_type > 0 {
+            let msg_name = if let Ok(map) = USER_MSG_REGISTRY.read() {
+                map.iter()
+                    .find(|(_, id)| **id == msg_type)
+                    .map(|(k, _)| k.clone())
+            } else {
+                None
+            };
+            if let Some(name) = msg_name {
+                let event_name = format!("user_msg_{}", name.to_ascii_lowercase());
+                crate::hooks::dispatcher::emit(crate::host::HostEvent::Custom {
+                    name: &event_name,
+                    payload: &payload,
+                });
+            }
         }
 
         unsafe {
@@ -319,46 +362,80 @@ impl EngineMessages for EngineBackend {
     }
 
     fn write_byte(&self, val: i32) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_BYTES.lock()
+        {
+            list.push(val as u8);
+        }
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteByte, val);
         }
     }
 
     fn write_char(&self, val: i32) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_BYTES.lock()
+        {
+            list.push(val as u8);
+        }
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteChar, val);
         }
     }
 
     fn write_short(&self, val: i32) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_BYTES.lock()
+        {
+            list.extend_from_slice(&(val as i16).to_le_bytes());
+        }
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteShort, val);
         }
     }
 
     fn write_long(&self, val: i32) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_BYTES.lock()
+        {
+            list.extend_from_slice(&val.to_le_bytes());
+        }
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteLong, val);
         }
     }
 
     fn write_angle(&self, val: f32) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_BYTES.lock()
+        {
+            list.extend_from_slice(&val.to_le_bytes());
+        }
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteAngle, val);
         }
     }
 
     fn write_coord(&self, val: f32) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_BYTES.lock()
+        {
+            list.extend_from_slice(&val.to_le_bytes());
+        }
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteCoord, val);
         }
     }
 
     fn write_string(&self, val: &str) {
-        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
-            && let Ok(mut list) = ACTIVE_MSG_STRINGS.lock()
-        {
-            list.push(val.to_string());
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0 {
+            if let Ok(mut list) = ACTIVE_MSG_STRINGS.lock() {
+                list.push(val.to_string());
+            }
+            if let Ok(mut list) = ACTIVE_MSG_BYTES.lock() {
+                list.extend_from_slice(val.as_bytes());
+                list.push(0);
+            }
         }
 
         unsafe {
@@ -379,6 +456,11 @@ impl EngineMessages for EngineBackend {
     }
 
     fn write_entity(&self, val: i32) {
+        if ACTIVE_MSG_TYPE.load(std::sync::atomic::Ordering::Relaxed) > 0
+            && let Ok(mut list) = ACTIVE_MSG_BYTES.lock()
+        {
+            list.extend_from_slice(&val.to_le_bytes());
+        }
         unsafe {
             call_engfunc!((self.engfuncs)().pfnWriteEntity, val);
         }
@@ -866,6 +948,38 @@ impl EngineEntities for EngineBackend {
                 _ => {
                     log::debug!(target: CORE, "dispatch_touch({touched},{other}): no GameDLL bridge");
                 }
+            }
+        }
+    }
+
+    fn entity_key_value(&self, index: i32, key: &str, value: &str) -> bool {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            let pent = match funcs.pfnPEntityOfEntIndex {
+                Some(f) => f(index),
+                None => return false,
+            };
+            if pent.is_null() {
+                return false;
+            }
+
+            let classname = self.entity_classname(index).unwrap_or_default();
+            let c_class = std::ffi::CString::new(classname).unwrap_or_default();
+            let c_key = std::ffi::CString::new(key).unwrap_or_default();
+            let c_val = std::ffi::CString::new(value).unwrap_or_default();
+
+            let mut kvd = goldsrc_sys::KeyValueData {
+                szClassName: c_class.as_ptr(),
+                szKeyName: c_key.as_ptr(),
+                szValue: c_val.as_ptr(),
+                fHandled: 0,
+            };
+
+            if let Some(kv_fn) = GAME_DLL_KEY_VALUE.get() {
+                kv_fn(pent, &mut kvd);
+                kvd.fHandled != 0
+            } else {
+                false
             }
         }
     }

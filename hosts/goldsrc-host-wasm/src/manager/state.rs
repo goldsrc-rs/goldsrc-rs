@@ -123,6 +123,9 @@ impl api::Host for HostState {
     fn host_drop_to_floor(&mut self, index: i32) -> i32 {
         self.engine.drop_to_floor(index)
     }
+    fn host_entity_key_value(&mut self, index: i32, key: String, value: String) -> bool {
+        self.engine.entity_key_value(index, &key, &value)
+    }
 
     fn host_player_name(&mut self, index: i32) -> Option<String> {
         if !(1..=32).contains(&index) {
