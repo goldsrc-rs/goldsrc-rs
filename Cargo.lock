@@ -601,7 +601,7 @@ dependencies = [
  "toml",
  "wasmtime",
  "wit-component 0.258.0",
- "wit-parser 0.258.0",
+ "wit-parser 0.259.0",
 ]
 
 [[package]]
