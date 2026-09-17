@@ -56,6 +56,12 @@ pub const FRAMEWORK_NAME: &str = "goldsrc";
 /// Standard plugins directory name.
 pub const PLUGINS_DIR_NAME: &str = "plugins";
 
+/// Standard backend binaries library directory name (`lib/`, replacing legacy `bin/`).
+pub const LIB_DIR_NAME: &str = "lib";
+
+/// Standard bundles directory name.
+pub const BUNDLES_DIR_NAME: &str = "bundles";
+
 /// Standard configs directory name.
 pub const CONFIGS_DIR_NAME: &str = "configs";
 

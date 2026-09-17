@@ -1,10 +1,12 @@
 //! System and plugin configuration schemas (`goldsrc.toml` and `plugins.toml`).
 
 pub mod adapter;
+pub mod autonomous;
 pub mod host;
 pub mod plugins;
 
 pub use adapter::ConfigBinder;
+pub use autonomous::{SelfHealingConfigEngine, deep_merge_toml};
 
 pub use host::{
     CoreConfig, DEFAULT_COMMAND_EPOCH_DEADLINE, DEFAULT_DEBOUNCE_MS, DEFAULT_EVENT_EPOCH_DEADLINE,

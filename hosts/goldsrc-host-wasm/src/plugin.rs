@@ -68,6 +68,9 @@ pub struct PluginMetadata {
     /// Target subfolder or bundle directory within `plugins/` (e.g. `test_suite`, `admin_system`).
     #[serde(default)]
     pub bundle: Option<String>,
+    /// Architectural component role within the bundle.
+    #[serde(default)]
+    pub role: goldsrc_api::bundle::ComponentRole,
     /// Registered system names (from `#[plugin(system = ...)]`).
     #[serde(default)]
     pub systems: Vec<String>,

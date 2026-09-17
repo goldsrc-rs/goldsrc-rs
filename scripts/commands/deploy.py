@@ -68,9 +68,9 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
     key_name = "gamedll" if is_windows else "gamedll_linux"
 
     if is_windows:
-        expected_val = f"goldsrc\\bin\\{dest_name}"
+        expected_val = f"goldsrc\\lib\\{dest_name}"
     else:
-        expected_val = f"goldsrc/bin/{dest_name}"
+        expected_val = f"goldsrc/lib/{dest_name}"
 
     expected_line = f'{key_name} "{expected_val}"'
 
@@ -124,13 +124,13 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
     dest_name = get_dest_name(backend, target)
 
     if backend == "standalone":
-        # Standalone lives directly under cstrike/goldsrc/bin/ (no addons/ wrapper)
+        # Standalone lives directly under cstrike/goldsrc/lib/ (no addons/ wrapper)
         mod_dir = game_path / DEFAULT_MOD
         if not mod_dir.exists():
             mod_dir = game_path
-        plugin_dir = mod_dir / FRAMEWORK_NAME / "bin"
+        plugin_dir = mod_dir / FRAMEWORK_NAME / "lib"
     else:
-        # Metamod lives under cstrike/addons/goldsrc/bin/
+        # Metamod lives under cstrike/addons/goldsrc/lib/
         addons_dir = game_path / DEFAULT_MOD / ADDONS_DIR_NAME
         if not addons_dir.exists():
             addons_dir = game_path / ADDONS_DIR_NAME
@@ -141,7 +141,7 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
                 print("\n-> To deploy with Metamod, ensure Metamod-r/Metamod is installed on your server.", file=sys.stderr)
                 print("-> Alternatively, use Standalone backend without Metamod: python -m scripts deploy --backend standalone", file=sys.stderr)
                 sys.exit(1)
-        plugin_dir = addons_dir / FRAMEWORK_NAME / "bin"
+        plugin_dir = addons_dir / FRAMEWORK_NAME / "lib"
 
     plugin_dir.mkdir(parents=True, exist_ok=True)
     dest_path = plugin_dir / dest_name
@@ -185,7 +185,7 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
         metamod_dir = addons_dir / "metamod"
         plugins_ini = metamod_dir / "plugins.ini"
         prefix = get_platform_prefix(target)
-        expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
+        expected_line = f"{prefix} addons\\goldsrc\\lib\\{dest_name}"
 
         # If addons/metamod exists but plugins.ini is not created yet, create it automatically
         if not plugins_ini.exists():
@@ -202,7 +202,7 @@ def deploy_plugin(dll_path: Path, game_path: Path, backend: str = "metamod", tar
 
         content = plugins_ini.read_text(encoding="utf-8")
         prefix = get_platform_prefix(target)
-        expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
+        expected_line = f"{prefix} addons\\goldsrc\\lib\\{dest_name}"
 
         lines = []
         updated = False
@@ -337,7 +337,7 @@ def verify_deploy(
             content = liblist_path.read_text(encoding="utf-8")
             is_windows = "windows" in target
             key_name = "gamedll" if is_windows else "gamedll_linux"
-            expected_val = f"goldsrc\\bin\\{dest_name}" if is_windows else f"goldsrc/bin/{dest_name}"
+            expected_val = f"goldsrc\\lib\\{dest_name}" if is_windows else f"goldsrc/lib/{dest_name}"
             expected_line = f'{key_name} "{expected_val}"'
 
             first_active_gamedll = None
@@ -366,7 +366,7 @@ def verify_deploy(
         else:
             content = plugins_ini.read_text(encoding="utf-8")
             prefix = get_platform_prefix(target)
-            expected_line = f"{prefix} addons\\goldsrc\\bin\\{dest_name}"
+            expected_line = f"{prefix} addons\\goldsrc\\lib\\{dest_name}"
 
             found = any(expected_line in line and not line.strip().startswith(";") for line in content.split("\n"))
             if found:

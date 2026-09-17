@@ -68,6 +68,11 @@ pub fn generate_manifest_toml(attr: &PluginAttr, command_defs: &[CommandDefInfo]
         None => String::new(),
     };
 
+    let role_field = match &attr.role {
+        Some(r) => format!("role = \"{}\"\n", toml_escape(r)),
+        None => String::new(),
+    };
+
     let lifecycle_toml = format!(
         "[lifecycle]\nload = \"{}\"\nunload = \"{}\"\n",
         toml_escape(&attr.load_time),
@@ -75,7 +80,7 @@ pub fn generate_manifest_toml(attr: &PluginAttr, command_defs: &[CommandDefInfo]
     );
 
     format!(
-        "[plugin]\nname = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\ndescription = \"{}\"\nurl = \"{}\"\nlicense = \"{}\"\n{}{}{}{}{}",
+        "[plugin]\nname = \"{}\"\nversion = \"{}\"\nauthor = \"{}\"\ndescription = \"{}\"\nurl = \"{}\"\nlicense = \"{}\"\n{}{}{}{}{}{}",
         toml_escape(&attr.name),
         toml_escape(&attr.version),
         toml_escape(&attr.author),
@@ -83,6 +88,7 @@ pub fn generate_manifest_toml(attr: &PluginAttr, command_defs: &[CommandDefInfo]
         toml_escape(&attr.url),
         toml_escape(&attr.license),
         bundle_field,
+        role_field,
         requires_toml,
         permissions_toml,
         lifecycle_toml,

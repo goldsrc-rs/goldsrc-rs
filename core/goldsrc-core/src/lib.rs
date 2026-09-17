@@ -2,6 +2,7 @@
 
 pub mod api_registry;
 pub mod backend;
+pub mod bundle;
 pub mod chat;
 #[cfg(feature = "cli")]
 pub mod cli;
@@ -25,12 +26,13 @@ pub mod timer;
 pub mod watcher;
 
 pub use ::log;
+pub use bundle::{BrokerError, BundleFsSandbox, BundleMessageBroker, SandboxError};
 pub use chat::process_chat_message;
 pub use combat::{CombatBridge, CombatTier};
 pub use config::plugins as plugins_config;
 pub use config::{
     ConfigBinder, HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup,
-    PluginsConfig,
+    PluginsConfig, SelfHealingConfigEngine,
 };
 pub use host::{EventPayload, HostEvent, HostRuntime, PlayerEvent};
 pub use i18n::I18nService;

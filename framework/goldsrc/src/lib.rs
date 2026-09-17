@@ -307,6 +307,10 @@ pub use ecs::*;
 pub use goldsrc_api as api;
 pub use goldsrc_api;
 pub use goldsrc_api::bindings;
+pub use goldsrc_api::bundle as bundle_api;
+pub use goldsrc_api::bundle::{
+    BundleComponentSpec, BundleInfo, BundleManifest, BundleValidationError, ComponentRole,
+};
 pub use goldsrc_api::engine_api as engine;
 pub use goldsrc_api::hud as hud_api;
 pub use goldsrc_api::menu as menu_api;
@@ -338,7 +342,8 @@ pub use goldsrc_api::{
 };
 pub use goldsrc_macros as macros;
 pub use goldsrc_macros::{
-    ConfigModel, command, event, menu_action, on_frame, on_load, on_unload, plugin, system,
+    ConfigModel, bundle, command, event, menu_action, on_frame, on_load, on_unload, permission,
+    permissions, plugin, requires, role, system,
 };
 
 /// Convenient prelude module for plugin authors.

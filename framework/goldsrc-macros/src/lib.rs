@@ -34,6 +34,12 @@ pub fn bundle(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("bundle")
 }
 
+/// Helper attribute for declaring component role (`#[role("coordinator")]` or `#[role(coordinator)]`).
+#[proc_macro_attribute]
+pub fn role(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("role")
+}
+
 /// Helper attribute for declaring plugin / command requirements (`#[requires("plugin@^1.0")]`).
 #[proc_macro_attribute]
 pub fn requires(_attr: TokenStream, _item: TokenStream) -> TokenStream {

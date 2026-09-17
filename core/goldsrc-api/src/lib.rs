@@ -9,6 +9,8 @@ pub mod action;
 pub mod auth;
 /// Generated WASM bindings (wasm32 only).
 pub mod bindings;
+/// Autonomous Bundle Component Model and Metadata Abstractions.
+pub mod bundle;
 /// In-game chat interception, formatting, and packet splitting.
 pub mod chat;
 /// Core player and client domain abstractions, states, and typestate guards.
@@ -62,6 +64,9 @@ pub mod types;
 
 pub use action::{Action, CancellationToken, PlayerAction};
 pub use auth::{Auth, CapExpr, CapabilityRegistry, CheckCapability};
+pub use bundle::{
+    BundleComponentSpec, BundleInfo, BundleManifest, BundleValidationError, ComponentRole,
+};
 pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
 pub use client::{
     Alive, AsLangCode, Bot, Client, ClientExt, ClientKind, Connected, ConnectedClient,

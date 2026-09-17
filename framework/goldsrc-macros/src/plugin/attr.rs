@@ -42,6 +42,7 @@ pub fn parse_plugin_and_helpers(
         url: cargo_url,
         license: cargo_license,
         bundle: None,
+        role: None,
         requires: Vec::new(),
         permissions: Vec::new(),
         load_time: "anytime".to_string(),
@@ -93,6 +94,20 @@ pub fn parse_plugin_and_helpers(
                 let _ = meta_list.parse_nested_meta(|meta| {
                     if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
                         out.bundle = Some(s.value());
+                    }
+                    Ok(())
+                });
+            }
+            false
+        } else if attr.path().is_ident("role") {
+            if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                out.role = Some(s.value().to_ascii_lowercase());
+            } else if let Ok(meta_list) = attr.meta.require_list() {
+                let _ = meta_list.parse_nested_meta(|meta| {
+                    if let Ok(Lit::Str(s)) = meta.value()?.parse::<Lit>() {
+                        out.role = Some(s.value().to_ascii_lowercase());
+                    } else if let Some(id) = meta.path.get_ident() {
+                        out.role = Some(id.to_string().to_ascii_lowercase());
                     }
                     Ok(())
                 });
@@ -274,11 +289,23 @@ fn apply_kv_meta(
             ));
         }
         out.bundle = Some(value);
+    } else if ident == "role" {
+        let valid_roles = ["coordinator", "service", "feature", "ui", "peer"];
+        let lower = value.to_ascii_lowercase();
+        if !valid_roles.contains(&lower.as_str()) {
+            return Err(syn::Error::new_spanned(
+                &nv.value,
+                format!(
+                    "invalid #[plugin(role = \"{value}\")]: expected one of 'coordinator', 'service', 'feature', 'ui', 'peer'"
+                ),
+            ));
+        }
+        out.role = Some(lower);
     } else {
         return Err(syn::Error::new_spanned(
             &nv.path,
             format!(
-                "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url/repository, license, bundle, requires, permissions"
+                "unknown #[plugin] attribute '{ident}'; supported: name, version, author, description, url/repository, license, bundle, role, requires, permissions"
             ),
         ));
     }

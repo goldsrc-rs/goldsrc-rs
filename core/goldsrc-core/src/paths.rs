@@ -53,6 +53,64 @@ impl PathResolver {
         Self::framework_dir(backend).join(PLUGINS_DIR_NAME)
     }
 
+    /// Returns possible backend shared library directory paths (`lib/`) in order of preference.
+    pub fn lib_dirs(backend: BackendType) -> Vec<PathBuf> {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+        let mut dirs = Vec::new();
+
+        let rel_path = Self::framework_dir(backend).join(goldsrc_api::consts::LIB_DIR_NAME);
+        if let Some(ref base) = exe_dir {
+            dirs.push(base.join(&rel_path));
+            let mut alt_rel = PathBuf::new();
+            if backend == BackendType::Metamod {
+                alt_rel.push(ADDONS_DIR_NAME);
+            }
+            alt_rel.push(FRAMEWORK_NAME);
+            alt_rel.push(goldsrc_api::consts::LIB_DIR_NAME);
+            dirs.push(base.join(&alt_rel));
+        }
+
+        dirs.push(rel_path);
+        dirs
+    }
+
+    /// Returns the first existing shared library directory (`lib/`), or the primary default path.
+    pub fn existing_lib_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::lib_dirs(backend) {
+            if dir.exists() {
+                return dir;
+            }
+        }
+        Self::framework_dir(backend).join(goldsrc_api::consts::LIB_DIR_NAME)
+    }
+
+    /// Returns possible bundle directory paths in order of preference.
+    pub fn bundle_dirs(backend: BackendType) -> Vec<PathBuf> {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+        let mut dirs = Vec::new();
+
+        let rel_path = Self::framework_dir(backend).join(goldsrc_api::consts::BUNDLES_DIR_NAME);
+        if let Some(ref base) = exe_dir {
+            dirs.push(base.join(&rel_path));
+        }
+        dirs.push(rel_path);
+        dirs
+    }
+
+    /// Returns the first existing bundle directory, or the primary default path.
+    pub fn existing_bundle_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::bundle_dirs(backend) {
+            if dir.exists() {
+                return dir;
+            }
+        }
+        Self::framework_dir(backend).join(goldsrc_api::consts::BUNDLES_DIR_NAME)
+    }
+
     /// Returns possible config directory paths in order of preference.
     pub fn config_dirs(backend: BackendType) -> Vec<PathBuf> {
         let exe_dir = std::env::current_exe()

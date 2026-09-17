@@ -11,7 +11,7 @@
 //! ```
 //! to:
 //! ```text
-//! gamedll "addons/goldsrc/bin/goldsrc_standalone.dll"
+//! gamedll "addons/goldsrc/lib/goldsrc_standalone.dll"
 //! ```
 
 mod commands;

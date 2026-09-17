@@ -10,6 +10,7 @@ pub struct PluginAttr {
     pub url: String,
     pub license: String,
     pub bundle: Option<String>,
+    pub role: Option<String>,
     pub requires: Vec<String>,
     pub permissions: Vec<String>,
     pub load_time: String,
