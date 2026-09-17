@@ -52,7 +52,7 @@ wasmtime = { version = "48.0", default-features = false, features = [
     "runtime",
     "std",
 ] }
-wit-bindgen = "0.61.1"
+wit-bindgen = "0.62.0"
 wit-component = "0.258.0"
 wit-parser = "0.258.0"
 notify = "8.0"
