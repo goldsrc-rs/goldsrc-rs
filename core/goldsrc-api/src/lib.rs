@@ -63,7 +63,9 @@ pub mod timer;
 pub mod types;
 
 pub use action::{Action, CancellationToken, PlayerAction};
-pub use auth::{Auth, CapExpr, CapabilityRegistry, CheckCapability};
+pub use auth::{
+    AdminCaps, Auth, CapExpr, CapabilityRegistry, CheckCapability, ValidationResult, VipCaps,
+};
 pub use bundle::{
     BundleComponentSpec, BundleInfo, BundleManifest, BundleValidationError, ComponentRole,
 };
