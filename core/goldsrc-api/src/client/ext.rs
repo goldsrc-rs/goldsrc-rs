@@ -25,6 +25,18 @@ pub trait ClientExt: EntityExt {
     fn client_kind(&self) -> ClientKind;
     /// Returns the client's full network and authentication identity.
     fn identity(&self) -> crate::client::PlayerIdentity;
+    /// Returns the client's canonical GUID if authenticated.
+    fn guid(&self) -> Option<crate::client::PlayerGuid> {
+        self.identity().guid()
+    }
+    /// Returns the client's SteamID if authenticated via Steam.
+    fn steam_id(&self) -> Option<crate::client::SteamId> {
+        self.identity().steam_id()
+    }
+    /// Returns the client's authentication state.
+    fn auth_state(&self) -> crate::client::AuthState {
+        self.identity().auth_state
+    }
     /// Returns the client's SteamID / AuthID string (e.g. "STEAM_0:1:12345678").
     fn auth_id(&self) -> String {
         self.identity().auth_id().to_string()
@@ -127,7 +139,8 @@ impl ClientExt for Client {
             crate::client::PlayerIdentity {
                 slot: self.index,
                 user_id: 0,
-                steam_id: crate::client::SteamId::Pending,
+                raw_auth_id: "STEAM_ID_PENDING".to_string(),
+                auth_state: crate::client::AuthState::Pending,
                 ip: None,
                 ping: 0,
                 packet_loss: 0,
@@ -145,7 +158,8 @@ impl ClientExt for Client {
             crate::client::PlayerIdentity {
                 slot: self.index,
                 user_id: 0,
-                steam_id: crate::client::SteamId::Pending,
+                raw_auth_id: "STEAM_ID_PENDING".to_string(),
+                auth_state: crate::client::AuthState::Pending,
                 ip: None,
                 ping: 0,
                 packet_loss: 0,

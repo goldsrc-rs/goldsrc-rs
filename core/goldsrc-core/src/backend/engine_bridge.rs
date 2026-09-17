@@ -826,17 +826,72 @@ impl EngineEntities for EngineBackend {
         }
 
         let steam_id_raw = self.player_auth_id(index);
-        let steam_id = match steam_id_raw {
-            Some(raw) => goldsrc_api::client::SteamId::parse(&raw),
-            None if is_bot => goldsrc_api::client::SteamId::Bot,
-            None if is_hltv => goldsrc_api::client::SteamId::Server,
-            None => goldsrc_api::client::SteamId::Pending,
+        let (raw_auth_id, auth_state) = match steam_id_raw {
+            Some(raw) => {
+                let trimmed = raw.trim();
+                let state =
+                    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("STEAM_ID_PENDING") {
+                        goldsrc_api::client::AuthState::Pending
+                    } else if is_bot || trimmed.eq_ignore_ascii_case("BOT") {
+                        let bot_name = self
+                            .player_name(index)
+                            .unwrap_or_else(|| format!("Bot #{}", index));
+                        goldsrc_api::client::AuthState::Authenticated(
+                            goldsrc_api::client::AuthSubject::bot(bot_name),
+                        )
+                    } else if is_hltv || trimmed.eq_ignore_ascii_case("HLTV") {
+                        goldsrc_api::client::AuthState::Authenticated(
+                            goldsrc_api::client::AuthSubject::hltv(),
+                        )
+                    } else if trimmed.eq_ignore_ascii_case("STEAM_ID_LAN")
+                        || trimmed.eq_ignore_ascii_case("VALVE_ID_LAN")
+                    {
+                        let ip: std::net::IpAddr = self
+                            .player_ip(index)
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or_else(|| "127.0.0.1".parse().unwrap());
+                        goldsrc_api::client::AuthState::Authenticated(
+                            goldsrc_api::client::AuthSubject::lan(ip),
+                        )
+                    } else if let Some(steam_id) = goldsrc_api::client::SteamId::parse(trimmed) {
+                        goldsrc_api::client::AuthState::Authenticated(
+                            goldsrc_api::client::AuthSubject::steam(steam_id),
+                        )
+                    } else {
+                        goldsrc_api::client::AuthState::Authenticated(
+                            goldsrc_api::client::AuthSubject::external("custom", trimmed),
+                        )
+                    };
+                (raw, state)
+            }
+            None if is_bot => {
+                let bot_name = self
+                    .player_name(index)
+                    .unwrap_or_else(|| format!("Bot #{}", index));
+                (
+                    "BOT".to_string(),
+                    goldsrc_api::client::AuthState::Authenticated(
+                        goldsrc_api::client::AuthSubject::bot(bot_name),
+                    ),
+                )
+            }
+            None if is_hltv => (
+                "HLTV".to_string(),
+                goldsrc_api::client::AuthState::Authenticated(
+                    goldsrc_api::client::AuthSubject::hltv(),
+                ),
+            ),
+            None => (
+                "STEAM_ID_PENDING".to_string(),
+                goldsrc_api::client::AuthState::Pending,
+            ),
         };
 
         goldsrc_api::client::PlayerIdentity {
             slot: index,
             user_id: self.player_user_id(index),
-            steam_id,
+            raw_auth_id,
+            auth_state,
             ip: self.player_ip(index),
             ping,
             packet_loss: loss,

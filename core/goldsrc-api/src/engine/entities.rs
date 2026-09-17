@@ -52,14 +52,25 @@ pub trait EngineEntities: Send + Sync {
 
     /// Comprehensive player identity record.
     fn player_identity(&self, index: i32) -> crate::client::PlayerIdentity {
+        let raw_auth = self
+            .player_auth_id(index)
+            .unwrap_or_else(|| "STEAM_ID_PENDING".to_string());
+        let auth_state = if raw_auth == "STEAM_ID_PENDING" || raw_auth.is_empty() {
+            crate::client::AuthState::Pending
+        } else if let Some(steam_id) = crate::client::SteamId::parse(&raw_auth) {
+            crate::client::AuthState::Authenticated(crate::client::AuthSubject::steam(steam_id))
+        } else {
+            crate::client::AuthState::Authenticated(crate::client::AuthSubject::external(
+                "custom",
+                raw_auth.clone(),
+            ))
+        };
+
         crate::client::PlayerIdentity {
             slot: index,
             user_id: self.player_user_id(index),
-            steam_id: self
-                .player_auth_id(index)
-                .as_deref()
-                .map(crate::client::SteamId::parse)
-                .unwrap_or_default(),
+            raw_auth_id: raw_auth,
+            auth_state,
             ip: self.player_ip(index),
             ping: 0,
             packet_loss: 0,

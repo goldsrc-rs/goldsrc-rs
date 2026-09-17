@@ -2,6 +2,7 @@
 members = [
     "core/goldsrc-sys",
     "core/goldsrc-api",
+    "core/goldsrc-spi",
     "core/goldsrc-core",
     "backends/goldsrc-backend-metamod",
     "backends/goldsrc-backend-standalone",
@@ -19,6 +20,7 @@ members = [
 default-members = [
     "core/goldsrc-sys",
     "core/goldsrc-api",
+    "core/goldsrc-spi",
     "core/goldsrc-core",
     "backends/goldsrc-backend-metamod",
     "backends/goldsrc-backend-standalone",
@@ -39,6 +41,7 @@ repository = "https://github.com/goldsrc-rs/goldsrc-rs"
 [workspace.dependencies]
 goldsrc-sys = { path = "core/goldsrc-sys", version = "0.17.0" }
 goldsrc-api = { path = "core/goldsrc-api", version = "0.17.0" }
+goldsrc-spi = { path = "core/goldsrc-spi", version = "0.17.0" }
 goldsrc-core = { path = "core/goldsrc-core", version = "0.17.0" }
 goldsrc-backend-metamod = { path = "backends/goldsrc-backend-metamod", version = "0.17.0" }
 goldsrc-backend-standalone = { path = "backends/goldsrc-backend-standalone", version = "0.17.0" }

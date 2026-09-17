@@ -241,7 +241,8 @@ impl HostRuntime {
                 goldsrc_api::client::PlayerIdentity {
                     slot: index,
                     user_id: 0,
-                    steam_id: goldsrc_api::client::SteamId::Pending,
+                    raw_auth_id: "STEAM_ID_PENDING".to_string(),
+                    auth_state: goldsrc_api::client::AuthState::Pending,
                     ip: None,
                     ping: 0,
                     packet_loss: 0,
