@@ -60,7 +60,7 @@ def update_liblist_gam(game_path: Path, dest_name: str, target: str) -> None:
     if not liblist_path.exists():
         print(f"\nWarning: liblist.gam not found at {liblist_path}", file=sys.stderr)
         print("Set gamedll in liblist.gam manually:")
-        print(f"  gamedll \"goldsrc\\bin\\{dest_name}\"")
+        print(f'  gamedll "goldsrc\\lib\\{dest_name}"')
         return
 
     content = liblist_path.read_text(encoding="utf-8")
@@ -283,7 +283,7 @@ def verify_deploy(
             addons_dir = game_path / ADDONS_DIR_NAME
         goldsrc_dir = addons_dir / FRAMEWORK_NAME
 
-    dest_path = goldsrc_dir / "bin" / dest_name
+    dest_path = goldsrc_dir / "lib" / dest_name
     wasm_target_dir = goldsrc_dir / "plugins"
 
     all_ok = True

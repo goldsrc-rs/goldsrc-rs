@@ -1,17 +1,17 @@
-//! Engine entity queries, property manipulation, and GameDLL spawn/touch hooks.
-
 use super::EngineBackend;
 use crate::{call_engfunc, call_engfunc_ret};
+use goldsrc_api::client::{AuthState, AuthSubject, Player, PlayerIdentity};
+use goldsrc_api::consts::FL_CLIENT;
 use goldsrc_api::consts::log_targets::CORE;
 use goldsrc_api::cvar::CvarEngine;
 use goldsrc_api::entity::EntitySpawner;
-use goldsrc_spi::engine::{EngineEntities, EngineMessages};
+use goldsrc_api::{Angles, Armor, Health, Origin, Velocity};
+use goldsrc_spi::engine::{EngineEntities, EngineMessages, MessageDest};
+use goldsrc_sys::{KeyValueData, edict_t, ffi};
 
-pub type GamedllSpawnFn = unsafe extern "C" fn(*mut goldsrc_sys::edict_t) -> i32;
-pub type GamedllTouchFn =
-    unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::edict_t);
-pub type GamedllKeyValueFn =
-    unsafe extern "C" fn(*mut goldsrc_sys::edict_t, *mut goldsrc_sys::KeyValueData);
+pub type GamedllSpawnFn = unsafe extern "C" fn(*mut edict_t) -> i32;
+pub type GamedllTouchFn = unsafe extern "C" fn(*mut edict_t, *mut edict_t);
+pub type GamedllKeyValueFn = unsafe extern "C" fn(*mut edict_t, *mut KeyValueData);
 
 static GAME_DLL_SPAWN: std::sync::OnceLock<GamedllSpawnFn> = std::sync::OnceLock::new();
 static GAME_DLL_TOUCH: std::sync::OnceLock<GamedllTouchFn> = std::sync::OnceLock::new();
@@ -45,7 +45,7 @@ impl EngineEntities for EngineBackend {
             if (1..=32).contains(&index) {
                 // GoldSrc engine: pev->flags & FL_CLIENT (1 << 3 = 8).
                 // Edict is a connected client only if FL_CLIENT is set.
-                if pedict.v.flags & goldsrc_api::consts::FL_CLIENT == 0 {
+                if pedict.v.flags & FL_CLIENT == 0 {
                     return false;
                 }
                 if pedict.v.netname != 0 {
@@ -57,7 +57,7 @@ impl EngineEntities for EngineBackend {
                     let buffer = get_infokey(pedict);
                     let key = std::ffi::CString::new("name").unwrap_or_default();
                     let val_ptr = infokey_val(buffer, key.as_ptr());
-                    if let Some(name_str) = goldsrc_sys::ffi::cstr_to_string_bounded(val_ptr, 64) {
+                    if let Some(name_str) = ffi::cstr_to_string_bounded(val_ptr, 64) {
                         return !name_str.is_empty();
                     }
                 }
@@ -79,7 +79,7 @@ impl EngineEntities for EngineBackend {
                 && let Some(sz_from_idx) = funcs.pfnSzFromIndex
             {
                 let str_ptr = sz_from_idx(classname_offset as i32);
-                if let Some(s) = goldsrc_sys::ffi::cstr_to_string_bounded(str_ptr, 64) {
+                if let Some(s) = ffi::cstr_to_string_bounded(str_ptr, 64) {
                     return Some(s);
                 }
             }
@@ -89,23 +89,18 @@ impl EngineEntities for EngineBackend {
 
     fn entity_health(&self, index: i32) -> f32 {
         self.get_player(index)
-            .map(|e| e.get::<goldsrc_api::Health>().current())
+            .map(|e| e.get::<Health>().current())
             .unwrap_or(0.0)
     }
 
     fn entity_set_health(&self, index: i32, health: f32) {
         if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::Health::current_only(health));
+            e.set(Health::current_only(health));
             // Synchronize HUD health display for human and bot players
             if (1..=32).contains(&index) {
                 let health_msg_id = self.reg_user_msg("Health", 1);
                 if health_msg_id > 0 && health_msg_id != 255 {
-                    self.message_begin(
-                        goldsrc_spi::engine::MessageDest::One as i32,
-                        health_msg_id,
-                        None,
-                        Some(index),
-                    );
+                    self.message_begin(MessageDest::One as i32, health_msg_id, None, Some(index));
                     self.write_byte(health.clamp(0.0, 255.0) as i32);
                     self.message_end();
                 }
@@ -115,29 +110,29 @@ impl EngineEntities for EngineBackend {
 
     fn entity_origin(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.get::<goldsrc_api::Origin>().0.into())
+            .map(|e| e.get::<Origin>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_velocity(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.get::<goldsrc_api::Velocity>().0.into())
+            .map(|e| e.get::<Velocity>().0.into())
             .unwrap_or([0.0; 3])
     }
 
     fn entity_set_velocity(&self, index: i32, vel: [f32; 3]) {
         if let Some(mut e) = self.get_player(index) {
-            e.set(goldsrc_api::Velocity(vel.into()));
+            e.set(Velocity(vel.into()));
         }
     }
 
     fn entity_angles(&self, index: i32) -> [f32; 3] {
         self.get_player(index)
-            .map(|e| e.get::<goldsrc_api::Angles>().0.into())
+            .map(|e| e.get::<Angles>().0.into())
             .unwrap_or([0.0; 3])
     }
 
-    fn player_handle(&self, index: i32) -> Option<goldsrc_api::Player> {
+    fn player_handle(&self, index: i32) -> Option<Player> {
         self.get_player(index)
     }
 
@@ -203,9 +198,6 @@ impl EngineEntities for EngineBackend {
                         return Some(lang.to_lowercase());
                     }
                 }
-            }
-            if let Some(amx_lang) = self.cvar_get_string("amx_language") {
-                return Some(amx_lang.to_lowercase());
             }
             self.cvar_get_string("server_language")
         }
@@ -379,17 +371,12 @@ impl EngineEntities for EngineBackend {
             }
             None if is_hltv => (
                 "HLTV".to_string(),
-                goldsrc_api::client::AuthState::Authenticated(
-                    goldsrc_api::client::AuthSubject::hltv(),
-                ),
+                AuthState::Authenticated(AuthSubject::hltv()),
             ),
-            None => (
-                "STEAM_ID_PENDING".to_string(),
-                goldsrc_api::client::AuthState::Pending,
-            ),
+            None => ("STEAM_ID_PENDING".to_string(), AuthState::Pending),
         };
 
-        goldsrc_api::client::PlayerIdentity {
+        PlayerIdentity {
             slot: index,
             user_id: self.player_user_id(index),
             raw_auth_id,
@@ -404,23 +391,18 @@ impl EngineEntities for EngineBackend {
 
     fn player_armorvalue(&self, index: i32) -> f32 {
         self.get_player(index)
-            .map(|p| p.get::<goldsrc_api::Armor>().value())
+            .map(|p| p.get::<Armor>().value())
             .unwrap_or(0.0)
     }
 
     fn player_set_armorvalue(&self, index: i32, armor: f32) {
         if let Some(mut p) = self.get_player(index) {
-            p.set(goldsrc_api::Armor::new(armor));
+            p.set(Armor::new(armor));
             // Synchronize HUD armor display for human and bot players
             if (1..=32).contains(&index) {
                 let battery_msg_id = self.reg_user_msg("Battery", 2);
                 if battery_msg_id > 0 && battery_msg_id != 255 {
-                    self.message_begin(
-                        goldsrc_spi::engine::MessageDest::One as i32,
-                        battery_msg_id,
-                        None,
-                        Some(index),
-                    );
+                    self.message_begin(MessageDest::One as i32, battery_msg_id, None, Some(index));
                     self.write_short(armor.clamp(0.0, 255.0) as i32);
                     self.message_end();
                 }
@@ -516,7 +498,7 @@ impl EntitySpawner for EngineBackend {
             match (pent, GAME_DLL_SPAWN.get()) {
                 (Some(p), Some(f)) => f(p),
                 _ => {
-                    log::debug!(target: goldsrc_api::consts::log_targets::CORE, "dispatch_spawn({index}): no GameDLL bridge");
+                    log::debug!(target: CORE, "dispatch_spawn({index}): no GameDLL bridge");
                     0
                 }
             }
@@ -540,7 +522,7 @@ impl EntitySpawner for EngineBackend {
             let c_key = std::ffi::CString::new(key).unwrap_or_default();
             let c_val = std::ffi::CString::new(value).unwrap_or_default();
 
-            let mut kvd = goldsrc_sys::KeyValueData {
+            let mut kvd = KeyValueData {
                 szClassName: c_class.as_ptr(),
                 szKeyName: c_key.as_ptr(),
                 szValue: c_val.as_ptr(),

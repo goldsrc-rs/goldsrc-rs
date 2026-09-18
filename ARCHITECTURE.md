@@ -66,6 +66,7 @@ The repository is organized into distinct functional layers:
 goldsrc-rs/
 ├── core/
 │   ├── goldsrc-api/                # Safe guest/host shared domain types, traits, DAG, ECS, and builders
+│   ├── goldsrc-spi/                # Host-side Service Provider Interfaces (pure engine & subsystem traits)
 │   ├── goldsrc-core/               # Host runtime, config, i18n, storage, logging, rule engine, FFI bridge
 │   └── goldsrc-sys/                # Low-level raw FFI bindings to GoldSrc/Metamod headers (unsafe)
 ├── backends/
