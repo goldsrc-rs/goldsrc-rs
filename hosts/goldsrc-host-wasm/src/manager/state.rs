@@ -659,4 +659,13 @@ impl api::Host for HostState {
         crate::manager::register_host_placeholder(&name, &self.plugin_name);
         true
     }
+
+    fn host_is_extension_available(&mut self, name: String, version_req: Option<String>) -> bool {
+        self.engine
+            .is_extension_available(&name, version_req.as_deref())
+    }
+
+    fn host_get_extension_version(&mut self, name: String) -> Option<String> {
+        self.engine.get_extension_version(&name)
+    }
 }

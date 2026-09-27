@@ -197,6 +197,14 @@ interface api {
 
     /// Registers a custom placeholder in the host engine.
     host-register-placeholder: func(name: string, description: string) -> bool;
+
+    /// --- Extension Subsystem API ---
+
+    /// Checks if a named engine extension is available (optionally matching a SemVer constraint).
+    host-is-extension-available: func(name: string, version-req: option<string>) -> bool;
+
+    /// Retrieves the semantic version string of a named extension if registered and active.
+    host-get-extension-version: func(name: string) -> option<string>;
 }
 
 world goldsrc-plugin {

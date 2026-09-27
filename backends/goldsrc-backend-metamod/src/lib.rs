@@ -94,6 +94,7 @@ pub fn init_wasm_host() {
     let engine: std::sync::Arc<dyn goldsrc_spi::engine::Engine> = std::sync::Arc::new(
         goldsrc_core::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE),
     );
+    goldsrc_extension_reapi::init();
     if let Err(e) = goldsrc_core::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Metamod,
         |msg| {

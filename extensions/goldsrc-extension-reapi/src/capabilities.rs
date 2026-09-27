@@ -1,7 +1,7 @@
-//! High-level ReAPI capability flags, version info, and query traits.
+//! ReAPI modular engine extension capabilities and status models.
 //!
 //! Provides type-safe abstractions for detecting and leveraging advanced ReHLDS
-//! and ReGameDLL engine extensions with zero-overhead and transparent fallbacks.
+//! and ReGameDLL engine extensions with zero overhead and transparent fallbacks.
 
 /// Status of ReAPI components detected at runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -52,5 +52,23 @@ pub trait ReGameCapabilities: Send + Sync {
     /// Triggers immediate round restart with given delay.
     fn restart_round(&self, _delay: f32) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reapi_status_is_available() {
+        let mut status = ReApiStatus::default();
+        assert!(!status.is_available());
+
+        status.rehlds_active = true;
+        assert!(status.is_available());
+
+        status.rehlds_active = false;
+        status.regamedll_active = true;
+        assert!(status.is_available());
     }
 }

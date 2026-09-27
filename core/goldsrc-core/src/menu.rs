@@ -659,11 +659,12 @@ mod tests {
     use goldsrc_api::entity::EntitySpawner;
     use goldsrc_api::menu::{MenuItem, MenuStyle};
     use goldsrc_spi::engine::{
-        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
-        TraceResult,
+        EngineConsole, EngineEntities, EngineExtensions, EngineMessages, EnginePhysics,
+        EnginePrecache, EngineSound, TraceResult,
     };
 
     struct MockEngine;
+    impl EngineExtensions for MockEngine {}
     impl EnginePrecache for MockEngine {
         fn precache_model(&self, _s: &str) -> i32 {
             0

@@ -15,4 +15,5 @@ goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
 goldsrc-spi = { workspace = true }
 goldsrc-core = { workspace = true }
+goldsrc-extension-reapi = { workspace = true }
 libloading = { workspace = true }

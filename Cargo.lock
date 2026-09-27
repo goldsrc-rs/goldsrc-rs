@@ -555,6 +555,7 @@ version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
+ "goldsrc-extension-reapi",
  "goldsrc-spi",
  "goldsrc-sys",
  "libc",
@@ -567,6 +568,7 @@ version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
+ "goldsrc-extension-reapi",
  "goldsrc-spi",
  "goldsrc-sys",
  "libloading 0.9.0",
@@ -586,10 +588,24 @@ dependencies = [
  "log",
  "notify",
  "rusqlite",
+ "semver",
  "serde",
  "serde_json",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "goldsrc-extension-reapi"
+version = "0.17.0"
+dependencies = [
+ "goldsrc-api",
+ "goldsrc-core",
+ "goldsrc-spi",
+ "goldsrc-sys",
+ "libc",
+ "log",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -599,6 +615,7 @@ dependencies = [
  "goldsrc-api",
  "goldsrc-spi",
  "log",
+ "semver",
  "serde",
  "thiserror",
  "toml",

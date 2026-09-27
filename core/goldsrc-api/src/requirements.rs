@@ -36,6 +36,19 @@ pub enum Requirement {
     HostVersion { version_req: String },
     /// Engine type requirement (e.g. "goldsrc", "cs16").
     Engine { name: String },
+    /// Requirement for an engine extension (e.g. `ext:reapi`, `ext:rehlds@>=5.21.0`).
+    Extension {
+        name: String,
+        version_req: Option<String>,
+        optional: bool,
+    },
+}
+
+impl Requirement {
+    /// Returns true if this requirement represents an inter-plugin DAG dependency.
+    pub fn is_plugin_dependency(&self) -> bool {
+        matches!(self, Requirement::Plugin { .. })
+    }
 }
 
 impl FromStr for Requirement {
@@ -45,6 +58,28 @@ impl FromStr for Requirement {
         let trimmed = s.trim();
         if trimmed.is_empty() {
             return Err("Empty requirement string".to_string());
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("ext:") {
+            let optional = rest.ends_with('?');
+            let clean = if optional {
+                &rest[..rest.len() - 1]
+            } else {
+                rest
+            };
+            if let Some((name, ver)) = clean.split_once('@') {
+                return Ok(Requirement::Extension {
+                    name: name.trim().to_string(),
+                    version_req: Some(ver.trim().to_string()),
+                    optional,
+                });
+            } else {
+                return Ok(Requirement::Extension {
+                    name: clean.trim().to_string(),
+                    version_req: None,
+                    optional,
+                });
+            }
         }
 
         if let Some(rest) = trimmed.strip_prefix("plugin:") {
@@ -182,5 +217,46 @@ mod tests {
                 name: "screen_fade".to_string()
             }
         );
+
+        assert_eq!(
+            Requirement::from_str("ext:reapi").unwrap(),
+            Requirement::Extension {
+                name: "reapi".to_string(),
+                version_req: None,
+                optional: false
+            }
+        );
+
+        assert_eq!(
+            Requirement::from_str("ext:reapi@>=5.21.0").unwrap(),
+            Requirement::Extension {
+                name: "reapi".to_string(),
+                version_req: Some(">=5.21.0".to_string()),
+                optional: false
+            }
+        );
+
+        assert_eq!(
+            Requirement::from_str("ext:rehlds?").unwrap(),
+            Requirement::Extension {
+                name: "rehlds".to_string(),
+                version_req: None,
+                optional: true
+            }
+        );
+
+        assert_eq!(
+            Requirement::from_str("ext:regamedll@^5.26.0?").unwrap(),
+            Requirement::Extension {
+                name: "regamedll".to_string(),
+                version_req: Some("^5.26.0".to_string()),
+                optional: true
+            }
+        );
+
+        let ext_req = Requirement::from_str("ext:reapi").unwrap();
+        assert!(!ext_req.is_plugin_dependency());
+        let pl_req = Requirement::from_str("plugin:admin_system").unwrap();
+        assert!(pl_req.is_plugin_dependency());
     }
 }

@@ -292,8 +292,8 @@ mod tests {
     use goldsrc_api::cvar::{CvarEngine, CvarFlags};
     use goldsrc_api::entity::EntitySpawner;
     use goldsrc_spi::engine::{
-        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
-        TraceResult,
+        EngineConsole, EngineEntities, EngineExtensions, EngineMessages, EnginePhysics,
+        EnginePrecache, EngineSound, TraceResult,
     };
     use std::sync::Mutex;
 
@@ -307,6 +307,8 @@ mod tests {
         strings: Mutex<Vec<String>>,
         ended: Mutex<usize>,
     }
+
+    impl EngineExtensions for MockNetEngine {}
 
     impl EnginePrecache for MockNetEngine {
         fn precache_model(&self, _s: &str) -> i32 {

@@ -331,3 +331,99 @@ pub fn handle_reload<F: FnMut(&str)>(
         out("[GoldSrc.rs] Usage: grs plugins reload <name|index...> [-a|--all]\n");
     }
 }
+
+pub fn handle_extensions<F: FnMut(&str)>(
+    spec: &CommandSpec,
+    mut parser: lexopt::Parser,
+    mut out: F,
+) {
+    let mut subcommand = None;
+    let mut target_name = None;
+
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Value(val) => {
+                let s = val.to_string_lossy().to_string();
+                if subcommand.is_none() {
+                    subcommand = Some(s);
+                } else if target_name.is_none() {
+                    target_name = Some(s);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let sub = subcommand.as_deref().unwrap_or("list");
+    let registry = crate::extension::extension_registry();
+
+    match sub {
+        "list" | "ls" => {
+            let mut extensions = registry.all();
+            extensions.sort_by(|a, b| a.name().cmp(b.name()));
+            if extensions.is_empty() {
+                out("[GoldSrc.rs] Engine Extensions (0):\n  (No extensions registered)\n");
+                return;
+            }
+            out(&format!(
+                "[GoldSrc.rs] Engine Extensions ({}):\n",
+                extensions.len()
+            ));
+            out(&format!(
+                "  {:<12} {:<10} {:<10} {}\n",
+                "NAME", "STATUS", "VERSION", "DESCRIPTION"
+            ));
+            out(&format!(
+                "  {:-<12} {:-<10} {:-<10} {:-<30}\n",
+                "", "", "", ""
+            ));
+            for ext in extensions {
+                let status_str = if ext.is_available() {
+                    "ACTIVE"
+                } else {
+                    "DISABLED"
+                };
+                out(&format!(
+                    "  {:<12} {:<10} {:<10} {}\n",
+                    ext.name(),
+                    status_str,
+                    ext.version(),
+                    ext.description()
+                ));
+            }
+        }
+        "info" => {
+            let Some(name) = target_name else {
+                out("[GoldSrc.rs] Usage: grs extensions info <name>\n");
+                return;
+            };
+            if let Some(ext) = registry.get(&name) {
+                let status_str = if ext.is_available() {
+                    "ACTIVE"
+                } else {
+                    "DISABLED"
+                };
+                out(&format!("[GoldSrc.rs] Extension: {}\n", ext.name()));
+                out(&format!("  Name:        {}\n", ext.name()));
+                out(&format!("  Status:      {}\n", status_str));
+                out(&format!("  Version:     {}\n", ext.version()));
+                out(&format!("  Description: {}\n", ext.description()));
+            } else {
+                out(&format!(
+                    "[GoldSrc.rs] Error: Engine extension '{}' not found.\n",
+                    name
+                ));
+            }
+        }
+        unknown => {
+            out(&format!(
+                "[GoldSrc.rs] Unknown extensions subcommand '{}'. Valid: list, info.\n",
+                unknown
+            ));
+        }
+    }
+}

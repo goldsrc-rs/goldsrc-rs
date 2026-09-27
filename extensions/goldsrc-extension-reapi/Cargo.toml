@@ -1,0 +1,21 @@
+[package]
+name = "goldsrc-extension-reapi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Modular ReAPI extension (ReHLDS and ReGameDLL) for GoldSrc.rs"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+goldsrc-api.workspace = true
+goldsrc-core.workspace = true
+goldsrc-spi.workspace = true
+goldsrc-sys.workspace = true
+log = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_LibraryLoader"] }
+
+[target.'cfg(not(windows))'.dependencies]
+libc = "0.2"

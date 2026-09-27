@@ -20,6 +20,7 @@ crossbeam-channel = { workspace = true }
 notify = { workspace = true }
 libloading = { workspace = true }
 thiserror = { workspace = true }
+semver = { workspace = true }
 
 [features]
 default = ["cli"]

@@ -3,6 +3,7 @@
 pub mod console;
 pub mod cvars;
 pub mod entities;
+pub mod extensions;
 pub mod messages;
 pub mod physics;
 pub mod precache;
@@ -11,6 +12,7 @@ pub mod sound;
 pub use console::EngineConsole;
 pub use cvars::EngineCvars;
 pub use entities::EngineEntities;
+pub use extensions::EngineExtensions;
 pub use messages::{EngineMessages, MessageBuilder, MessageDest};
 pub use physics::{EnginePhysics, TraceResult};
 pub use precache::EnginePrecache;
@@ -28,6 +30,7 @@ pub trait Engine:
     + EnginePhysics
     + EngineSound
     + EngineConsole
+    + EngineExtensions
     + Send
     + Sync
 {
@@ -42,6 +45,7 @@ impl<T> Engine for T where
         + EnginePhysics
         + EngineSound
         + EngineConsole
+        + EngineExtensions
         + Send
         + Sync
 {

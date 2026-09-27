@@ -15,6 +15,7 @@ goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
 goldsrc-spi = { workspace = true }
 goldsrc-core = { workspace = true }
+goldsrc-extension-reapi = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Memory", "Win32_Foundation"] }

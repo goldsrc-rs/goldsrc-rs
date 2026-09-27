@@ -365,6 +365,9 @@ impl HostRuntime {
             backend_name
         );
 
+        // Initialize modular engine extensions registry
+        crate::extension::init_default_extensions(backend);
+
         let main_cfg_path = PathResolver::main_config_path(backend);
         log::info!(
             target: log_targets::CORE,
@@ -531,14 +534,22 @@ impl HostRuntime {
             let mut builder = dag.add(rel_name.clone(), path.clone()).phase(tier);
             if let Some(e) = entry {
                 for req in &e.requires {
+                    let parsed_req = req.parse::<goldsrc_api::Requirement>();
+                    let dep_name: &str = match &parsed_req {
+                        Ok(goldsrc_api::Requirement::Plugin { name, .. }) => name.as_str(),
+                        // Non-plugin requirements (ext:*, cvar:*, feature:*, etc.) are environmental, not inter-plugin edges
+                        Ok(_) => continue,
+                        Err(_) => req.as_str(),
+                    };
                     let target_rel = discovered_plugins
                         .iter()
                         .find(|(d_name, _)| {
-                            d_name == req
-                                || d_name.rsplit_once('/').map(|(_, b)| b).unwrap_or(d_name) == req
+                            d_name == dep_name
+                                || d_name.rsplit_once('/').map(|(_, b)| b).unwrap_or(d_name)
+                                    == dep_name
                         })
                         .map(|(d_name, _)| d_name.clone())
-                        .unwrap_or_else(|| req.clone());
+                        .unwrap_or_else(|| dep_name.to_string());
                     builder = builder.after(target_rel);
                 }
             }
@@ -683,9 +694,11 @@ impl HostRuntime {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             let _ = guard.storage.flush();
             guard.paused_plugins.clear();
+            let map_name = guard.current_map.clone();
             guard.current_map.clear();
             guard.rule_orchestrator.on_map_change();
             guard.sessions.clear();
+            crate::extension::extension_registry().on_change_level(&map_name);
         }
         crate::logging::flush();
     }
@@ -1055,6 +1068,9 @@ impl HostRuntime {
                 manager.call_on_frame();
             }
         });
+
+        // Broadcast physics frame tick to modular engine extensions
+        crate::extension::extension_registry().on_server_frame();
 
         // Advance frame tick and continuous clock in TimerService
         static FRAME_TICK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

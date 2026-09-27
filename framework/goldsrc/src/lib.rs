@@ -301,6 +301,9 @@ pub mod cvar {
     pub use goldsrc_api::cvar::*;
 }
 
+pub mod extension;
+pub mod reapi;
+
 pub use ::log;
 #[cfg(feature = "ecs")]
 pub use ecs::*;
@@ -374,8 +377,8 @@ pub mod prelude {
         use_command_interceptor,
     };
     pub use crate::{
-        bundle, chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load,
-        on_unload, plugin, role, system,
+        bundle, chat_broadcast, chat_print, command, event, extension, menu_action, on_frame,
+        on_load, on_unload, plugin, reapi, role, system,
     };
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }
@@ -433,5 +436,13 @@ mod tests {
         let cvars_str = cfg.to_cvars();
         assert!(cvars_str.contains("vip_bonus_hp \"50\" // Bonus HP"));
         assert!(cvars_str.contains("vip_tag \"VIP\" // VIP Tag"));
+    }
+
+    #[test]
+    fn test_extension_and_reapi_host_queries() {
+        assert!(!crate::extension::is_available("reapi", None));
+        assert_eq!(crate::extension::version("reapi"), None);
+        assert!(!crate::reapi::has_reapi());
+        assert_eq!(crate::reapi::reapi_version(), None);
     }
 }

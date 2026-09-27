@@ -8,6 +8,7 @@ pub mod chat;
 pub mod cli;
 pub mod combat;
 pub mod config;
+pub mod extension;
 pub mod hooks;
 pub mod host;
 pub mod hud;
@@ -18,7 +19,6 @@ pub mod net;
 pub mod paths;
 pub mod placeholders;
 pub mod plugins;
-pub mod reapi;
 pub mod rules;
 pub mod session;
 pub mod storage;
@@ -37,13 +37,13 @@ pub use config::{
     ConfigBinder, HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup,
     PluginsConfig, SelfHealingConfigEngine,
 };
+pub use extension::{ExtensionRegistry, extension_registry};
 pub use host::{EventPayload, HostEvent, HostRuntime, PlayerEvent};
 pub use i18n::I18nService;
 pub use net::NetworkMessageDispatcher;
 pub use paths::PathResolver;
 pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use plugins::PluginOrchestrator;
-pub use reapi::ReApiBridge;
 pub use storage::{Bucket, JsonFormat, SqliteStorageEngine, StorageFormat};
 pub use timer::TimerService;
 pub use watcher::{
