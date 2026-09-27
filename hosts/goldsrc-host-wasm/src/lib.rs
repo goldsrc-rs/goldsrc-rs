@@ -26,6 +26,7 @@ pub type StorageDeleteCallback = fn(&str, &str) -> bool;
 pub type StorageFetchAddCallback = fn(&str, &str, i64) -> i64;
 pub type TranslateCallback = fn(&str, &str, &str, &str) -> String;
 pub type FormatPlaceholdersCallback = fn(i32, &str) -> String;
+pub type TimeCallback = fn() -> f32;
 
 static PRINT_CALLBACK: std::sync::RwLock<Option<PrintCallback>> = std::sync::RwLock::new(None);
 static SHOW_MENU_CALLBACK: std::sync::RwLock<Option<ShowMenuCallback>> =
@@ -39,6 +40,28 @@ static STORAGE_FETCH_ADD_CB: std::sync::RwLock<Option<StorageFetchAddCallback>> 
 static TRANSLATE_CB: std::sync::RwLock<Option<TranslateCallback>> = std::sync::RwLock::new(None);
 static FORMAT_PLACEHOLDERS_CB: std::sync::RwLock<Option<FormatPlaceholdersCallback>> =
     std::sync::RwLock::new(None);
+static TIME_CB: std::sync::RwLock<Option<TimeCallback>> = std::sync::RwLock::new(None);
+
+/// Set global callback for retrieving host uptime in seconds.
+pub fn set_time_callback(f: TimeCallback) {
+    if let Ok(mut lock) = TIME_CB.write() {
+        *lock = Some(f);
+    }
+}
+
+pub(crate) fn get_host_time() -> f32 {
+    static START_TIME: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    if let Ok(lock) = TIME_CB.read()
+        && let Some(cb) = *lock
+    {
+        cb()
+    } else {
+        START_TIME
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_secs_f32()
+    }
+}
 
 /// Set global callback for formatting placeholders in host messages.
 pub fn set_format_placeholders_callback(f: FormatPlaceholdersCallback) {

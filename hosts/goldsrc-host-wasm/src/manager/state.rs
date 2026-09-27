@@ -73,6 +73,10 @@ impl api::Host for HostState {
         crate::host_log(&msg);
     }
 
+    fn host_time(&mut self) -> f32 {
+        crate::get_host_time()
+    }
+
     fn host_entity_is_valid(&mut self, index: i32) -> bool {
         self.engine.entity_is_valid(index)
     }

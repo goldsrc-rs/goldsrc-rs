@@ -1237,6 +1237,15 @@ mod tests {
             assert!(result.is_ok(), "Failed to load plugin: {:?}", result.err());
             assert_eq!(manager.plugins.len(), 1);
             assert_eq!(manager.plugins[0].name, "admin_system");
+            assert_eq!(
+                manager.plugins[0].status,
+                crate::plugin::PluginStatus::Running
+            );
+            manager.call_on_frame();
+            assert_eq!(
+                manager.plugins[0].status,
+                crate::plugin::PluginStatus::Running
+            );
         }
     }
 }

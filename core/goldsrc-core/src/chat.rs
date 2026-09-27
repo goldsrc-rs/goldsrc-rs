@@ -1,7 +1,8 @@
-use goldsrc_api::chat::{ChatMessage, ChatScope};
-
-use goldsrc_api::chat::{LifeStateFilter, TeamTarget, split_chat_chunks};
+use goldsrc_api::chat::{
+    ChatMessage, ChatScope, ChatTarget, LifeStateFilter, TeamTarget, split_chat_chunks,
+};
 use goldsrc_api::client::{LifeState, Player, Team};
+use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 
 /// Type definition for a chat filter middleware handler.
@@ -10,6 +11,37 @@ pub type ChatMiddleware = Arc<dyn Fn(&mut ChatMessage) -> bool + Send + Sync>;
 /// Global chat processing pipeline registry.
 static CHAT_PIPELINE: LazyLock<RwLock<Vec<ChatMiddleware>>> =
     LazyLock::new(|| RwLock::new(Vec::new()));
+
+/// Pluggable resolver for custom chat target channels.
+pub trait ChatTargetResolver: Send + Sync {
+    /// Returns true if `recipient` is allowed to see messages sent to `channel` by `sender`.
+    fn can_receive(&self, channel: &str, sender: Player, recipient: Player) -> bool;
+}
+
+impl<F> ChatTargetResolver for F
+where
+    F: Fn(&str, Player, Player) -> bool + Send + Sync,
+{
+    fn can_receive(&self, channel: &str, sender: Player, recipient: Player) -> bool {
+        self(channel, sender, recipient)
+    }
+}
+
+/// Global custom chat channel resolvers registry.
+static CUSTOM_RESOLVERS: LazyLock<RwLock<HashMap<String, Arc<dyn ChatTargetResolver>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Registers a custom chat target channel resolver.
+pub fn register_chat_target_resolver(channel: &str, resolver: Arc<dyn ChatTargetResolver>) {
+    let mut map = CUSTOM_RESOLVERS.write().unwrap_or_else(|e| e.into_inner());
+    map.insert(channel.to_ascii_lowercase(), resolver);
+}
+
+/// Unregisters a custom chat target channel resolver.
+pub fn unregister_chat_target_resolver(channel: &str) {
+    let mut map = CUSTOM_RESOLVERS.write().unwrap_or_else(|e| e.into_inner());
+    map.remove(&channel.to_ascii_lowercase());
+}
 
 /// Registers a custom chat filter / middleware in the global pipeline.
 pub fn register_chat_middleware<F>(middleware: F)
@@ -85,7 +117,7 @@ pub fn process_chat_message_with_manager(
     // 2. Run WASM plugins chat middleware
 
     {
-        let is_team = matches!(msg.scope.team, TeamTarget::SameTeam);
+        let is_team = msg.scope.is_team();
         let wasm_result = if let Some(ref mut m) = manager {
             Some(m.dispatch_chat(sender.index(), &msg.formatted_text, is_team))
         } else {
@@ -122,8 +154,8 @@ pub fn process_chat_message_with_manager(
         .map(String::from)
         .unwrap_or_else(|| format!("Player#{}", sender.index()));
 
-    let full_text = match msg.scope.team {
-        TeamTarget::SameTeam => {
+    let full_text = match &msg.scope.target {
+        ChatTarget::Team(TeamTarget::SameTeam) => {
             if let Some(ref prefix) = msg.prefix {
                 format!(
                     "{prefix}^2(TEAM)^1 ^3{sender_name}^1 :  {}",
@@ -131,6 +163,20 @@ pub fn process_chat_message_with_manager(
                 )
             } else {
                 format!("^2(TEAM)^1 ^3{sender_name}^1 :  {}", msg.formatted_text)
+            }
+        }
+        ChatTarget::Custom(channel) => {
+            let ch_upper = channel.to_ascii_uppercase();
+            if let Some(ref prefix) = msg.prefix {
+                format!(
+                    "{prefix}^4({ch_upper})^1 ^3{sender_name}^1 :  {}",
+                    msg.formatted_text
+                )
+            } else {
+                format!(
+                    "^4({ch_upper})^1 ^3{sender_name}^1 :  {}",
+                    msg.formatted_text
+                )
             }
         }
         _ => {
@@ -147,16 +193,16 @@ pub fn process_chat_message_with_manager(
 
     // 5. Broadcast chunks to target recipients based on ChatScope
     let sender_team = sender.get::<goldsrc_api::client::Team>();
-    match msg.scope.team {
-        TeamTarget::Direct(slot) => {
-            let target = Player::new(slot);
+    match &msg.scope.target {
+        ChatTarget::Direct(slot) => {
+            let target = Player::new(*slot);
             if target.is_valid() && matches_lifestate(target, msg.scope.state) {
                 for chunk in &chunks {
                     target.act(goldsrc_api::action::Print::chat(chunk));
                 }
             }
         }
-        TeamTarget::All => {
+        ChatTarget::All | ChatTarget::Team(TeamTarget::All) => {
             for i in 1..=32 {
                 let target = Player::new(i);
                 if target.is_valid() && matches_lifestate(target, msg.scope.state) {
@@ -166,7 +212,7 @@ pub fn process_chat_message_with_manager(
                 }
             }
         }
-        TeamTarget::SameTeam => {
+        ChatTarget::Team(TeamTarget::SameTeam) => {
             for i in 1..=32 {
                 let target = Player::new(i);
                 if target.is_valid()
@@ -179,12 +225,32 @@ pub fn process_chat_message_with_manager(
                 }
             }
         }
-        TeamTarget::OppositeTeam => {
+        ChatTarget::Team(TeamTarget::OppositeTeam) => {
             for i in 1..=32 {
                 let target = Player::new(i);
                 if target.is_valid()
                     && is_opposite_team(sender_team, target.get::<goldsrc_api::client::Team>())
                     && matches_lifestate(target, msg.scope.state)
+                {
+                    for chunk in &chunks {
+                        target.act(goldsrc_api::action::Print::chat(chunk));
+                    }
+                }
+            }
+        }
+        ChatTarget::Custom(channel) => {
+            let resolver = {
+                let map = CUSTOM_RESOLVERS.read().unwrap_or_else(|e| e.into_inner());
+                map.get(channel.as_ref()).cloned()
+            };
+
+            for i in 1..=32 {
+                let target = Player::new(i);
+                if target.is_valid()
+                    && matches_lifestate(target, msg.scope.state)
+                    && resolver
+                        .as_ref()
+                        .is_some_and(|r| r.can_receive(channel, sender, target))
                 {
                     for chunk in &chunks {
                         target.act(goldsrc_api::action::Print::chat(chunk));
@@ -327,4 +393,29 @@ macro_rules! chat_team {
             }
         }
     }};
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_custom_chat_resolver_registration() {
+        let channel = "admin_test";
+        register_chat_target_resolver(
+            channel,
+            Arc::new(|_ch: &str, _sender: Player, recipient: Player| recipient.index() == 1),
+        );
+
+        let map = CUSTOM_RESOLVERS.read().unwrap();
+        assert!(map.contains_key("admin_test"));
+        let resolver = map.get("admin_test").unwrap();
+        assert!(resolver.can_receive("admin_test", Player::new(2), Player::new(1)));
+        assert!(!resolver.can_receive("admin_test", Player::new(2), Player::new(2)));
+        drop(map);
+
+        unregister_chat_target_resolver(channel);
+        let map = CUSTOM_RESOLVERS.read().unwrap();
+        assert!(!map.contains_key("admin_test"));
+    }
 }

@@ -27,7 +27,10 @@ pub mod watcher;
 
 pub use ::log;
 pub use bundle::{BrokerError, BundleFsSandbox, BundleMessageBroker, SandboxError};
-pub use chat::process_chat_message;
+pub use chat::{
+    ChatTargetResolver, process_chat_message, register_chat_target_resolver,
+    unregister_chat_target_resolver,
+};
 pub use combat::{CombatBridge, CombatTier};
 pub use config::plugins as plugins_config;
 pub use config::{

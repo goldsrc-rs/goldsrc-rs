@@ -65,7 +65,10 @@ pub use auth::{
 pub use bundle::{
     BundleComponentSpec, BundleInfo, BundleManifest, BundleValidationError, ComponentRole,
 };
-pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
+pub use chat::{
+    ChatMessage, ChatScope, ChatTarget, LifeStateFilter, MAX_SAYTEXT_PAYLOAD_LEN, TeamTarget,
+    split_chat_chunks,
+};
 pub use client::{
     Alive, AsLangCode, Bot, Client, ClientExt, ClientKind, Connected, ConnectedClient,
     ConnectionState, Dead, DeadPlayer, Hltv, Human, HumanClient, LifeState, LivingHuman,

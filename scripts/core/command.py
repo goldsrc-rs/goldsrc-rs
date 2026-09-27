@@ -1,7 +1,7 @@
 """Core abstractions for the GoldSrc.rs CLI dispatcher."""
 
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 
 class Command:

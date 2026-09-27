@@ -2,8 +2,9 @@
 
 use crate::client::Player;
 
-/// Team targeting filter for chat messages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Team relation targeting for team-scoped chat messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TeamTarget {
     /// Broadcast to all teams / public.
     #[default]
@@ -12,12 +13,62 @@ pub enum TeamTarget {
     SameTeam,
     /// Sent only to players of the opposite team.
     OppositeTeam,
-    /// Sent to a specific player slot (1..32).
+}
+
+/// Routing recipient target for chat messages.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum ChatTarget {
+    /// Broadcast to all players on the server.
+    #[default]
+    All,
+    /// Targeted by team relation (SameTeam or OppositeTeam).
+    Team(TeamTarget),
+    /// Direct private message to a specific player slot (1..=32).
     Direct(i32),
+    /// Extensible custom channel identifier (e.g. "admin", "guild_42", "room_1").
+    Custom(Box<str>),
+}
+
+impl ChatTarget {
+    /// Creates a broadcast target for all players.
+    pub const fn all() -> Self {
+        Self::All
+    }
+
+    /// Creates a teammate-only target.
+    pub const fn same_team() -> Self {
+        Self::Team(TeamTarget::SameTeam)
+    }
+
+    /// Creates an opposite-team target.
+    pub const fn opposite_team() -> Self {
+        Self::Team(TeamTarget::OppositeTeam)
+    }
+
+    /// Creates a direct private target for a specific player slot.
+    pub const fn direct(slot: i32) -> Self {
+        Self::Direct(slot)
+    }
+
+    /// Creates a custom named channel target.
+    pub fn custom(channel: impl Into<Box<str>>) -> Self {
+        Self::Custom(channel.into())
+    }
+}
+
+impl From<TeamTarget> for ChatTarget {
+    fn from(t: TeamTarget) -> Self {
+        match t {
+            TeamTarget::All => Self::All,
+            TeamTarget::SameTeam | TeamTarget::OppositeTeam => Self::Team(t),
+        }
+    }
 }
 
 /// Life state filter for recipient players.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LifeStateFilter {
     /// Delivered to players in any life state (alive or dead).
     #[default]
@@ -29,10 +80,11 @@ pub enum LifeStateFilter {
 }
 
 /// Structured visibility scope for dispatched chat messages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ChatScope {
-    /// Team routing target.
-    pub team: TeamTarget,
+    /// Message recipient target (all, team, direct, or custom channel).
+    pub target: ChatTarget,
     /// Player life state filter.
     pub state: LifeStateFilter,
 }
@@ -41,7 +93,7 @@ impl ChatScope {
     /// Creates a default public scope (all players, any life state).
     pub const fn all() -> Self {
         Self {
-            team: TeamTarget::All,
+            target: ChatTarget::All,
             state: LifeStateFilter::Any,
         }
     }
@@ -49,7 +101,7 @@ impl ChatScope {
     /// Creates a team-only chat scope for teammates.
     pub const fn same_team() -> Self {
         Self {
-            team: TeamTarget::SameTeam,
+            target: ChatTarget::Team(TeamTarget::SameTeam),
             state: LifeStateFilter::Any,
         }
     }
@@ -57,7 +109,7 @@ impl ChatScope {
     /// Creates an opposite-team chat scope.
     pub const fn opposite_team() -> Self {
         Self {
-            team: TeamTarget::OppositeTeam,
+            target: ChatTarget::Team(TeamTarget::OppositeTeam),
             state: LifeStateFilter::Any,
         }
     }
@@ -65,7 +117,15 @@ impl ChatScope {
     /// Creates a direct private chat scope to a specific player.
     pub const fn direct(slot: i32) -> Self {
         Self {
-            team: TeamTarget::Direct(slot),
+            target: ChatTarget::Direct(slot),
+            state: LifeStateFilter::Any,
+        }
+    }
+
+    /// Creates an extensible custom channel chat scope.
+    pub fn custom(channel: impl Into<Box<str>>) -> Self {
+        Self {
+            target: ChatTarget::Custom(channel.into()),
             state: LifeStateFilter::Any,
         }
     }
@@ -80,6 +140,11 @@ impl ChatScope {
     pub const fn dead_only(mut self) -> Self {
         self.state = LifeStateFilter::DeadOnly;
         self
+    }
+
+    /// Returns `true` if the target is restricted to teammates.
+    pub fn is_team(&self) -> bool {
+        matches!(self.target, ChatTarget::Team(TeamTarget::SameTeam))
     }
 }
 
@@ -276,12 +341,20 @@ mod tests {
     #[test]
     fn test_chat_scope_composition() {
         let team_dead = ChatScope::same_team().dead_only();
-        assert_eq!(team_dead.team, TeamTarget::SameTeam);
+        assert_eq!(team_dead.target, ChatTarget::Team(TeamTarget::SameTeam));
         assert_eq!(team_dead.state, LifeStateFilter::DeadOnly);
+        assert!(team_dead.is_team());
 
         let opp_alive = ChatScope::opposite_team().alive_only();
-        assert_eq!(opp_alive.team, TeamTarget::OppositeTeam);
+        assert_eq!(opp_alive.target, ChatTarget::Team(TeamTarget::OppositeTeam));
         assert_eq!(opp_alive.state, LifeStateFilter::AliveOnly);
+        assert!(!opp_alive.is_team());
+
+        let direct = ChatScope::direct(5);
+        assert_eq!(direct.target, ChatTarget::Direct(5));
+
+        let custom = ChatScope::custom("admin");
+        assert_eq!(custom.target, ChatTarget::Custom("admin".into()));
     }
 
     #[test]

@@ -23,8 +23,6 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(feature = "task")]
 use std::sync::{Mutex, OnceLock};
-#[cfg(feature = "task")]
-use std::time::Instant;
 
 #[cfg(feature = "task")]
 type TaskCallback = Box<dyn FnOnce() + Send + 'static>;
@@ -69,8 +67,6 @@ struct SchedulerState {
 static SCHEDULER: OnceLock<Mutex<SchedulerState>> = OnceLock::new();
 #[cfg(feature = "task")]
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
-#[cfg(feature = "task")]
-static APP_START_TIME: OnceLock<Instant> = OnceLock::new();
 
 #[cfg(feature = "task")]
 fn scheduler() -> &'static Mutex<SchedulerState> {
@@ -85,10 +81,7 @@ fn scheduler() -> &'static Mutex<SchedulerState> {
 
 #[cfg(feature = "task")]
 fn uptime_secs() -> f64 {
-    APP_START_TIME
-        .get_or_init(Instant::now)
-        .elapsed()
-        .as_secs_f64()
+    goldsrc_api::timer::host_time() as f64
 }
 
 /// Handle to a scheduled task or timer.

@@ -66,6 +66,8 @@ pub enum EventPayload<'a> {
     Borrowed(&'a [u8]),
     Inline4([u8; 4]),
     Inline8([u8; 8]),
+    Inline12([u8; 12]),
+    Inline20([u8; 20]),
 }
 
 impl<'a> std::ops::Deref for EventPayload<'a> {
@@ -76,12 +78,14 @@ impl<'a> std::ops::Deref for EventPayload<'a> {
             Self::Borrowed(s) => s,
             Self::Inline4(s) => s,
             Self::Inline8(s) => s,
+            Self::Inline12(s) => s,
+            Self::Inline20(s) => s,
         }
     }
 }
 
 /// Lifecycle and gameplay events originating from the game engine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HostEvent<'a> {
     /// Server frame tick (occurs every engine frame).
     ServerFrame,
@@ -104,6 +108,27 @@ pub enum HostEvent<'a> {
     /// Entity use event.
     EntityUse { used: i32, other: i32 },
 
+    /// Menu item selection event by player.
+    MenuSelect { player: i32, item_id: u32 },
+
+    /// Entity take damage hook event (pre or post).
+    EntityTakeDamage {
+        victim: i32,
+        inflictor: i32,
+        attacker: i32,
+        damage: f32,
+        bits_damage_type: i32,
+        timing: crate::hooks::types::HookTiming,
+    },
+
+    /// Entity killed hook event (pre or post).
+    EntityKilled {
+        victim: i32,
+        attacker: i32,
+        gib_mode: i32,
+        timing: crate::hooks::types::HookTiming,
+    },
+
     /// Custom or generic event with explicit name and byte payload.
     Custom { name: &'a str, payload: &'a [u8] },
 }
@@ -120,6 +145,15 @@ impl<'a> HostEvent<'a> {
             Self::CmdStart { .. } => "cmd_start",
             Self::EntityTouch { .. } => "entity_touch",
             Self::EntityUse { .. } => "entity_use",
+            Self::MenuSelect { .. } => "menu_select",
+            Self::EntityTakeDamage { timing, .. } => match timing {
+                crate::hooks::types::HookTiming::Pre => "entity_take_damage_pre",
+                crate::hooks::types::HookTiming::Post => "entity_take_damage_post",
+            },
+            Self::EntityKilled { timing, .. } => match timing {
+                crate::hooks::types::HookTiming::Pre => "entity_killed_pre",
+                crate::hooks::types::HookTiming::Post => "entity_killed_post",
+            },
             Self::Custom { name, .. } => name,
         }
     }
@@ -143,6 +177,40 @@ impl<'a> HostEvent<'a> {
                 used: touched,
                 other,
             } => EventPayload::Inline8(crate::api_registry::pack_two_i32(*touched, *other)),
+            Self::MenuSelect { player, item_id } => {
+                let mut buf = [0u8; 8];
+                buf[0..4].copy_from_slice(&player.to_le_bytes());
+                buf[4..8].copy_from_slice(&item_id.to_le_bytes());
+                EventPayload::Inline8(buf)
+            }
+            Self::EntityTakeDamage {
+                victim,
+                inflictor,
+                attacker,
+                damage,
+                bits_damage_type,
+                ..
+            } => {
+                let mut buf = [0u8; 20];
+                buf[0..4].copy_from_slice(&victim.to_le_bytes());
+                buf[4..8].copy_from_slice(&inflictor.to_le_bytes());
+                buf[8..12].copy_from_slice(&attacker.to_le_bytes());
+                buf[12..16].copy_from_slice(&damage.to_le_bytes());
+                buf[16..20].copy_from_slice(&bits_damage_type.to_le_bytes());
+                EventPayload::Inline20(buf)
+            }
+            Self::EntityKilled {
+                victim,
+                attacker,
+                gib_mode,
+                ..
+            } => {
+                let mut buf = [0u8; 12];
+                buf[0..4].copy_from_slice(&victim.to_le_bytes());
+                buf[4..8].copy_from_slice(&attacker.to_le_bytes());
+                buf[8..12].copy_from_slice(&gib_mode.to_le_bytes());
+                EventPayload::Inline12(buf)
+            }
             Self::Custom { payload, .. } => EventPayload::Borrowed(payload),
         }
     }
@@ -164,6 +232,7 @@ impl HostRuntime {
         };
         goldsrc_host_wasm::set_print_callback(print_cb);
         goldsrc_host_wasm::set_show_menu_callback(|_player_idx, _keys_mask, _timeout, _text| {});
+        goldsrc_host_wasm::set_time_callback(HostRuntime::current_time);
 
         goldsrc_host_wasm::set_storage_callbacks(
             |bucket, key| HostRuntime::storage().and_then(|s| s.get(bucket, key).ok().flatten()),
@@ -764,6 +833,9 @@ impl HostRuntime {
             HostEvent::CmdStart { .. }
             | HostEvent::EntityTouch { .. }
             | HostEvent::EntityUse { .. }
+            | HostEvent::MenuSelect { .. }
+            | HostEvent::EntityTakeDamage { .. }
+            | HostEvent::EntityKilled { .. }
             | HostEvent::Custom { .. } => {}
         }
     }
@@ -1042,5 +1114,32 @@ mod tests {
 
         assert_eq!(ev4.name(), "cmd_start");
         assert_eq!(ev4.payload().len(), 8);
+
+        let ev_menu = HostEvent::MenuSelect {
+            player: 2,
+            item_id: 101,
+        };
+        assert_eq!(ev_menu.name(), "menu_select");
+        assert_eq!(ev_menu.payload().len(), 8);
+
+        let ev_dmg = HostEvent::EntityTakeDamage {
+            victim: 1,
+            inflictor: 2,
+            attacker: 2,
+            damage: 25.5,
+            bits_damage_type: 2,
+            timing: crate::hooks::types::HookTiming::Pre,
+        };
+        assert_eq!(ev_dmg.name(), "entity_take_damage_pre");
+        assert_eq!(ev_dmg.payload().len(), 20);
+
+        let ev_kill = HostEvent::EntityKilled {
+            victim: 1,
+            attacker: 2,
+            gib_mode: 0,
+            timing: crate::hooks::types::HookTiming::Post,
+        };
+        assert_eq!(ev_kill.name(), "entity_killed_post");
+        assert_eq!(ev_kill.payload().len(), 12);
     }
 }

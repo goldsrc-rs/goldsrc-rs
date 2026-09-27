@@ -162,6 +162,25 @@ pub enum TimerBound {
     Session(PlayerSessionToken),
 }
 
+#[cfg(target_arch = "wasm32")]
+use crate::bindings::goldsrc::engine::api as host_api;
+
+/// Returns current monotonic server host uptime in seconds.
+pub fn host_time() -> f32 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        host_api::host_time()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        START
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_secs_f32()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -196,13 +196,9 @@ impl MenuSessionManager {
                     Self::clear_client_menu(player_idx, engine);
                 }
 
-                // Dispatch to WASM hook / event: 8 bytes payload: [player_idx: i32 (4 bytes), id: u32 (4 bytes)]
-                let mut payload = Vec::with_capacity(8);
-                payload.extend_from_slice(&player_idx.to_le_bytes());
-                payload.extend_from_slice(&id.to_le_bytes());
-                crate::hooks::emit(crate::host::HostEvent::Custom {
-                    name: "menu_select",
-                    payload: &payload,
+                crate::hooks::emit(crate::host::HostEvent::MenuSelect {
+                    player: player_idx,
+                    item_id: id,
                 });
 
                 // Also trigger client command if action name is non-empty

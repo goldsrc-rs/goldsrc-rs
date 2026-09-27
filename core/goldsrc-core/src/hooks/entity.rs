@@ -155,21 +155,13 @@ impl EntityHookRegistry {
             }
         }
 
-        // Emit WASM event: "entity_take_damage_pre" or "entity_take_damage_post"
-        // Payload layout: [victim: i32, inflictor: i32, attacker: i32, damage: f32, bits_damage_type: i32] (20 bytes)
-        let event_name = match timing {
-            HookTiming::Pre => "entity_take_damage_pre",
-            HookTiming::Post => "entity_take_damage_post",
-        };
-        let mut payload = [0u8; 20];
-        payload[0..4].copy_from_slice(&ctx.victim.to_le_bytes());
-        payload[4..8].copy_from_slice(&ctx.inflictor.to_le_bytes());
-        payload[8..12].copy_from_slice(&ctx.attacker.to_le_bytes());
-        payload[12..16].copy_from_slice(&ctx.damage.to_le_bytes());
-        payload[16..20].copy_from_slice(&ctx.bits_damage_type.to_le_bytes());
-        crate::hooks::dispatcher::emit(crate::host::HostEvent::Custom {
-            name: event_name,
-            payload: &payload,
+        crate::hooks::dispatcher::emit(crate::host::HostEvent::EntityTakeDamage {
+            victim: ctx.victim,
+            inflictor: ctx.inflictor,
+            attacker: ctx.attacker,
+            damage: ctx.damage,
+            bits_damage_type: ctx.bits_damage_type,
+            timing,
         });
 
         final_result
@@ -190,19 +182,11 @@ impl EntityHookRegistry {
             }
         }
 
-        // Emit WASM event: "entity_killed_pre" or "entity_killed_post"
-        // Payload layout: [victim: i32, attacker: i32, gib_mode: i32] (12 bytes)
-        let event_name = match timing {
-            HookTiming::Pre => "entity_killed_pre",
-            HookTiming::Post => "entity_killed_post",
-        };
-        let mut payload = [0u8; 12];
-        payload[0..4].copy_from_slice(&ctx.victim.to_le_bytes());
-        payload[4..8].copy_from_slice(&ctx.attacker.to_le_bytes());
-        payload[8..12].copy_from_slice(&ctx.gib_mode.to_le_bytes());
-        crate::hooks::dispatcher::emit(crate::host::HostEvent::Custom {
-            name: event_name,
-            payload: &payload,
+        crate::hooks::dispatcher::emit(crate::host::HostEvent::EntityKilled {
+            victim: ctx.victim,
+            attacker: ctx.attacker,
+            gib_mode: ctx.gib_mode,
+            timing,
         });
 
         final_result

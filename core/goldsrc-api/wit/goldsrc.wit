@@ -10,6 +10,9 @@ interface api {
     /// Logs a message to the server console.
     host-log: func(msg: string);
 
+    /// Returns current monotonic server host uptime in seconds.
+    host-time: func() -> f32;
+
     /// Checks if an entity index is valid.
     host-entity-is-valid: func(index: s32) -> bool;
 
