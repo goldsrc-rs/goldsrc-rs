@@ -1,9 +1,8 @@
-//! Dual Storage Port Abstraction (raw bytes, no serialization format imposed).
+//! Storage Service Provider Interface (Storage SPI).
 //!
 //! Provides decoupled KV storage ([`StorageProvider`]) with atomic operations
-//! and relational query interface ([`SqlDatabase`]). Typed serialization
-//! (`Bucket<T>`) lives in `framework/goldsrc` where the format can be chosen
-//! per-plugin (JSON, bincode, raw bytes).
+//! and relational query interface ([`SqlDatabase`]). Implemented by storage
+//! engines (e.g. SQLite WAL, Redb, Mock).
 
 /// Domain errors occurring during storage operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +39,7 @@ impl std::error::Error for StorageError {}
 
 /// Key-Value Storage Provider trait (KV Port).
 ///
-/// Implemented by host engines (e.g. SQLite WAL, Redb, Mock).
+/// Implemented by host storage engines (e.g. SQLite WAL, Redb, Mock).
 pub trait StorageProvider: Send + Sync {
     /// Retrieves a binary value by key in the specified bucket.
     fn get(&self, bucket: &str, key: &str) -> Result<Option<Vec<u8>>, StorageError>;

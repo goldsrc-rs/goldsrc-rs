@@ -4,7 +4,7 @@
 //! entity manipulation, cvars, networking messages, HUD, capabilities, and storage sandbox.
 
 use crate::bindings::goldsrc::engine::api;
-use goldsrc_api::Engine as GoldsrcEngine;
+use goldsrc_spi::engine::Engine as GoldsrcEngine;
 use std::sync::Arc;
 
 /// Wasmtime store state exposed to WASM plugins via host functions.
@@ -73,6 +73,10 @@ impl api::Host for HostState {
         crate::host_log(&msg);
     }
 
+    fn host_time(&mut self) -> f32 {
+        crate::get_host_time()
+    }
+
     fn host_entity_is_valid(&mut self, index: i32) -> bool {
         self.engine.entity_is_valid(index)
     }
@@ -122,6 +126,9 @@ impl api::Host for HostState {
     }
     fn host_drop_to_floor(&mut self, index: i32) -> i32 {
         self.engine.drop_to_floor(index)
+    }
+    fn host_entity_key_value(&mut self, index: i32, key: String, value: String) -> bool {
+        self.engine.entity_key_value(index, &key, &value)
     }
 
     fn host_player_name(&mut self, index: i32) -> Option<String> {
@@ -228,9 +235,9 @@ impl api::Host for HostState {
         };
 
         let dest = if player_index == 0 {
-            goldsrc_api::MessageDest::All as i32
+            goldsrc_spi::engine::MessageDest::All as i32
         } else {
-            goldsrc_api::MessageDest::One as i32
+            goldsrc_spi::engine::MessageDest::One as i32
         };
         let target_edict = if player_index == 0 {
             None
@@ -282,12 +289,12 @@ impl api::Host for HostState {
         let msg_id = if text_msg_id <= 0 { 75 } else { text_msg_id };
 
         let dest = if player_index == 0 {
-            goldsrc_api::MessageDest::All as i32
+            goldsrc_spi::engine::MessageDest::All as i32
         } else {
             if !(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index) {
                 return;
             }
-            goldsrc_api::MessageDest::One as i32
+            goldsrc_spi::engine::MessageDest::One as i32
         };
 
         let target_edict = if player_index == 0 {
@@ -346,7 +353,7 @@ impl api::Host for HostState {
                 &payload
             };
             self.engine.message_begin(
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 text_msg_id,
                 None,
                 Some(player_index),
@@ -384,7 +391,7 @@ impl api::Host for HostState {
                 &payload
             };
             self.engine.message_begin(
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 text_msg_id,
                 None,
                 Some(player_index),
@@ -426,7 +433,7 @@ impl api::Host for HostState {
 
         if text.is_empty() {
             self.engine.message_begin(
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 show_menu_id,
                 None,
                 Some(player_index),
@@ -462,7 +469,7 @@ impl api::Host for HostState {
             let has_more = !remaining.is_empty();
 
             self.engine.message_begin(
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 show_menu_id,
                 None,
                 Some(player_index),
@@ -495,7 +502,7 @@ impl api::Host for HostState {
         let y_val = (if y < 0.0 { -1.0 } else { y } * 8192.0) as i32;
 
         self.engine.message_begin(
-            goldsrc_api::MessageDest::Broadcast as i32,
+            goldsrc_spi::engine::MessageDest::Broadcast as i32,
             goldsrc_api::consts::SVC_TEMPENTITY,
             None,
             None,
@@ -543,9 +550,12 @@ impl api::Host for HostState {
         const DRC_CMD_MESSAGE: i32 = 6;
 
         let (dest, target_idx) = if player_index <= 0 {
-            (goldsrc_api::MessageDest::Broadcast as i32, None)
+            (goldsrc_spi::engine::MessageDest::Broadcast as i32, None)
         } else {
-            (goldsrc_api::MessageDest::One as i32, Some(player_index))
+            (
+                goldsrc_spi::engine::MessageDest::One as i32,
+                Some(player_index),
+            )
         };
 
         let text_bytes = text.as_bytes();

@@ -13,6 +13,7 @@ doctest = false
 [dependencies]
 goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true }
+goldsrc-spi = { workspace = true }
 goldsrc-core = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]

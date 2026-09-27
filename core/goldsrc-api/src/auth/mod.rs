@@ -3,10 +3,12 @@
 pub mod action;
 pub mod dsl;
 pub mod registry;
+pub mod roles;
 
 pub use action::{CheckCapability, GrantCapability, RevokeCapability};
-pub use dsl::CapExpr;
+pub use dsl::{CapExpr, ValidationResult};
 pub use registry::{CAPS, CapabilityRegistry};
+pub use roles::{AdminCaps, VipCaps, is_root_namespace, namespaces};
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::hash_map::Entry;
@@ -58,9 +60,9 @@ impl Auth {
                         return true;
                     }
                     for g in player_caps {
-                        if let Some(prefix) = g.strip_suffix(".*")
-                            && name.starts_with(prefix)
-                            && name[prefix.len()..].starts_with('.')
+                        if let Some(prefix) = g.strip_suffix(".*").or_else(|| g.strip_suffix(":*"))
+                            && let Some(rem) = name.strip_prefix(prefix)
+                            && (rem.starts_with('.') || rem.starts_with(':'))
                         {
                             return true;
                         }
@@ -114,7 +116,11 @@ impl Auth {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let mut caps = CAPS.write().unwrap_or_else(|e| e.into_inner());
-            if !caps.registered.contains_key(name) && !name.ends_with(".*") && name != "*" {
+            if !caps.registered.contains_key(name)
+                && !name.ends_with(".*")
+                && !name.ends_with(":*")
+                && name != "*"
+            {
                 return false;
             }
             caps.player_capabilities

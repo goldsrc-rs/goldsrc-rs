@@ -66,6 +66,7 @@ The repository is organized into distinct functional layers:
 goldsrc-rs/
 ├── core/
 │   ├── goldsrc-api/                # Safe guest/host shared domain types, traits, DAG, ECS, and builders
+│   ├── goldsrc-spi/                # Host-side Service Provider Interfaces (pure engine & subsystem traits)
 │   ├── goldsrc-core/               # Host runtime, config, i18n, storage, logging, rule engine, FFI bridge
 │   └── goldsrc-sys/                # Low-level raw FFI bindings to GoldSrc/Metamod headers (unsafe)
 ├── backends/
@@ -76,10 +77,11 @@ goldsrc-rs/
 ├── framework/
 │   ├── goldsrc/                    # Lightweight developer SDK for WASM guest plugins
 │   └── goldsrc-macros/             # Procedural macros (#[plugin], #[command], #[event], #[system])
+├── plugins/                        # Standard production plugins (admin_system, vip_core)
+├── examples/                       # Reference examples (test_chat, test_ecs, test_hud, test_i18n, test_menu)
 ├── references/                     # C/C++ reference headers (HLSDK, Metamod, ReHLDS, ReGameDLL)
 ├── resources/                      # Configuration templates, default localization files, gamedata
-├── scripts/                        # Modular Python toolchain (build, deploy, verify, analyze, setup)
-└── examples/demo_plugins/          # Reference demo plugins (test_suite, vip_core, admin_system)
+└── scripts/                        # Modular Python toolchain (build, deploy, verify, analyze, setup)
 ```
 
 ---

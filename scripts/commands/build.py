@@ -74,9 +74,9 @@ def discover_wasm_plugins() -> list[str]:
             tomllib = None
 
     if not tomllib:
-        # Fallback if tomllib is unavailable: scan examples/demo_plugins/ and plugins/
+        # Fallback if tomllib is unavailable: scan plugins/ and examples/
         for root, dirs, files in os.walk(repo_root):
-            if "Cargo.toml" in files and ("plugins" in root or "demo_plugins" in root):
+            if "Cargo.toml" in files and ("plugins" in root or "examples" in root):
                 p = Path(root)
                 if p != repo_root:
                     plugins.append(p.name)
@@ -93,7 +93,7 @@ def discover_wasm_plugins() -> list[str]:
                 try:
                     mdata = tomllib.loads(member_manifest.read_text(encoding="utf-8"))
                     crate_type = mdata.get("lib", {}).get("crate-type", [])
-                    if "cdylib" in crate_type and ("plugins" in member or "demo_plugins" in member):
+                    if "cdylib" in crate_type and ("plugins" in member or "examples" in member):
                         pkg_name = mdata.get("package", {}).get("name")
                         if pkg_name:
                             plugins.append(pkg_name)

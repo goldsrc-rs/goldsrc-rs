@@ -4,7 +4,8 @@
 //! and ensures strict adherence to GoldSrc buffer boundaries (185 bytes) and UTF-8 safety.
 
 use goldsrc_api::consts::SAFE_SAYTEXT_LIMIT;
-use goldsrc_api::{HUD_PRINTCENTER, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY, MessageDest, PrintTarget};
+use goldsrc_api::{HUD_PRINTCENTER, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY, PrintTarget};
+use goldsrc_spi::engine::MessageDest;
 
 /// Dispatcher responsible for formatting, chunking, and sending GoldSrc network user messages.
 pub struct NetworkMessageDispatcher;
@@ -12,7 +13,7 @@ pub struct NetworkMessageDispatcher;
 impl NetworkMessageDispatcher {
     /// Dispatches a formatted message to a player according to the target print channel.
     pub fn dispatch_player_print(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         player_index: i32,
         target: PrintTarget,
         message: &str,
@@ -51,7 +52,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `TextMsg` user message (console, notify, center text) to a single client.
     pub fn send_text_msg(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         player_index: i32,
         msg_dest: i32,
         formatted: &str,
@@ -94,7 +95,7 @@ impl NetworkMessageDispatcher {
 
     /// Sends a `SayText` user message to a single client.
     pub fn send_say_text(
-        engine: &dyn goldsrc_api::Engine,
+        engine: &dyn goldsrc_spi::engine::Engine,
         receiver_index: i32,
         sender_index: i32,
         message: &str,
@@ -135,7 +136,11 @@ impl NetworkMessageDispatcher {
     }
 
     /// Broadcasts a `TextMsg` to all connected clients (`MessageDest::All`).
-    pub fn broadcast_text_msg(engine: &dyn goldsrc_api::Engine, msg_dest: i32, message: &str) {
+    pub fn broadcast_text_msg(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        msg_dest: i32,
+        message: &str,
+    ) {
         for idx in 1..=32 {
             if engine.entity_is_valid(idx) {
                 Self::send_text_msg(engine, idx, msg_dest, message);
@@ -144,21 +149,151 @@ impl NetworkMessageDispatcher {
     }
 
     /// Broadcasts a `SayText` message to all connected clients (`MessageDest::All`).
-    pub fn broadcast_say_text(engine: &dyn goldsrc_api::Engine, sender_index: i32, message: &str) {
+    pub fn broadcast_say_text(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        sender_index: i32,
+        message: &str,
+    ) {
         for idx in 1..=32 {
             if engine.entity_is_valid(idx) {
                 Self::send_say_text(engine, idx, sender_index, message);
             }
         }
     }
+
+    /// Sends a `ScreenFade` user message to a specific player or broadcasts to all clients.
+    pub fn send_screen_fade(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        target_player: Option<i32>,
+        fade: &goldsrc_api::hud::ScreenFade,
+    ) {
+        if target_player.is_some_and(|idx| !(1..=32).contains(&idx) || !engine.entity_is_valid(idx))
+        {
+            return;
+        }
+
+        let fade_msg_id = engine.reg_user_msg("ScreenFade", 10);
+        if fade_msg_id <= 0 || fade_msg_id >= 255 {
+            return;
+        }
+
+        let (dest, ent) = match target_player {
+            Some(idx) => (MessageDest::One as i32, Some(idx)),
+            None => (MessageDest::All as i32, None),
+        };
+
+        let duration_units = (fade.duration * 4096.0).clamp(0.0, 65535.0) as i32;
+        let hold_units = (fade.hold_time * 4096.0).clamp(0.0, 65535.0) as i32;
+
+        engine.message_begin(dest, fade_msg_id, None, ent);
+        engine.write_short(duration_units);
+        engine.write_short(hold_units);
+        engine.write_short(fade.flags.0 as i32);
+        engine.write_byte(fade.color.r as i32);
+        engine.write_byte(fade.color.g as i32);
+        engine.write_byte(fade.color.b as i32);
+        engine.write_byte(fade.color.a as i32);
+        engine.message_end();
+    }
+
+    /// Sends a `DeathMsg` user message to a specific player or broadcasts to all clients.
+    pub fn send_death_msg(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        target_player: Option<i32>,
+        killer_index: i32,
+        victim_index: i32,
+        headshot: bool,
+        weapon_name: &str,
+    ) {
+        if target_player.is_some_and(|idx| !(1..=32).contains(&idx) || !engine.entity_is_valid(idx))
+        {
+            return;
+        }
+
+        let death_msg_id = engine.reg_user_msg("DeathMsg", -1);
+        if death_msg_id <= 0 || death_msg_id >= 255 {
+            return;
+        }
+
+        let (dest, ent) = match target_player {
+            Some(idx) => (MessageDest::One as i32, Some(idx)),
+            None => (MessageDest::All as i32, None),
+        };
+
+        engine.message_begin(dest, death_msg_id, None, ent);
+        engine.write_byte(killer_index);
+        engine.write_byte(victim_index);
+        engine.write_byte(if headshot { 1 } else { 0 });
+        engine.write_string(weapon_name);
+        engine.message_end();
+    }
+
+    /// Sends a `CurWeapon` user message to a specific player.
+    pub fn send_cur_weapon(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        player_index: i32,
+        is_active: bool,
+        weapon_id: i32,
+        clip_ammo: i32,
+    ) {
+        if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+            return;
+        }
+
+        let cur_weapon_id = engine.reg_user_msg("CurWeapon", 3);
+        if cur_weapon_id <= 0 || cur_weapon_id >= 255 {
+            return;
+        }
+
+        engine.message_begin(
+            MessageDest::One as i32,
+            cur_weapon_id,
+            None,
+            Some(player_index),
+        );
+        engine.write_byte(if is_active { 1 } else { 0 });
+        engine.write_byte(weapon_id);
+        engine.write_byte(clip_ammo);
+        engine.message_end();
+    }
+
+    /// Sends a `Damage` user message to a specific player.
+    pub fn send_damage(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        player_index: i32,
+        save_damage: i32,
+        take_damage: i32,
+        damage_bits: i32,
+        origin: [f32; 3],
+    ) {
+        if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+            return;
+        }
+
+        let damage_id = engine.reg_user_msg("Damage", 12);
+        if damage_id <= 0 || damage_id >= 255 {
+            return;
+        }
+
+        engine.message_begin(MessageDest::One as i32, damage_id, None, Some(player_index));
+        engine.write_byte(save_damage);
+        engine.write_byte(take_damage);
+        engine.write_long(damage_bits);
+        engine.write_coord(origin[0]);
+        engine.write_coord(origin[1]);
+        engine.write_coord(origin[2]);
+        engine.message_end();
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use goldsrc_api::{
-        EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
-        EngineSound, TraceResult,
+    use goldsrc_api::cvar::{CvarEngine, CvarFlags};
+    use goldsrc_api::entity::EntitySpawner;
+    use goldsrc_spi::engine::{
+        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
+        TraceResult,
     };
     use std::sync::Mutex;
 
@@ -166,6 +301,9 @@ mod tests {
     struct MockNetEngine {
         messages: Mutex<Vec<(i32, i32, Option<i32>)>>,
         bytes: Mutex<Vec<i32>>,
+        shorts: Mutex<Vec<i32>>,
+        longs: Mutex<Vec<i32>>,
+        coords: Mutex<Vec<f32>>,
         strings: Mutex<Vec<String>>,
         ended: Mutex<usize>,
     }
@@ -193,10 +331,16 @@ mod tests {
             self.bytes.lock().unwrap().push(b);
         }
         fn write_char(&self, _c: i32) {}
-        fn write_short(&self, _s: i32) {}
-        fn write_long(&self, _l: i32) {}
+        fn write_short(&self, s: i32) {
+            self.shorts.lock().unwrap().push(s);
+        }
+        fn write_long(&self, l: i32) {
+            self.longs.lock().unwrap().push(l);
+        }
         fn write_angle(&self, _a: f32) {}
-        fn write_coord(&self, _c: f32) {}
+        fn write_coord(&self, c: f32) {
+            self.coords.lock().unwrap().push(c);
+        }
         fn write_string(&self, s: &str) {
             self.strings.lock().unwrap().push(s.to_string());
         }
@@ -205,8 +349,26 @@ mod tests {
             match name {
                 "TextMsg" => 64,
                 "SayText" => 65,
+                "ScreenFade" => 66,
+                "DeathMsg" => 67,
+                "CurWeapon" => 68,
+                "Damage" => 69,
                 _ => -1,
             }
+        }
+    }
+
+    impl EntitySpawner for MockNetEngine {
+        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
+            None
+        }
+        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
+        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
+        fn entity_key_value(&self, _index: i32, _key: &str, _value: &str) -> bool {
+            false
+        }
+        fn dispatch_spawn(&self, _index: i32) -> i32 {
+            0
         }
     }
 
@@ -224,7 +386,6 @@ mod tests {
         fn entity_origin(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
         fn entity_velocity(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
@@ -232,7 +393,6 @@ mod tests {
         fn entity_angles(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
         fn player_name(&self, _index: i32) -> Option<String> {
             Some("Player".into())
         }
@@ -246,20 +406,14 @@ mod tests {
             0.0
         }
         fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
-        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
-            None
-        }
         fn remove_entity(&self, _index: i32) {}
         fn drop_to_floor(&self, _index: i32) -> i32 {
-            0
-        }
-        fn dispatch_spawn(&self, _index: i32) -> i32 {
             0
         }
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
 
-    impl EngineCvars for MockNetEngine {
+    impl CvarEngine for MockNetEngine {
         fn cvar_get_string(&self, _n: &str) -> Option<String> {
             None
         }
@@ -268,6 +422,9 @@ mod tests {
             0.0
         }
         fn cvar_set_float(&self, _n: &str, _v: f32) {}
+        fn cvar_register(&self, _name: &str, _default_value: &str, _flags: CvarFlags) -> bool {
+            true
+        }
     }
 
     impl EngineConsole for MockNetEngine {
@@ -391,6 +548,102 @@ mod tests {
         let msgs = engine.messages.lock().unwrap();
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0], (MessageDest::One as i32, 64, Some(3)));
+        assert_eq!(*engine.ended.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_dispatcher_send_screen_fade() {
+        let engine = MockNetEngine::default();
+        let fade = goldsrc_api::hud::ScreenFade::damage_flash();
+        NetworkMessageDispatcher::send_screen_fade(&engine, Some(5), &fade);
+
+        let msgs = engine.messages.lock().unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0], (MessageDest::One as i32, 66, Some(5)));
+
+        let shorts = engine.shorts.lock().unwrap();
+        assert_eq!(shorts.len(), 3);
+        assert_eq!(shorts[0], (0.2 * 4096.0) as i32);
+        assert_eq!(shorts[1], (0.1 * 4096.0) as i32);
+        assert_eq!(shorts[2], fade.flags.0 as i32);
+
+        let bytes = engine.bytes.lock().unwrap();
+        assert_eq!(bytes.len(), 4);
+        assert_eq!(bytes[0], fade.color.r as i32);
+        assert_eq!(bytes[1], fade.color.g as i32);
+        assert_eq!(bytes[2], fade.color.b as i32);
+        assert_eq!(bytes[3], fade.color.a as i32);
+        assert_eq!(*engine.ended.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_dispatcher_send_death_msg() {
+        let engine = MockNetEngine::default();
+        NetworkMessageDispatcher::send_death_msg(&engine, None, 1, 2, true, "deagle");
+
+        let msgs = engine.messages.lock().unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0], (MessageDest::All as i32, 67, None));
+
+        let bytes = engine.bytes.lock().unwrap();
+        assert_eq!(bytes.len(), 3);
+        assert_eq!(bytes[0], 1);
+        assert_eq!(bytes[1], 2);
+        assert_eq!(bytes[2], 1); // headshot
+
+        let strings = engine.strings.lock().unwrap();
+        assert_eq!(strings.len(), 1);
+        assert_eq!(strings[0], "deagle");
+        assert_eq!(*engine.ended.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_dispatcher_send_cur_weapon() {
+        let engine = MockNetEngine::default();
+        NetworkMessageDispatcher::send_cur_weapon(&engine, 4, true, 28, 30);
+
+        let msgs = engine.messages.lock().unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0], (MessageDest::One as i32, 68, Some(4)));
+
+        let bytes = engine.bytes.lock().unwrap();
+        assert_eq!(bytes.len(), 3);
+        assert_eq!(bytes[0], 1); // active
+        assert_eq!(bytes[1], 28); // weapon_id
+        assert_eq!(bytes[2], 30); // clip_ammo
+        assert_eq!(*engine.ended.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_dispatcher_send_damage() {
+        let engine = MockNetEngine::default();
+        NetworkMessageDispatcher::send_damage(
+            &engine,
+            7,
+            15,
+            35,
+            1 << 1, // DMG_BULLET
+            [100.0, -200.0, 50.0],
+        );
+
+        let msgs = engine.messages.lock().unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0], (MessageDest::One as i32, 69, Some(7)));
+
+        let bytes = engine.bytes.lock().unwrap();
+        assert_eq!(bytes.len(), 2);
+        assert_eq!(bytes[0], 15);
+        assert_eq!(bytes[1], 35);
+
+        let longs = engine.longs.lock().unwrap();
+        assert_eq!(longs.len(), 1);
+        assert_eq!(longs[0], 1 << 1);
+
+        let coords = engine.coords.lock().unwrap();
+        assert_eq!(coords.len(), 3);
+        assert_eq!(coords[0], 100.0);
+        assert_eq!(coords[1], -200.0);
+        assert_eq!(coords[2], 50.0);
         assert_eq!(*engine.ended.lock().unwrap(), 1);
     }
 }

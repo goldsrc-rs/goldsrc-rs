@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use goldsrc_api::consts::log_targets;
-use goldsrc_api::engine::Engine;
 use goldsrc_api::menu::{
     ExitBehavior, Menu, MenuContext, MenuRendererKind, RenderedMenuPage, SlotAction,
 };
+use goldsrc_spi::engine::Engine;
 
 /// Active menu session for a single connected player.
 pub struct PlayerMenuSession {
@@ -56,7 +56,7 @@ impl MenuSessionManager {
         {
             engine.client_print(
                 player_idx,
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 &format!("[Menu] Access denied: requires capability '{cap}'.\n"),
             );
             return;
@@ -196,13 +196,9 @@ impl MenuSessionManager {
                     Self::clear_client_menu(player_idx, engine);
                 }
 
-                // Dispatch to WASM hook / event: 8 bytes payload: [player_idx: i32 (4 bytes), id: u32 (4 bytes)]
-                let mut payload = Vec::with_capacity(8);
-                payload.extend_from_slice(&player_idx.to_le_bytes());
-                payload.extend_from_slice(&id.to_le_bytes());
-                crate::hooks::emit(crate::host::HostEvent::Custom {
-                    name: "menu_select",
-                    payload: &payload,
+                crate::hooks::emit(crate::host::HostEvent::MenuSelect {
+                    player: player_idx,
+                    item_id: id,
                 });
 
                 // Also trigger client command if action name is non-empty
@@ -558,7 +554,7 @@ impl MenuSessionManager {
 
         if text.is_empty() {
             engine.message_begin(
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 show_menu_id,
                 None,
                 Some(player_idx),
@@ -597,7 +593,7 @@ impl MenuSessionManager {
             let has_more = !remaining.is_empty();
 
             engine.message_begin(
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 show_menu_id,
                 None,
                 Some(player_idx),
@@ -615,7 +611,7 @@ impl MenuSessionManager {
         let show_menu_id = engine.reg_user_msg("ShowMenu", -1);
         if show_menu_id > 0 && show_menu_id != 255 {
             engine.message_begin(
-                goldsrc_api::MessageDest::One as i32,
+                goldsrc_spi::engine::MessageDest::One as i32,
                 show_menu_id,
                 None,
                 Some(player_idx),
@@ -659,11 +655,13 @@ pub fn menu_manager() -> &'static Mutex<MenuSessionManager> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use goldsrc_api::engine::{
-        EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
-        EngineSound, TraceResult,
-    };
+    use goldsrc_api::cvar::{CvarEngine, CvarFlags};
+    use goldsrc_api::entity::EntitySpawner;
     use goldsrc_api::menu::{MenuItem, MenuStyle};
+    use goldsrc_spi::engine::{
+        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
+        TraceResult,
+    };
 
     struct MockEngine;
     impl EnginePrecache for MockEngine {
@@ -692,6 +690,19 @@ mod tests {
             1
         }
     }
+    impl EntitySpawner for MockEngine {
+        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
+            None
+        }
+        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
+        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
+        fn entity_key_value(&self, _index: i32, _key: &str, _value: &str) -> bool {
+            false
+        }
+        fn dispatch_spawn(&self, _index: i32) -> i32 {
+            0
+        }
+    }
     impl EngineEntities for MockEngine {
         fn entity_is_valid(&self, _index: i32) -> bool {
             true
@@ -706,7 +717,6 @@ mod tests {
         fn entity_origin(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
         fn entity_velocity(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
@@ -714,7 +724,6 @@ mod tests {
         fn entity_angles(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
         fn player_name(&self, _index: i32) -> Option<String> {
             Some("Tester".into())
         }
@@ -722,19 +731,13 @@ mod tests {
             0.0
         }
         fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
-        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
-            None
-        }
         fn remove_entity(&self, _index: i32) {}
         fn drop_to_floor(&self, _index: i32) -> i32 {
             0
         }
-        fn dispatch_spawn(&self, _index: i32) -> i32 {
-            0
-        }
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
-    impl EngineCvars for MockEngine {
+    impl CvarEngine for MockEngine {
         fn cvar_get_float(&self, _n: &str) -> f32 {
             0.0
         }
@@ -743,6 +746,9 @@ mod tests {
             None
         }
         fn cvar_set_string(&self, _n: &str, _v: &str) {}
+        fn cvar_register(&self, _name: &str, _default_value: &str, _flags: CvarFlags) -> bool {
+            true
+        }
     }
     impl EnginePhysics for MockEngine {
         fn point_contents(&self, _point: [f32; 3]) -> i32 {

@@ -8,6 +8,7 @@ description = "Host-side runtime orchestrator, engine bridge, configuration, sto
 [dependencies]
 goldsrc-sys = { workspace = true }
 goldsrc-api = { workspace = true, features = ["unsafe-sys"] }
+goldsrc-spi = { workspace = true }
 goldsrc-host-wasm = { workspace = true }
 lexopt = { workspace = true, optional = true }
 serde = { workspace = true }

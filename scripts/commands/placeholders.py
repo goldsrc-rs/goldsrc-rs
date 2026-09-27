@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-EXAMPLES_DIR = ROOT_DIR / "examples" / "demo_plugins"
+EXAMPLES_DIR = ROOT_DIR / "examples"
+PLUGINS_DIR = ROOT_DIR / "plugins"
 
 
 def main(argv: list[str] | None = None) -> int:

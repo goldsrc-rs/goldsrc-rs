@@ -76,10 +76,10 @@ goldsrc-rs/
 ├── framework/
 │   ├── goldsrc/                    # Lightweight guest SDK: Flat ECS, tr!, chat_print!, logging
 │   └── goldsrc-macros/             # Procedural macros: #[plugin], #[command], #[on_load]
+├── plugins/                        # Standard production-grade plugins (admin_system, vip_core)
+├── examples/                       # Developer SDK examples (test_chat, test_ecs, test_hud, test_i18n, test_menu)
 ├── resources/
 │   └── lang/                       # Global shared localization dictionaries (common.toml, test_i18n.toml)
-├── examples/
-│   └── demo_plugins/               # Example WASM plugins (admin_system, test_hud, test_menu, test_i18n, test_chat, vip_core, vip_menu)
 └── scripts/                        # Unified Python CLI automation tools (setup, build, deploy, diagnostics)
 ```
 

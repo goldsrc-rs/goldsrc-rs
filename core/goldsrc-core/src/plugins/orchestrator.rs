@@ -55,9 +55,11 @@ impl PluginOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use goldsrc_api::{
-        EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache,
-        EngineSound, TraceResult,
+    use goldsrc_api::cvar::{CvarEngine, CvarFlags};
+    use goldsrc_api::entity::EntitySpawner;
+    use goldsrc_spi::engine::{
+        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
+        TraceResult,
     };
     use std::sync::Arc;
 
@@ -88,6 +90,19 @@ mod tests {
             -1
         }
     }
+    impl EntitySpawner for NoopEngine {
+        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
+            None
+        }
+        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
+        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
+        fn entity_key_value(&self, _index: i32, _key: &str, _value: &str) -> bool {
+            false
+        }
+        fn dispatch_spawn(&self, _index: i32) -> i32 {
+            0
+        }
+    }
     impl EngineEntities for NoopEngine {
         fn entity_is_valid(&self, _index: i32) -> bool {
             false
@@ -102,7 +117,6 @@ mod tests {
         fn entity_origin(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_origin(&self, _index: i32, _pos: [f32; 3]) {}
         fn entity_velocity(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
@@ -110,7 +124,6 @@ mod tests {
         fn entity_angles(&self, _index: i32) -> [f32; 3] {
             [0.0; 3]
         }
-        fn entity_set_angles(&self, _index: i32, _angles: [f32; 3]) {}
         fn player_name(&self, _index: i32) -> Option<String> {
             None
         }
@@ -124,19 +137,13 @@ mod tests {
             0.0
         }
         fn player_set_armorvalue(&self, _index: i32, _armor: f32) {}
-        fn create_named_entity(&self, _classname: &str) -> Option<i32> {
-            None
-        }
         fn remove_entity(&self, _index: i32) {}
         fn drop_to_floor(&self, _index: i32) -> i32 {
             0
         }
-        fn dispatch_spawn(&self, _index: i32) -> i32 {
-            0
-        }
         fn dispatch_touch(&self, _touched: i32, _other: i32) {}
     }
-    impl EngineCvars for NoopEngine {
+    impl CvarEngine for NoopEngine {
         fn cvar_get_string(&self, _n: &str) -> Option<String> {
             None
         }
@@ -145,6 +152,9 @@ mod tests {
             0.0
         }
         fn cvar_set_float(&self, _n: &str, _v: f32) {}
+        fn cvar_register(&self, _name: &str, _default_value: &str, _flags: CvarFlags) -> bool {
+            true
+        }
     }
     impl EngineConsole for NoopEngine {
         fn server_command(&self, _cmd: &str) {}

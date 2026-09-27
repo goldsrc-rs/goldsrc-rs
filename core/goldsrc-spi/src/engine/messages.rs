@@ -72,23 +72,7 @@ pub trait EngineMessages: Send + Sync {
 ///
 /// Wraps the raw `message_begin` / `write_*` / `message_end` sequence and
 /// guarantees `message_end` is always emitted: either explicitly via
-/// [`MessageBuilder::send`] or automatically on drop (RAII safety net),
-/// so a forgotten `send()` can never leave the engine's network buffer
-/// in a dangling open state (`svc_bad` on clients).
-///
-/// # Examples
-///
-/// ```no_run
-/// # use goldsrc_api::{EngineMessages, MessageDest};
-/// # fn demo(engine: &dyn EngineMessages, say_text_id: i32, player: i32) {
-/// use goldsrc_api::engine::MessageBuilder;
-///
-/// MessageBuilder::to_player(engine, MessageDest::One, say_text_id, player)
-///     .byte(0)               // sender: server console
-///     .string("Hello!")
-///     .send();
-/// # }
-/// ```
+/// [`MessageBuilder::send`] or automatically on drop (RAII safety net).
 pub struct MessageBuilder<'a> {
     engine: &'a dyn EngineMessages,
     /// `true` while the engine-side message is still open.
@@ -281,7 +265,6 @@ mod tests {
         let mock = MockMessages::default();
         {
             MessageBuilder::broadcast(&mock, 23).byte(1).short(2);
-            // No send() — dropped here.
         }
 
         assert_eq!(

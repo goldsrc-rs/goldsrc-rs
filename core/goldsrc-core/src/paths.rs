@@ -1,6 +1,7 @@
 pub use goldsrc_api::consts::{
-    ADDONS_DIR_NAME, BackendType, CONFIGS_DIR_NAME, DEFAULT_CONFIG_FILE_NAME, DEFAULT_MOD_DIR,
-    FRAMEWORK_NAME, HOSTS_DIR_NAME, LOGS_DIR_NAME, PLUGINS_DIR_NAME, WASM_EXT,
+    ADDONS_DIR_NAME, BUNDLES_DIR_NAME, BackendType, CONFIGS_DIR_NAME, DATA_DIR_NAME, DB_DIR_NAME,
+    DEFAULT_CONFIG_FILE_NAME, DEFAULT_DB_FILE_NAME, DEFAULT_MOD_DIR, FRAMEWORK_NAME,
+    HOSTS_DIR_NAME, LANG_DIR_NAME, LIB_DIR_NAME, LOGS_DIR_NAME, PLUGINS_DIR_NAME, WASM_EXT,
 };
 use std::path::{Path, PathBuf};
 
@@ -51,6 +52,64 @@ impl PathResolver {
             }
         }
         Self::framework_dir(backend).join(PLUGINS_DIR_NAME)
+    }
+
+    /// Returns possible backend shared library directory paths (`lib/`) in order of preference.
+    pub fn lib_dirs(backend: BackendType) -> Vec<PathBuf> {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+        let mut dirs = Vec::new();
+
+        let rel_path = Self::framework_dir(backend).join(LIB_DIR_NAME);
+        if let Some(ref base) = exe_dir {
+            dirs.push(base.join(&rel_path));
+            let mut alt_rel = PathBuf::new();
+            if backend == BackendType::Metamod {
+                alt_rel.push(ADDONS_DIR_NAME);
+            }
+            alt_rel.push(FRAMEWORK_NAME);
+            alt_rel.push(LIB_DIR_NAME);
+            dirs.push(base.join(&alt_rel));
+        }
+
+        dirs.push(rel_path);
+        dirs
+    }
+
+    /// Returns the first existing shared library directory (`lib/`), or the primary default path.
+    pub fn existing_lib_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::lib_dirs(backend) {
+            if dir.exists() {
+                return dir;
+            }
+        }
+        Self::framework_dir(backend).join(LIB_DIR_NAME)
+    }
+
+    /// Returns possible bundle directory paths in order of preference.
+    pub fn bundle_dirs(backend: BackendType) -> Vec<PathBuf> {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+        let mut dirs = Vec::new();
+
+        let rel_path = Self::framework_dir(backend).join(BUNDLES_DIR_NAME);
+        if let Some(ref base) = exe_dir {
+            dirs.push(base.join(&rel_path));
+        }
+        dirs.push(rel_path);
+        dirs
+    }
+
+    /// Returns the first existing bundle directory, or the primary default path.
+    pub fn existing_bundle_dir(backend: BackendType) -> PathBuf {
+        for dir in Self::bundle_dirs(backend) {
+            if dir.exists() {
+                return dir;
+            }
+        }
+        Self::framework_dir(backend).join(BUNDLES_DIR_NAME)
     }
 
     /// Returns possible config directory paths in order of preference.
@@ -134,7 +193,7 @@ impl PathResolver {
             .and_then(|p| p.parent().map(|p| p.to_path_buf()));
         let mut dirs = Vec::new();
 
-        let rel_path = Self::framework_dir(backend).join(goldsrc_api::consts::DATA_DIR_NAME);
+        let rel_path = Self::framework_dir(backend).join(DATA_DIR_NAME);
         if let Some(ref base) = exe_dir {
             // 1. Primary: <exe_dir>/cstrike/addons/goldsrc/data (for Metamod) or <exe_dir>/cstrike/goldsrc/data (for Standalone)
             dirs.push(base.join(&rel_path));
@@ -150,7 +209,7 @@ impl PathResolver {
                 alt_rel.push(ADDONS_DIR_NAME);
             }
             alt_rel.push(FRAMEWORK_NAME);
-            alt_rel.push(goldsrc_api::consts::DATA_DIR_NAME);
+            alt_rel.push(DATA_DIR_NAME);
             dirs.push(base.join(&alt_rel));
         }
 
@@ -167,21 +226,19 @@ impl PathResolver {
         Self::data_dirs(backend)
             .into_iter()
             .next()
-            .unwrap_or_else(|| {
-                Self::framework_dir(backend).join(goldsrc_api::consts::DATA_DIR_NAME)
-            })
+            .unwrap_or_else(|| Self::framework_dir(backend).join(DATA_DIR_NAME))
     }
 
     /// Returns the primary localization directory (`data/lang`).
     pub fn lang_dir(backend: BackendType) -> PathBuf {
-        Self::existing_data_dir(backend).join(goldsrc_api::consts::LANG_DIR_NAME)
+        Self::existing_data_dir(backend).join(LANG_DIR_NAME)
     }
 
     /// Returns the primary SQLite database path (`data/db/goldsrc.db`).
     pub fn db_path(backend: BackendType) -> PathBuf {
         Self::existing_data_dir(backend)
-            .join(goldsrc_api::consts::DB_DIR_NAME)
-            .join(goldsrc_api::consts::DEFAULT_DB_FILE_NAME)
+            .join(DB_DIR_NAME)
+            .join(DEFAULT_DB_FILE_NAME)
     }
 
     /// Returns the path to goldsrc.toml.

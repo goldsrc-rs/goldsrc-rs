@@ -7,7 +7,7 @@
 //! - Synchronous transactional flush on `client_disconnect` and `ServerDeactivate`.
 
 use goldsrc_api::consts::log_targets;
-use goldsrc_api::storage::{StorageError, StorageProvider};
+use goldsrc_spi::storage::{StorageError, StorageProvider};
 use std::marker::PhantomData;
 use std::sync::Arc;
 

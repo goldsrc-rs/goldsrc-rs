@@ -4,9 +4,9 @@ pub mod engine_bridge;
 pub mod print_queue;
 
 pub use engine_bridge::{
-    EngineBackend, GamedllSpawnFn, GamedllTouchFn, MapNameResolverFn, UserMsgResolverFn,
-    register_user_msg_id, set_game_dll_spawn, set_game_dll_touch, set_map_name_resolver,
-    set_user_msg_resolver,
+    EngineBackend, GamedllKeyValueFn, GamedllSpawnFn, GamedllTouchFn, MapNameResolverFn,
+    UserMsgResolverFn, register_user_msg_id, set_game_dll_key_value, set_game_dll_spawn,
+    set_game_dll_touch, set_map_name_resolver, set_user_msg_resolver,
 };
 pub use print_queue::{PrintQueue, cstr_to_string, escape_server_print, sanitize_client_print};
 

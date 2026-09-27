@@ -297,8 +297,7 @@ impl I18nService {
 
     /// Returns the global server default language code (from `server_language` cvar or fallback "en").
     pub fn server_lang() -> String {
-        goldsrc_api::engine_api::cvar_get_string("server_language")
-            .unwrap_or_else(|| "en".to_string())
+        goldsrc_api::cvar::cvar_get_string("server_language").unwrap_or_else(|| "en".to_string())
     }
 
     /// Clears all loaded dictionaries.

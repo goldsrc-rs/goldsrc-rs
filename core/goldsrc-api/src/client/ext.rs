@@ -23,6 +23,34 @@ pub trait ClientExt: EntityExt {
     fn lang(&self) -> String;
     /// Returns the client kind (Player, Bot, HLTV).
     fn client_kind(&self) -> ClientKind;
+    /// Returns the client's full network and authentication identity.
+    fn identity(&self) -> crate::client::PlayerIdentity;
+    /// Returns the client's canonical GUID if authenticated.
+    fn guid(&self) -> Option<crate::client::PlayerGuid> {
+        self.identity().guid()
+    }
+    /// Returns the client's SteamID if authenticated via Steam.
+    fn steam_id(&self) -> Option<crate::client::SteamId> {
+        self.identity().steam_id()
+    }
+    /// Returns the client's authentication state.
+    fn auth_state(&self) -> crate::client::AuthState {
+        self.identity().auth_state
+    }
+    /// Returns the client's SteamID / AuthID string (e.g. "STEAM_0:1:12345678").
+    fn auth_id(&self) -> String {
+        self.identity().auth_id().to_string()
+    }
+    /// Returns the client's server-assigned monotonic user ID (`pfnGetPlayerUserId`).
+    fn user_id(&self) -> u32 {
+        self.identity().user_id
+    }
+    /// Returns the client's IP address string.
+    fn ip(&self) -> String {
+        self.identity().ip_str().to_string()
+    }
+    /// Returns the client's generational session token, if active.
+    fn session_token(&self) -> Option<crate::client::PlayerSessionToken>;
     /// Returns `true` if this client is an AI bot (`FL_FAKECLIENT`).
     fn is_bot(&self) -> bool;
     /// Returns `true` if this client is an HLTV proxy (`FL_PROXY`).
@@ -101,6 +129,60 @@ impl ClientExt for Client {
             ClientKind::Bot
         } else {
             ClientKind::Player
+        }
+    }
+
+    #[inline(always)]
+    fn identity(&self) -> crate::client::PlayerIdentity {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::client::PlayerIdentity {
+                slot: self.index,
+                user_id: 0,
+                raw_auth_id: "STEAM_ID_PENDING".to_string(),
+                auth_state: crate::client::AuthState::Pending,
+                ip: None,
+                ping: 0,
+                packet_loss: 0,
+                is_bot: self.is_bot(),
+                is_hltv: self.is_hltv(),
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(lock) = crate::client::player::PLAYER_IDENTITY_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+            {
+                return resolver(self.index);
+            }
+            crate::client::PlayerIdentity {
+                slot: self.index,
+                user_id: 0,
+                raw_auth_id: "STEAM_ID_PENDING".to_string(),
+                auth_state: crate::client::AuthState::Pending,
+                ip: None,
+                ping: 0,
+                packet_loss: 0,
+                is_bot: self.is_bot(),
+                is_hltv: self.is_hltv(),
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn session_token(&self) -> Option<crate::client::PlayerSessionToken> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(lock) = crate::client::player::PLAYER_SESSION_TOKEN_RESOLVER_HOOK.read()
+                && let Some(resolver) = *lock
+            {
+                return resolver(self.index);
+            }
+            None
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            None
         }
     }
 
@@ -197,6 +279,16 @@ impl ClientExt for Player {
     #[inline(always)]
     fn client_kind(&self) -> ClientKind {
         self.client().client_kind()
+    }
+
+    #[inline(always)]
+    fn identity(&self) -> crate::client::PlayerIdentity {
+        self.client().identity()
+    }
+
+    #[inline(always)]
+    fn session_token(&self) -> Option<crate::client::PlayerSessionToken> {
+        self.client().session_token()
     }
 
     #[inline(always)]

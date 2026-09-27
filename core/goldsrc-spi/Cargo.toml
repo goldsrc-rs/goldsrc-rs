@@ -1,0 +1,11 @@
+[package]
+name = "goldsrc-spi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Service Provider Interface (SPI) traits and driver contracts for GoldSrc.rs"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+goldsrc-api = { workspace = true }

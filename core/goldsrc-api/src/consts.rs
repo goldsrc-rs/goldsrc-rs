@@ -1,11 +1,52 @@
 //! Global constants for the GoldSrc engine and framework.
 
-pub use crate::engine::{
-    ENGINE_INTERFACE_VERSION, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
-    HUD_PRINTRADIO, MAX_EDICTS, MAX_PLAYERS, MAX_SAYTEXT_PAYLOAD_LEN, MAX_USER_MSG_DATA_LEN,
-    NEW_DLL_INTERFACE_VERSION, PRINT_CENTER, PRINT_CHAT, PRINT_CONSOLE, PRINT_NOTIFY,
-    SAFE_SAYTEXT_LIMIT,
-};
+/// Maximum number of players supported by the GoldSrc engine.
+pub const MAX_PLAYERS: u16 = 32;
+
+/// Maximum number of entity edicts in GoldSrc engine.
+pub const MAX_EDICTS: u16 = 2048;
+
+/// Maximum payload size in bytes for a single user network message.
+pub const MAX_USER_MSG_DATA_LEN: usize = 192;
+
+/// Maximum payload size for SayText user messages (192 - 12 bytes header/sender/NUL).
+pub const MAX_SAYTEXT_PAYLOAD_LEN: usize = 180;
+
+/// Safe payload limit for single-chunk chat messages (180 - 5 bytes safety margin).
+pub const SAFE_SAYTEXT_LIMIT: usize = MAX_SAYTEXT_PAYLOAD_LEN - 5;
+
+/// Standard engine interface version (`DLL_FUNCTIONS`).
+pub const ENGINE_INTERFACE_VERSION: i32 = 140;
+
+/// Standard NEW_DLL_FUNCTIONS interface version.
+pub const NEW_DLL_INTERFACE_VERSION: i32 = 1;
+
+/// Client print destination: Console (HLSDK `print_console = 0`).
+pub const PRINT_CONSOLE: i32 = 0;
+
+/// Client print destination: Center message (HLSDK `print_center = 1`).
+pub const PRINT_CENTER: i32 = 1;
+
+/// Client print destination: Chat (HLSDK `print_chat = 2`).
+pub const PRINT_CHAT: i32 = 2;
+
+/// Client print destination: Notify / developer print (HLSDK `print_notify = 1`).
+pub const PRINT_NOTIFY: i32 = 1;
+
+/// HUD / TextMsg print destination: Notify / developer print (HLSDK `HUD_PRINTNOTIFY = 1`).
+pub const HUD_PRINTNOTIFY: i32 = 1;
+
+/// HUD / TextMsg print destination: Console (HLSDK `HUD_PRINTCONSOLE = 2`).
+pub const HUD_PRINTCONSOLE: i32 = 2;
+
+/// HUD / TextMsg print destination: Chat (HLSDK `HUD_PRINTTALK = 3`).
+pub const HUD_PRINTCHAT: i32 = 3;
+
+/// HUD / TextMsg print destination: Center message (HLSDK `HUD_PRINTCENTER = 4`).
+pub const HUD_PRINTCENTER: i32 = 4;
+
+/// HUD / TextMsg print destination: Radio chat (HLSDK `HUD_PRINTRADIO = 5`).
+pub const HUD_PRINTRADIO: i32 = 5;
 pub use crate::hud::{
     DRC_CMD_MESSAGE, HUD_COORD_CENTER, MAX_HUD_CHANNELS, SVC_DIRECTOR, SVC_TEMPENTITY,
     TE_TEXTMESSAGE,
@@ -55,6 +96,12 @@ pub const FRAMEWORK_NAME: &str = "goldsrc";
 
 /// Standard plugins directory name.
 pub const PLUGINS_DIR_NAME: &str = "plugins";
+
+/// Standard backend binaries library directory name (`lib/`, replacing legacy `bin/`).
+pub const LIB_DIR_NAME: &str = "lib";
+
+/// Standard bundles directory name.
+pub const BUNDLES_DIR_NAME: &str = "bundles";
 
 /// Standard configs directory name.
 pub const CONFIGS_DIR_NAME: &str = "configs";

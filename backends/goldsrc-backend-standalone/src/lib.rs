@@ -11,7 +11,7 @@
 //! ```
 //! to:
 //! ```text
-//! gamedll "addons/goldsrc/bin/goldsrc_standalone.dll"
+//! gamedll "addons/goldsrc/lib/goldsrc_standalone.dll"
 //! ```
 
 mod commands;
@@ -80,7 +80,7 @@ fn init_wasm_host() {
         None
     });
 
-    let engine: std::sync::Arc<dyn goldsrc_api::Engine> = std::sync::Arc::new(*backend());
+    let engine: std::sync::Arc<dyn goldsrc_spi::engine::Engine> = std::sync::Arc::new(*backend());
     if let Err(e) = goldsrc_core::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Standalone,
         |msg| {
@@ -433,6 +433,9 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
         }
         if let Some(f) = proxy::real_touch() {
             goldsrc_core::backend::set_game_dll_touch(f);
+        }
+        if let Some(f) = proxy::real_key_value() {
+            goldsrc_core::backend::set_game_dll_key_value(f);
         }
     });
 }

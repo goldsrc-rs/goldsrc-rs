@@ -27,6 +27,12 @@ pub type PlayerTeamResolverHook = fn(i32) -> i32;
 pub type PlayerLangResolverHook = fn(i32) -> Option<String>;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub type PlayerIdentityResolverHook = fn(i32) -> crate::client::PlayerIdentity;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type PlayerSessionTokenResolverHook = fn(i32) -> Option<crate::client::PlayerSessionToken>;
+
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) static NATIVE_PRINT_HOOK: RwLock<Option<NativePrintHook>> = RwLock::new(None);
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -43,6 +49,31 @@ pub(crate) static PLAYER_TEAM_RESOLVER_HOOK: RwLock<Option<PlayerTeamResolverHoo
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) static PLAYER_LANG_RESOLVER_HOOK: RwLock<Option<PlayerLangResolverHook>> =
     RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) static PLAYER_IDENTITY_RESOLVER_HOOK: RwLock<Option<PlayerIdentityResolverHook>> =
+    RwLock::new(None);
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) static PLAYER_SESSION_TOKEN_RESOLVER_HOOK: RwLock<
+    Option<PlayerSessionTokenResolverHook>,
+> = RwLock::new(None);
+
+/// Registers the native engine player identity resolver for `Player::identity()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_identity_hook(hook: PlayerIdentityResolverHook) {
+    if let Ok(mut lock) = PLAYER_IDENTITY_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
+
+/// Registers the native player session token resolver for `Player::session_token()` on the host.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_player_session_token_hook(hook: PlayerSessionTokenResolverHook) {
+    if let Ok(mut lock) = PLAYER_SESSION_TOKEN_RESOLVER_HOOK.write() {
+        *lock = Some(hook);
+    }
+}
 
 /// Registers the native backend print dispatcher for host-side `Player::print_*` calls.
 #[cfg(not(target_arch = "wasm32"))]

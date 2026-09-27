@@ -1,7 +1,7 @@
 //! Pure Rust traits (interfaces) for GoldSrc engine interaction.
 //!
-//! This crate defines the abstract interface that plugin developers use.
-//! It has no dependency on any specific backend (Metamod or Standalone).
+//! This crate defines the abstract domain model and consumer interfaces that plugin developers use.
+//! It has no dependency on any specific host or backend (Metamod, Standalone, or Engine HAL).
 
 /// Universal Entity and Player Action System and Value Objects.
 pub mod action;
@@ -9,6 +9,8 @@ pub mod action;
 pub mod auth;
 /// Generated WASM bindings (wasm32 only).
 pub mod bindings;
+/// Autonomous Bundle Component Model and Metadata Abstractions.
+pub mod bundle;
 /// In-game chat interception, formatting, and packet splitting.
 pub mod chat;
 /// Core player and client domain abstractions, states, and typestate guards.
@@ -17,15 +19,13 @@ pub mod client;
 pub mod command;
 /// Global constants for the engine and framework.
 pub mod consts;
-/// Typed CVar bindings and flags.
+/// Typed CVar bindings, builder, flags, and ConfigModel sync abstractions.
 pub mod cvar;
 /// Universal Phased Directed Acyclic Graph (PhasedDag) ordering engine.
 pub mod dag;
 /// Unified Expression DSL lexer, parser, and grammar primitives.
 pub mod dsl;
-/// Modular engine sub-system traits, unified engine bridge, and API facade.
-pub mod engine;
-/// Safe wrapper around engine entities and entity extension traits.
+/// Safe wrapper around engine entities, spawner, and entity extension traits.
 pub mod entity;
 /// Event subscription, priority ordering, and local guest event dispatching.
 pub mod event;
@@ -44,8 +44,6 @@ pub mod pipeline;
 pub mod placeholders;
 /// Universal Entity and Player Property System (`Property` & `MutProperty`).
 pub mod property;
-/// High-level ReAPI capability flags, detection, and queries.
-pub mod reapi;
 /// Unified requirements DSL.
 pub mod requirements;
 /// Generic Reactive Rule & Provider Engine.
@@ -53,14 +51,24 @@ pub mod requirements;
 pub mod rules;
 /// Compile-time specifications, logical combinators, and state-guarded refinement.
 pub mod spec;
-/// Dual Storage Port Abstraction & Typed Bucket Facade.
-pub mod storage;
+/// Text encoding utilities and chat color escape code converters.
+pub mod text;
+/// Discrete tick and continuous duration task scheduling abstractions.
+pub mod timer;
 /// Fundamental game data types, spatial mathematics, and engine descriptors.
 pub mod types;
 
 pub use action::{Action, CancellationToken, PlayerAction};
-pub use auth::{Auth, CapExpr, CapabilityRegistry, CheckCapability};
-pub use chat::{ChatMessage, ChatScope, MAX_SAYTEXT_PAYLOAD_LEN, split_chat_chunks};
+pub use auth::{
+    AdminCaps, Auth, CapExpr, CapabilityRegistry, CheckCapability, ValidationResult, VipCaps,
+};
+pub use bundle::{
+    BundleComponentSpec, BundleInfo, BundleManifest, BundleValidationError, ComponentRole,
+};
+pub use chat::{
+    ChatMessage, ChatScope, ChatTarget, LifeStateFilter, MAX_SAYTEXT_PAYLOAD_LEN, TeamTarget,
+    split_chat_chunks,
+};
 pub use client::{
     Alive, AsLangCode, Bot, Client, ClientExt, ClientKind, Connected, ConnectedClient,
     ConnectionState, Dead, DeadPlayer, Hltv, Human, HumanClient, LifeState, LivingHuman,
@@ -71,18 +79,13 @@ pub use command::{
     CommandResult, CommandTarget, FromArg, PlayerStateFilter, clear_commands, dispatch_command,
     register_command, split_command_args, use_command_interceptor,
 };
-pub use cvar::{Cvar, CvarFlags};
+pub use consts::*;
+pub use cvar::{ConfigModel, Cvar, CvarEngine, CvarField, CvarFlags, FromCvarEngine};
 pub use dag::{DagError, EventPhase, NodeBuilder, OrderNode, Phase, PhasedDag, PluginTier};
 pub use dsl::{Lexer, Token};
-
-pub use engine::{
-    Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
-    EnginePrecache, EngineSound, HUD_PRINTCENTER, HUD_PRINTCHAT, HUD_PRINTCONSOLE, HUD_PRINTNOTIFY,
-    HUD_PRINTRADIO, MAX_EDICTS, MAX_PLAYERS, MessageBuilder, MessageDest, PRINT_CENTER, PRINT_CHAT,
-    PRINT_CONSOLE, PRINT_NOTIFY, SAFE_SAYTEXT_LIMIT, TraceResult, cyrillic_to_latin, engine_api,
-    format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
+pub use entity::{
+    Entity, EntityBuilder, EntityExt, EntityId, EntitySpawner, SolidEntity, SpawnedEntity,
 };
-pub use entity::{Entity, EntityExt, EntityId, SolidEntity, SpawnedEntity};
 pub use event::{
     Event, EventHandler, EventRegistry, EventSubscriberBuilder, EventSubscription, clear_events,
     dispatch_event, subscribe_event,
@@ -93,7 +96,6 @@ pub use hud::{
     FadeFlags, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, ScreenFade,
     ScreenFadeBuilder, ScreenShake, ScreenShakeBuilder,
 };
-
 pub use menu::{
     AntiSpamAction, Condition, DenyAction, DenyPolicy, ExitBehavior, Feedback, ItemKind, ItemTitle,
     Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext, MenuItem,
@@ -110,12 +112,16 @@ pub use placeholders::{
 pub use property::{
     Angles, Armor, Classname, Health, Origin, Prop, PropGet, PropSet, Velocity, prop,
 };
-pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 pub use requirements::{CvarOp, Requirement};
 #[cfg(feature = "rules")]
 pub use rules::{Rule, RuleAction, RuleCondition, RuleEngine, RuleRegistry, RuleScope};
 pub use spec::{
     All, Any, Dormant, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec, SpecError,
 };
-pub use storage::{SqlDatabase, StorageError, StorageProvider};
+pub use text::{
+    cyrillic_to_latin, format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
+};
+pub use timer::{
+    IntoScheduleDelay, ScheduleDelay, Ticks, TimerAction, TimerBound, TimerId, TimerMode,
+};
 pub use types::{EDict, LIBLIST_FILENAME, LibList, Vector3, bump_map_generation};

@@ -10,6 +10,9 @@ interface api {
     /// Logs a message to the server console.
     host-log: func(msg: string);
 
+    /// Returns current monotonic server host uptime in seconds.
+    host-time: func() -> f32;
+
     /// Checks if an entity index is valid.
     host-entity-is-valid: func(index: s32) -> bool;
 
@@ -48,6 +51,9 @@ interface api {
 
     /// Drops an entity to the floor beneath it.
     host-drop-to-floor: func(index: s32) -> s32;
+
+    /// Sets a key-value attribute on an entity (dispatched via pfnKeyValue).
+    host-entity-key-value: func(index: s32, key: string, value: string) -> bool;
 
     /// Retrieves a player's name.
     host-player-name: func(index: s32) -> option<string>;

@@ -71,9 +71,9 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         };
 
         if !targeted {
-            emit(HostEvent::Custom {
-                name: "menu_select",
-                payload: &payload,
+            emit(HostEvent::MenuSelect {
+                player: player_idx,
+                item_id: slot as u32,
             });
         }
 

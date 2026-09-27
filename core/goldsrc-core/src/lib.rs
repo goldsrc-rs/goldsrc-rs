@@ -2,9 +2,11 @@
 
 pub mod api_registry;
 pub mod backend;
+pub mod bundle;
 pub mod chat;
 #[cfg(feature = "cli")]
 pub mod cli;
+pub mod combat;
 pub mod config;
 pub mod hooks;
 pub mod host;
@@ -20,13 +22,20 @@ pub mod reapi;
 pub mod rules;
 pub mod session;
 pub mod storage;
+pub mod timer;
 pub mod watcher;
 
 pub use ::log;
-pub use chat::process_chat_message;
+pub use bundle::{BrokerError, BundleFsSandbox, BundleMessageBroker, SandboxError};
+pub use chat::{
+    ChatTargetResolver, process_chat_message, register_chat_target_resolver,
+    unregister_chat_target_resolver,
+};
+pub use combat::{CombatBridge, CombatTier};
 pub use config::plugins as plugins_config;
 pub use config::{
-    HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup, PluginsConfig,
+    ConfigBinder, HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup,
+    PluginsConfig, SelfHealingConfigEngine,
 };
 pub use host::{EventPayload, HostEvent, HostRuntime, PlayerEvent};
 pub use i18n::I18nService;
@@ -36,6 +45,7 @@ pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use plugins::PluginOrchestrator;
 pub use reapi::ReApiBridge;
 pub use storage::{Bucket, JsonFormat, SqliteStorageEngine, StorageFormat};
+pub use timer::TimerService;
 pub use watcher::{
     WatchTarget, WatcherEvent, WatcherFilter, WatcherService, WatcherSpec, WatcherStatus,
 };

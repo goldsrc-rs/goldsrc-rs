@@ -4,7 +4,7 @@
 //! dynamically on module load, and verifies major/minor version compatibility.
 
 use goldsrc_api::consts::log_targets;
-use goldsrc_api::reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
+use goldsrc_spi::reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 use goldsrc_sys::reapi::{
     CreateInterfaceFn, IReGameApi, IRehldsApi, REGAMEDLL_API_VERSION_MAJOR,
     REGAMEDLL_API_VERSION_MINOR, REHLDS_API_VERSION_MAJOR, REHLDS_API_VERSION_MINOR, ReGameFuncs_t,

@@ -12,4 +12,4 @@ crate-type = ["cdylib"]
 doctest = false
 
 [dependencies]
-goldsrc = { path = "../../../framework/goldsrc" }
+goldsrc = { workspace = true }

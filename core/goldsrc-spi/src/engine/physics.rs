@@ -60,38 +60,21 @@ pub trait EnginePhysics: Send + Sync {
         ignore_ent: i32,
     ) -> TraceResult;
 
-    /// Cast an arbitrary axis-aligned bounding box from `start` to `end`.
-    fn trace_hull_box(
-        &self,
-        start: [f32; 3],
-        end: [f32; 3],
-        mins: [f32; 3],
-        maxs: [f32; 3],
-        flags: i32,
-        ignore_ent: i32,
-    ) -> TraceResult {
-        // Default implementation maps to standard player hull (hull 1) or point trace
-        if mins == [0.0; 3] && maxs == [0.0; 3] {
-            self.trace_line(start, end, flags, ignore_ent)
-        } else {
-            self.trace_hull(start, end, flags, 1, ignore_ent)
-        }
+    /// Checks if a line-of-sight between two entities is clear of map geometry.
+    fn is_visible(&self, ent_from: i32, ent_to: i32) -> bool {
+        let _ = (ent_from, ent_to);
+        true
     }
 
-    /// Cast a ray against a specific entity's bounding box/model.
+    /// Cast a ray against a specific model/entity collision hull.
     fn trace_model(
         &self,
         start: [f32; 3],
         end: [f32; 3],
-        flags: i32,
-        ent_index: i32,
+        hull_number: i32,
+        pent_model: i32,
     ) -> TraceResult {
-        self.trace_line(start, end, flags, ent_index)
-    }
-
-    /// Checks direct line-of-sight visibility between two world points.
-    fn check_visibility(&self, src: [f32; 3], dest: [f32; 3]) -> bool {
-        let trace = self.trace_line(src, dest, 0, -1);
-        trace.fraction >= 0.999
+        let _ = (start, end, hull_number, pent_model);
+        TraceResult::default()
     }
 }

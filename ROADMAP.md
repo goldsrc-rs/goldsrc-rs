@@ -307,12 +307,147 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Implement `WatchTarget` Value Object (`File` vs `Directory`), multi-strategy `WatcherFilter` (`Any`, `Extension`, `Stem`, `ExactName`, `Pattern`), and per-watcher debounce windows.
   - Reorganize CLI under clean hierarchical namespaces: `grs plugins <list|info|load|unload|reload|pause|unpause|cmds>` and `grs watchers <list|pause|resume>` with zero legacy aliases.
 
-## v0.18.0 — Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python) 📝 Planned
+## v0.18.0 — Engine Core Parity, Bundle Architecture & Hierarchical PBAC 📝 Planned
 
-**Goal:** Support polyglot plugin development by dynamically loading external language runtimes (Native Rust/C plugins via `goldsrc-host-native`, C# .NET, Python) from `hosts/` with strict C-ABI handshakes.
+**Goal:** Bridge the core gap with native engine runtime capabilities (Identity, Combat, UserMessages, Timers, CVARs), establish a secure Bundle Component Model with FS sandboxing, deploy an ergonomic RBAC-on-PBAC access control system, stabilize runtime boundaries, and implement foundational standard plugins (`admin_system`, `vip_core`).
+
+### 1. Engine Core Mechanics & FFI Bridge Parity
+
+- [x] **Runtime Boundary & FFI Stability**:
+  - Export `host-time` in WIT component interface, binding mono uptime to host high-precision ticks to prevent WASI `Instant::now()` trapping.
+  - Refactor `guard.rs` into `panic_barrier.rs` (clarifying role as an FFI panic boundary rather than engine crash protector).
+  - Graceful console shutdown handler on Windows/Linux trapping `Ctrl+C` / `SIGINT` and invoking engine `exit\n` to prevent `tier0` `Illegal termination of worker thread 'CFileWriterThread'`.
+  - Console encoding alignment: configure `SetConsoleCP(65001)` alongside `SetConsoleOutputCP(65001)` on Windows with automatic CP1251/UTF-8 input decoding for admin console commands.
+- [x] **Real Network Identity & Session Tokens**:
+  - Wire `pfnGetPlayerAuthId`, `pfnGetPlayerUserId`, and `pfnInfoKeyValue` (IP address) to `EngineBridge` and `PlayerIdentity`.
+  - Connect dynamic template placeholders `{player:ip}`, `{player:authid}`, `{player:userid}` without mock fallbacks.
+  - Introduce thread-safe, generational `PlayerSession` tokens immune to Slot Recycling Hazards.
+- [x] **Frame-Driven Task & Timer Service (`TimerService`)**:
+  - Implement tick-accurate `TimerService` inside `HostRuntime` driven by `on_server_frame` and `gpGlobals->time` / frame counters.
+  - Dual scheduling modes: continuous game time (`Duration`) and discrete physics frame intervals (`Ticks(u64)`).
+  - Replace blocking/panicking threads in WASM with safe client-bound builders: `task::after(Ticks(1) | Duration).spawn(...)` and `task::every(Ticks(64)).bound_to(session).spawn(...)` supporting next-frame deferrals and pause-resilient timers.
+- [x] **Reactive CVAR & Config Adapter Engine (`ConfigModel` & `#[cvar]`)**:
+  - Unify CVARs and TOML files as decoupled I/O adapters over a single typed `PluginConfig` source of truth.
+  - Full FFI support for `pfnCVarRegister` with typed values (`Cvar<T>`), IDE-friendly `CvarFlags` bitmasks, and reactive `.on_change(|old, new| ...)` observer hooks.
+  - Bi-directional reactive synchronization: console/RCON mutations update in-memory state and disk TOML; disk changes update engine `cvar_t` via FFI without map restarts.
+  - Self-describing schema exports: automatic generation of documented `.toml` templates, engine `.cfg` files (`to_cvars`), and admin Markdown documentation.
+- [x] **Engine Entity Lifecycle & Typed Builder (`EntityBuilder`)**:
+  - Universal `Entity::builder(classname)` with mandatory `pfnKeyValue` parameterization prior to `pfnSpawn`.
+  - Type-safe enumerations and constants for common keys (`keys::TARGET_NAME`, `RenderMode`, `SolidType`).
+- [x] **Combat Hooking & User Message Interception (`CombatBridge` & `UserMessageDispatcher`)**:
+  - Dual-tier interception for `TakeDamage` and `Killed`: ReGameDLL API hooks (Tier 1) with VTable virtual hook fallback (Tier 2).
+  - Complete replacement of legacy AMXX forwards with phased event pipelines (`Filter` -> `Handle` -> `Observe`) with commutative modifiers.
+  - Connect engine user messages (`pfnMessageBegin`, `Write*`, `pfnMessageEnd`) enabling plugins to observe and mutate `ScreenFade`, `DeathMsg`, `CurWeapon`, and `Damage`.
+- [x] **Extended Edict Properties (`pev` / `entvars_t`)**:
+  - Expand safe property triad (`get`/`set`/`modify`) with `Buttons` (`PlayerButtons` bitflags `IN_*`), `Flags` (`FL_ONGROUND`, `FL_DUCKING`), `MaxSpeed`, `Gravity`, `RenderEffect`, and `Model`.
+
+### 2. Autonomous Bundle Architecture & Sandbox Isolation
+
+- [x] **Role-Based Component Model (`ComponentRole`)**:
+  - Taxonomy: `Coordinator` (root public facade, max 1 per bundle), `Service` (persistence/state), `Feature` (gameplay hooks), `Ui` (menu/chat), `Peer` (symmetric participant).
+  - Baked `.goldsrc.component.role` custom section metadata in WASM with `#[plugin(role = ...)]`.
+  - Handshake validation: graceful degradation to safe binary defaults with clear warnings if `bundle.toml` overrides violate binary capabilities.
+- [ ] **Decoupled Inter-Bundle Communication & Service Gateway**:
+  - Complete elimination of legacy AMXX natives: replace with zero-cost shared WIT component model linking intra-bundle.
+  - Inter-bundle: decoupled `BundleMessageBroker` request/response channels with contract versioning (`economy.v1`) and `ServiceUnavailable` resilience.
+- [x] **Strict Filesystem Sandboxing (WASI Preopens)**:
+  - Strict path traversal prevention (`..` blocks).
+  - Absolute bundle isolation: write access jailed to `addons/goldsrc/data/<bundle_name>/`, read-only configs to `configs/<bundle_name>/`. Zero access outside the server root.
+- [x] **Self-Healing Autonomous Configuration Engine**:
+  - Decentralized config ownership: Host (`goldsrc.toml`), Bundle (`bundles/<name>.toml`), and Plugin (`plugins/<name>.toml`).
+  - Zero-initial-config server deployment: auto-generation of missing default configs on boot with deep-merge schema updates and non-destructive preservation of admin edits.
+- [x] **Deployment Layout Standardization (`bin` -> `lib`)**:
+  - Rename backend binary deployment path from `bin/` to `lib/` (`addons/goldsrc/lib/` and `goldsrc/lib/`) for strict semantic alignment with shared libraries (`.dll`/`.so`) and game hosting standards.
+- [x] **Separation of Plugins and Examples**:
+  - Move production-grade plugins (`admin_system`, `vip_core`) into dedicated `plugins/` workspace.
+  - Maintain `examples/` strictly for SDK capability demonstrations (`test_chat`, `test_ecs`, `test_hud`, `test_i18n`, `test_menu`).
+
+### 3. Hierarchical PBAC, Granular DSL & Modular Administration
+
+- [x] **Orthogonal Capability Namespaces & Generic Access Scopes**:
+  - Elimination of leaky abstraction names (`chat:admin_say` -> `chat:channel(admin)`, `menu:vip` -> `menu:scope(vip)`).
+  - Unification under root namespace containers (`engine:*`, `system:*`, `chat:*`, `menu:*`, `gameplay:*`, `bundle:<id>:*`).
+  - System ECS stages & phases guarded by capability checks (`system:stage.post_think.modify`).
+- [x] **Compiler-Grade Capability DSL Semantic Validator**:
+  - Enforce strict separator semantics: `:` for namespace roots, `.` for hierarchical path traversal, `()` for parametric arguments (`gameplay:heal(max=150)`).
+  - Support `&` and `|` boolean operators inside Group Expansions `[...]` with `,` retained as conjunctive shorthand.
+  - Explanatory compiler warnings with reconstructed AST pretty-printing upon ambiguous grouping (e.g. `"... to clarify precedence. Treated as: (A & B) | C"`).
+- [ ] **Modular Administration Ecosystem (`admin_system` & `vip_core` PoC)**:
+  - Preserve engine core purity: implement admin capabilities, bans, slaps, and voting purely as an external WASM plugin (`admin_system`) instead of hardcoding into `goldsrc-core`.
+  - Implement VIP equipment, round start hooks, and capabilities in `vip_core`.
+  - Type-safe role aliases (`AdminCaps`, `VipCaps`) mapping to composite capability sets.
+
+---
+
+## v0.19.0 — Modular Engine Extensions, Abstract UI Renderers & Hardware Diagnostics 📝 Planned
+
+**Goal:** Decouple engine-specific modifications (ReAPI, ReHLDS, ReGameDLL, Xash3D) into dynamic `EngineExtension` modules with DSL requirements (`ext:<name>`), introduce a full MVC in-game UI system (`MenuRenderer` + `MenuInputDriver`) with Ghost Slot Trapping, rich `messagemode` text inputs, and provide a host Hardware Inspector.
+
+### 1. Modular Engine Extensions (`trait EngineExtension`)
+
+- [ ] **Engine Extension Architecture**:
+  - Extract engine-specific C-ABI hooks out of core runtime into modular `EngineExtension` providers.
+  - Separate Metamod adapter into pure **Transport Backend** and optional **Metamod Extension**.
+  - Dynamically discoverable extension registry with graceful fallback: if running on Vanilla HLDS or Xash3D, runtime gracefully disables features without crashing.
+- [ ] **ReAPI Subsystem as an Extension (`goldsrc-ext-reapi`)**:
+  - Encapsulate `IRehldsApi` and `IReGameApi` into `goldsrc-ext-reapi`.
+  - Expose extended memory offsets, custom entity hooks, and ReGameDLL-specific game events to the SPI.
+- [ ] **DSL Extension Requirements (`ext:<name>`)**:
+  - Extend plugin dependency DSL to support `ext:<name>[@<version>]` requirements (e.g. `require = ["ext:reapi@>=5.21.0"]`).
+  - Automatic FSM state management: plugins requiring missing extensions transition safely to `PluginStatus::Blocked` instead of throwing runtime panics.
+
+### 2. Abstract UI & Menu Architecture (MVC Pattern)
+
+- [ ] **Decoupled View Renderers (`trait MenuRenderer`)**:
+  - `ClassicMenuRenderer`: standard Half-Life `ShowMenu` formatted text pages (slots 1..9, 0).
+  - `DhudMenuRenderer`: high-fidelity, colored Director HUD overlay with differential screen updates.
+  - `ChatMenuRenderer`: compact formatted text menus in chat for minimal or spectator overlays.
+  - `MotdMenuRenderer`: rich interactive HTML/CSS dialogs (rules, leaderboards, stats).
+  - `TerminalTuiRenderer`: server-side admin dashboard rendering interactive menus to server console via `ratatui`.
+- [ ] **Decoupled Input Drivers (`trait MenuInputDriver`)**:
+  - `SlotInputDriver`: classic `menuselect` interceptor (keys 1..9, 0).
+  - `ButtonInputDriver`: real-time movement and action keys via `pev->button` (`IN_FORWARD`/`IN_BACK` cursor navigation, `IN_MOVELEFT`/`IN_MOVERIGHT` pagination/sliders, `IN_JUMP`/`IN_USE` toggle/select).
+  - `HybridInputDriver`: simultaneous support for quick number selection (1..9) alongside smooth arrow/jump navigation.
+  - **Ghost Slot Trap**: invisible `ShowMenu` transmission accompanying DHUD/HUD menus to prevent weapon switching while capturing slot inputs.
+- [ ] **Component Model & Custom Widgets (`MenuComponent`)**:
+  - Universal `MenuComponent` trait for extensible widgets.
+  - Fluent `MenuItem` constructors: `action`, `checkbox`, `slider`, and `custom(widget)`.
+  - Native `messagemode` integration: `MenuItem::input(label, prompt, on_submit)` transitioning session state to `AwaitingInput`, triggering client `messagemode`, capturing user text, and seamlessly restoring the menu page.
+
+### 3. Host Hardware Inspector & System Diagnostics
+
+- [ ] **Hardware Telemetry Provider (`SystemInfoService`)**:
+  - Host-side system metrics collection via `sysinfo` exposed through SPI to WASM plugins.
+  - Real-time CPU detection (vendor, model, logical/physical core allocation, CPU load %).
+  - Memory statistics (allocated RAM to HLDS process, free system RAM, swap).
+  - Frame time jitter and engine tickrate stability monitoring (measuring deviation from 1000 FPS).
+- [ ] **Admin System Inspection Tool (`system_monitor.wasm` / `admin_system`)**:
+  - Host audit console command (`grs hardware` / `amx_sysinfo`) enabling administrators to verify VPS/cloud hosting resource claims and detect overselling or throttling.
+
+---
+
+## v0.20.0 — Ecosystem Decomposition & Multi-Host Runtime 📝 Planned
+
+**Goal:** Physically decouple the GoldSrc.rs monorepo into independent publishable crates and repositories (`goldsrc` SDK, `goldsrc-runtime`, `goldsrc-plugins-standard`), and introduce multi-language runtime hosts (C# .NET Native AOT, Python, Native Rust/C++).
+
+### 1. Monorepo & Ecosystem Decomposition
+
+- [ ] **`goldsrc` (Pure Plugin SDK)**:
+  - Lightweight, zero-native-dependency SDK crate publishable to crates.io targeting `wasm32-wasip1`.
+  - Contains `goldsrc-api`, `goldsrc-macros`, typestate builders, and event traits.
+  - Zero dependencies on Wasmtime, C compilers, SQLite, or Metamod.
+- [ ] **`goldsrc-runtime` (Host Engine & Platform)**:
+  - Host execution container including `goldsrc-core`, `goldsrc-host-wasm`, and backend loaders (`standalone`, `metamod`).
+  - Compiled into target server shared libraries (`goldsrc_standalone.dll`, `goldsrc.so`).
+- [ ] **`goldsrc-plugins-standard` (Standard Reference Plugins)**:
+  - Standalone repository of production-grade plugins (`admin_system`, `vip_core`, `chat_manager`, `menu_system`, `map_chooser`, `stats_core`).
+- [ ] **`goldsrc-examples` (SDK Showcase)**:
+  - Educational sample plugins demonstrating discrete SDK capabilities.
+
+### 2. Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python)
 
 - [ ] **Native Dynamic Host (`goldsrc-host-native`)**:
-  - Direct dynamic loading of compiled `.dll`/`.so` plugins via `libloading` with zero sandbox overhead.
+  - Direct dynamic loading of compiled `.dll`/`.so` plugins via `libloading` with zero sandbox overhead for performance-critical server mods.
 - [ ] **Dynamic Host Runtime Architecture**:
   - Modular `cstrike/goldsrc/hosts/` discovery directory with configurable resolution policy (`prefer_builtin` vs `prefer_external`).
   - C-ABI `PluginHostFactory` handshake with version validation.
@@ -322,3 +457,4 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
+

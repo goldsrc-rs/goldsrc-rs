@@ -4,8 +4,8 @@ use crate::bindings::{GoldsrcPlugin, goldsrc::engine::api};
 use crate::error::LoadError;
 use crate::manager::state::HostState;
 use crate::plugin::{LoadedPlugin, PluginMetadata, PluginStatus};
-use goldsrc_api::Engine as GoldsrcEngine;
 use goldsrc_api::consts::log_targets;
+use goldsrc_spi::engine::Engine as GoldsrcEngine;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -302,6 +302,43 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
                             path
                         ));
                         meta.bundle = None;
+                    } else if let Some(parent) = path.parent() {
+                        // Check for bundle.toml in component directory or parent directory
+                        let bundle_toml_path = parent.join("bundle.toml");
+                        if bundle_toml_path.is_file()
+                            && let Ok(manifest_content) = std::fs::read_to_string(&bundle_toml_path)
+                        {
+                            match toml::from_str::<goldsrc_api::bundle::BundleManifest>(
+                                &manifest_content,
+                            ) {
+                                Ok(manifest) => {
+                                    if let Err(err) = manifest.validate() {
+                                        crate::host_log(&format!(
+                                            "[Bundle Handshake] Warning: Invalid bundle manifest at {:?}: {}. Using binary defaults.",
+                                            bundle_toml_path, err
+                                        ));
+                                    } else if let Some(spec) = manifest.components.get(&name) {
+                                        if spec.role.is_coordinator()
+                                            && let Some((coord_name, _)) = manifest.coordinator()
+                                            && coord_name != name
+                                        {
+                                            crate::host_log(&format!(
+                                                "[Bundle Handshake] Warning: Component '{}' in bundle '{}' cannot claim role 'coordinator'; bundle coordinator is '{}'. Retaining binary default '{}'.",
+                                                name, b, coord_name, meta.role
+                                            ));
+                                        } else {
+                                            meta.role = spec.role;
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    crate::host_log(&format!(
+                                        "[Bundle Handshake] Warning: Failed to parse {:?}: {}. Using binary defaults.",
+                                        bundle_toml_path, err
+                                    ));
+                                }
+                            }
+                        }
                     }
                 }
                 Some(meta)

@@ -251,13 +251,13 @@ secure "1"
         let content = r#"
 game "Counter-Strike"
 // gamedll "dlls/mp.dll"
-gamedll "cstrike/goldsrc/bin/goldsrc_standalone.dll"
+gamedll "cstrike/goldsrc/lib/goldsrc_standalone.dll"
 edicts "2048"
 "#;
         let manifest = LibList::parse(content);
         assert_eq!(
             manifest.gamedll.as_deref(),
-            Some("cstrike/goldsrc/bin/goldsrc_standalone.dll")
+            Some("cstrike/goldsrc/lib/goldsrc_standalone.dll")
         );
         assert_eq!(manifest.original_gamedll.as_deref(), Some("dlls/mp.dll"));
         assert_eq!(manifest.edicts, Some(2048));

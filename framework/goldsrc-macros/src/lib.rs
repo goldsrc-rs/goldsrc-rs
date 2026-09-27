@@ -2,6 +2,7 @@
 
 extern crate proc_macro;
 
+mod config;
 mod defs;
 mod plugin;
 mod utils;
@@ -31,6 +32,12 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn bundle(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("bundle")
+}
+
+/// Helper attribute for declaring component role (`#[role("coordinator")]` or `#[role(coordinator)]`).
+#[proc_macro_attribute]
+pub fn role(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("role")
 }
 
 /// Helper attribute for declaring plugin / command requirements (`#[requires("plugin@^1.0")]`).
@@ -103,6 +110,17 @@ pub fn system(_attr: TokenStream, _item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn placeholder(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("placeholder")
+}
+
+/// Derives the [`ConfigModel`] trait for a struct, providing automatic TOML serialization,
+/// CVAR schema generation, engine registration, and bidirectional synchronization.
+#[proc_macro_derive(ConfigModel, attributes(cvar))]
+pub fn derive_config_model(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as syn::DeriveInput);
+    match crate::config::expand_derive_config_model(input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
 }
 
 #[cfg(test)]

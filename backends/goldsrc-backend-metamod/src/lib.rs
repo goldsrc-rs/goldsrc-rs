@@ -91,7 +91,7 @@ pub fn init_wasm_host() {
         }
         0
     });
-    let engine: std::sync::Arc<dyn goldsrc_api::Engine> = std::sync::Arc::new(
+    let engine: std::sync::Arc<dyn goldsrc_spi::engine::Engine> = std::sync::Arc::new(
         goldsrc_core::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE),
     );
     if let Err(e) = goldsrc_core::host::HostRuntime::init(
@@ -169,6 +169,9 @@ pub fn ensure_game_dll_hooks() {
                 }
                 if let Some(touch_fn) = (*dllapi).pfnTouch {
                     goldsrc_core::backend::set_game_dll_touch(touch_fn);
+                }
+                if let Some(kv_fn) = (*dllapi).pfnKeyValue {
+                    goldsrc_core::backend::set_game_dll_key_value(kv_fn);
                 }
             }
         }

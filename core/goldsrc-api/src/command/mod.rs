@@ -129,6 +129,17 @@ impl FromArg for String {
     }
 }
 
+impl<T: FromArg> FromArg for Option<T> {
+    fn from_arg(token: &str) -> Result<Self, String> {
+        let trimmed = token.trim();
+        if trimmed.is_empty() {
+            Ok(None)
+        } else {
+            T::from_arg(trimmed).map(Some)
+        }
+    }
+}
+
 impl FromArg for Player {
     fn from_arg(token: &str) -> Result<Self, String> {
         if let Ok(idx) = token.parse::<i32>() {
