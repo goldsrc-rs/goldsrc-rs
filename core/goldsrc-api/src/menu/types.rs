@@ -357,6 +357,8 @@ pub enum ItemKind {
     Spacer,
     /// Horizontal divider (e.g. `\d-----------------------`).
     Divider(String),
+    /// Interactive custom component / widget.
+    Component(Arc<std::sync::Mutex<dyn super::widgets::MenuComponent>>),
 }
 
 impl Debug for ItemKind {
@@ -371,6 +373,7 @@ impl Debug for ItemKind {
             Self::Text => write!(f, "ItemKind::Text"),
             Self::Spacer => write!(f, "ItemKind::Spacer"),
             Self::Divider(d) => write!(f, "ItemKind::Divider({d:?})"),
+            Self::Component(_) => write!(f, "ItemKind::Component(<widget>)"),
         }
     }
 }
@@ -410,6 +413,60 @@ impl MenuItem {
                 id,
                 action_name: action.into(),
             },
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+            keep_open: false,
+            cooldown: None,
+        }
+    }
+
+    /// Creates an interactive checkbox item.
+    pub fn checkbox<S: Into<String>>(label: S, checked: bool, action: S) -> Self {
+        let label_str = label.into();
+        let action_str = action.into();
+        let cb = super::widgets::Checkbox::new(label_str.clone(), checked, action_str);
+        Self {
+            title: ItemTitle::Static(label_str),
+            kind: ItemKind::Component(Arc::new(std::sync::Mutex::new(cb))),
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+            keep_open: true,
+            cooldown: None,
+        }
+    }
+
+    /// Creates an interactive numeric slider item.
+    pub fn slider<S: Into<String>>(
+        label: S,
+        min: i32,
+        max: i32,
+        step: i32,
+        initial: i32,
+        action: S,
+    ) -> Self {
+        let label_str = label.into();
+        let action_str = action.into();
+        let sl =
+            super::widgets::Slider::new(label_str.clone(), min, max, step, initial, action_str);
+        Self {
+            title: ItemTitle::Static(label_str),
+            kind: ItemKind::Component(Arc::new(std::sync::Mutex::new(sl))),
+            conditions: Vec::new(),
+            deny_policy: DenyPolicy::default(),
+            keep_open: true,
+            cooldown: None,
+        }
+    }
+
+    /// Creates an interactive text input item prompting `messagemode`.
+    pub fn input<S: Into<String>>(label: S, prompt: S, action: S) -> Self {
+        let label_str = label.into();
+        let prompt_str = prompt.into();
+        let action_str = action.into();
+        let ti = super::widgets::TextInput::new(label_str.clone(), prompt_str, action_str);
+        Self {
+            title: ItemTitle::Static(label_str),
+            kind: ItemKind::Component(Arc::new(std::sync::Mutex::new(ti))),
             conditions: Vec::new(),
             deny_policy: DenyPolicy::default(),
             keep_open: false,
@@ -684,12 +741,18 @@ pub enum MenuRendererKind {
     /// Classic GoldSrc `ShowMenu` user message (`\w\y\r\d`).
     #[default]
     Text,
-    /// Director HUD message (`SVC_DIRECTOR`) + invisible `ShowMenu` key interceptor.
+    /// Director HUD message (`SVC_DIRECTOR`) + invisible `ShowMenu` key interceptor (Ghost Slot Trap).
     Dhud {
         position: crate::hud::HudCoord,
         color: crate::hud::HudColor,
         effect: crate::hud::HudEffect,
     },
+    /// Compact formatted text menu in chat.
+    Chat,
+    /// Interactive MOTD HTML/CSS rich dialog popup.
+    Motd { title: String, dark_theme: bool },
+    /// Terminal / Console TUI view (for server admin dashboard or console inspection).
+    TerminalTui,
 }
 
 /// Resolved interaction assigned to a single key slot (1..=10, where 10 is slot '0').
@@ -840,7 +903,7 @@ impl Menu {
         let mut action_count_on_page = 0;
 
         for item in evaluated_items {
-            let is_action = matches!(item.kind, ItemKind::Action { .. });
+            let is_action = matches!(item.kind, ItemKind::Action { .. } | ItemKind::Component(_));
 
             if (item.is_forced_break && !current_page.is_empty())
                 || (is_action && action_count_on_page >= per_page)
@@ -911,6 +974,48 @@ impl Menu {
                         }
                     }
                 }
+                ItemKind::Component(comp) => {
+                    let slot = slot_counter;
+                    slot_counter += 1;
+
+                    let (comp_text, action_name) = if let Ok(guard) = comp.lock() {
+                        (guard.render(ctx), guard.action_name().to_string())
+                    } else {
+                        (item.title.clone(), String::new())
+                    };
+
+                    if item.is_active {
+                        text.push_str(&(self.style.item_format)(slot as usize, &comp_text));
+                        keys_mask |= 1 << (slot - 1);
+                        slots_map.insert(
+                            slot,
+                            SlotAction::Execute {
+                                id: 0,
+                                action_name,
+                                keep_open: item.keep_open,
+                            },
+                        );
+                    } else {
+                        text.push_str(&(self.style.disabled_item_format)(
+                            slot as usize,
+                            &comp_text,
+                        ));
+                        match &item.deny_action {
+                            DenyAction::Disabled => {}
+                            DenyAction::Noop => {
+                                keys_mask |= 1 << (slot - 1);
+                                slots_map.insert(slot, SlotAction::Noop);
+                            }
+                            DenyAction::Feedback { .. } | DenyAction::Custom(_) => {
+                                keys_mask |= 1 << (slot - 1);
+                                slots_map.insert(
+                                    slot,
+                                    SlotAction::DenyFeedback(item.deny_action.clone()),
+                                );
+                            }
+                        }
+                    }
+                }
                 ItemKind::Text => {
                     text.push_str(&format!("{}\n", item.title));
                 }
@@ -963,10 +1068,13 @@ impl Menu {
         keys_mask |= 1 << 9; // (1<<9) = slot 0
         slots_map.insert(10, SlotAction::Exit);
 
-        // For HUD/DHUD renderers, strip legacy ShowMenu color formatting codes (\w, \y, \r, \d, \R)
+        // For HUD/DHUD/Chat/Motd/TUI renderers, strip legacy ShowMenu color formatting codes (\w, \y, \r, \d, \R)
         let final_text = match &self.renderer {
             MenuRendererKind::Text => text,
-            MenuRendererKind::Dhud { .. } => text
+            MenuRendererKind::Dhud { .. }
+            | MenuRendererKind::Chat
+            | MenuRendererKind::Motd { .. }
+            | MenuRendererKind::TerminalTui => text
                 .replace("\\y", "")
                 .replace("\\r", "")
                 .replace("\\w", "")

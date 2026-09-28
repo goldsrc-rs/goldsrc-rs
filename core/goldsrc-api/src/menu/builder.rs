@@ -31,6 +31,42 @@ impl MenuBuilder {
         self
     }
 
+    /// Adds an action item with title and slot id.
+    pub fn action<T: Into<ItemTitle>>(mut self, title: T, id: u32) -> Self {
+        self.menu.items.push(MenuItem::new(title, id));
+        self
+    }
+
+    /// Adds an interactive checkbox item.
+    pub fn checkbox<S: Into<String>>(mut self, label: S, checked: bool, action: S) -> Self {
+        self.menu
+            .items
+            .push(MenuItem::checkbox(label, checked, action));
+        self
+    }
+
+    /// Adds an interactive numeric slider item.
+    pub fn slider<S: Into<String>>(
+        mut self,
+        label: S,
+        min: i32,
+        max: i32,
+        step: i32,
+        initial: i32,
+        action: S,
+    ) -> Self {
+        self.menu
+            .items
+            .push(MenuItem::slider(label, min, max, step, initial, action));
+        self
+    }
+
+    /// Adds an interactive text input item prompting `messagemode`.
+    pub fn input<S: Into<String>>(mut self, label: S, prompt: S, action: S) -> Self {
+        self.menu.items.push(MenuItem::input(label, prompt, action));
+        self
+    }
+
     /// Adds a static text line.
     pub fn text<S: Into<String>>(mut self, text_str: S) -> Self {
         self.menu.items.push(MenuItem::text(text_str));
@@ -138,6 +174,39 @@ impl MenuPageBuilder {
     /// Adds any item implementing `Into<MenuItem>` (e.g. `("Name", id)` or `MenuItem::new(...)`).
     pub fn item<I: Into<MenuItem>>(mut self, item: I) -> Self {
         self.items.push(item.into());
+        self
+    }
+
+    /// Adds an action item with title and slot id.
+    pub fn action<T: Into<ItemTitle>>(mut self, title: T, id: u32) -> Self {
+        self.items.push(MenuItem::new(title, id));
+        self
+    }
+
+    /// Adds an interactive checkbox item.
+    pub fn checkbox<S: Into<String>>(mut self, label: S, checked: bool, action: S) -> Self {
+        self.items.push(MenuItem::checkbox(label, checked, action));
+        self
+    }
+
+    /// Adds an interactive numeric slider item.
+    pub fn slider<S: Into<String>>(
+        mut self,
+        label: S,
+        min: i32,
+        max: i32,
+        step: i32,
+        initial: i32,
+        action: S,
+    ) -> Self {
+        self.items
+            .push(MenuItem::slider(label, min, max, step, initial, action));
+        self
+    }
+
+    /// Adds an interactive text input item prompting `messagemode`.
+    pub fn input<S: Into<String>>(mut self, label: S, prompt: S, action: S) -> Self {
+        self.items.push(MenuItem::input(label, prompt, action));
         self
     }
 
