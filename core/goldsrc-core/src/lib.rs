@@ -9,6 +9,7 @@ pub mod cli;
 pub mod combat;
 pub mod config;
 pub mod extension;
+pub mod hardware;
 pub mod hooks;
 pub mod host;
 pub mod hud;
@@ -38,6 +39,7 @@ pub use config::{
     PluginsConfig, SelfHealingConfigEngine,
 };
 pub use extension::{ExtensionRegistry, extension_registry};
+pub use hardware::{SystemInfoService, SystemMetricsSnapshot, system_info};
 pub use host::{EventPayload, HostEvent, HostRuntime, PlayerEvent};
 pub use i18n::I18nService;
 pub use net::NetworkMessageDispatcher;

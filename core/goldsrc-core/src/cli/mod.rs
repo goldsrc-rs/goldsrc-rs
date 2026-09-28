@@ -321,5 +321,29 @@ mod tests {
         });
         assert!(out_status.contains("GoldSrc.rs Host Engine Status"));
         assert!(out_status.contains("Watchers:"));
+
+        // Test `grs hardware` & `grs hw`
+        let mut out_hw = String::new();
+        let args_hw = vec![OsString::from("grs"), OsString::from("hardware")];
+        dispatch_host_command(args_hw, None, ("0.10.0", "abc", "x86"), |s| {
+            out_hw.push_str(s);
+        });
+        assert!(out_hw.contains("GoldSrc.rs Host Hardware & Diagnostics"));
+        assert!(out_hw.contains("CPU Model"));
+        assert!(out_hw.contains("HLDS Process"));
+
+        // Test `grs hardware --json`
+        let mut out_hw_json = String::new();
+        let args_hw_json = vec![
+            OsString::from("grs"),
+            OsString::from("hw"),
+            OsString::from("--json"),
+        ];
+        dispatch_host_command(args_hw_json, None, ("0.10.0", "abc", "x86"), |s| {
+            out_hw_json.push_str(s);
+        });
+        assert!(out_hw_json.contains("\"cpu\""));
+        assert!(out_hw_json.contains("\"memory\""));
+        assert!(out_hw_json.contains("\"performance\""));
     }
 }

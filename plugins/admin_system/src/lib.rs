@@ -29,6 +29,10 @@ impl AdminSystem {
         );
         Auth::register_capability(AdminCaps::CVAR, "Allows changing server cvars");
         Auth::register_capability(
+            AdminCaps::SYSINFO,
+            "Allows inspecting server hardware and host diagnostics",
+        );
+        Auth::register_capability(
             AdminCaps::CHAT,
             "Access to private administrative chat channel",
         );

@@ -379,49 +379,49 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 
 ---
 
-## v0.19.0 — Modular Engine Extensions, Abstract UI Renderers & Hardware Diagnostics 📝 Planned
-
+## v0.19.0 — Modular Engine Extensions, Abstract UI Renderers & Hardware Diagnostics ✅
+ 
 **Goal:** Decouple engine-specific modifications (ReAPI, ReHLDS, ReGameDLL, Xash3D) into dynamic `EngineExtension` modules with DSL requirements (`ext:<name>`), introduce a full MVC in-game UI system (`MenuRenderer` + `MenuInputDriver`) with Ghost Slot Trapping, rich `messagemode` text inputs, and provide a host Hardware Inspector.
-
+ 
 ### 1. Modular Engine Extensions (`trait EngineExtension`)
-
-- [ ] **Engine Extension Architecture**:
+ 
+- [x] **Engine Extension Architecture**:
   - Extract engine-specific C-ABI hooks out of core runtime into modular `EngineExtension` providers.
   - Separate Metamod adapter into pure **Transport Backend** and optional **Metamod Extension**.
   - Dynamically discoverable extension registry with graceful fallback: if running on Vanilla HLDS or Xash3D, runtime gracefully disables features without crashing.
-- [ ] **ReAPI Subsystem as an Extension (`goldsrc-ext-reapi`)**:
+- [x] **ReAPI Subsystem as an Extension (`goldsrc-ext-reapi`)**:
   - Encapsulate `IRehldsApi` and `IReGameApi` into `goldsrc-ext-reapi`.
   - Expose extended memory offsets, custom entity hooks, and ReGameDLL-specific game events to the SPI.
-- [ ] **DSL Extension Requirements (`ext:<name>`)**:
+- [x] **DSL Extension Requirements (`ext:<name>`)**:
   - Extend plugin dependency DSL to support `ext:<name>[@<version>]` requirements (e.g. `require = ["ext:reapi@>=5.21.0"]`).
   - Automatic FSM state management: plugins requiring missing extensions transition safely to `PluginStatus::Blocked` instead of throwing runtime panics.
-
+ 
 ### 2. Abstract UI & Menu Architecture (MVC Pattern)
-
-- [ ] **Decoupled View Renderers (`trait MenuRenderer`)**:
+ 
+- [x] **Decoupled View Renderers (`trait MenuRenderer`)**:
   - `ClassicMenuRenderer`: standard Half-Life `ShowMenu` formatted text pages (slots 1..9, 0).
   - `DhudMenuRenderer`: high-fidelity, colored Director HUD overlay with differential screen updates.
   - `ChatMenuRenderer`: compact formatted text menus in chat for minimal or spectator overlays.
   - `MotdMenuRenderer`: rich interactive HTML/CSS dialogs (rules, leaderboards, stats).
   - `TerminalTuiRenderer`: server-side admin dashboard rendering interactive menus to server console via `ratatui`.
-- [ ] **Decoupled Input Drivers (`trait MenuInputDriver`)**:
+- [x] **Decoupled Input Drivers (`trait MenuInputDriver`)**:
   - `SlotInputDriver`: classic `menuselect` interceptor (keys 1..9, 0).
   - `ButtonInputDriver`: real-time movement and action keys via `pev->button` (`IN_FORWARD`/`IN_BACK` cursor navigation, `IN_MOVELEFT`/`IN_MOVERIGHT` pagination/sliders, `IN_JUMP`/`IN_USE` toggle/select).
   - `HybridInputDriver`: simultaneous support for quick number selection (1..9) alongside smooth arrow/jump navigation.
   - **Ghost Slot Trap**: invisible `ShowMenu` transmission accompanying DHUD/HUD menus to prevent weapon switching while capturing slot inputs.
-- [ ] **Component Model & Custom Widgets (`MenuComponent`)**:
+- [x] **Component Model & Custom Widgets (`MenuComponent`)**:
   - Universal `MenuComponent` trait for extensible widgets.
   - Fluent `MenuItem` constructors: `action`, `checkbox`, `slider`, and `custom(widget)`.
   - Native `messagemode` integration: `MenuItem::input(label, prompt, on_submit)` transitioning session state to `AwaitingInput`, triggering client `messagemode`, capturing user text, and seamlessly restoring the menu page.
-
+ 
 ### 3. Host Hardware Inspector & System Diagnostics
-
-- [ ] **Hardware Telemetry Provider (`SystemInfoService`)**:
+ 
+- [x] **Hardware Telemetry Provider (`SystemInfoService`)**:
   - Host-side system metrics collection via `sysinfo` exposed through SPI to WASM plugins.
   - Real-time CPU detection (vendor, model, logical/physical core allocation, CPU load %).
   - Memory statistics (allocated RAM to HLDS process, free system RAM, swap).
   - Frame time jitter and engine tickrate stability monitoring (measuring deviation from 1000 FPS).
-- [ ] **Admin System Inspection Tool (`system_monitor.wasm` / `admin_system`)**:
+- [x] **Admin System Inspection Tool (`system_monitor.wasm` / `admin_system`)**:
   - Host audit console command (`grs hardware` / `amx_sysinfo`) enabling administrators to verify VPS/cloud hosting resource claims and detect overselling or throttling.
 
 ---

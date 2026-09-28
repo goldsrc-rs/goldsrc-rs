@@ -836,6 +836,9 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
         "extensions" => {
             handlers::handle_extensions(spec, parser, out);
         }
+        "hardware" => {
+            handlers::handle_hardware(spec, parser, out);
+        }
         "status" => {
             while let Ok(Some(arg)) = parser.next() {
                 if let Arg::Short('h') | Arg::Long("help") = arg {

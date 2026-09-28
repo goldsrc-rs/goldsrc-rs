@@ -1084,6 +1084,9 @@ impl HostRuntime {
             mgr.tick_frame(now, engine.as_ref());
         }
 
+        // Record frame time for hardware diagnostics (FPS and jitter telemetry)
+        crate::hardware::system_info().on_frame();
+
         // Throttle disk flushing to at most once every second to prevent per-frame I/O stalls
         static LAST_LOG_FLUSH: OnceLock<Mutex<Instant>> = OnceLock::new();
         let tracker = LAST_LOG_FLUSH.get_or_init(|| Mutex::new(Instant::now()));

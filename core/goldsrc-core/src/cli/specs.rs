@@ -117,6 +117,15 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         examples: &["grs extensions", "grs ext list", "grs ext info reapi"],
     },
     CommandSpec {
+        name: "hardware",
+        aliases: &["hw", "sysinfo"],
+        category: "sys:runtime",
+        summary: "Display host hardware telemetry, CPU/RAM usage, and engine tickrate stability",
+        usage: "grs hardware [--json]",
+        options: &[("--json", "Output hardware metrics as JSON payload")],
+        examples: &["grs hardware", "grs hw", "grs hardware --json"],
+    },
+    CommandSpec {
         name: "status",
         aliases: &["stat", "st", "s"],
         category: "sys:runtime",
