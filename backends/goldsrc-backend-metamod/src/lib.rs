@@ -95,6 +95,7 @@ pub fn init_wasm_host() {
         goldsrc_core::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE),
     );
     goldsrc_extension_reapi::init();
+    goldsrc_extension_metamod::init(true);
     if let Err(e) = goldsrc_core::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Metamod,
         |msg| {

@@ -309,8 +309,9 @@ impl LoadedPlugin {
             error: err.to_string(),
         };
         crate::host_log(&format!(
-            "Plugin '{}' panicked and was poisoned: {}",
-            self.name, err
+            "Plugin '{}' panicked and was poisoned: {err}\nRoot cause: {:#?}\nError details: {err:#?}",
+            self.name,
+            err.root_cause()
         ));
     }
 }

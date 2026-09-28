@@ -19,6 +19,12 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
     // SAFETY: engfuncs and globals are engine-provided; valid for the server lifetime.
     catch_ffi_panic("GiveFnptrsToDll", (), || {
         goldsrc_sys::guard::install_crash_guard();
+        goldsrc_core::backend::console_hook::init();
+        if !engfuncs.is_null()
+            && let Some(cmd_fn) = unsafe { (*engfuncs).pfnServerCommand }
+        {
+            goldsrc_core::backend::console_hook::register_shutdown_handler(cmd_fn);
+        }
         unsafe { init_backend(engfuncs, globals) };
         backend().server_print("[GoldSrc.rs] Engine functions received.\n");
     });
@@ -36,6 +42,7 @@ pub unsafe extern "C" fn Meta_Query(
 ) -> std::os::raw::c_int {
     // SAFETY: plugin_info and meta_util_functions are Metamod-provided; valid at call time.
     catch_ffi_panic("Meta_Query", 0, || {
+        goldsrc_core::backend::console_hook::init();
         unsafe {
             if plugin_info.is_null() {
                 return 0;
@@ -63,6 +70,10 @@ pub unsafe extern "C" fn Meta_Attach(
 ) -> std::os::raw::c_int {
     // SAFETY: meta_functions and meta_globals are Metamod-provided; valid at call time.
     catch_ffi_panic("Meta_Attach", 0, || {
+        goldsrc_core::backend::console_hook::init();
+        if let Some(cmd_fn) = crate::engfuncs().pfnServerCommand {
+            goldsrc_core::backend::console_hook::register_shutdown_handler(cmd_fn);
+        }
         unsafe {
             if meta_globals.is_null() || meta_functions.is_null() {
                 return 0;

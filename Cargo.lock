@@ -555,6 +555,7 @@ version = "0.17.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
+ "goldsrc-extension-metamod",
  "goldsrc-extension-reapi",
  "goldsrc-spi",
  "goldsrc-sys",
@@ -593,6 +594,18 @@ dependencies = [
  "serde_json",
  "thiserror",
  "toml",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "goldsrc-extension-metamod"
+version = "0.17.0"
+dependencies = [
+ "goldsrc-api",
+ "goldsrc-core",
+ "goldsrc-spi",
+ "goldsrc-sys",
+ "log",
 ]
 
 [[package]]

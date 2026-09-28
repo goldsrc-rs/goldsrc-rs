@@ -8,6 +8,7 @@ members = [
     "backends/goldsrc-backend-standalone",
     "hosts/goldsrc-host-wasm",
     "extensions/goldsrc-extension-reapi",
+    "extensions/goldsrc-extension-metamod",
     "framework/goldsrc",
     "framework/goldsrc-macros",
     "plugins/admin_system",
@@ -27,6 +28,7 @@ default-members = [
     "backends/goldsrc-backend-standalone",
     "hosts/goldsrc-host-wasm",
     "extensions/goldsrc-extension-reapi",
+    "extensions/goldsrc-extension-metamod",
     "framework/goldsrc",
     "framework/goldsrc-macros",
 ]
@@ -46,6 +48,7 @@ goldsrc-api = { path = "core/goldsrc-api", version = "0.17.0" }
 goldsrc-spi = { path = "core/goldsrc-spi", version = "0.17.0" }
 goldsrc-core = { path = "core/goldsrc-core", version = "0.17.0" }
 goldsrc-extension-reapi = { path = "extensions/goldsrc-extension-reapi", version = "0.17.0" }
+goldsrc-extension-metamod = { path = "extensions/goldsrc-extension-metamod", version = "0.17.0" }
 goldsrc-backend-metamod = { path = "backends/goldsrc-backend-metamod", version = "0.17.0" }
 goldsrc-backend-standalone = { path = "backends/goldsrc-backend-standalone", version = "0.17.0" }
 goldsrc-host-wasm = { path = "hosts/goldsrc-host-wasm", version = "0.17.0" }

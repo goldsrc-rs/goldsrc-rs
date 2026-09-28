@@ -34,6 +34,25 @@ pub fn init_host_cli(backend: HostCliBackend) {
     let _ = HOST_CLI.set(backend);
 }
 
+/// Safely decodes a raw C-string pointer into a UTF-8 String.
+/// Attempts standard UTF-8 parsing first; falls back to CP1251 (Cyrillic) decoding
+/// if non-UTF-8 bytes (like Cyrillic console input) are present.
+///
+/// # Safety
+/// If `ptr` is non-null, it must point to valid, readable memory containing a NUL terminator.
+pub unsafe fn decode_c_string_lossy(ptr: *const c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    let cstr = unsafe { CStr::from_ptr(ptr) };
+    let bytes = cstr.to_bytes();
+    if let Ok(s) = std::str::from_utf8(bytes) {
+        s.to_string()
+    } else {
+        goldsrc_api::cp1251_to_utf8(bytes)
+    }
+}
+
 /// Shared server-command handler for `meta-rs` / `mrs` / `grs`.
 ///
 /// # Safety
@@ -50,10 +69,9 @@ pub unsafe extern "C" fn handle_host_command() {
         let mut raw_args = Vec::new();
         for i in 0..argc {
             let arg_ptr = (backend.argv)(i);
-            if !arg_ptr.is_null()
-                && let Ok(cstr) = unsafe { CStr::from_ptr(arg_ptr) }.to_str()
-            {
-                raw_args.push(OsString::from(cstr));
+            if !arg_ptr.is_null() {
+                let decoded = unsafe { decode_c_string_lossy(arg_ptr) };
+                raw_args.push(OsString::from(decoded));
             }
         }
         // Dispatch directly; commands requiring PluginManager will acquire it with
@@ -79,26 +97,26 @@ pub unsafe extern "C" fn handle_plugin_server_command() {
         if name_ptr.is_null() {
             return;
         }
-        let Ok(cmd_name) = (unsafe { CStr::from_ptr(name_ptr) }).to_str() else {
+        let cmd_name = unsafe { decode_c_string_lossy(name_ptr) };
+        if cmd_name.is_empty() {
             return;
-        };
+        }
 
         let mut args = String::new();
         for i in 1..argc {
             let arg_ptr = (backend.argv)(i);
-            if !arg_ptr.is_null()
-                && let Ok(cstr) = unsafe { CStr::from_ptr(arg_ptr) }.to_str()
-            {
+            if !arg_ptr.is_null() {
+                let decoded = unsafe { decode_c_string_lossy(arg_ptr) };
                 if !args.is_empty() {
                     args.push(' ');
                 }
-                args.push_str(cstr);
+                args.push_str(&decoded);
             }
         }
 
         crate::host::HostRuntime::with_manager(|manager| {
             if let Some(m) = manager {
-                m.dispatch_command(cmd_name, 0, &args);
+                m.dispatch_command(&cmd_name, 0, &args);
             }
         });
     });

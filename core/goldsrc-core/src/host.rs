@@ -365,9 +365,6 @@ impl HostRuntime {
             backend_name
         );
 
-        // Initialize modular engine extensions registry
-        crate::extension::init_default_extensions(backend);
-
         let main_cfg_path = PathResolver::main_config_path(backend);
         log::info!(
             target: log_targets::CORE,

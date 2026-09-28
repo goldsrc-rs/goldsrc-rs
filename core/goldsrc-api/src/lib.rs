@@ -119,7 +119,8 @@ pub use spec::{
     All, Any, Dormant, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec, SpecError,
 };
 pub use text::{
-    cyrillic_to_latin, format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
+    cp1251_to_utf8, cyrillic_to_latin, format_center_text, format_notify_text, format_say_text,
+    utf8_to_cp1251,
 };
 pub use timer::{
     IntoScheduleDelay, ScheduleDelay, Ticks, TimerAction, TimerBound, TimerId, TimerMode,
