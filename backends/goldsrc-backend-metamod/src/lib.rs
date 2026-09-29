@@ -27,10 +27,6 @@ static G_ENGFUNCS: std::sync::OnceLock<
 static G_GLOBALS: std::sync::OnceLock<
     goldsrc_sys::ffi::SyncWrapper<&'static goldsrc_sys::globalvars_t>,
 > = std::sync::OnceLock::new();
-static G_META_GLOBALS: std::sync::atomic::AtomicPtr<meta_globals_t> =
-    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
-static G_META_UTIL: std::sync::atomic::AtomicPtr<mutil_funcs_t> =
-    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 /// Deferred server-print queue shared with the standalone backend.
 pub static PRINT_QUEUE: goldsrc_core::backend::PrintQueue =
@@ -71,25 +67,7 @@ pub fn init_wasm_host() {
     });
 
     goldsrc_core::backend::set_user_msg_resolver(|name| {
-        let util_ptr = G_META_UTIL.load(std::sync::atomic::Ordering::Relaxed);
-        if !util_ptr.is_null() {
-            unsafe {
-                if let Some(get_msg_id) = (*util_ptr).pfnGetUserMsgID
-                    && let Ok(cname) = std::ffi::CString::new(name)
-                {
-                    let mut size: i32 = 0;
-                    let id = get_msg_id(
-                        &entrypoints::PLUGIN_INFO,
-                        cname.as_ptr(),
-                        &mut size as *mut _,
-                    );
-                    if id > 0 && id != 255 {
-                        return id;
-                    }
-                }
-            }
-        }
-        0
+        goldsrc_extension_metamod::MetamodApi::get_user_msg_id(name).unwrap_or(0)
     });
     let engine: std::sync::Arc<dyn goldsrc_spi::engine::Engine> = std::sync::Arc::new(
         goldsrc_core::backend::EngineBackend::new(engfuncs, &PRINT_QUEUE),
@@ -132,24 +110,20 @@ pub fn globals() -> &'static goldsrc_sys::globalvars_t {
 }
 
 pub fn meta_globals() -> &'static mut meta_globals_t {
-    let ptr = G_META_GLOBALS.load(std::sync::atomic::Ordering::Relaxed);
-    if ptr.is_null() {
-        panic!("Meta globals not initialized");
-    }
-    unsafe { &mut *ptr }
+    goldsrc_extension_metamod::MetamodApi::raw_meta_globals().expect("Meta globals not initialized")
 }
 
 static G_GAMEDLL_FUNCS: std::sync::atomic::AtomicPtr<gamedll_funcs_t> =
     std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 pub fn set_meta_globals(ptr: *mut meta_globals_t) {
-    G_META_GLOBALS.store(ptr, std::sync::atomic::Ordering::Relaxed);
+    goldsrc_extension_metamod::set_meta_globals(ptr);
 }
 
 /// # Safety
 /// `ptr` must be valid or null (passed from Metamod).
 pub unsafe fn set_meta_util_funcs(ptr: *mut mutil_funcs_t) {
-    G_META_UTIL.store(ptr, std::sync::atomic::Ordering::Relaxed);
+    goldsrc_extension_metamod::set_meta_util_funcs(ptr, &entrypoints::PLUGIN_INFO);
 }
 
 /// # Safety

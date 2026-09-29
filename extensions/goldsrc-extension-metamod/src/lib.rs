@@ -3,6 +3,12 @@
 //! Provides the `MetamodExtension` descriptor and runtime capabilities
 //! for plugins to discover and interact with the Metamod plugin manager.
 
+pub mod api;
+pub mod types;
+
+pub use api::{MetamodApi, set_meta_globals, set_meta_util_funcs};
+pub use types::*;
+
 use goldsrc_spi::EngineExtension;
 use std::sync::Arc;
 
@@ -65,5 +71,13 @@ mod tests {
         assert_eq!(ext.name(), "metamod");
         assert!(ext.is_available());
         assert_eq!(ext.version(), "1.21.0");
+    }
+
+    #[test]
+    fn test_metamod_api_defaults() {
+        assert!(!MetamodApi::is_available());
+        assert_eq!(MetamodApi::get_result(), MRES_UNSET);
+        assert_eq!(MetamodApi::get_user_msg_id("TestMsg"), None);
+        assert_eq!(MetamodApi::get_user_msg_name(1), None);
     }
 }

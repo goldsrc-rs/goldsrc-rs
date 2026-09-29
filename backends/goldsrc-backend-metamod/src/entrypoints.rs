@@ -263,12 +263,7 @@ unsafe extern "C" fn hook_reg_user_msg_post(
     _i_size: std::os::raw::c_int,
 ) -> std::os::raw::c_int {
     catch_ffi_panic("hook_reg_user_msg_post", 0, || {
-        let orig_ret_ptr = crate::meta_globals().orig_ret as *const i32;
-        let msg_id = if !orig_ret_ptr.is_null() {
-            unsafe { *orig_ret_ptr }
-        } else {
-            0
-        };
+        let msg_id = goldsrc_extension_metamod::MetamodApi::orig_ret_val::<i32>().unwrap_or(0);
         if !psz_name.is_null()
             && msg_id > 0
             && msg_id != 255
