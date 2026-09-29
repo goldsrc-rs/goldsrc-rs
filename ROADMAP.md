@@ -458,3 +458,72 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
 
+---
+
+## v0.21.0 — Network & Threat Intelligence (`grlg-geo`) 📝 Planned
+
+**Goal:** Integrate the standalone zero-copy `grlg-geo` threat intelligence engine directly into the GoldSrc host networking layer for sub-microsecond player classification, proxy/VPN mitigation, and connection screening.
+
+### 1. Host Network Screening & Zero-Copy GeoIP
+
+- [ ] **Host `mmap` Database Resolver**:
+  - Integrate pure-Rust `GrlgReader` into `goldsrc-core` with memory-mapped zero-heap lookups (<1 µs latency).
+  - Background asynchronous updates: hot-reload database memory maps without server hitch or player disconnects.
+- [ ] **Threat Bitmask Pipeline in `ClientConnect`**:
+  - Immediate bitflag screening during initial handshake: `is_datacenter`, `is_proxy`, `is_botnet`, `is_spam`.
+  - Declarative connection policies in `goldsrc.toml`: `block_vpn`, `block_datacenter`, `allow_countries`.
+- [ ] **SPI Network Filter Extension**:
+  - Expose `GeoRecord` (Country, Region, City, Coordinates, ASN, ISP, ThreatFlags) through SPI to WASM and Native plugins.
+
+---
+
+## v0.22.0 — Next-Gen Demo Subsystem (`goldsrc-demo`) 📝 Planned
+
+**Goal:** Design an event-driven, tamper-proof demo container format inspired by modern esports engines (CS2), featuring Zstandard stream compression, Ed25519 digital signatures, and backward compatibility with downstream analyzers.
+
+### 1. CS2-Style Event-Driven Container
+
+- [ ] **Structured Event Markers**:
+  - Round boundaries (`RoundStart`, `RoundEnd`, `FreezePeriodEnd`).
+  - Match economy & objectives (bomb plant/defuse, hostage rescue, weapon buy/drop).
+  - High-precision killfeed and damage matrices with tick-accurate player origins and hitgroup indices.
+- [ ] **Lossless Zstandard (`zstd`) Stream Compression**:
+  - On-the-fly chunk compression shrinking 20–30 MB raw demos to 4–7 MB.
+- [ ] **Cryptographic Signing (Ed25519)**:
+  - Asymmetric cryptographic signing of demo headers and keyframe checkpoints to prevent post-game tampering or spoofed replays.
+- [ ] **Streaming & Client-Server Relay**:
+  - Bi-directional demo streaming: automatic client-to-server replay upload on player bans or in-game cheat reports.
+- [ ] **Payload Backward Compatibility**:
+  - Preserve 100% backward compatibility for the raw inner Half-Life network stream with legacy analyzers (UnrealDemoScanner, HL Demo Player).
+
+---
+
+## v0.23.0 — Behavioral Anti-Cheat Engine (`goldsrc-ac`) 📝 Planned
+
+**Goal:** Build a server-authoritative, zero-cost behavioral anti-cheat plugin synthesizing ReAimDetector 3D raycasting and UnrealDemoScanner temporal input signatures with Adaptive Deep-Scan attention and regression testing against real demo corpora.
+
+### 1. Hybrid Detection Core (ReAimDetector + UDS Heuristics)
+
+- [ ] **Server-Authoritative 3D Hitbox Matrix (ReAimDetector Synthesis)**:
+  - Server-side hitbox reconstruction with lag-compensation validation (`sv_unlag`).
+  - True 3D raycasts calculating angular deviation to bone centers and closest hitbox bounding box facets.
+- [ ] **Temporal Input Heuristics (UnrealDemoScanner Extraction)**:
+  - **ViewAngle GCD / Pitch-Yaw Quantization**: detect mouse sensor step discreteness vs synthetic software floats.
+  - **Angular Acceleration & Jerk Curvature**: identify unnatural bell-curve violations and instant linear interpolations.
+  - **PunchAngle RCS Compensation**: detect sub-15ms recoil compensation ignoring human neuromuscular reaction latency.
+  - **Sub-tick Button Distribution**: detect zero-variance `IN_JUMP` (Bhop) and `IN_ATTACK` (FastZoom / KnifeBot) patterns.
+
+### 2. Adaptive Attention & Deep-Scan Lock-in
+
+- [ ] **Selective Attention Architecture**:
+  - Tier 1 Lightweight Triage: $O(1)$ fast filters for 95% of verified players; CPU overhead near zero.
+  - Suspicion Accumulator: Leaky-bucket anomaly counter with exponential temporal decay.
+  - Tier 2 Deep-Scan Lock-in: full hitbox history recording, multi-ray collision tests, and micro-timing analysis activated only upon threshold breach.
+
+### 3. Demo Corpus CI/CD Regression Suite
+
+- [ ] **Automated Test Fixtures (`tests/fixtures/demos/`)**:
+  - Integrate clean and dirty `.dem` test suite from UDS corpus into automated CI.
+  - Automated verification of **0 False Positives** on legitimate professional player demos and **100% True Positives** on confirmed cheat signatures.
+
+
