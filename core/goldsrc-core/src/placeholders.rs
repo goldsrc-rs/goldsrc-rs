@@ -418,6 +418,8 @@ pub fn format_placeholders_with_manager(
 
                         let resolved = if let Some(ref mut m) = manager {
                             m.dispatch_placeholder(&call.ident, caller.index(), param)
+                        } else if crate::host::HostRuntime::is_in_manager() {
+                            None
                         } else {
                             crate::host::HostRuntime::with_manager(|mgr| {
                                 mgr.and_then(|m| {

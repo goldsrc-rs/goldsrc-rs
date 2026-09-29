@@ -278,6 +278,9 @@ impl Action<Player> for GiveItem {
                     z: o.z,
                 },
             );
+            // Set SF_NORESPAWN (1024 / 0x400) so GoldSrc CItem removes itself on touch
+            // instead of triggering a 20-second Respawn() timer and items/suitchargeok1.wav.
+            host_api::host_entity_key_value(ent, "spawnflags", "1024");
             host_api::host_dispatch_spawn(ent);
             host_api::host_dispatch_touch(ent, player.index);
             Some(ent)

@@ -24,6 +24,10 @@ use std::time::Instant;
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_spi::engine::Engine>> = OnceLock::new();
 
+thread_local! {
+    static IN_MANAGER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// Player-specific gameplay and lifecycle events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerEvent {
@@ -700,17 +704,19 @@ impl HostRuntime {
         crate::logging::flush();
     }
 
+    /// Returns `true` if the current thread is already executing inside `HostRuntime::with_manager`.
+    #[inline(always)]
+    pub fn is_in_manager() -> bool {
+        IN_MANAGER.get()
+    }
+
     /// Run `f` with exclusive access to the `PluginManager`, if initialized.
     /// Protects against re-entrant mutex deadlock if called recursively on the same thread.
     pub fn with_manager<R>(f: impl FnOnce(Option<&mut PluginManager>) -> R) -> R {
-        thread_local! {
-            static IN_MANAGER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-        }
-
         if IN_MANAGER.get() {
-            log::warn!(
+            log::trace!(
                 target: log_targets::CORE,
-                "Re-entrant call to HostRuntime::with_manager detected and suppressed to prevent deadlock"
+                "Re-entrant call to HostRuntime::with_manager suppressed to prevent deadlock"
             );
             return f(None);
         }
