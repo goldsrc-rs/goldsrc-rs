@@ -5,13 +5,13 @@
 
 pub mod auth;
 pub mod engine;
-pub mod reapi;
+pub mod extension;
 pub mod storage;
 
 pub use auth::{AuthProvider, HandshakeContext, HandshakeDecision};
 pub use engine::{
-    Engine, EngineConsole, EngineCvars, EngineEntities, EngineMessages, EnginePhysics,
-    EnginePrecache, EngineSound, MessageBuilder, MessageDest, TraceResult,
+    Engine, EngineConsole, EngineCvars, EngineEntities, EngineExtensions, EngineMessages,
+    EnginePhysics, EnginePrecache, EngineSound, MessageBuilder, MessageDest, TraceResult,
 };
-pub use reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
+pub use extension::EngineExtension;
 pub use storage::{SqlDatabase, StorageError, StorageProvider};

@@ -301,6 +301,9 @@ pub mod cvar {
     pub use goldsrc_api::cvar::*;
 }
 
+pub mod extension;
+pub mod reapi;
+
 pub use ::log;
 #[cfg(feature = "ecs")]
 pub use ecs::*;
@@ -318,21 +321,24 @@ pub use goldsrc_api::pipeline as pipeline_api;
 pub use goldsrc_api::spec as spec_api;
 pub use goldsrc_api::{
     Action, AdminCaps, Alive, All, Angles, AntiSpamAction, Any, Armor, AsLangCode, Auth,
-    BlackboardValue, Bot, CancellationToken, CapExpr, ChatScope, ChatTarget, CheckCapability,
-    Classname, Client, ClientExt, ClientKind, Command, CommandBuilder, CommandContext,
-    CommandError, CommandHandler, CommandRegistry, CommandResult, CommandTarget,
-    CommutativeModifier, Condition, Connected, ConnectedClient, ConnectionState, DagError, Dead,
-    DeadPlayer, DenyAction, DenyPolicy, Dormant, Entity, EntityExt, EntityId, Event, EventHandler,
-    EventPhase, EventRegistry, EventSubscriberBuilder, EventSubscription, ExitBehavior, Feedback,
-    FromArg, Health, Hltv, HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder,
-    Human, HumanClient, Interceptor, ItemKind, ItemTitle, LifeState, LivingHuman, LivingPlayer,
-    Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext, MenuItem,
-    MenuPageBuilder, MenuRendererKind, MenuStyle, ModifierContribution, NodeBuilder, NoneOf, Not,
-    OrderNode, Origin, Phase, PhasedDag, Pipeline, PipelineFlow, Placeholder, PlaceholderBuilder,
-    PlaceholderCall, PlaceholderHandler, PlaceholderMetadata, PlaceholderRegistry, Player,
-    PlayerAction, PlayerExt, PlayerSlot, PlayerStateFilter, PluginTier, PrintTarget, Prop, PropGet,
-    PropSet, RefineExt, Refined, RenderedMenuPage, SlotAction, Solid, SolidEntity, Spawned,
-    SpawnedEntity, Spec, SpecError, SpectatingPlayer, Spectator, Team, TeamTarget, TypedBlackboard,
+    BlackboardValue, Bot, ButtonInputDriver, CancellationToken, CapExpr, ChatMenuRenderer,
+    ChatScope, ChatTarget, CheckCapability, Checkbox, ClassicMenuRenderer, Classname, Client,
+    ClientExt, ClientKind, Command, CommandBuilder, CommandContext, CommandError, CommandHandler,
+    CommandRegistry, CommandResult, CommandTarget, CommutativeModifier, Condition, Connected,
+    ConnectedClient, ConnectionState, DagError, Dead, DeadPlayer, DenyAction, DenyPolicy,
+    DhudMenuRenderer, Dormant, Entity, EntityExt, EntityId, Event, EventHandler, EventPhase,
+    EventRegistry, EventSubscriberBuilder, EventSubscription, ExitBehavior, Feedback, FromArg,
+    GhostSlotTrap, Health, Hltv, HudColor, HudCoord, HudEffect, HudKind, HudMessage,
+    HudMessageBuilder, Human, HumanClient, HybridInputDriver, Interceptor, ItemKind, ItemTitle,
+    LifeState, LivingHuman, LivingPlayer, Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder,
+    MenuComponent, MenuContext, MenuInputAction, MenuInputDriver, MenuItem, MenuPageBuilder,
+    MenuRenderer, MenuRendererKind, MenuStyle, ModifierContribution, MotdMenuRenderer, NodeBuilder,
+    NoneOf, Not, OrderNode, Origin, Phase, PhasedDag, Pipeline, PipelineFlow, Placeholder,
+    PlaceholderBuilder, PlaceholderCall, PlaceholderHandler, PlaceholderMetadata,
+    PlaceholderRegistry, Player, PlayerAction, PlayerExt, PlayerSlot, PlayerStateFilter,
+    PluginTier, PrintTarget, Prop, PropGet, PropSet, RefineExt, Refined, RenderedMenuPage, Slider,
+    SlotAction, SlotInputDriver, Solid, SolidEntity, Spawned, SpawnedEntity, Spec, SpecError,
+    SpectatingPlayer, Spectator, Team, TeamTarget, TerminalTuiRenderer, TextInput, TypedBlackboard,
     ValidationResult, Vector3, Velocity, VipCaps, VisualDeny, clear_commands, clear_events,
     clear_menu_actions, clear_placeholders, dispatch_command, dispatch_event,
     dispatch_local_placeholder, dispatch_menu_action, register_command, register_menu_action_id,
@@ -357,25 +363,28 @@ pub mod prelude {
     pub use crate::tr;
     pub use crate::{
         Action, AdminCaps, Alive, All, Angles, AntiSpamAction, Any, Armor, AsLangCode, Auth,
-        BlackboardValue, Bot, CancellationToken, CapExpr, ChatScope, ChatTarget, CheckCapability,
-        Classname, Client, ClientExt, ClientKind, Command, CommandBuilder, CommandContext,
-        CommandError, CommandHandler, CommandResult, CommandTarget, CommutativeModifier, Condition,
-        Connected, ConnectedClient, ConnectionState, Dead, DeadPlayer, DenyAction, DenyPolicy,
-        Dormant, Entity, EntityExt, EntityId, Event, EventHandler, EventPhase,
-        EventSubscriberBuilder, ExitBehavior, Feedback, FromArg, Health, Hltv, HudColor, HudCoord,
-        HudEffect, HudKind, HudMessage, HudMessageBuilder, Human, HumanClient, Interceptor,
-        ItemKind, ItemTitle, LifeState, LivingHuman, LivingPlayer, Menu, MenuBuilder, MenuContext,
-        MenuItem, MenuPageBuilder, MenuRendererKind, MenuStyle, ModifierContribution, NoneOf, Not,
-        Origin, Pipeline, PipelineFlow, Placeholder, PlaceholderBuilder, Player, PlayerAction,
-        PlayerExt, PlayerSlot, PlayerStateFilter, PrintTarget, Prop, PropGet, PropSet, RefineExt,
-        Refined, RenderedMenuPage, SlotAction, Solid, SolidEntity, Spawned, SpawnedEntity, Spec,
-        SpecError, SpectatingPlayer, Spectator, Team, TeamTarget, TypedBlackboard,
-        ValidationResult, Vector3, Velocity, VipCaps, VisualDeny, action, prop,
+        BlackboardValue, Bot, ButtonInputDriver, CancellationToken, CapExpr, ChatMenuRenderer,
+        ChatScope, ChatTarget, CheckCapability, Checkbox, ClassicMenuRenderer, Classname, Client,
+        ClientExt, ClientKind, Command, CommandBuilder, CommandContext, CommandError,
+        CommandHandler, CommandResult, CommandTarget, CommutativeModifier, Condition, Connected,
+        ConnectedClient, ConnectionState, Dead, DeadPlayer, DenyAction, DenyPolicy,
+        DhudMenuRenderer, Dormant, Entity, EntityExt, EntityId, Event, EventHandler, EventPhase,
+        EventSubscriberBuilder, ExitBehavior, Feedback, FromArg, GhostSlotTrap, Health, Hltv,
+        HudColor, HudCoord, HudEffect, HudKind, HudMessage, HudMessageBuilder, Human, HumanClient,
+        HybridInputDriver, Interceptor, ItemKind, ItemTitle, LifeState, LivingHuman, LivingPlayer,
+        Menu, MenuBuilder, MenuComponent, MenuContext, MenuInputAction, MenuInputDriver, MenuItem,
+        MenuPageBuilder, MenuRenderer, MenuRendererKind, MenuStyle, ModifierContribution,
+        MotdMenuRenderer, NoneOf, Not, Origin, Pipeline, PipelineFlow, Placeholder,
+        PlaceholderBuilder, Player, PlayerAction, PlayerExt, PlayerSlot, PlayerStateFilter,
+        PrintTarget, Prop, PropGet, PropSet, RefineExt, Refined, RenderedMenuPage, Slider,
+        SlotAction, SlotInputDriver, Solid, SolidEntity, Spawned, SpawnedEntity, Spec, SpecError,
+        SpectatingPlayer, Spectator, Team, TeamTarget, TerminalTuiRenderer, TextInput,
+        TypedBlackboard, ValidationResult, Vector3, Velocity, VipCaps, VisualDeny, action, prop,
         use_command_interceptor,
     };
     pub use crate::{
-        bundle, chat_broadcast, chat_print, command, event, menu_action, on_frame, on_load,
-        on_unload, plugin, role, system,
+        bundle, chat_broadcast, chat_print, command, event, extension, menu_action, on_frame,
+        on_load, on_unload, plugin, reapi, role, system,
     };
     pub use crate::{log_debug, log_err, log_info, log_warn};
 }
@@ -433,5 +442,13 @@ mod tests {
         let cvars_str = cfg.to_cvars();
         assert!(cvars_str.contains("vip_bonus_hp \"50\" // Bonus HP"));
         assert!(cvars_str.contains("vip_tag \"VIP\" // VIP Tag"));
+    }
+
+    #[test]
+    fn test_extension_and_reapi_host_queries() {
+        assert!(!crate::extension::is_available("reapi", None));
+        assert_eq!(crate::extension::version("reapi"), None);
+        assert!(!crate::reapi::has_reapi());
+        assert_eq!(crate::reapi::reapi_version(), None);
     }
 }

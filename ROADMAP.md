@@ -379,49 +379,49 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
 
 ---
 
-## v0.19.0 — Modular Engine Extensions, Abstract UI Renderers & Hardware Diagnostics 📝 Planned
-
+## v0.19.0 — Modular Engine Extensions, Abstract UI Renderers & Hardware Diagnostics ✅
+ 
 **Goal:** Decouple engine-specific modifications (ReAPI, ReHLDS, ReGameDLL, Xash3D) into dynamic `EngineExtension` modules with DSL requirements (`ext:<name>`), introduce a full MVC in-game UI system (`MenuRenderer` + `MenuInputDriver`) with Ghost Slot Trapping, rich `messagemode` text inputs, and provide a host Hardware Inspector.
-
+ 
 ### 1. Modular Engine Extensions (`trait EngineExtension`)
-
-- [ ] **Engine Extension Architecture**:
+ 
+- [x] **Engine Extension Architecture**:
   - Extract engine-specific C-ABI hooks out of core runtime into modular `EngineExtension` providers.
   - Separate Metamod adapter into pure **Transport Backend** and optional **Metamod Extension**.
   - Dynamically discoverable extension registry with graceful fallback: if running on Vanilla HLDS or Xash3D, runtime gracefully disables features without crashing.
-- [ ] **ReAPI Subsystem as an Extension (`goldsrc-ext-reapi`)**:
+- [x] **ReAPI Subsystem as an Extension (`goldsrc-ext-reapi`)**:
   - Encapsulate `IRehldsApi` and `IReGameApi` into `goldsrc-ext-reapi`.
   - Expose extended memory offsets, custom entity hooks, and ReGameDLL-specific game events to the SPI.
-- [ ] **DSL Extension Requirements (`ext:<name>`)**:
+- [x] **DSL Extension Requirements (`ext:<name>`)**:
   - Extend plugin dependency DSL to support `ext:<name>[@<version>]` requirements (e.g. `require = ["ext:reapi@>=5.21.0"]`).
   - Automatic FSM state management: plugins requiring missing extensions transition safely to `PluginStatus::Blocked` instead of throwing runtime panics.
-
+ 
 ### 2. Abstract UI & Menu Architecture (MVC Pattern)
-
-- [ ] **Decoupled View Renderers (`trait MenuRenderer`)**:
+ 
+- [x] **Decoupled View Renderers (`trait MenuRenderer`)**:
   - `ClassicMenuRenderer`: standard Half-Life `ShowMenu` formatted text pages (slots 1..9, 0).
   - `DhudMenuRenderer`: high-fidelity, colored Director HUD overlay with differential screen updates.
   - `ChatMenuRenderer`: compact formatted text menus in chat for minimal or spectator overlays.
   - `MotdMenuRenderer`: rich interactive HTML/CSS dialogs (rules, leaderboards, stats).
   - `TerminalTuiRenderer`: server-side admin dashboard rendering interactive menus to server console via `ratatui`.
-- [ ] **Decoupled Input Drivers (`trait MenuInputDriver`)**:
+- [x] **Decoupled Input Drivers (`trait MenuInputDriver`)**:
   - `SlotInputDriver`: classic `menuselect` interceptor (keys 1..9, 0).
   - `ButtonInputDriver`: real-time movement and action keys via `pev->button` (`IN_FORWARD`/`IN_BACK` cursor navigation, `IN_MOVELEFT`/`IN_MOVERIGHT` pagination/sliders, `IN_JUMP`/`IN_USE` toggle/select).
   - `HybridInputDriver`: simultaneous support for quick number selection (1..9) alongside smooth arrow/jump navigation.
   - **Ghost Slot Trap**: invisible `ShowMenu` transmission accompanying DHUD/HUD menus to prevent weapon switching while capturing slot inputs.
-- [ ] **Component Model & Custom Widgets (`MenuComponent`)**:
+- [x] **Component Model & Custom Widgets (`MenuComponent`)**:
   - Universal `MenuComponent` trait for extensible widgets.
   - Fluent `MenuItem` constructors: `action`, `checkbox`, `slider`, and `custom(widget)`.
   - Native `messagemode` integration: `MenuItem::input(label, prompt, on_submit)` transitioning session state to `AwaitingInput`, triggering client `messagemode`, capturing user text, and seamlessly restoring the menu page.
-
+ 
 ### 3. Host Hardware Inspector & System Diagnostics
-
-- [ ] **Hardware Telemetry Provider (`SystemInfoService`)**:
+ 
+- [x] **Hardware Telemetry Provider (`SystemInfoService`)**:
   - Host-side system metrics collection via `sysinfo` exposed through SPI to WASM plugins.
   - Real-time CPU detection (vendor, model, logical/physical core allocation, CPU load %).
   - Memory statistics (allocated RAM to HLDS process, free system RAM, swap).
   - Frame time jitter and engine tickrate stability monitoring (measuring deviation from 1000 FPS).
-- [ ] **Admin System Inspection Tool (`system_monitor.wasm` / `admin_system`)**:
+- [x] **Admin System Inspection Tool (`system_monitor.wasm` / `admin_system`)**:
   - Host audit console command (`grs hardware` / `amx_sysinfo`) enabling administrators to verify VPS/cloud hosting resource claims and detect overselling or throttling.
 
 ---
@@ -457,4 +457,73 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
 - [ ] **Multi-Version Host Isolation**:
   - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
+
+---
+
+## v0.21.0 — Network & Threat Intelligence (`grlg-geo`) 📝 Planned
+
+**Goal:** Integrate the standalone zero-copy `grlg-geo` threat intelligence engine directly into the GoldSrc host networking layer for sub-microsecond player classification, proxy/VPN mitigation, and connection screening.
+
+### 1. Host Network Screening & Zero-Copy GeoIP
+
+- [ ] **Host `mmap` Database Resolver**:
+  - Integrate pure-Rust `GrlgReader` into `goldsrc-core` with memory-mapped zero-heap lookups (<1 µs latency).
+  - Background asynchronous updates: hot-reload database memory maps without server hitch or player disconnects.
+- [ ] **Threat Bitmask Pipeline in `ClientConnect`**:
+  - Immediate bitflag screening during initial handshake: `is_datacenter`, `is_proxy`, `is_botnet`, `is_spam`.
+  - Declarative connection policies in `goldsrc.toml`: `block_vpn`, `block_datacenter`, `allow_countries`.
+- [ ] **SPI Network Filter Extension**:
+  - Expose `GeoRecord` (Country, Region, City, Coordinates, ASN, ISP, ThreatFlags) through SPI to WASM and Native plugins.
+
+---
+
+## v0.22.0 — Next-Gen Demo Subsystem (`goldsrc-demo`) 📝 Planned
+
+**Goal:** Design an event-driven, tamper-proof demo container format inspired by modern esports engines (CS2), featuring Zstandard stream compression, Ed25519 digital signatures, and backward compatibility with downstream analyzers.
+
+### 1. CS2-Style Event-Driven Container
+
+- [ ] **Structured Event Markers**:
+  - Round boundaries (`RoundStart`, `RoundEnd`, `FreezePeriodEnd`).
+  - Match economy & objectives (bomb plant/defuse, hostage rescue, weapon buy/drop).
+  - High-precision killfeed and damage matrices with tick-accurate player origins and hitgroup indices.
+- [ ] **Lossless Zstandard (`zstd`) Stream Compression**:
+  - On-the-fly chunk compression shrinking 20–30 MB raw demos to 4–7 MB.
+- [ ] **Cryptographic Signing (Ed25519)**:
+  - Asymmetric cryptographic signing of demo headers and keyframe checkpoints to prevent post-game tampering or spoofed replays.
+- [ ] **Streaming & Client-Server Relay**:
+  - Bi-directional demo streaming: automatic client-to-server replay upload on player bans or in-game cheat reports.
+- [ ] **Payload Backward Compatibility**:
+  - Preserve 100% backward compatibility for the raw inner Half-Life network stream with legacy analyzers (UnrealDemoScanner, HL Demo Player).
+
+---
+
+## v0.23.0 — Behavioral Anti-Cheat Engine (`goldsrc-ac`) 📝 Planned
+
+**Goal:** Build a server-authoritative, zero-cost behavioral anti-cheat plugin synthesizing ReAimDetector 3D raycasting and UnrealDemoScanner temporal input signatures with Adaptive Deep-Scan attention and regression testing against real demo corpora.
+
+### 1. Hybrid Detection Core (ReAimDetector + UDS Heuristics)
+
+- [ ] **Server-Authoritative 3D Hitbox Matrix (ReAimDetector Synthesis)**:
+  - Server-side hitbox reconstruction with lag-compensation validation (`sv_unlag`).
+  - True 3D raycasts calculating angular deviation to bone centers and closest hitbox bounding box facets.
+- [ ] **Temporal Input Heuristics (UnrealDemoScanner Extraction)**:
+  - **ViewAngle GCD / Pitch-Yaw Quantization**: detect mouse sensor step discreteness vs synthetic software floats.
+  - **Angular Acceleration & Jerk Curvature**: identify unnatural bell-curve violations and instant linear interpolations.
+  - **PunchAngle RCS Compensation**: detect sub-15ms recoil compensation ignoring human neuromuscular reaction latency.
+  - **Sub-tick Button Distribution**: detect zero-variance `IN_JUMP` (Bhop) and `IN_ATTACK` (FastZoom / KnifeBot) patterns.
+
+### 2. Adaptive Attention & Deep-Scan Lock-in
+
+- [ ] **Selective Attention Architecture**:
+  - Tier 1 Lightweight Triage: $O(1)$ fast filters for 95% of verified players; CPU overhead near zero.
+  - Suspicion Accumulator: Leaky-bucket anomaly counter with exponential temporal decay.
+  - Tier 2 Deep-Scan Lock-in: full hitbox history recording, multi-ray collision tests, and micro-timing analysis activated only upon threshold breach.
+
+### 3. Demo Corpus CI/CD Regression Suite
+
+- [ ] **Automated Test Fixtures (`tests/fixtures/demos/`)**:
+  - Integrate clean and dirty `.dem` test suite from UDS corpus into automated CI.
+  - Automated verification of **0 False Positives** on legitimate professional player demos and **100% True Positives** on confirmed cheat signatures.
+
 

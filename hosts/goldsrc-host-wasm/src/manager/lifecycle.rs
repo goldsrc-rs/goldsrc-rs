@@ -43,15 +43,50 @@ pub fn recalculate_dependency_states(
             for req_str in &meta.requires {
                 if let Ok(req) = goldsrc_api::Requirement::from_str(req_str) {
                     match req {
-                        goldsrc_api::Requirement::Plugin { name, optional, .. } => {
-                            if !loaded_plugins.contains_key(&name) {
-                                if !optional {
-                                    missing_dep =
-                                        Some(format!("missing plugin dependency '{name}'"));
-                                    break;
+                        goldsrc_api::Requirement::Plugin {
+                            name,
+                            version_req,
+                            optional,
+                        } => {
+                            if let Some(loaded_ver) = loaded_plugins.get(&name) {
+                                if let Some(ref req_str) = version_req {
+                                    let satisfies = semver::VersionReq::parse(req_str)
+                                        .and_then(|r| {
+                                            semver::Version::parse(loaded_ver)
+                                                .map(|v| r.matches(&v))
+                                        })
+                                        .unwrap_or(loaded_ver == req_str);
+                                    if !satisfies && !optional {
+                                        missing_dep = Some(format!(
+                                            "plugin dependency '{name}' version mismatch (got {loaded_ver}, requires {req_str})"
+                                        ));
+                                        break;
+                                    }
                                 }
-                            } else if !running_plugins.contains_key(&name) && !optional {
-                                paused_dep = Some(format!("waiting for paused plugin '{name}'"));
+                                if !running_plugins.contains_key(&name) && !optional {
+                                    paused_dep =
+                                        Some(format!("waiting for paused plugin '{name}'"));
+                                }
+                            } else if !optional {
+                                missing_dep = Some(format!("missing plugin dependency '{name}'"));
+                                break;
+                            }
+                        }
+                        goldsrc_api::Requirement::Extension {
+                            name,
+                            version_req,
+                            optional,
+                        } => {
+                            let available =
+                                engine_ops.is_extension_available(&name, version_req.as_deref());
+                            if !available && !optional {
+                                let req_desc = if let Some(ref ver) = version_req {
+                                    format!("'ext:{name}@{ver}'")
+                                } else {
+                                    format!("'ext:{name}'")
+                                };
+                                missing_dep = Some(format!("missing engine extension {req_desc}"));
+                                break;
                             }
                         }
                         goldsrc_api::Requirement::Cvar { name, op } => {

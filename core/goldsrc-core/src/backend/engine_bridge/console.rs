@@ -1,7 +1,7 @@
 //! Engine console print and command execution operations.
 
 use super::EngineBackend;
-use crate::backend::print_queue::{escape_server_print, sanitize_client_print};
+use crate::backend::print_queue::{sanitize_client_print, sanitize_server_print};
 use crate::call_engfunc;
 use goldsrc_spi::engine::EngineConsole;
 
@@ -12,17 +12,13 @@ impl EngineConsole for EngineBackend {
             if let Some(f) = funcs.pfnServerPrint {
                 for buffered in self.print_queue.drain() {
                     for line in buffered.lines() {
-                        let safe = escape_server_print(line);
-                        if let Ok(cstr) = std::ffi::CString::new(safe) {
-                            f(cstr.as_ptr());
-                        }
+                        let bytes = sanitize_server_print(line);
+                        f(bytes.as_ptr() as *const std::ffi::c_char);
                     }
                 }
                 for line in message.lines() {
-                    let safe = escape_server_print(line);
-                    if let Ok(cstr) = std::ffi::CString::new(safe) {
-                        f(cstr.as_ptr());
-                    }
+                    let bytes = sanitize_server_print(line);
+                    f(bytes.as_ptr() as *const std::ffi::c_char);
                 }
             } else {
                 self.print_queue.push(message);

@@ -81,6 +81,7 @@ fn init_wasm_host() {
     });
 
     let engine: std::sync::Arc<dyn goldsrc_spi::engine::Engine> = std::sync::Arc::new(*backend());
+    goldsrc_extension_reapi::init();
     if let Err(e) = goldsrc_core::host::HostRuntime::init(
         goldsrc_api::consts::BackendType::Standalone,
         |msg| {
@@ -134,11 +135,13 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
         edict_count: i32,
         client_max: i32,
     ) {
+        goldsrc_core::backend::console_hook::suppress_tier0_spew();
         proxy::forward_server_activate(edict_list, edict_count, client_max);
         goldsrc_core::hooks::emit(HostEvent::ServerActivate);
     }
 
     fn server_deactivate(&self) {
+        goldsrc_core::backend::console_hook::suppress_tier0_spew();
         proxy::forward_server_deactivate();
         goldsrc_core::hooks::emit(HostEvent::ServerDeactivate);
     }
@@ -420,6 +423,12 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
     // SAFETY: engfuncs and globals are engine-provided; valid for the server lifetime.
     catch_ffi_panic("GiveFnptrsToDll", (), || unsafe {
         goldsrc_sys::guard::install_crash_guard();
+        goldsrc_core::backend::console_hook::init();
+        if !engfuncs.is_null()
+            && let Some(cmd_fn) = (*engfuncs).pfnServerCommand
+        {
+            goldsrc_core::backend::console_hook::register_shutdown_handler(cmd_fn);
+        }
         engine_api::init(engfuncs, globals);
         // Register the unified hook strategy before the engine queries our tables.
         goldsrc_core::api_registry::register(goldsrc_core::api_registry::Registry {
@@ -502,6 +511,22 @@ pub unsafe extern "C" fn GetEntityAPI(
     })
 }
 
+static REAL_GAME_SHUTDOWN: std::sync::atomic::AtomicPtr<()> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+/// Hooked GameShutdown callback from NEW_DLL_FUNCTIONS.
+///
+/// # Safety
+/// Invoked by the engine during GameDLL shutdown.
+pub unsafe extern "C" fn hook_game_shutdown() {
+    goldsrc_core::backend::console_hook::suppress_tier0_spew();
+    let ptr = REAL_GAME_SHUTDOWN.load(std::sync::atomic::Ordering::SeqCst);
+    if !ptr.is_null() {
+        let f: unsafe extern "C" fn() = unsafe { std::mem::transmute(ptr) };
+        unsafe { f() };
+    }
+}
+
 /// Called by engine for NEW_DLL_FUNCTIONS interface (ReGameDLL, Sven Co-op, HLSDK 2.x).
 ///
 /// # Safety
@@ -523,6 +548,13 @@ pub unsafe extern "C" fn GetNewDLLFunctions(
             }
         }
         if proxy::populate_new_dll_table(new_dll_table) {
+            let table = new_dll_table as *mut goldsrc_sys::NEW_DLL_FUNCTIONS;
+            unsafe {
+                if let Some(f) = (*table).pfnGameShutdown {
+                    REAL_GAME_SHUTDOWN.store(f as *mut (), std::sync::atomic::Ordering::SeqCst);
+                }
+                (*table).pfnGameShutdown = Some(hook_game_shutdown);
+            }
             1
         } else {
             0

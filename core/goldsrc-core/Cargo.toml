@@ -20,7 +20,19 @@ crossbeam-channel = { workspace = true }
 notify = { workspace = true }
 libloading = { workspace = true }
 thiserror = { workspace = true }
+semver = { workspace = true }
+sysinfo = "0.39.6"
 
 [features]
 default = ["cli"]
 cli = ["lexopt"]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_System_Memory",
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+] }

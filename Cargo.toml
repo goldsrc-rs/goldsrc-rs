@@ -7,6 +7,8 @@ members = [
     "backends/goldsrc-backend-metamod",
     "backends/goldsrc-backend-standalone",
     "hosts/goldsrc-host-wasm",
+    "extensions/goldsrc-extension-reapi",
+    "extensions/goldsrc-extension-metamod",
     "framework/goldsrc",
     "framework/goldsrc-macros",
     "plugins/admin_system",
@@ -25,6 +27,8 @@ default-members = [
     "backends/goldsrc-backend-metamod",
     "backends/goldsrc-backend-standalone",
     "hosts/goldsrc-host-wasm",
+    "extensions/goldsrc-extension-reapi",
+    "extensions/goldsrc-extension-metamod",
     "framework/goldsrc",
     "framework/goldsrc-macros",
 ]
@@ -43,11 +47,14 @@ goldsrc-sys = { path = "core/goldsrc-sys", version = "0.17.0" }
 goldsrc-api = { path = "core/goldsrc-api", version = "0.17.0" }
 goldsrc-spi = { path = "core/goldsrc-spi", version = "0.17.0" }
 goldsrc-core = { path = "core/goldsrc-core", version = "0.17.0" }
+goldsrc-extension-reapi = { path = "extensions/goldsrc-extension-reapi", version = "0.17.0" }
+goldsrc-extension-metamod = { path = "extensions/goldsrc-extension-metamod", version = "0.17.0" }
 goldsrc-backend-metamod = { path = "backends/goldsrc-backend-metamod", version = "0.17.0" }
 goldsrc-backend-standalone = { path = "backends/goldsrc-backend-standalone", version = "0.17.0" }
 goldsrc-host-wasm = { path = "hosts/goldsrc-host-wasm", version = "0.17.0" }
 goldsrc = { path = "framework/goldsrc", version = "0.17.0" }
 goldsrc-macros = { path = "framework/goldsrc-macros", version = "0.17.0" }
+
 wasmtime = { version = "48.0", default-features = false, features = [
     "cranelift",
     "pulley",
@@ -69,6 +76,7 @@ thiserror = "2.0"
 log = "0.4.33"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 crossbeam-channel = "0.5"
+semver = "1.0"
 
 [profile.dev]
 opt-level = 0

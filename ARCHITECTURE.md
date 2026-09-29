@@ -245,3 +245,41 @@ graph TD
   Calling an `Action` that invokes native C-ABI functions (e.g. `TakeDamage`) can synchronously trigger recursive engine hooks before the initial call returns. Interceptors and actions must release internal mutexes/locks prior to crossing the FFI boundary.
 - **Entity Generation / Serial Number Tracking**:
   Entity slot indices ($1..32$ for players, $33..N$ for entities) are recycled by GoldSrc upon deletion. All `Spec` verifications must check generation serial counters to prevent operations against resurrected entity handles.
+
+---
+
+## 7. Engine Extensions & Compatibility Layer (ReAPI / CExt / AMX)
+
+GoldSrc.rs features a decoupled, modular extension detection and integration system enabling WASM guest plugins and host subsystems to dynamically query native engine mods and capabilities (e.g., ReAPI, ReHLDS, RegameDLL, Metamod extensions, or custom C/C++ modules).
+
+```mermaid
+flowchart LR
+    subgraph HostCore ["Host Core (goldsrc-core & goldsrc-spi)"]
+        ExtRegistry["ExtensionRegistry\n(SemVer Matching)"]
+        SPI["EngineExtensions Trait\n(ISP Separation)"]
+        Bridge["EngineBackend Bridge\n(Dynamic Probe & Safe Fallback)"]
+    end
+
+    subgraph GuestLayer ["Guest Plugins & SDK (framework/goldsrc)"]
+        ExtMod["goldsrc::extension\n(is_available / version)"]
+        ReApi["goldsrc::reapi\n(has_reapi / reapi_version)"]
+        PluginReq["#[plugin(requires = ['ext:reapi'])]"]
+    end
+
+    ExtRegistry --> SPI
+    SPI --> Bridge
+    Bridge <-->|WIT: goldsrc:engine/api| ExtMod
+    ExtMod --> ReApi
+    PluginReq -.->|DAG Validation| ExtRegistry
+```
+
+### 7.1. Structural Principles
+
+1. **Interface Segregation (ISP)**:
+   The `EngineExtensions` trait in `goldsrc_spi::engine` isolates extension checks from basic physics, precache, or message primitives. Mock test engines provide zero-cost default implementations (`impl EngineExtensions for MockEngine {}`).
+2. **SemVer-Aware Requirements**:
+   Plugins can declare requirements via `requires = ["ext:reapi>=1.2.0"]`. The host validates these constraints during DAG initialization, gracefully preventing unsatisfied plugins from executing without panicking.
+3. **Safe Guest Queries**:
+   Guest WASM plugins query extensions through `goldsrc::extension::is_available("reapi", Some(">=1.2.0"))` or helper wrappers like `goldsrc::reapi::has_reapi()`. If running outside the WASM runtime or if the extension is absent, safe default fallbacks prevent guest crashes.
+4. **Interactive CLI Diagnostics**:
+   The engine console command `goldsrc extensions` lists all registered extensions, active versions, and health statuses directly in the server console.

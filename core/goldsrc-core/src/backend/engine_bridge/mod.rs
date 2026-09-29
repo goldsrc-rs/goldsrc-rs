@@ -10,6 +10,7 @@ use goldsrc_sys::enginefuncs_t;
 pub mod console;
 pub mod cvars;
 pub mod entities;
+pub mod extensions;
 pub mod messages;
 pub mod physics;
 pub mod precache;

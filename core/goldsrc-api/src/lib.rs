@@ -97,9 +97,12 @@ pub use hud::{
     ScreenFadeBuilder, ScreenShake, ScreenShakeBuilder,
 };
 pub use menu::{
-    AntiSpamAction, Condition, DenyAction, DenyPolicy, ExitBehavior, Feedback, ItemKind, ItemTitle,
-    Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder, MenuContext, MenuItem,
-    MenuPageBuilder, MenuRendererKind, MenuStyle, RenderedMenuPage, SlotAction, VisualDeny,
+    AntiSpamAction, ButtonInputDriver, ChatMenuRenderer, Checkbox, ClassicMenuRenderer, Condition,
+    DenyAction, DenyPolicy, DhudMenuRenderer, ExitBehavior, Feedback, GhostSlotTrap,
+    HybridInputDriver, ItemKind, ItemTitle, Menu, MenuActionHandler, MenuActionRegistry,
+    MenuBuilder, MenuComponent, MenuContext, MenuInputAction, MenuInputDriver, MenuItem,
+    MenuPageBuilder, MenuRenderer, MenuRendererKind, MenuStyle, MotdMenuRenderer, RenderedMenuPage,
+    Slider, SlotAction, SlotInputDriver, TerminalTuiRenderer, TextInput, VisualDeny,
     clear_menu_actions, dispatch_menu_action, register_menu_action_id, register_menu_action_name,
 };
 pub use modifiers::{BlackboardValue, CommutativeModifier, ModifierContribution, TypedBlackboard};
@@ -119,7 +122,8 @@ pub use spec::{
     All, Any, Dormant, NoneOf, Not, RefineExt, Refined, Solid, Spawned, Spec, SpecError,
 };
 pub use text::{
-    cyrillic_to_latin, format_center_text, format_notify_text, format_say_text, utf8_to_cp1251,
+    cp1251_to_utf8, cyrillic_to_latin, format_center_text, format_notify_text, format_say_text,
+    utf8_to_cp1251,
 };
 pub use timer::{
     IntoScheduleDelay, ScheduleDelay, Ticks, TimerAction, TimerBound, TimerId, TimerMode,

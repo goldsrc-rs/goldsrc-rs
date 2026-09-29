@@ -102,6 +102,30 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         examples: &["grs cmd vip_add 1", "grs cmd test_cvar sv_gravity 600"],
     },
     CommandSpec {
+        name: "extensions",
+        aliases: &["ext", "e"],
+        category: "sys:runtime",
+        summary: "Inspect registered engine extensions (ReAPI, Metamod, Standalone, etc.)",
+        usage: "grs extensions [list|info <name>]",
+        options: &[
+            (
+                "list",
+                "List all registered extensions and their availability",
+            ),
+            ("info <name>", "Show detailed info for a specific extension"),
+        ],
+        examples: &["grs extensions", "grs ext list", "grs ext info reapi"],
+    },
+    CommandSpec {
+        name: "hardware",
+        aliases: &["hw", "sysinfo"],
+        category: "sys:runtime",
+        summary: "Display host hardware telemetry, CPU/RAM usage, and engine tickrate stability",
+        usage: "grs hardware [--json]",
+        options: &[("--json", "Output hardware metrics as JSON payload")],
+        examples: &["grs hardware", "grs hw", "grs hardware --json"],
+    },
+    CommandSpec {
         name: "status",
         aliases: &["stat", "st", "s"],
         category: "sys:runtime",

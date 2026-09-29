@@ -19,6 +19,12 @@ pub unsafe extern "system" fn GiveFnptrsToDll(
     // SAFETY: engfuncs and globals are engine-provided; valid for the server lifetime.
     catch_ffi_panic("GiveFnptrsToDll", (), || {
         goldsrc_sys::guard::install_crash_guard();
+        goldsrc_core::backend::console_hook::init();
+        if !engfuncs.is_null()
+            && let Some(cmd_fn) = unsafe { (*engfuncs).pfnServerCommand }
+        {
+            goldsrc_core::backend::console_hook::register_shutdown_handler(cmd_fn);
+        }
         unsafe { init_backend(engfuncs, globals) };
         backend().server_print("[GoldSrc.rs] Engine functions received.\n");
     });
@@ -36,6 +42,7 @@ pub unsafe extern "C" fn Meta_Query(
 ) -> std::os::raw::c_int {
     // SAFETY: plugin_info and meta_util_functions are Metamod-provided; valid at call time.
     catch_ffi_panic("Meta_Query", 0, || {
+        goldsrc_core::backend::console_hook::init();
         unsafe {
             if plugin_info.is_null() {
                 return 0;
@@ -63,6 +70,10 @@ pub unsafe extern "C" fn Meta_Attach(
 ) -> std::os::raw::c_int {
     // SAFETY: meta_functions and meta_globals are Metamod-provided; valid at call time.
     catch_ffi_panic("Meta_Attach", 0, || {
+        goldsrc_core::backend::console_hook::init();
+        if let Some(cmd_fn) = crate::engfuncs().pfnServerCommand {
+            goldsrc_core::backend::console_hook::register_shutdown_handler(cmd_fn);
+        }
         unsafe {
             if meta_globals.is_null() || meta_functions.is_null() {
                 return 0;
@@ -252,12 +263,7 @@ unsafe extern "C" fn hook_reg_user_msg_post(
     _i_size: std::os::raw::c_int,
 ) -> std::os::raw::c_int {
     catch_ffi_panic("hook_reg_user_msg_post", 0, || {
-        let orig_ret_ptr = crate::meta_globals().orig_ret as *const i32;
-        let msg_id = if !orig_ret_ptr.is_null() {
-            unsafe { *orig_ret_ptr }
-        } else {
-            0
-        };
+        let msg_id = goldsrc_extension_metamod::MetamodApi::orig_ret_val::<i32>().unwrap_or(0);
         if !psz_name.is_null()
             && msg_id > 0
             && msg_id != 255

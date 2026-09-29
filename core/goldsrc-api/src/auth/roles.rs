@@ -48,6 +48,8 @@ impl AdminCaps {
     pub const VOTE: &'static str = "admin.vote";
     /// Authority to modify server CVARs.
     pub const CVAR: &'static str = "admin.cvar";
+    /// Authority to inspect host hardware and diagnostics telemetry.
+    pub const SYSINFO: &'static str = "admin.sysinfo";
     /// Access to private admin chat channel.
     pub const CHAT: &'static str = "chat:channel(admin)";
 
@@ -62,6 +64,7 @@ impl AdminCaps {
             Self::KICK,
             Self::VOTE,
             Self::CVAR,
+            Self::SYSINFO,
             Self::CHAT,
         ]
     }
@@ -99,7 +102,7 @@ mod tests {
         assert_eq!(AdminCaps::ALL, "admin:*");
         assert_eq!(AdminCaps::CHAT, "chat:channel(admin)");
         assert_eq!(VipCaps::MENU, "menu:scope(vip)");
-        assert_eq!(AdminCaps::default_caps().len(), 9);
+        assert_eq!(AdminCaps::default_caps().len(), 10);
         assert_eq!(VipCaps::default_caps().len(), 4);
         assert!(namespaces::is_root_namespace("chat"));
         assert!(namespaces::is_root_namespace("gameplay"));

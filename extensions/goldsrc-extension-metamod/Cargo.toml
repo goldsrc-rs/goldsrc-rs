@@ -1,0 +1,15 @@
+[package]
+name = "goldsrc-extension-metamod"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Modular Metamod plugin manager engine extension for GoldSrc.rs"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+goldsrc-api.workspace = true
+goldsrc-core.workspace = true
+goldsrc-spi.workspace = true
+goldsrc-sys.workspace = true
+log.workspace = true

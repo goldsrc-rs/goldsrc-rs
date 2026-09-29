@@ -643,11 +643,13 @@ mod tests {
     use goldsrc_api::cvar::{CvarEngine, CvarFlags};
     use goldsrc_api::entity::EntitySpawner;
     use goldsrc_spi::engine::{
-        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
-        TraceResult,
+        EngineConsole, EngineEntities, EngineExtensions, EngineMessages, EnginePhysics,
+        EnginePrecache, EngineSound, TraceResult,
     };
 
     struct NoopEngineOps;
+
+    impl EngineExtensions for NoopEngineOps {}
 
     impl EnginePrecache for NoopEngineOps {
         fn precache_model(&self, _path: &str) -> i32 {
@@ -1082,6 +1084,8 @@ mod tests {
         ) {
         }
     }
+
+    impl EngineExtensions for MockMessageEngine {}
 
     #[test]
     fn host_print_center_formats_and_dispatches_textmsg() {

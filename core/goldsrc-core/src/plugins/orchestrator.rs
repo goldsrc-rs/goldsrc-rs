@@ -58,12 +58,13 @@ mod tests {
     use goldsrc_api::cvar::{CvarEngine, CvarFlags};
     use goldsrc_api::entity::EntitySpawner;
     use goldsrc_spi::engine::{
-        EngineConsole, EngineEntities, EngineMessages, EnginePhysics, EnginePrecache, EngineSound,
-        TraceResult,
+        EngineConsole, EngineEntities, EngineExtensions, EngineMessages, EnginePhysics,
+        EnginePrecache, EngineSound, TraceResult,
     };
     use std::sync::Arc;
 
     struct NoopEngine;
+    impl EngineExtensions for NoopEngine {}
     impl EnginePrecache for NoopEngine {
         fn precache_model(&self, _s: &str) -> i32 {
             0

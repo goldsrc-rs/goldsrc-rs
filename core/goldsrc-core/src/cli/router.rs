@@ -833,6 +833,12 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             });
         }
+        "extensions" => {
+            handlers::handle_extensions(spec, parser, out);
+        }
+        "hardware" => {
+            handlers::handle_hardware(spec, parser, out);
+        }
         "status" => {
             while let Ok(Some(arg)) = parser.next() {
                 if let Arg::Short('h') | Arg::Long("help") = arg {
@@ -849,6 +855,11 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 })
                 .unwrap_or((0, 0))
             });
+            let active_exts = crate::extension::extension_registry()
+                .all()
+                .into_iter()
+                .filter(|e| e.is_available())
+                .count();
             out("--- GoldSrc.rs Host Engine Status ---\n");
             out(&format!(
                 "  Version:    v{} (git: {})\n",
@@ -857,6 +868,7 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
             out(&format!("  Target:     {}\n", build_target));
             out("  WASM Engine: wasmtime (Component Model)\n");
             out(&format!("  Plugins:    {} loaded\n", plugins_count));
+            out(&format!("  Extensions: {} active\n", active_exts));
             out(&format!(
                 "  Watchers:   {} active ({} total registered)\n",
                 watchers_active, watchers_total

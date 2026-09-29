@@ -30,6 +30,14 @@ pub fn escape_server_print(message: &str) -> String {
     format!("{}\n", slice.trim_end_matches(['\r', '\n']))
 }
 
+/// Helper to sanitize server console prints with fmtlib escaping in UTF-8 encoding.
+pub fn sanitize_server_print(line: &str) -> Vec<u8> {
+    let safe = escape_server_print(line);
+    let mut out = safe.into_bytes();
+    out.push(0); // NUL terminator
+    out
+}
+
 /// Helper to sanitize console/center/chat prints with CP1251 encoding for Cyrillic GoldSrc client support.
 pub fn sanitize_client_print(message: &str) -> Vec<u8> {
     let cp1251_bytes = goldsrc_api::utf8_to_cp1251(message);
@@ -50,15 +58,23 @@ pub fn sanitize_client_print(message: &str) -> Vec<u8> {
 }
 
 /// Converts an engine-provided C string pointer to an owned `String`
-/// (empty on null). Lossy UTF-8, matching engine console semantics.
+/// (empty on null). Supports both UTF-8 and CP1251 (Cyrillic) decoding.
 ///
 /// # Safety
-/// `ptr` must be null or point to a valid NUL-terminated UTF-8 C string.
+/// `ptr` must be null or point to readable memory.
 pub unsafe fn cstr_to_string(ptr: *const std::ffi::c_char) -> String {
     if ptr.is_null() {
-        String::new()
+        return String::new();
+    }
+    let len = unsafe { goldsrc_sys::ffi::libc_strnlen(ptr, 1024) };
+    if len == 0 {
+        return String::new();
+    }
+    let slice = unsafe { std::slice::from_raw_parts(ptr as *const u8, len) };
+    if let Ok(s) = std::str::from_utf8(slice) {
+        s.trim().to_string()
     } else {
-        unsafe { goldsrc_sys::ffi::cstr_to_string_bounded(ptr, 1024).unwrap_or_default() }
+        goldsrc_api::cp1251_to_utf8(slice).trim().to_string()
     }
 }
 

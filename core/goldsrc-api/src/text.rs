@@ -165,6 +165,36 @@ pub fn utf8_to_cp1251(input: &str) -> Vec<u8> {
     out
 }
 
+/// Converts Windows-1251 (CP1251) byte slice into a UTF-8 `String`.
+pub fn cp1251_to_utf8(input: &[u8]) -> String {
+    let mut out = String::with_capacity(input.len());
+    for &b in input {
+        let c = match b {
+            0x00..=0x7F => b as char,
+            0xC0..=0xFF => {
+                // Cyrillic uppercase and lowercase: А-Я, а-я
+                // 0xC0 corresponds to U+0410 ('А'), 0xFF corresponds to U+044F ('я')
+                char::from_u32(0x0410 + (b - 0xC0) as u32).unwrap_or('?')
+            }
+            0xA8 => 'Ё',
+            0xB8 => 'ё',
+            0xAF => 'Ї',
+            0xBF => 'ї',
+            0xAA => 'Є',
+            0xBA => 'є',
+            0xAB => '«',
+            0xBB => '»',
+            0x97 => '—',
+            0x96 => '–',
+            0xB9 => '№',
+            0xA0 => ' ',
+            _ => '?',
+        };
+        out.push(c);
+    }
+    out
+}
+
 /// Transliterates Cyrillic text to ASCII Latin characters for clean rendering in
 /// legacy GoldSrc monospace HUD / developer notify overlays (`PRINT_NOTIFY`).
 pub fn cyrillic_to_latin(input: &str) -> String {
@@ -297,6 +327,15 @@ mod tests {
         let input = "Привет";
         let bytes = utf8_to_cp1251(input);
         assert_eq!(bytes, vec![0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2]);
+        assert_eq!(cp1251_to_utf8(&bytes), "Привет");
+    }
+
+    #[test]
+    fn test_cp1251_to_utf8_extended() {
+        let input = "Привет, мир! Тест: «Ёлка» №1.";
+        let bytes = utf8_to_cp1251(input);
+        let restored = cp1251_to_utf8(&bytes);
+        assert_eq!(restored, input);
     }
 
     #[test]

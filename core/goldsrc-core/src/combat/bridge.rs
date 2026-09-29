@@ -10,7 +10,6 @@
 
 use crate::hooks::entity::{KilledContext, TakeDamageContext, entity_hooks};
 use crate::hooks::types::{HookResult, HookTiming};
-use crate::reapi::ReApiBridge;
 use goldsrc_api::dag::EventPhase;
 use std::sync::{LazyLock, RwLock};
 
@@ -52,7 +51,7 @@ pub struct CombatBridge;
 impl CombatBridge {
     /// Resolves the currently active combat interception tier.
     pub fn active_tier() -> CombatTier {
-        if ReApiBridge::status().regamedll_active {
+        if crate::extension::extension_registry().is_available("regamedll", None) {
             CombatTier::Tier1ReGame
         } else {
             CombatTier::Tier2VTable

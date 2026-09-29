@@ -9,7 +9,8 @@ use goldsrc_core::api_registry::EntityHooks;
 use goldsrc_core::{HostEvent, PlayerEvent};
 use goldsrc_sys::edict_t;
 
-use crate::{meta_globals, meta_types::MRES_SUPERCEDE};
+use crate::meta_types::MRES_SUPERCEDE;
+use goldsrc_extension_metamod::MetamodApi;
 
 /// Metamod hook behavior. Registered once via `api_registry::register`.
 pub struct MetamodHooks;
@@ -27,7 +28,7 @@ impl EntityHooks for MetamodHooks {
     fn client_command(&self, _edict: *mut edict_t, index: i32, cmd: &str, args: &str) -> bool {
         let handled = goldsrc_core::hooks::dispatch_client_command(index, cmd, args);
         if handled {
-            meta_globals().mres = MRES_SUPERCEDE;
+            MetamodApi::set_result(MRES_SUPERCEDE);
         }
         handled
     }

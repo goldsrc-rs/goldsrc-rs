@@ -1,5 +1,6 @@
 //! Shared backend plumbing: engine access, deferred print queue and engfunc-call macros.
 
+pub mod console_hook;
 pub mod engine_bridge;
 pub mod print_queue;
 

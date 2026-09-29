@@ -331,3 +331,195 @@ pub fn handle_reload<F: FnMut(&str)>(
         out("[GoldSrc.rs] Usage: grs plugins reload <name|index...> [-a|--all]\n");
     }
 }
+
+pub fn handle_extensions<F: FnMut(&str)>(
+    spec: &CommandSpec,
+    mut parser: lexopt::Parser,
+    mut out: F,
+) {
+    let mut subcommand = None;
+    let mut target_name = None;
+
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Value(val) => {
+                let s = val.to_string_lossy().to_string();
+                if subcommand.is_none() {
+                    subcommand = Some(s);
+                } else if target_name.is_none() {
+                    target_name = Some(s);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let sub = subcommand.as_deref().unwrap_or("list");
+    let registry = crate::extension::extension_registry();
+
+    match sub {
+        "list" | "ls" => {
+            let mut extensions = registry.all();
+            extensions.sort_by(|a, b| a.name().cmp(b.name()));
+            if extensions.is_empty() {
+                out("[GoldSrc.rs] Engine Extensions (0):\n  (No extensions registered)\n");
+                return;
+            }
+            out(&format!(
+                "[GoldSrc.rs] Engine Extensions ({}):\n",
+                extensions.len()
+            ));
+            out(&format!(
+                "  {:<12} {:<10} {:<10} {}\n",
+                "NAME", "STATUS", "VERSION", "DESCRIPTION"
+            ));
+            out(&format!(
+                "  {:-<12} {:-<10} {:-<10} {:-<30}\n",
+                "", "", "", ""
+            ));
+            for ext in extensions {
+                let status_str = if ext.is_available() {
+                    "ACTIVE"
+                } else {
+                    "DISABLED"
+                };
+                out(&format!(
+                    "  {:<12} {:<10} {:<10} {}\n",
+                    ext.name(),
+                    status_str,
+                    ext.version(),
+                    ext.description()
+                ));
+            }
+        }
+        "info" => {
+            let Some(name) = target_name else {
+                out("[GoldSrc.rs] Usage: grs extensions info <name>\n");
+                return;
+            };
+            if let Some(ext) = registry.get(&name) {
+                let status_str = if ext.is_available() {
+                    "ACTIVE"
+                } else {
+                    "DISABLED"
+                };
+                out(&format!("[GoldSrc.rs] Extension: {}\n", ext.name()));
+                out(&format!("  Name:        {}\n", ext.name()));
+                out(&format!("  Status:      {}\n", status_str));
+                out(&format!("  Version:     {}\n", ext.version()));
+                out(&format!("  Description: {}\n", ext.description()));
+            } else {
+                out(&format!(
+                    "[GoldSrc.rs] Error: Engine extension '{}' not found.\n",
+                    name
+                ));
+            }
+        }
+        unknown => {
+            out(&format!(
+                "[GoldSrc.rs] Unknown extensions subcommand '{}'. Valid: list, info.\n",
+                unknown
+            ));
+        }
+    }
+}
+
+pub fn handle_hardware<F: FnMut(&str)>(spec: &CommandSpec, mut parser: lexopt::Parser, mut out: F) {
+    let mut json_output = false;
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Long("json") => {
+                json_output = true;
+            }
+            _ => {}
+        }
+    }
+
+    let snapshot = crate::hardware::system_info().sample_metrics();
+
+    if json_output {
+        let json = serde_json::json!({
+            "cpu": {
+                "brand": snapshot.cpu_brand,
+                "vendor": snapshot.cpu_vendor,
+                "physical_cores": snapshot.physical_cores,
+                "logical_cores": snapshot.logical_cores,
+                "global_usage_pct": snapshot.global_cpu_usage,
+                "process_usage_pct": snapshot.process_cpu_usage
+            },
+            "memory": {
+                "process_rss_mb": snapshot.process_memory_rss_bytes as f64 / (1024.0 * 1024.0),
+                "process_virtual_mb": snapshot.process_memory_virtual_bytes as f64 / (1024.0 * 1024.0),
+                "total_ram_mb": snapshot.total_memory_bytes as f64 / (1024.0 * 1024.0),
+                "available_ram_mb": snapshot.available_memory_bytes as f64 / (1024.0 * 1024.0),
+                "total_swap_mb": snapshot.total_swap_bytes as f64 / (1024.0 * 1024.0),
+                "used_swap_mb": snapshot.used_swap_bytes as f64 / (1024.0 * 1024.0)
+            },
+            "performance": {
+                "measured_fps": snapshot.measured_fps,
+                "jitter_ms": snapshot.frame_jitter_ms,
+                "uptime_secs": snapshot.uptime_secs
+            }
+        });
+        out(&format!("{}\n", json));
+        return;
+    }
+
+    let rss_mb = snapshot.process_memory_rss_bytes as f64 / (1024.0 * 1024.0);
+    let total_ram_mb = snapshot.total_memory_bytes as f64 / (1024.0 * 1024.0);
+    let avail_ram_mb = snapshot.available_memory_bytes as f64 / (1024.0 * 1024.0);
+    let phys_str = snapshot
+        .physical_cores
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "N/A".to_string());
+
+    out("====================================================\n");
+    out("       GoldSrc.rs Host Hardware & Diagnostics       \n");
+    out("====================================================\n");
+    out(&format!(
+        "  CPU Model     : {}\n",
+        snapshot.cpu_brand.trim()
+    ));
+    out(&format!("  Vendor / Arch : {}\n", snapshot.cpu_vendor));
+    out(&format!(
+        "  Cores / Threads: {} physical / {} logical\n",
+        phys_str, snapshot.logical_cores
+    ));
+    out(&format!(
+        "  Host CPU Load : {:.1}%\n",
+        snapshot.global_cpu_usage
+    ));
+    out(&format!(
+        "  HLDS CPU Load : {:.1}%\n",
+        snapshot.process_cpu_usage
+    ));
+    out("----------------------------------------------------\n");
+    out(&format!("  HLDS Process  : {:.1} MB RSS\n", rss_mb));
+    out(&format!(
+        "  Host RAM Free : {:.0} MB / {:.0} MB total ({:.1}% free)\n",
+        avail_ram_mb,
+        total_ram_mb,
+        (avail_ram_mb / total_ram_mb.max(1.0)) * 100.0
+    ));
+    out("----------------------------------------------------\n");
+    let fps_display = if snapshot.measured_fps > 0.0 {
+        format!("{:.1} FPS", snapshot.measured_fps)
+    } else {
+        "Calibrating...".to_string()
+    };
+    out(&format!("  Engine Rate   : {}\n", fps_display));
+    out(&format!(
+        "  Frame Jitter  : {:.2} ms\n",
+        snapshot.frame_jitter_ms
+    ));
+    out(&format!("  Host Uptime   : {}s\n", snapshot.uptime_secs));
+    out("====================================================\n");
+}

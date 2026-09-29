@@ -3,8 +3,8 @@
 //! Provides zero-overhead access to ReAPI extensions, queries `CreateInterface`
 //! dynamically on module load, and verifies major/minor version compatibility.
 
+use crate::capabilities::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 use goldsrc_api::consts::log_targets;
-use goldsrc_spi::reapi::{ReApiStatus, ReGameCapabilities, RehldsCapabilities};
 use goldsrc_sys::reapi::{
     CreateInterfaceFn, IReGameApi, IRehldsApi, REGAMEDLL_API_VERSION_MAJOR,
     REGAMEDLL_API_VERSION_MINOR, REHLDS_API_VERSION_MAJOR, REHLDS_API_VERSION_MINOR, ReGameFuncs_t,
@@ -178,6 +178,56 @@ impl ReApiBridge {
             let funcs = &*funcs_ptr;
             funcs.GetRealTime.map(|f| f())
         }
+    }
+
+    /// Automatically scans host process modules for ReHLDS and ReGameDLL if not already loaded.
+    pub fn auto_detect() -> ReApiStatus {
+        #[cfg(target_os = "windows")]
+        {
+            // Try detecting ReHLDS from loaded engine module
+            if !Self::status().rehlds_active {
+                for mod_name in &[c"swds.dll", c"hw.dll"] {
+                    unsafe {
+                        use windows_sys::Win32::System::LibraryLoader::{
+                            GetModuleHandleA, GetProcAddress,
+                        };
+                        let h_mod = GetModuleHandleA(mod_name.as_ptr().cast());
+                        if !h_mod.is_null() {
+                            let proc = GetProcAddress(h_mod, c"CreateInterface".as_ptr().cast());
+                            if let Some(create_fn) = proc {
+                                let factory: CreateInterfaceFn = std::mem::transmute(create_fn);
+                                if Self::try_init_rehlds_factory(factory) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Try detecting ReGameDLL from loaded game DLL module
+            if !Self::status().regamedll_active {
+                for mod_name in &[c"mp.dll", c"cs.dll"] {
+                    unsafe {
+                        use windows_sys::Win32::System::LibraryLoader::{
+                            GetModuleHandleA, GetProcAddress,
+                        };
+                        let h_mod = GetModuleHandleA(mod_name.as_ptr().cast());
+                        if !h_mod.is_null() {
+                            let proc = GetProcAddress(h_mod, c"CreateInterface".as_ptr().cast());
+                            if let Some(create_fn) = proc {
+                                let factory: CreateInterfaceFn = std::mem::transmute(create_fn);
+                                if Self::try_init_regamedll_factory(factory) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Self::status()
     }
 }
 

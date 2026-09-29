@@ -24,6 +24,10 @@ use std::time::Instant;
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_spi::engine::Engine>> = OnceLock::new();
 
+thread_local! {
+    static IN_MANAGER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// Player-specific gameplay and lifecycle events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerEvent {
@@ -531,14 +535,22 @@ impl HostRuntime {
             let mut builder = dag.add(rel_name.clone(), path.clone()).phase(tier);
             if let Some(e) = entry {
                 for req in &e.requires {
+                    let parsed_req = req.parse::<goldsrc_api::Requirement>();
+                    let dep_name: &str = match &parsed_req {
+                        Ok(goldsrc_api::Requirement::Plugin { name, .. }) => name.as_str(),
+                        // Non-plugin requirements (ext:*, cvar:*, feature:*, etc.) are environmental, not inter-plugin edges
+                        Ok(_) => continue,
+                        Err(_) => req.as_str(),
+                    };
                     let target_rel = discovered_plugins
                         .iter()
                         .find(|(d_name, _)| {
-                            d_name == req
-                                || d_name.rsplit_once('/').map(|(_, b)| b).unwrap_or(d_name) == req
+                            d_name == dep_name
+                                || d_name.rsplit_once('/').map(|(_, b)| b).unwrap_or(d_name)
+                                    == dep_name
                         })
                         .map(|(d_name, _)| d_name.clone())
-                        .unwrap_or_else(|| req.clone());
+                        .unwrap_or_else(|| dep_name.to_string());
                     builder = builder.after(target_rel);
                 }
             }
@@ -683,24 +695,28 @@ impl HostRuntime {
             let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
             let _ = guard.storage.flush();
             guard.paused_plugins.clear();
+            let map_name = guard.current_map.clone();
             guard.current_map.clear();
             guard.rule_orchestrator.on_map_change();
             guard.sessions.clear();
+            crate::extension::extension_registry().on_change_level(&map_name);
         }
         crate::logging::flush();
+    }
+
+    /// Returns `true` if the current thread is already executing inside `HostRuntime::with_manager`.
+    #[inline(always)]
+    pub fn is_in_manager() -> bool {
+        IN_MANAGER.get()
     }
 
     /// Run `f` with exclusive access to the `PluginManager`, if initialized.
     /// Protects against re-entrant mutex deadlock if called recursively on the same thread.
     pub fn with_manager<R>(f: impl FnOnce(Option<&mut PluginManager>) -> R) -> R {
-        thread_local! {
-            static IN_MANAGER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-        }
-
         if IN_MANAGER.get() {
-            log::warn!(
+            log::trace!(
                 target: log_targets::CORE,
-                "Re-entrant call to HostRuntime::with_manager detected and suppressed to prevent deadlock"
+                "Re-entrant call to HostRuntime::with_manager suppressed to prevent deadlock"
             );
             return f(None);
         }
@@ -1056,6 +1072,9 @@ impl HostRuntime {
             }
         });
 
+        // Broadcast physics frame tick to modular engine extensions
+        crate::extension::extension_registry().on_server_frame();
+
         // Advance frame tick and continuous clock in TimerService
         static FRAME_TICK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let tick = FRAME_TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1070,6 +1089,9 @@ impl HostRuntime {
         {
             mgr.tick_frame(now, engine.as_ref());
         }
+
+        // Record frame time for hardware diagnostics (FPS and jitter telemetry)
+        crate::hardware::system_info().on_frame();
 
         // Throttle disk flushing to at most once every second to prevent per-frame I/O stalls
         static LAST_LOG_FLUSH: OnceLock<Mutex<Instant>> = OnceLock::new();

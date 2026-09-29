@@ -29,6 +29,10 @@ impl AdminSystem {
         );
         Auth::register_capability(AdminCaps::CVAR, "Allows changing server cvars");
         Auth::register_capability(
+            AdminCaps::SYSINFO,
+            "Allows inspecting server hardware and host diagnostics",
+        );
+        Auth::register_capability(
             AdminCaps::CHAT,
             "Access to private administrative chat channel",
         );
@@ -43,7 +47,11 @@ impl AdminSystem {
     )]
     fn handle_grant(target: Player, cap_name: String) {
         if target.grant_capability(&cap_name) {
-            log_info!("[Админ] Выдал '{}' игроку #{}", cap_name, target.index());
+            log_info!(
+                "[Admin System] Granted '{}' to player #{}",
+                cap_name,
+                target.index()
+            );
         } else {
             log_warn!(
                 "[Admin System] Capability '{}' is not registered!",
