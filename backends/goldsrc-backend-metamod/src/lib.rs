@@ -101,16 +101,22 @@ pub unsafe fn init_backend(
     }
 }
 
+static DUMMY_ENGFUNCS: goldsrc_sys::enginefuncs_t = unsafe { std::mem::zeroed() };
+static DUMMY_GLOBALS: goldsrc_sys::ffi::SyncWrapper<goldsrc_sys::globalvars_t> =
+    goldsrc_sys::ffi::SyncWrapper::new(unsafe { std::mem::zeroed() });
+static mut DUMMY_META_GLOBALS: meta_globals_t = unsafe { std::mem::zeroed() };
+
 pub fn engfuncs() -> &'static goldsrc_sys::enginefuncs_t {
-    G_ENGFUNCS.get().expect("Backend not initialized")
+    G_ENGFUNCS.get().map(|s| **s).unwrap_or(&DUMMY_ENGFUNCS)
 }
 
 pub fn globals() -> &'static goldsrc_sys::globalvars_t {
-    G_GLOBALS.get().expect("Backend not initialized")
+    G_GLOBALS.get().map(|s| **s).unwrap_or(&*DUMMY_GLOBALS)
 }
 
 pub fn meta_globals() -> &'static mut meta_globals_t {
-    goldsrc_extension_metamod::MetamodApi::raw_meta_globals().expect("Meta globals not initialized")
+    goldsrc_extension_metamod::MetamodApi::raw_meta_globals()
+        .unwrap_or_else(|| unsafe { &mut *std::ptr::addr_of_mut!(DUMMY_META_GLOBALS) })
 }
 
 static G_GAMEDLL_FUNCS: std::sync::atomic::AtomicPtr<gamedll_funcs_t> =

@@ -603,7 +603,6 @@ mod tests {
 
     #[test]
     fn test_steam_id_parse_and_conversions() {
-        // Steam2 -> AccountID -> Steam3 -> Steam64
         let steam2 = "STEAM_0:1:12345678";
         let id = SteamId::parse(steam2).expect("valid Steam2");
         assert_eq!(id.auth_server(), 1);
@@ -613,25 +612,20 @@ mod tests {
         assert_eq!(id.to_steam3(), "[U:1:24691357]");
         assert_eq!(id.steam64(), 76561197960265728 + 24691357);
 
-        // Steam3 parse
         let id3 = SteamId::parse("[U:1:24691357]").expect("valid Steam3");
         assert_eq!(id3, id);
 
-        // Steam64 numeric parse
         let id64 = SteamId::parse(&format!("{}", id.steam64())).expect("valid Steam64");
         assert_eq!(id64, id);
 
-        // AccountID raw numeric parse
         let id_acc = SteamId::parse("24691357").expect("valid account ID");
         assert_eq!(id_acc, id);
 
-        // VALVE_ prefix
         let id_valve = SteamId::parse("VALVE_0:0:98765").expect("valid VALVE_ prefix");
         assert_eq!(id_valve.auth_server(), 0);
         assert_eq!(id_valve.auth_id(), 98765);
         assert_eq!(id_valve.account_id(), 197530);
 
-        // Invalid strings
         assert!(SteamId::parse("").is_none());
         assert!(SteamId::parse("BOT").is_none());
         assert!(SteamId::parse("STEAM_ID_PENDING").is_none());
@@ -658,13 +652,11 @@ mod tests {
         let lan2 = PlayerGuid::for_lan(ip);
         assert_eq!(lan1, lan2);
 
-        // Hex formatting and parsing roundtrip
         let hex = guid1.to_hex();
         assert_eq!(hex.len(), 32);
         let parsed_hex = PlayerGuid::from_hex(&hex).expect("valid hex");
         assert_eq!(parsed_hex, guid1);
 
-        // UUID string roundtrip
         let uuid_str = guid1.to_uuid_string();
         assert_eq!(uuid_str.len(), 36);
         let parsed_uuid = PlayerGuid::from_hex(&uuid_str).expect("valid uuid hex");

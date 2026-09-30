@@ -1,12 +1,17 @@
 //! Engine entity management operations.
 
-use goldsrc_api::client::{AuthState, AuthSubject, Player, PlayerIdentity, SteamId};
-use goldsrc_api::entity::EntitySpawner;
+use crate::entity::EntitySpawner;
+use crate::identity::{AuthState, AuthSubject, PlayerIdentity, SteamId};
 
 /// Operations for querying and manipulating entities and players.
 pub trait EngineEntities: EntitySpawner + Send + Sync {
     /// Whether an entity index is valid (0 = world, 1..=N = players, >N = entities).
     fn entity_is_valid(&self, index: i32) -> bool;
+
+    /// Checks whether the given slot index represents a valid, active player (1..=32).
+    fn player_is_valid(&self, index: i32) -> bool {
+        (1..=32).contains(&index) && self.entity_is_valid(index)
+    }
 
     /// Entity classname (e.g. "info_player_start", "hostage_entity").
     fn entity_classname(&self, index: i32) -> Option<String>;
@@ -99,20 +104,4 @@ pub trait EngineEntities: EntitySpawner + Send + Sync {
     /// Forces the real GameDLL's Touch between two entities
     /// (`touched` delivered into `other`, e.g. weapon → player).
     fn dispatch_touch(&self, touched: i32, other: i32);
-
-    /// Constructs a safe Player entity handle from a player slot index if valid.
-    fn player_handle(&self, index: i32) -> Option<Player> {
-        if (1..=32).contains(&index) && self.entity_is_valid(index) {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                Some(Player::from_index(index))
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                Some(Player::new(index))
-            }
-        } else {
-            None
-        }
-    }
 }

@@ -320,7 +320,7 @@ impl SubAssign for Vector3 {
     fn sub_assign(&mut self, rhs: Self) {
         self.x -= rhs.x;
         self.y -= rhs.y;
-        self.z += rhs.z;
+        self.z -= rhs.z;
     }
 }
 
@@ -428,6 +428,10 @@ mod tests {
         assert_eq!(2.0 * a, Vector3::new(2.0, 4.0, 6.0));
         assert_eq!(b / 2.0, Vector3::new(2.0, 2.5, 3.0));
         assert_eq!(-a, Vector3::new(-1.0, -2.0, -3.0));
+
+        let mut sub_test = Vector3::new(10.0, 20.0, 30.0);
+        sub_test -= Vector3::new(1.0, 2.0, 3.0);
+        assert_eq!(sub_test, Vector3::new(9.0, 18.0, 27.0));
     }
 
     #[test]

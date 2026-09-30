@@ -396,67 +396,67 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Extend plugin dependency DSL to support `ext:<name>[@<version>]` requirements (e.g. `require = ["ext:reapi@>=5.21.0"]`).
   - Automatic FSM state management: plugins requiring missing extensions transition safely to `PluginStatus::Blocked` instead of throwing runtime panics.
  
-### 2. Abstract UI & Menu Architecture (MVC Pattern)
- 
-- [x] **Decoupled View Renderers (`trait MenuRenderer`)**:
-  - `ClassicMenuRenderer`: standard Half-Life `ShowMenu` formatted text pages (slots 1..9, 0).
-  - `DhudMenuRenderer`: high-fidelity, colored Director HUD overlay with differential screen updates.
-  - `ChatMenuRenderer`: compact formatted text menus in chat for minimal or spectator overlays.
-  - `MotdMenuRenderer`: rich interactive HTML/CSS dialogs (rules, leaderboards, stats).
-  - `TerminalTuiRenderer`: server-side admin dashboard rendering interactive menus to server console via `ratatui`.
-- [x] **Decoupled Input Drivers (`trait MenuInputDriver`)**:
-  - `SlotInputDriver`: classic `menuselect` interceptor (keys 1..9, 0).
-  - `ButtonInputDriver`: real-time movement and action keys via `pev->button` (`IN_FORWARD`/`IN_BACK` cursor navigation, `IN_MOVELEFT`/`IN_MOVERIGHT` pagination/sliders, `IN_JUMP`/`IN_USE` toggle/select).
-  - `HybridInputDriver`: simultaneous support for quick number selection (1..9) alongside smooth arrow/jump navigation.
-  - **Ghost Slot Trap**: invisible `ShowMenu` transmission accompanying DHUD/HUD menus to prevent weapon switching while capturing slot inputs.
-- [x] **Component Model & Custom Widgets (`MenuComponent`)**:
-  - Universal `MenuComponent` trait for extensible widgets.
-  - Fluent `MenuItem` constructors: `action`, `checkbox`, `slider`, and `custom(widget)`.
-  - Native `messagemode` integration: `MenuItem::input(label, prompt, on_submit)` transitioning session state to `AwaitingInput`, triggering client `messagemode`, capturing user text, and seamlessly restoring the menu page.
- 
+### 2. In-Game Menu Architecture & Renderers
+
+- [x] **Native Engine Renderers**:
+  - `ClassicMenuRenderer`: standard Half-Life `ShowMenu` formatted text pages (slots 1..9, 0) with colors (`\w`, `\y`, `\r`, `\d`) and automatic pagination.
+  - `DhudMenuRenderer`: high-fidelity Director HUD overlay.
+- [ ] **Rich Client GUI & Custom Shaders**:
+  - Deferred to sovereign client horizon (`wgpu` / client-side WebAssembly runtime) where input trapping and raw mouse clicks are natively supported.
+- [x] **Menu Action Model & Dynamic Dispatch**:
+  - Structured `MenuItem` with action callback bindings and typestate requirements (`MenuItem::require_spec`).
+  - Native `messagemode` integration: captures user text and seamlessly returns to previous menu page.
+
 ### 3. Host Hardware Inspector & System Diagnostics
- 
+
 - [x] **Hardware Telemetry Provider (`SystemInfoService`)**:
   - Host-side system metrics collection via `sysinfo` exposed through SPI to WASM plugins.
   - Real-time CPU detection (vendor, model, logical/physical core allocation, CPU load %).
   - Memory statistics (allocated RAM to HLDS process, free system RAM, swap).
   - Frame time jitter and engine tickrate stability monitoring (measuring deviation from 1000 FPS).
 - [x] **Admin System Inspection Tool (`system_monitor.wasm` / `admin_system`)**:
-  - Host audit console command (`grs hardware` / `amx_sysinfo`) enabling administrators to verify VPS/cloud hosting resource claims and detect overselling or throttling.
+  - Host audit console command (`grs hardware`) enabling administrators to verify VPS/cloud hosting resource claims and detect overselling or throttling.
 
 ---
 
-## v0.20.0 — Ecosystem Decomposition & Multi-Host Runtime 📝 Planned
+## v0.20.0 — Ecosystem Decomposition, Zero-Dep SPI & Core Sovereignty 🚧 In Progress
 
-**Goal:** Physically decouple the GoldSrc.rs monorepo into independent publishable crates and repositories (`goldsrc` SDK, `goldsrc-runtime`, `goldsrc-plugins-standard`), and introduce multi-language runtime hosts (C# .NET Native AOT, Python, Native Rust/C++).
+**Goal:** Invert and purify architecture dependencies via zero-dep `goldsrc-spi` (DIP), eliminate all legacy AMXX assumptions, establish memory and arithmetic invariants, lay the groundwork for pipeline console utilities (`uutils`), and decouple the monorepo.
 
-### 1. Monorepo & Ecosystem Decomposition
+### 1. Zero-Dep SPI & Domain Foundation
+
+- [x] **Service Provider Interface Decoupling (`goldsrc-spi`)**:
+  - Remove all dependencies from `goldsrc-spi` on `goldsrc-api`, establishing a clean DAG.
+  - Relocate core value objects (`SteamId`, `PlayerGuid`, `murmur3_128`, `AuthIdentity`, `AuthSubject`, `AuthState`, `PlayerIdentity`, `PlayerSessionToken`, `CvarFlags`, `CvarEngine`, `EntitySpawner`) into `goldsrc-spi`.
+  - Re-export all foundational types in `goldsrc-api` for seamless backward compatibility.
+- [x] **Memory Governance, Signal Safety & Arithmetic Correctness**:
+  - Fixed `Vector3::sub_assign` vector math copy-paste bug (`-= rhs.z`).
+  - Standardized `Health` arithmetic operators to preserve clamping invariants and finite floats while allowing mod-friendly overrides (e.g. Zombie Plague 5000 HP).
+  - Enforced terminal `_exit(128 + sig)` on fatal POSIX signals (`SIGSEGV`, `SIGBUS`, `SIGILL`) on Linux to prevent infinite recursion loops.
+  - Wrapped console spew hook callbacks in `catch_unwind` FFI panic barrier.
+  - Enforced `user_id` consistency validation in `SessionManager::validate_token`.
+- [x] **Core Sovereignty & AMXX Purity**:
+  - Completely purged AMX Mod X assumptions, configuration keys, and command relics (`amx_sysinfo`) from core specifications.
+  - Removed speculative Menu MVC dead code (`driver.rs`, `widgets.rs`, `GhostSlotTrap`).
+
+### 2. Console Streaming Tooling & Command Pipelines
+
+- [ ] **Multi-Command Server Utilities (`uutils / coreutils.wasm`)**:
+  - Embed lightweight streaming utilities for server console inspection: `cat`, `grep`, `tail`, `ls`, `wc`.
+  - Compile utilities as a single multicall WASM plugin or native host extensions.
+- [ ] **Console Pipeline Preprocessor**:
+  - Server console piping support (`|`) connecting stdout of one command to stdin of another.
+- [ ] **Hierarchical Command Registry**:
+  - Tree-based command router replacing monolithic matching in `router.rs`.
+
+### 3. Monorepo & Ecosystem Decomposition
 
 - [ ] **`goldsrc` (Pure Plugin SDK)**:
   - Lightweight, zero-native-dependency SDK crate publishable to crates.io targeting `wasm32-wasip1`.
-  - Contains `goldsrc-api`, `goldsrc-macros`, typestate builders, and event traits.
-  - Zero dependencies on Wasmtime, C compilers, SQLite, or Metamod.
 - [ ] **`goldsrc-runtime` (Host Engine & Platform)**:
   - Host execution container including `goldsrc-core`, `goldsrc-host-wasm`, and backend loaders (`standalone`, `metamod`).
-  - Compiled into target server shared libraries (`goldsrc_standalone.dll`, `goldsrc.so`).
 - [ ] **`goldsrc-plugins-standard` (Standard Reference Plugins)**:
   - Standalone repository of production-grade plugins (`admin_system`, `vip_core`, `chat_manager`, `menu_system`, `map_chooser`, `stats_core`).
-- [ ] **`goldsrc-examples` (SDK Showcase)**:
-  - Educational sample plugins demonstrating discrete SDK capabilities.
-
-### 2. Multi-Host Ecosystem (Native Dynamic DLLs, C#, Python)
-
-- [ ] **Native Dynamic Host (`goldsrc-host-native`)**:
-  - Direct dynamic loading of compiled `.dll`/`.so` plugins via `libloading` with zero sandbox overhead for performance-critical server mods.
-- [ ] **Dynamic Host Runtime Architecture**:
-  - Modular `cstrike/goldsrc/hosts/` discovery directory with configurable resolution policy (`prefer_builtin` vs `prefer_external`).
-  - C-ABI `PluginHostFactory` handshake with version validation.
-- [ ] **C# Plugin Host (`goldsrc-host-csharp`)**:
-  - Native AOT / .NET runtime embedding for high-performance C# GoldSrc plugins.
-- [ ] **Python Plugin Host (`goldsrc-host-python`)**:
-  - Python 3.x bindings with `@plugin`, `@command`, and `@event` decorators.
-- [ ] **Multi-Version Host Isolation**:
-  - Ability to run multiple versions or types of runtime hosts simultaneously on the same server backend.
 
 ---
 

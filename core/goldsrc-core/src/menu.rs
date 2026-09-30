@@ -529,44 +529,6 @@ impl MenuSessionManager {
                         "",
                     );
                 }
-                MenuRendererKind::Chat => {
-                    for line in rendered.text.lines() {
-                        engine.client_print(
-                            player_idx,
-                            goldsrc_api::client::PrintTarget::Chat as i32,
-                            line,
-                        );
-                    }
-                    // Ghost slot trap to capture keys
-                    Self::send_show_menu_chunked(
-                        engine,
-                        player_idx,
-                        rendered.keys_mask as i32,
-                        rendered.timeout,
-                        "",
-                    );
-                }
-                MenuRendererKind::Motd { .. } => {
-                    engine.client_print(
-                        player_idx,
-                        goldsrc_api::client::PrintTarget::Console as i32,
-                        &rendered.text,
-                    );
-                    Self::send_show_menu_chunked(
-                        engine,
-                        player_idx,
-                        rendered.keys_mask as i32,
-                        rendered.timeout,
-                        "",
-                    );
-                }
-                MenuRendererKind::TerminalTui => {
-                    engine.client_print(
-                        player_idx,
-                        goldsrc_api::client::PrintTarget::Console as i32,
-                        &rendered.text,
-                    );
-                }
             }
             session.rendered_page = Some(rendered);
         }

@@ -274,7 +274,18 @@ impl HostRuntime {
 
         goldsrc_api::client::player::set_player_resolver_hook(|index| {
             if let Some(engine) = HostRuntime::engine() {
-                engine.player_handle(index)
+                if engine.player_is_valid(index) {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        Some(goldsrc_api::Player::from_index(index))
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        Some(goldsrc_api::Player::new(index))
+                    }
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -617,6 +628,9 @@ impl HostRuntime {
         // Evaluate initial rules (e.g. initial pause/cvar states) across all scopes
         Self::evaluate_rules("", 0);
 
+        // Register default moderation command executors (kick, mute, ban)
+        crate::moderation::register_moderation_commands();
+
         Ok(())
     }
 
@@ -814,6 +828,20 @@ impl HostRuntime {
                         &current_map,
                         player_count,
                     );
+
+                    // Native ban enforcement check
+                    if let Some(engine) = Self::engine() {
+                        let auth = engine.player_auth_id(slot).unwrap_or_default();
+                        let ip = engine.player_ip(slot).unwrap_or_default();
+                        let ban = crate::moderation::is_identity_banned(&auth)
+                            .or_else(|| crate::moderation::is_identity_banned(&ip));
+                        if let Some(b) = ban {
+                            crate::moderation::drop_client(
+                                slot,
+                                &format!("You are banned: {}", b.reason),
+                            );
+                        }
+                    }
                 }
                 PlayerEvent::Disconnect => {
                     // 1. Session cleanup

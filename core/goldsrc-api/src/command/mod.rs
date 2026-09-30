@@ -7,8 +7,9 @@ pub mod registry;
 pub use builder::{Command, CommandBuilder};
 pub use error::{CommandContext, CommandError, CommandResult};
 pub use registry::{
-    CommandHandler, CommandRegistry, RegisteredCommand, clear_commands, dispatch_command,
-    register_command, use_command_interceptor,
+    CommandHandler, CommandRegistry, PostHook, PreHook, RegisteredCommand, add_command_post_hook,
+    add_command_pre_hook, clear_commands, dispatch_command, override_command_executor,
+    register_command, restore_command_executor, use_command_interceptor,
 };
 
 use crate::client::{Client, Player};

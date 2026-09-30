@@ -233,6 +233,7 @@ mod posix {
         pub fn sigaction(signum: i32, act: *const sigaction_t, oldact: *mut sigaction_t) -> i32;
         pub fn sigaltstack(ss: *const stack_t, old_ss: *mut stack_t) -> i32;
         pub fn write(fd: i32, buf: *const c_void, count: usize) -> isize;
+        pub fn _exit(status: i32) -> !;
     }
 
     static mut ALT_STACK: [u8; 64 * 1024] = [0; 64 * 1024];
@@ -259,6 +260,7 @@ mod posix {
                 name_bytes.as_ptr() as *const c_void,
                 name_bytes.len() - 1,
             );
+            _exit(128 + sig);
         }
     }
 

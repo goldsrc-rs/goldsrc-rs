@@ -25,14 +25,13 @@ pub unsafe fn init(engfuncs: *mut enginefuncs_t, globals: *mut goldsrc_sys::glob
     }
 }
 
-/// Returns the current engine functions table.
-///
-/// # Panics
-/// Panics if called before `init`.
+static DUMMY_ENGFUNCS: enginefuncs_t = unsafe { std::mem::zeroed() };
+static DUMMY_GLOBALS: goldsrc_sys::ffi::SyncWrapper<goldsrc_sys::globalvars_t> =
+    goldsrc_sys::ffi::SyncWrapper::new(unsafe { std::mem::zeroed() });
+
+/// Returns the current engine functions table, falling back to an empty dummy if uninitialized.
 pub fn engfuncs() -> &'static enginefuncs_t {
-    G_ENGFUNCS
-        .get()
-        .expect("[GoldSrc.rs Standalone] Engine not initialized")
+    G_ENGFUNCS.get().map(|w| **w).unwrap_or(&DUMMY_ENGFUNCS)
 }
 
 /// Tries to return the engine functions table without panicking.
@@ -40,15 +39,10 @@ pub fn try_engfuncs() -> Option<&'static enginefuncs_t> {
     G_ENGFUNCS.get().map(|w| **w)
 }
 
-/// Returns the global variables table.
-///
-/// # Panics
-/// Panics if called before `init`.
+/// Returns the global variables table, falling back to an empty dummy if uninitialized.
 #[allow(dead_code)]
 pub fn globals() -> &'static goldsrc_sys::globalvars_t {
-    G_GLOBALS
-        .get()
-        .expect("[GoldSrc.rs Standalone] Globals not initialized")
+    G_GLOBALS.get().map(|w| **w).unwrap_or(&*DUMMY_GLOBALS)
 }
 
 /// Tries to return the global variables table without panicking.

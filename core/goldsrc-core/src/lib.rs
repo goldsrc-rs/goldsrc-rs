@@ -16,6 +16,7 @@ pub mod hud;
 pub mod i18n;
 pub mod logging;
 pub mod menu;
+pub mod moderation;
 pub mod net;
 pub mod paths;
 pub mod placeholders;

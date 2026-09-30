@@ -1,12 +1,12 @@
 use super::EngineBackend;
 use crate::{call_engfunc, call_engfunc_ret};
-use goldsrc_api::client::{AuthState, AuthSubject, Player, PlayerIdentity};
 use goldsrc_api::consts::FL_CLIENT;
 use goldsrc_api::consts::log_targets::CORE;
 use goldsrc_api::cvar::CvarEngine;
 use goldsrc_api::entity::EntitySpawner;
 use goldsrc_api::{Angles, Armor, Health, Origin, Velocity};
 use goldsrc_spi::engine::{EngineEntities, EngineMessages, MessageDest};
+use goldsrc_spi::identity::{AuthState, AuthSubject, PlayerIdentity, SteamId};
 use goldsrc_sys::{KeyValueData, edict_t, ffi};
 
 pub type GamedllSpawnFn = unsafe extern "C" fn(*mut edict_t) -> i32;
@@ -130,10 +130,6 @@ impl EngineEntities for EngineBackend {
         self.get_player(index)
             .map(|e| e.get::<Angles>().0.into())
             .unwrap_or([0.0; 3])
-    }
-
-    fn player_handle(&self, index: i32) -> Option<Player> {
-        self.get_player(index)
     }
 
     fn player_name(&self, index: i32) -> Option<String> {
@@ -344,17 +340,11 @@ impl EngineEntities for EngineBackend {
                             .player_ip(index)
                             .and_then(|s| s.parse().ok())
                             .unwrap_or_else(|| "127.0.0.1".parse().unwrap());
-                        goldsrc_api::client::AuthState::Authenticated(
-                            goldsrc_api::client::AuthSubject::lan(ip),
-                        )
-                    } else if let Some(steam_id) = goldsrc_api::client::SteamId::parse(trimmed) {
-                        goldsrc_api::client::AuthState::Authenticated(
-                            goldsrc_api::client::AuthSubject::steam(steam_id),
-                        )
+                        AuthState::Authenticated(AuthSubject::lan(ip))
+                    } else if let Some(steam_id) = SteamId::parse(trimmed) {
+                        AuthState::Authenticated(AuthSubject::steam(steam_id))
                     } else {
-                        goldsrc_api::client::AuthState::Authenticated(
-                            goldsrc_api::client::AuthSubject::external("custom", trimmed),
-                        )
+                        AuthState::Authenticated(AuthSubject::external("custom", trimmed))
                     };
                 (raw, state)
             }

@@ -552,6 +552,7 @@ dependencies = [
 name = "goldsrc-api"
 version = "0.17.0"
 dependencies = [
+ "goldsrc-spi",
  "goldsrc-sys",
  "log",
  "serde",
@@ -662,7 +663,7 @@ dependencies = [
 name = "goldsrc-spi"
 version = "0.17.0"
 dependencies = [
- "goldsrc-api",
+ "serde",
 ]
 
 [[package]]

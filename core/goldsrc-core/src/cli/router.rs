@@ -833,6 +833,12 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             });
         }
+        "sessions" => {
+            handlers::handle_sessions(spec, parser, out);
+        }
+        "cvars" => {
+            handlers::handle_cvars(spec, parser, out);
+        }
         "extensions" => {
             handlers::handle_extensions(spec, parser, out);
         }
