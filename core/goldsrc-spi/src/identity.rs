@@ -324,6 +324,15 @@ impl fmt::Display for SteamId {
     }
 }
 
+impl std::str::FromStr for SteamId {
+    type Err = ();
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s).ok_or(())
+    }
+}
+
 /// Concrete identity provider source of an authenticated client.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

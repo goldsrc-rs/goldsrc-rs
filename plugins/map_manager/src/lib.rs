@@ -134,7 +134,7 @@ impl MapManager {
                     0.2,
                     0.5,
                     7.0,
-                    format!("Следующая карта: {winner}"),
+                    &format!("Следующая карта: {winner}"),
                 );
             }
 

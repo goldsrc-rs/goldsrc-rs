@@ -164,7 +164,7 @@ impl ChatDirector {
                         0.5,
                         0.5,
                         5.0, // FadeIn, FadeOut, HoldTime
-                        announcement,
+                        &announcement,
                     );
                 }
             }
@@ -191,18 +191,9 @@ impl ChatDirector {
         #[cfg(target_arch = "wasm32")]
         {
             host_api::host_send_dhud_message(
-                -1,
-                -1.0,
-                0.20, // Center-top
-                255,
-                180,
-                0,
-                255, // Gold
-                0,
-                0.2,
-                0.5,
-                6.0,
-                banner.clone(),
+                -1, -1.0, 0.20, // Center-top
+                255, 180, 0, 255, // Gold
+                0, 0.2, 0.5, 6.0, &banner,
             );
         }
 

@@ -148,7 +148,13 @@ impl ClientExt for Client {
             let user_id =
                 crate::bindings::goldsrc::engine::api::host_player_user_id(self.index) as u32;
             let auth_state = if auth_id != "STEAM_ID_PENDING" && !auth_id.is_empty() {
-                crate::client::AuthState::Authenticated
+                if let Ok(steam_id) = auth_id.parse::<crate::client::SteamId>() {
+                    crate::client::AuthState::Authenticated(crate::client::AuthSubject::steam(
+                        steam_id,
+                    ))
+                } else {
+                    crate::client::AuthState::Pending
+                }
             } else {
                 crate::client::AuthState::Pending
             };
