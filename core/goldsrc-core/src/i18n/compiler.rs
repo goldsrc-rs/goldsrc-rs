@@ -77,30 +77,20 @@ impl<'a> Compiler<'a> {
             for (lang_code, val) in trans_tbl {
                 if let toml::Value::Table(lang_tbl) = val {
                     let mut entries = HashMap::new();
-                    for (k, v) in lang_tbl {
-                        if k == "vars" {
-                            if let toml::Value::Table(vt) = v {
-                                let mut vm = HashMap::new();
-                                for (vk, vv) in vt {
-                                    if let toml::Value::String(s) = vv {
-                                        vm.insert(vk.clone(), s.clone());
-                                    }
-                                }
-                                l_vars.insert(lang_code.clone(), vm);
-                            }
-                        } else if k == "templates" {
-                            if let toml::Value::Table(tt) = v {
-                                let mut tm = HashMap::new();
-                                for (tk, tv) in tt {
-                                    if let toml::Value::String(s) = tv {
-                                        tm.insert(tk.clone(), s.clone());
-                                    }
-                                }
-                                l_tmpls.insert(lang_code.clone(), tm);
-                            }
-                        } else if let toml::Value::String(s) = v {
-                            entries.insert(k.clone(), s.clone());
-                        }
+                    let mut vars_map = HashMap::new();
+                    let mut tmpls_map = HashMap::new();
+                    Self::collect_flattened_entries(
+                        "",
+                        lang_tbl,
+                        &mut entries,
+                        &mut vars_map,
+                        &mut tmpls_map,
+                    );
+                    if !vars_map.is_empty() {
+                        l_vars.insert(lang_code.clone(), vars_map);
+                    }
+                    if !tmpls_map.is_empty() {
+                        l_tmpls.insert(lang_code.clone(), tmpls_map);
                     }
                     trans.insert(lang_code.clone(), entries);
                 }
@@ -129,15 +119,35 @@ impl<'a> Compiler<'a> {
                                 }
                             }
                             l_tmpls.insert(lang.to_string(), tm);
+                        } else {
+                            let entries = trans.entry(lang.to_string()).or_default();
+                            let mut dummy_vars = HashMap::new();
+                            let mut dummy_tmpls = HashMap::new();
+                            Self::collect_flattened_entries(
+                                sub,
+                                tbl,
+                                entries,
+                                &mut dummy_vars,
+                                &mut dummy_tmpls,
+                            );
                         }
                     } else {
-                        let mut entries = HashMap::new();
-                        for (k, v) in tbl {
-                            if let toml::Value::String(s) = v {
-                                entries.insert(k.clone(), s.clone());
-                            }
+                        let entries = trans.entry(section.clone()).or_default();
+                        let mut vars_map = HashMap::new();
+                        let mut tmpls_map = HashMap::new();
+                        Self::collect_flattened_entries(
+                            "",
+                            tbl,
+                            entries,
+                            &mut vars_map,
+                            &mut tmpls_map,
+                        );
+                        if !vars_map.is_empty() {
+                            l_vars.insert(section.clone(), vars_map);
                         }
-                        trans.insert(section.clone(), entries);
+                        if !tmpls_map.is_empty() {
+                            l_tmpls.insert(section.clone(), tmpls_map);
+                        }
                     }
                 }
             }
@@ -185,6 +195,51 @@ impl<'a> Compiler<'a> {
         }
 
         Ok((compiled, parsed_access, parsed_fallback))
+    }
+
+    fn collect_flattened_entries(
+        prefix: &str,
+        tbl: &toml::Table,
+        entries: &mut HashMap<String, String>,
+        l_vars: &mut HashMap<String, String>,
+        l_tmpls: &mut HashMap<String, String>,
+    ) {
+        for (k, v) in tbl {
+            if prefix.is_empty() && k == "vars" {
+                if let toml::Value::Table(vt) = v {
+                    for (vk, vv) in vt {
+                        if let toml::Value::String(s) = vv {
+                            l_vars.insert(vk.clone(), s.clone());
+                        }
+                    }
+                }
+            } else if prefix.is_empty() && k == "templates" {
+                if let toml::Value::Table(tt) = v {
+                    for (tk, tv) in tt {
+                        if let toml::Value::String(s) = tv {
+                            l_tmpls.insert(tk.clone(), s.clone());
+                        }
+                    }
+                }
+            } else {
+                let full_key = if prefix.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{prefix}.{k}")
+                };
+                match v {
+                    toml::Value::String(s) => {
+                        entries.insert(full_key, s.clone());
+                    }
+                    toml::Value::Table(nested) => {
+                        Self::collect_flattened_entries(
+                            &full_key, nested, entries, l_vars, l_tmpls,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
     pub fn expand_entry(

@@ -445,6 +445,44 @@ mod tests {
         assert!(cvars_str.contains("vip_tag \"VIP\" // VIP Tag"));
     }
 
+    #[derive(Debug, Clone, PartialEq, ConfigModel)]
+    #[config(cvar_prefix = "grs_vip_")]
+    struct AdvancedVipConfig {
+        /// Enables VIP mode on the server
+        #[cvar(flags = crate::CvarFlags::SERVER)]
+        pub enabled: bool,
+
+        /// Bonus health for VIP players
+        #[cvar(range = 1..=100)]
+        pub bonus_hp: i32,
+
+        /// Internal secret token not registered as CVAR
+        #[setting(hidden)]
+        pub secret_token: String,
+    }
+
+    #[test]
+    fn test_derive_config_model_advanced_features() {
+        let cfg = AdvancedVipConfig {
+            enabled: true,
+            bonus_hp: 75,
+            secret_token: "secret_123".to_string(),
+        };
+
+        let toml_str = cfg.to_toml();
+        assert!(toml_str.contains("# Enables VIP mode on the server"));
+        assert!(toml_str.contains("enabled = true"));
+        assert!(toml_str.contains("# Bonus health for VIP players"));
+        assert!(toml_str.contains("bonus_hp = 75"));
+        assert!(toml_str.contains("# Internal secret token not registered as CVAR"));
+        assert!(toml_str.contains("secret_token = \"secret_123\""));
+
+        let cvars_str = cfg.to_cvars();
+        assert!(cvars_str.contains("grs_vip_enabled \"1\" // Enables VIP mode on the server"));
+        assert!(cvars_str.contains("grs_vip_bonus_hp \"75\" // Bonus health for VIP players"));
+        assert!(!cvars_str.contains("secret_token"));
+    }
+
     #[test]
     fn test_extension_and_reapi_host_queries() {
         assert!(!crate::extension::is_available("reapi", None));

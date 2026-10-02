@@ -23,37 +23,83 @@ pub fn expand_derive_config_model(input: DeriveInput) -> Result<TokenStream, Err
         ));
     };
 
+    // 1. Parse container-level #[config(...)] attributes
+    let mut cvar_prefix = String::new();
+    for attr in &input.attrs {
+        if attr.path().is_ident("config") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("cvar_prefix") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    cvar_prefix = value.value();
+                }
+                Ok(())
+            })?;
+        }
+    }
+
     struct FieldSpec {
         ident: syn::Ident,
         cvar_name: String,
         toml_key: String,
         description: String,
+        _desc_key: String,
         flags_expr: TokenStream,
         range_expr: Option<TokenStream>,
+        skip_cvar: bool,
     }
 
     let mut parsed_fields = Vec::new();
 
     for field in &fields_named.named {
         let ident = field.ident.clone().unwrap();
-        let mut cvar_name = ident.to_string();
+        let mut custom_cvar_name: Option<String> = None;
         let mut toml_key = ident.to_string();
         let mut description = String::new();
+        let mut desc_key: Option<String> = None;
         let mut flags_expr = quote! { ::goldsrc_api::cvar::CvarFlags::ARCHIVE };
         let mut range_expr = None;
+        let mut skip_cvar = false;
+
+        // Collect doc comments
+        let mut doc_lines = Vec::new();
+        for attr in &field.attrs {
+            if attr.path().is_ident("doc") {
+                if let syn::Meta::NameValue(syn::MetaNameValue {
+                    value:
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Str(lit_str),
+                            ..
+                        }),
+                    ..
+                }) = &attr.meta
+                {
+                    let val = lit_str.value();
+                    let trimmed = val.trim();
+                    if !trimmed.is_empty() {
+                        doc_lines.push(trimmed.to_string());
+                    }
+                }
+            }
+        }
+        let doc_comment = doc_lines.join(" ");
 
         for attr in &field.attrs {
-            if attr.path().is_ident("cvar") {
+            if attr.path().is_ident("cvar") || attr.path().is_ident("setting") {
                 attr.parse_nested_meta(|meta| {
                     if meta.path.is_ident("name") {
                         let value: syn::LitStr = meta.value()?.parse()?;
-                        cvar_name = value.value();
+                        custom_cvar_name = Some(value.value());
                     } else if meta.path.is_ident("toml_key") {
                         let value: syn::LitStr = meta.value()?.parse()?;
                         toml_key = value.value();
                     } else if meta.path.is_ident("description") {
                         let value: syn::LitStr = meta.value()?.parse()?;
                         description = value.value();
+                    } else if meta.path.is_ident("desc_key") {
+                        let value: syn::LitStr = meta.value()?.parse()?;
+                        desc_key = Some(value.value());
+                    } else if meta.path.is_ident("skip") || meta.path.is_ident("hidden") {
+                        skip_cvar = true;
                     } else if meta.path.is_ident("flags") {
                         let value = meta.value()?;
                         if let Ok(lit_str) = value.parse::<syn::LitStr>() {
@@ -100,13 +146,29 @@ pub fn expand_derive_config_model(input: DeriveInput) -> Result<TokenStream, Err
             }
         }
 
+        let cvar_name = match custom_cvar_name {
+            Some(name) => name,
+            None => format!("{}{}", cvar_prefix, ident),
+        };
+
+        if description.is_empty() && !doc_comment.is_empty() {
+            description = doc_comment;
+        }
+
+        let resolved_desc_key = match desc_key {
+            Some(k) => k,
+            None => format!("cvars.{}", ident),
+        };
+
         parsed_fields.push(FieldSpec {
             ident,
             cvar_name,
             toml_key,
             description,
+            _desc_key: resolved_desc_key,
             flags_expr,
             range_expr,
+            skip_cvar,
         });
     }
 
@@ -125,7 +187,7 @@ pub fn expand_derive_config_model(input: DeriveInput) -> Result<TokenStream, Err
         }
     });
 
-    let cvar_lines = parsed_fields.iter().map(|f| {
+    let cvar_lines = parsed_fields.iter().filter(|f| !f.skip_cvar).map(|f| {
         let ident = &f.ident;
         let cvar_name = &f.cvar_name;
         let desc = &f.description;
@@ -134,7 +196,7 @@ pub fn expand_derive_config_model(input: DeriveInput) -> Result<TokenStream, Err
         }
     });
 
-    let reg_lines = parsed_fields.iter().map(|f| {
+    let reg_lines = parsed_fields.iter().filter(|f| !f.skip_cvar).map(|f| {
         let ident = &f.ident;
         let cvar_name = &f.cvar_name;
         let flags = &f.flags_expr;
@@ -143,7 +205,7 @@ pub fn expand_derive_config_model(input: DeriveInput) -> Result<TokenStream, Err
         }
     });
 
-    let sync_from_lines = parsed_fields.iter().map(|f| {
+    let sync_from_lines = parsed_fields.iter().filter(|f| !f.skip_cvar).map(|f| {
         let ident = &f.ident;
         let cvar_name = &f.cvar_name;
         let range_clamp = if let Some(r) = &f.range_expr {
@@ -159,7 +221,7 @@ pub fn expand_derive_config_model(input: DeriveInput) -> Result<TokenStream, Err
         }
     });
 
-    let sync_to_lines = parsed_fields.iter().map(|f| {
+    let sync_to_lines = parsed_fields.iter().filter(|f| !f.skip_cvar).map(|f| {
         let ident = &f.ident;
         let cvar_name = &f.cvar_name;
         quote! {
