@@ -104,4 +104,12 @@ pub trait EngineEntities: EntitySpawner + Send + Sync {
     /// Forces the real GameDLL's Touch between two entities
     /// (`touched` delivered into `other`, e.g. weapon → player).
     fn dispatch_touch(&self, touched: i32, other: i32);
+
+    /// Sets voice listening permissions between receiver and sender (e.g. for mute/unmute).
+    fn set_client_listening(&self, _receiver: i32, _sender: i32, _listen: bool) -> bool {
+        false
+    }
+
+    /// Sets maximum movement speed on a player entity (e.g. 0.0 to freeze, 250.0 normal).
+    fn set_player_maxspeed(&self, _index: i32, _speed: f32) {}
 }

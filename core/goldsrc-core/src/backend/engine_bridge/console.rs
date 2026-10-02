@@ -50,4 +50,17 @@ impl EngineConsole for EngineBackend {
             call_engfunc!((self.engfuncs)().pfnServerCommand, cmd.as_ptr());
         }
     }
+
+    fn client_command(&self, client_index: i32, command: &str) {
+        unsafe {
+            let funcs = (self.engfuncs)();
+            if let Some(pfn_p_entity_of_ent_index) = funcs.pfnPEntityOfEntIndex {
+                let pedict = pfn_p_entity_of_ent_index(client_index);
+                if !pedict.is_null() {
+                    let cmd = std::ffi::CString::new(command).unwrap_or_default();
+                    call_engfunc!(funcs.pfnClientCommand, pedict, cmd.as_ptr());
+                }
+            }
+        }
+    }
 }

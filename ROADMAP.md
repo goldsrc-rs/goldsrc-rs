@@ -448,6 +448,12 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - Server console piping support (`|`) connecting stdout of one command to stdin of another.
 - [ ] **Hierarchical Command Registry**:
   - Tree-based command router replacing monolithic matching in `router.rs`.
+- [ ] **Smart Preset Execution & State Snapshot Engine (`grs exec / grs_exec`)**:
+  - **Infrastructure as Code (IaC) for Game Servers**: declarative presets (`presets/<mode>.toml` / `.kdl`) replacing naive sequential `.cfg` execution.
+  - **Atomic Validation & Bounds Clamping**: validate full preset configuration, cvar ranges, and plugin requirements before mutation to prevent half-broken server states.
+  - **State Snapshots & Reversible Rollback**: snapshot modified cvars and plugin states (`grs exec --restore`) for clean returns to base public mode after CW/Overtime matches without map restarts.
+  - **Reactive Orchestration Event**: emit `ModeChanged { from, to }` across EventBus notifying `menu_frontend`, `chat_director`, and gameplay plugins to adapt UI and rules.
+  - **WASM Bridge**: export `host-config-exec(preset_path: string) -> result<_, string>` to `goldsrc.wit` enabling single-click mode switching from `administration` menus.
 
 ### 3. Monorepo & Ecosystem Decomposition
 

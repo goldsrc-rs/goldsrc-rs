@@ -103,6 +103,12 @@ pub trait PlayerExt: ClientExt {
     fn grant_capability(&self, name: impl Into<String>) -> bool;
     /// Revokes a capability from the player dynamically.
     fn revoke_capability(&self, name: impl Into<String>) -> bool;
+    /// Sets voice listening status between this player (as receiver) and the specified sender.
+    fn set_listening(&self, sender: &Player, listen: bool) -> bool;
+    /// Sets the player's maximum movement speed (`edict->v.maxspeed`).
+    fn set_maxspeed(&mut self, speed: f32);
+    /// Executes a console command on this player's client console (`pfnClientCommand`).
+    fn client_command(&self, command: impl Into<String>);
 }
 
 impl ClientExt for Client {
@@ -136,12 +142,22 @@ impl ClientExt for Client {
     fn identity(&self) -> crate::client::PlayerIdentity {
         #[cfg(target_arch = "wasm32")]
         {
+            let auth_id = crate::bindings::goldsrc::engine::api::host_player_auth_id(self.index)
+                .unwrap_or_else(|| "STEAM_ID_PENDING".to_string());
+            let ip = crate::bindings::goldsrc::engine::api::host_player_ip(self.index);
+            let user_id =
+                crate::bindings::goldsrc::engine::api::host_player_user_id(self.index) as u32;
+            let auth_state = if auth_id != "STEAM_ID_PENDING" && !auth_id.is_empty() {
+                crate::client::AuthState::Authenticated
+            } else {
+                crate::client::AuthState::Pending
+            };
             crate::client::PlayerIdentity {
                 slot: self.index,
-                user_id: 0,
-                raw_auth_id: "STEAM_ID_PENDING".to_string(),
-                auth_state: crate::client::AuthState::Pending,
-                ip: None,
+                user_id,
+                raw_auth_id: auth_id,
+                auth_state,
+                ip,
                 ping: 0,
                 packet_loss: 0,
                 is_bot: self.is_bot(),
@@ -415,5 +431,39 @@ impl PlayerExt for Player {
     #[inline(always)]
     fn revoke_capability(&self, name: impl Into<String>) -> bool {
         self.act(RevokeCapability::new(name))
+    }
+
+    #[inline(always)]
+    fn set_listening(&self, sender: &Player, listen: bool) -> bool {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_player_set_listening(
+                self.index,
+                sender.index,
+                listen,
+            )
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (sender, listen);
+            false
+        }
+    }
+
+    #[inline(always)]
+    fn set_maxspeed(&mut self, speed: f32) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::bindings::goldsrc::engine::api::host_player_set_maxspeed(self.index, speed);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = speed;
+        }
+    }
+
+    #[inline(always)]
+    fn client_command(&self, command: impl Into<String>) {
+        crate::engine::client_command(self.index, command.into());
     }
 }

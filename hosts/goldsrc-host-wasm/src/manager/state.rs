@@ -162,6 +162,64 @@ impl api::Host for HostState {
         self.engine.player_set_armorvalue(index, armor);
     }
 
+    fn host_player_auth_id(&mut self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) {
+            return None;
+        }
+        self.engine.player_auth_id(index)
+    }
+
+    fn host_player_ip(&mut self, index: i32) -> Option<String> {
+        if !(1..=32).contains(&index) {
+            return None;
+        }
+        self.engine.player_ip(index)
+    }
+
+    fn host_player_user_id(&mut self, index: i32) -> i32 {
+        if !(1..=32).contains(&index) {
+            return 0;
+        }
+        self.engine.player_user_id(index) as i32
+    }
+
+    fn host_player_set_listening(&mut self, receiver: i32, sender: i32, listen: bool) -> bool {
+        self.engine.set_client_listening(receiver, sender, listen)
+    }
+
+    fn host_player_set_maxspeed(&mut self, index: i32, speed: f32) {
+        self.engine.set_player_maxspeed(index, speed);
+    }
+
+    fn host_server_command(&mut self, command: String) {
+        if !self.check_permission(goldsrc_api::consts::permissions::ENGINE_SERVER_COMMAND) {
+            return;
+        }
+        self.engine.server_command(&command);
+    }
+
+    fn host_client_command(&mut self, player_index: i32, command: String) {
+        if !self.check_permission(goldsrc_api::consts::permissions::ENGINE_CLIENT_COMMAND) {
+            return;
+        }
+        self.engine.client_command(player_index, &command);
+    }
+
+    fn host_config_exec(&mut self, preset_path: String) -> Result<bool, String> {
+        if !self.check_permission(goldsrc_api::consts::permissions::CONFIG_EXEC) {
+            return Err("Permission denied: config:exec required".to_string());
+        }
+        // Validate path and execute preset
+        let path = std::path::Path::new(&preset_path);
+        if !path.exists() {
+            return Err(format!("Preset file not found: {}", preset_path));
+        }
+        // Fallback execution via engine command if standard .cfg, or success for validated path
+        self.engine
+            .server_command(&format!("exec \"{}\"\n", preset_path));
+        Ok(true)
+    }
+
     fn host_cvar_get_float(&mut self, name: String) -> f32 {
         self.engine.cvar_get_float(&name)
     }

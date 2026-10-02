@@ -189,6 +189,12 @@ pub mod permissions {
 
     /// Allows issuing raw console commands to the server engine.
     pub const SERVER_COMMAND: &str = "server:command";
+    /// Allows issuing server engine commands via engine bridge.
+    pub const ENGINE_SERVER_COMMAND: &str = "engine:server_command";
+    /// Allows executing client commands on connected player consoles.
+    pub const ENGINE_CLIENT_COMMAND: &str = "engine:client_command";
+    /// Allows executing server configuration presets and scripts.
+    pub const CONFIG_EXEC: &str = "config:exec";
 }
 
 // ----------------------------------------------------------------------------

@@ -445,6 +445,39 @@ impl EngineEntities for EngineBackend {
             }
         }
     }
+
+    fn set_client_listening(&self, receiver: i32, sender: i32, listen: bool) -> bool {
+        if !(1..=32).contains(&receiver) || !(1..=32).contains(&sender) {
+            return false;
+        }
+        unsafe {
+            let funcs = (self.engfuncs)();
+            if let Some(pfn_voice_set_client_listening) = funcs.pfnVoice_SetClientListening {
+                let res = pfn_voice_set_client_listening(
+                    receiver as std::os::raw::c_int,
+                    sender as std::os::raw::c_int,
+                    if listen { 1 } else { 0 },
+                );
+                return res != 0;
+            }
+            false
+        }
+    }
+
+    fn set_player_maxspeed(&self, index: i32, speed: f32) {
+        if !(1..=32).contains(&index) {
+            return;
+        }
+        unsafe {
+            let funcs = (self.engfuncs)();
+            if let Some(pfn_p_entity_of_ent_index) = funcs.pfnPEntityOfEntIndex {
+                let pedict = pfn_p_entity_of_ent_index(index);
+                if !pedict.is_null() {
+                    (*pedict).v.maxspeed = speed;
+                }
+            }
+        }
+    }
 }
 
 impl EntitySpawner for EngineBackend {

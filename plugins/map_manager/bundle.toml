@@ -1,0 +1,15 @@
+[bundle]
+name = "gameplay"
+version = "0.19.0"
+description = "GoldSrc Gameplay & Player Suite (Privileges + Chat Director + Map Manager)"
+author = "GoldSrc.rs Team"
+
+[components.map_manager]
+role = "feature"
+path = "map_manager.wasm"
+priority = 30
+description = "Map timelimit tracker, public nominations, interactive voting, and nextmap rotation"
+
+[permissions]
+shared_buckets = ["gameplay/shared", "gameplay/maps"]
+allowed_cvars = ["grs_map_*", "mp_timelimit"]
