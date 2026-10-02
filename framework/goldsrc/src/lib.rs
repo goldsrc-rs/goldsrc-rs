@@ -324,13 +324,13 @@ pub use goldsrc_api::{
     BlackboardValue, Bot, CancellationToken, CapExpr, ChatScope, ChatTarget, CheckCapability,
     ClassicMenuRenderer, Classname, Client, ClientExt, ClientKind, Command, CommandBuilder,
     CommandContext, CommandError, CommandHandler, CommandRegistry, CommandResult, CommandTarget,
-    CommutativeModifier, Condition, Connected, ConnectedClient, ConnectionState, DagError, Dead,
-    DeadPlayer, DenyAction, DenyPolicy, DhudMenuRenderer, Dormant, Entity, EntityExt, EntityId,
-    Event, EventHandler, EventPhase, EventRegistry, EventSubscriberBuilder, EventSubscription,
-    ExitBehavior, Feedback, FromArg, Health, Hltv, HudColor, HudCoord, HudEffect, HudKind,
-    HudMessage, HudMessageBuilder, Human, HumanClient, Interceptor, ItemKind, ItemTitle, LifeState,
-    LivingHuman, LivingPlayer, Menu, MenuActionHandler, MenuActionRegistry, MenuBuilder,
-    MenuContext, MenuItem, MenuPageBuilder, MenuRenderer, MenuRendererKind, MenuStyle,
+    CommutativeModifier, Condition, Connected, ConnectedClient, ConnectionState, Cvar, CvarFlags,
+    DagError, Dead, DeadPlayer, DenyAction, DenyPolicy, DhudMenuRenderer, Dormant, Entity,
+    EntityExt, EntityId, Event, EventHandler, EventPhase, EventRegistry, EventSubscriberBuilder,
+    EventSubscription, ExitBehavior, Feedback, FromArg, Health, Hltv, HudColor, HudCoord,
+    HudEffect, HudKind, HudMessage, HudMessageBuilder, Human, HumanClient, Interceptor, ItemKind,
+    ItemTitle, LifeState, LivingHuman, LivingPlayer, Menu, MenuActionHandler, MenuActionRegistry,
+    MenuBuilder, MenuContext, MenuItem, MenuPageBuilder, MenuRenderer, MenuRendererKind, MenuStyle,
     ModifierContribution, NodeBuilder, NoneOf, Not, OrderNode, Origin, Phase, PhasedDag, Pipeline,
     PipelineFlow, Placeholder, PlaceholderBuilder, PlaceholderCall, PlaceholderHandler,
     PlaceholderMetadata, PlaceholderRegistry, Player, PlayerAction, PlayerExt, PlayerSlot,
@@ -416,7 +416,9 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, ConfigModel)]
     struct DemoVipConfig {
-        #[cvar(name = "vip_bonus_hp", flags = "archive", description = "Bonus HP")]
+        #[cvar(name = "vip_enabled", description = "Toggle VIP features")]
+        pub enabled: bool,
+        #[cvar(name = "vip_bonus_hp", flags = crate::CvarFlags::ARCHIVE | crate::CvarFlags::SERVER, range = 1..=100, description = "Bonus HP")]
         pub bonus_hp: i32,
         #[cvar(name = "vip_tag", flags = "server", description = "VIP Tag")]
         pub tag: String,
@@ -425,17 +427,20 @@ mod tests {
     #[test]
     fn test_derive_config_model_to_toml_and_cvars() {
         let cfg = DemoVipConfig {
+            enabled: true,
             bonus_hp: 50,
             tag: "VIP".to_string(),
         };
 
         let toml_str = cfg.to_toml();
+        assert!(toml_str.contains("enabled = true"));
         assert!(toml_str.contains("# Bonus HP"));
         assert!(toml_str.contains("bonus_hp = 50"));
         assert!(toml_str.contains("# VIP Tag"));
         assert!(toml_str.contains("tag = \"VIP\""));
 
         let cvars_str = cfg.to_cvars();
+        assert!(cvars_str.contains("vip_enabled \"1\" // Toggle VIP features"));
         assert!(cvars_str.contains("vip_bonus_hp \"50\" // Bonus HP"));
         assert!(cvars_str.contains("vip_tag \"VIP\" // VIP Tag"));
     }

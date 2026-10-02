@@ -301,6 +301,99 @@ impl ToTomlVal for f64 {
     }
 }
 
+/// Helper trait for formatting a configuration value into a GoldSrc CVAR-compatible string literal.
+pub trait ToCvarVal {
+    /// Formats `self` as a cvar string value.
+    fn to_cvar_val(&self) -> String;
+}
+
+impl ToCvarVal for bool {
+    fn to_cvar_val(&self) -> String {
+        if *self {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        }
+    }
+}
+
+impl ToCvarVal for i32 {
+    fn to_cvar_val(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToCvarVal for u32 {
+    fn to_cvar_val(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToCvarVal for usize {
+    fn to_cvar_val(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToCvarVal for f32 {
+    fn to_cvar_val(&self) -> String {
+        format!("{:.2}", self)
+    }
+}
+
+impl ToCvarVal for f64 {
+    fn to_cvar_val(&self) -> String {
+        format!("{:.2}", self)
+    }
+}
+
+impl ToCvarVal for String {
+    fn to_cvar_val(&self) -> String {
+        self.clone()
+    }
+}
+
+impl ToCvarVal for &str {
+    fn to_cvar_val(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// Helper trait for clamping a numeric value within an inclusive range invariant.
+pub trait ClampRange<R> {
+    /// Clamps `self` to lie within `range`.
+    fn clamp_range(&mut self, range: R);
+}
+
+macro_rules! impl_clamp_range_int {
+    ($($ty:ty),*) => {
+        $(
+            impl ClampRange<std::ops::RangeInclusive<$ty>> for $ty {
+                #[inline(always)]
+                fn clamp_range(&mut self, range: std::ops::RangeInclusive<$ty>) {
+                    *self = (*self).clamp(*range.start(), *range.end());
+                }
+            }
+        )*
+    };
+}
+
+impl_clamp_range_int!(i8, u8, i16, u16, i32, u32, i64, u64, usize);
+
+impl ClampRange<std::ops::RangeInclusive<f32>> for f32 {
+    #[inline(always)]
+    fn clamp_range(&mut self, range: std::ops::RangeInclusive<f32>) {
+        *self = self.clamp(*range.start(), *range.end());
+    }
+}
+
+impl ClampRange<std::ops::RangeInclusive<f64>> for f64 {
+    #[inline(always)]
+    fn clamp_range(&mut self, range: std::ops::RangeInclusive<f64>) {
+        *self = self.clamp(*range.start(), *range.end());
+    }
+}
+
 /// Helper trait for reading and writing typed configuration values to/from the GoldSrc engine.
 pub trait FromCvarEngine {
     /// Reads current cvar value from the engine and updates `current`.
