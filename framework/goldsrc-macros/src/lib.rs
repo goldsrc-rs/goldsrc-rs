@@ -64,6 +64,12 @@ pub fn lifecycle(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("lifecycle")
 }
 
+/// Helper attribute for declaring command prefix (`#[command_prefix("grs_")]`).
+#[proc_macro_attribute]
+pub fn command_prefix(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("command_prefix")
+}
+
 /// Marker attribute for the plugin's `on_load` lifecycle hook.
 #[proc_macro_attribute]
 pub fn on_load(_attr: TokenStream, _item: TokenStream) -> TokenStream {

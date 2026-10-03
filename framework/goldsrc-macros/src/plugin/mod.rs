@@ -43,6 +43,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
             let mut macro_error: Option<syn::Error> = None;
 
             let sig = &mut method.sig;
+            let method_attrs = method.attrs.clone();
             // Retain attributes that are NOT our custom ones
             method.attrs.retain(|fn_attr| {
                 if fn_attr.path().is_ident(crate::defs::markers::ON_LOAD) {
@@ -86,7 +87,7 @@ pub fn expand_plugin(mut attr: PluginAttr, mut input_impl: ItemImpl) -> TokenStr
                     }
                     false
                 } else if fn_attr.path().is_ident(crate::defs::markers::COMMAND) {
-                    match parse_command(fn_attr) {
+                    match parse_command(fn_attr, sig, &method_attrs, &attr.command_prefix) {
                         Ok(cmd_def) => {
                             current_cmd_def = Some(cmd_def);
                         }
