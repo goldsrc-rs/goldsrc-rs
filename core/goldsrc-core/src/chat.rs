@@ -150,19 +150,10 @@ impl ChatTrigger for CommandChatTrigger {
             None => (trimmed, ""),
         };
 
-        let is_prefixed = first_word.starts_with('/') || first_word.starts_with('!');
         let clean_name = first_word.trim_start_matches(['/', '!']);
 
         let dispatch = |mgr: &mut goldsrc_host_wasm::PluginManager| -> bool {
-            // 1. Try clean command name (e.g. "vip" or "vipmenu")
-            if mgr.dispatch_command(clean_name, sender.index(), rest) {
-                return true;
-            }
-            // 2. Try raw word if prefixed (e.g. "/vip")
-            if is_prefixed && mgr.dispatch_command(first_word, sender.index(), rest) {
-                return true;
-            }
-            false
+            mgr.dispatch_command(clean_name, sender.index(), rest)
         };
 
         if let Some(ref mut mgr) = manager {
