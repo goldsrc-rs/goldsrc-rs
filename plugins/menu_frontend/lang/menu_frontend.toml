@@ -1,0 +1,61 @@
+# GoldSrc.rs Menu Frontend Localization Dictionary
+# Dictionary Name: menu_frontend
+
+[config]
+fallback = "en"
+access = "public"
+
+[vars]
+tag = "@{tag('Menu')}"
+
+[translations.en]
+cooldown_warn = "{tag} Please wait @{g('{ms}')} ms before pressing again."
+
+[translations.en.menus]
+title = "\\y[GoldSrc] Server Navigation Hub"
+item_mod = "1. Moderation & Sanctions"
+item_admin = "2. Administration & Match Controls"
+item_vip = "3. VIP Perks & Equipment"
+item_maps = "4. Map Voting & Nominations"
+btn_back = "Back"
+btn_next = "Next"
+btn_exit = "Exit"
+
+[translations.en.errors]
+player_not_connected = "Target player #@{g('{idx}')} is not connected or valid."
+item_not_found = "Menu item #@{g('{id}')} not found in registry."
+session_expired = "Interactive menu session for player #@{g('{idx}')} has expired."
+unauthorized = "Access denied: missing required menu permission '@{g('{cap}')}'."
+storage = "Menu frontend storage failure: @{g('{err}')}."
+
+[translations.en.cvars]
+title = "Header title displayed atop the main server menu."
+page_size = "Maximum number of selectable items per menu page (1..8)."
+debounce_ms = "Minimum debounce interval in milliseconds between button presses."
+timeout_secs = "Auto-close timeout in seconds for idle menus."
+
+[translations.ru]
+cooldown_warn = "{tag} Пожалуйста, подождите @{g('{ms}')} мс перед следующим нажатием."
+
+[translations.ru.menus]
+title = "\\y[GoldSrc] Главное Меню Сервера"
+item_mod = "1. Модерация и Санкции"
+item_admin = "2. Администрация и Матчи"
+item_vip = "3. VIP Меню и Снаряжение"
+item_maps = "4. Карты и Голосование"
+btn_back = "Назад"
+btn_next = "Далее"
+btn_exit = "Выход"
+
+[translations.ru.errors]
+player_not_connected = "Целевой игрок #@{g('{idx}')} не подключен или некорректен."
+item_not_found = "Пункт меню #@{g('{id}')} не найден в реестре."
+session_expired = "Сессия интерактивного меню игрока #@{g('{idx}')} истекла."
+unauthorized = "Доступ запрещен: отсутствует право меню '@{g('{cap}')}'."
+storage = "Сбой хранилища menu_frontend: @{g('{err}')}."
+
+[translations.ru.cvars]
+title = "Заголовок, отображаемый в шапке главного меню сервера."
+page_size = "Максимальное число пунктов на странице меню (1..8)."
+debounce_ms = "Минимальная задержка между нажатиями кнопок меню в миллисекундах."
+timeout_secs = "Таймаут авто-закрытия меню в секундах."
