@@ -1,36 +1,25 @@
 //! Chat director configuration model derived into TOML file format and CVAR registrations.
 
-use goldsrc::ConfigModel;
+use goldsrc::{ConfigModel, CvarFlags};
 
 #[derive(Debug, Clone, PartialEq, ConfigModel)]
+#[config(cvar_prefix = "grs_chat_")]
 pub struct ChatDirectorConfig {
-    #[cvar(
-        name = "grs_chat_flood_interval",
-        flags = "ARCHIVE|SERVER",
-        description = "Minimum interval in seconds between messages to prevent spam"
-    )]
+    /// Minimum interval in seconds between messages to prevent spam
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0.1..=10.0)]
     pub flood_interval: f32,
 
-    #[cvar(
-        name = "grs_chat_broadcast_interval",
-        flags = "ARCHIVE|SERVER",
-        description = "Interval in seconds between rotating informational broadcast messages"
-    )]
+    /// Interval in seconds between rotating informational broadcast messages
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 5.0..=600.0)]
     pub broadcast_interval: f32,
 
-    #[cvar(
-        name = "grs_chat_enable_staff_channel",
-        flags = "ARCHIVE|SERVER",
-        description = "Enable say_team @ prefix routing to online staff (1 = yes, 0 = no)"
-    )]
-    pub enable_staff_channel: i32,
+    /// Enable say_team @ prefix routing to online staff
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER)]
+    pub enable_staff_channel: bool,
 
-    #[cvar(
-        name = "grs_chat_enable_dhud_banners",
-        flags = "ARCHIVE|SERVER",
-        description = "Render rotating announcements in Director HUD banners (1 = yes, 0 = no)"
-    )]
-    pub enable_dhud_banners: i32,
+    /// Render rotating announcements in Director HUD banners
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER)]
+    pub enable_dhud_banners: bool,
 }
 
 impl Default for ChatDirectorConfig {
@@ -38,8 +27,8 @@ impl Default for ChatDirectorConfig {
         Self {
             flood_interval: 0.75,
             broadcast_interval: 60.0,
-            enable_staff_channel: 1,
-            enable_dhud_banners: 1,
+            enable_staff_channel: true,
+            enable_dhud_banners: true,
         }
     }
 }

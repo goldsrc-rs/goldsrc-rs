@@ -1,0 +1,87 @@
+# GoldSrc.rs Moderation Localization Dictionary
+# Dictionary Name: moderation
+
+[config]
+fallback = "en"
+access = "public"
+
+[vars]
+tag = "@{tag('Moderation')}"
+
+[translations.en]
+slap_msg = "{tag} Administrator slapped @{g('{name}')} with @{g('{dmg}')} HP damage."
+slay_msg = "{tag} Player @{g('{name}')} was eliminated by administrator."
+freeze_alert = "[INSPECTION] You have been frozen by an administrator! Remain still."
+unfreeze_msg = "{tag} You have been unfrozen."
+gag_blocked = "[SANCTION] Your text chat has been blocked by a moderator!"
+gag_notify = "{tag} Message blocked: gag is active."
+gag_broadcast = "{tag} Player @{g('{name}')} text chat blocked for @{g('{mins}')} min(s). Reason: @{g('{why}')}."
+gag_target = "[GAG] Your chat is blocked for @{g('{mins}')} min(s) (@{g('{why}')})."
+mute_broadcast = "{tag} Player @{g('{name}')} voice chat blocked for @{g('{mins}')} min(s). Reason: @{g('{why}')}."
+mute_target = "[MUTE] Your voice is blocked for @{g('{mins}')} min(s) (@{g('{why}')})."
+kick_broadcast = "{tag} Player @{g('{name}')} was kicked from the server. Reason: @{g('{why}')}."
+ban_broadcast = "{tag} Player @{g('{name}')} has been banned for @{g('{mins}')} min(s). Reason: @{g('{why}')}."
+unban_success = "{tag} Revoked @{g('{count}')} sanction(s) for '@{g('{target}')}'."
+
+[translations.en.menus]
+title = "\\y[GoldSrc] Moderation Menu"
+freeze = "1. Freeze / Unfreeze"
+gag = "2. Block Text Chat (Gag 10m)"
+mute = "3. Block Voice Chat (Mute 10m)"
+slap = "4. Slap (5 HP)"
+slay = "5. Slay (Kill)"
+kick = "6. Kick from Server"
+ban = "7. Ban (60m)"
+
+[translations.en.errors]
+player_not_found = "Player '@{g('{id}')}' not found on server."
+invalid_state = "Player #@{g('{idx}')} is in invalid state for action: @{g('{state}')}."
+permission_denied = "Access denied: missing required capability '@{g('{cap}')}'."
+invalid_argument = "Invalid argument: @{g('{msg}')}."
+storage = "Storage failure: @{g('{err}')}."
+
+[translations.en.cvars]
+default_ban_mins = "Default duration in minutes for player bans (0 = permanent)."
+default_slap_damage = "Default damage applied by grs_slap command."
+max_freeze_secs = "Maximum duration in seconds allowed for grs_freeze inspection."
+notify_chat = "Broadcast disciplinary actions to global server chat."
+log_audit = "Persist disciplinary audit logs into storage."
+
+[translations.ru]
+slap_msg = "{tag} Администратор дал пощечину игроку @{g('{name}')} на @{g('{dmg}')} HP урона."
+slay_msg = "{tag} Игрок @{g('{name}')} был уничтожен администрацией."
+freeze_alert = "[ПРОВЕРКА] Вы заморожены администратором! Оставайтесь на месте."
+unfreeze_msg = "{tag} Вы были разморожены."
+gag_blocked = "[САНКЦИЯ] Ваш текстовый чат заблокирован модератором!"
+gag_notify = "{tag} Ваше сообщение заблокировано (активен gag)."
+gag_broadcast = "{tag} Игроку @{g('{name}')} заблокирован чат на @{g('{mins}')} мин. Причина: @{g('{why}')}."
+gag_target = "[GAG] Вам заблокирован чат на @{g('{mins}')} мин (@{g('{why}')})."
+mute_broadcast = "{tag} Игроку @{g('{name}')} заблокирован голосовой чат на @{g('{mins}')} мин. Причина: @{g('{why}')}."
+mute_target = "[MUTE] Вам заблокирован микрофон на @{g('{mins}')} мин (@{g('{why}')})."
+kick_broadcast = "{tag} Игрок @{g('{name}')} был отключен с сервера. Причина: @{g('{why}')}."
+ban_broadcast = "{tag} Игрок @{g('{name}')} заблокирован на @{g('{mins}')} мин. Причина: @{g('{why}')}."
+unban_success = "{tag} Санкции для '@{g('{target}')}' сняты (@{g('{count}')} записей)."
+
+[translations.ru.menus]
+title = "\\y[GoldSrc] Меню Модерации"
+freeze = "1. Заморозить / Разморозить"
+gag = "2. Заблокировать чат (Gag 10m)"
+mute = "3. Заблокировать голос (Mute 10m)"
+slap = "4. Дать пощечину (Slap 5 HP)"
+slay = "5. Убить (Slay)"
+kick = "6. Отключить (Kick)"
+ban = "7. Забанить (Ban 60m)"
+
+[translations.ru.errors]
+player_not_found = "Игрок '@{g('{id}')}' не найден на сервере."
+invalid_state = "Игрок #@{g('{idx}')} находится в недопустимом состоянии: @{g('{state}')}."
+permission_denied = "Доступ запрещен: отсутствует право '@{g('{cap}')}'."
+invalid_argument = "Неверный аргумент: @{g('{msg}')}."
+storage = "Ошибка хранилища: @{g('{err}')}."
+
+[translations.ru.cvars]
+default_ban_mins = "Длительность бана по умолчанию в минутах (0 = навсегда)."
+default_slap_damage = "Урон по умолчанию, наносимый командой grs_slap."
+max_freeze_secs = "Максимальная длительность заморозки в секундах для инспекции."
+notify_chat = "Оповещать ли глобальный чат о дисциплинарных действиях."
+log_audit = "Сохранять ли записи аудита модерации в постоянное хранилище."

@@ -44,4 +44,41 @@ impl std::fmt::Display for MenuFrontendError {
     }
 }
 
+impl MenuFrontendError {
+    /// Formats the domain error using the localization dictionary for the specified language.
+    pub fn format_localized(&self, lang: &str) -> String {
+        match self {
+            Self::PlayerNotConnected(idx) => {
+                goldsrc::tr!(
+                    "menu_frontend",
+                    lang,
+                    "errors.player_not_connected",
+                    idx = idx
+                )
+            }
+            Self::ItemNotFound(id) => {
+                goldsrc::tr!("menu_frontend", lang, "errors.item_not_found", id = id)
+            }
+            Self::SessionExpired(idx) => {
+                goldsrc::tr!("menu_frontend", lang, "errors.session_expired", idx = idx)
+            }
+            Self::Unauthorized(cap) => {
+                goldsrc::tr!("menu_frontend", lang, "errors.unauthorized", cap = cap)
+            }
+            Self::FeatureUnsupported {
+                feature,
+                missing_wit_binding,
+                reason,
+            } => {
+                format!(
+                    "[HOST GAP] Menu feature '{feature}' cannot execute: missing WIT binding '{missing_wit_binding}'. Reason: {reason}"
+                )
+            }
+            Self::Storage(err) => {
+                goldsrc::tr!("menu_frontend", lang, "errors.storage", err = err)
+            }
+        }
+    }
+}
+
 impl std::error::Error for MenuFrontendError {}

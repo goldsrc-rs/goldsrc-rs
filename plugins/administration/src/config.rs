@@ -1,43 +1,29 @@
 //! Administration configuration model derived into TOML file format and CVAR registrations.
 
-use goldsrc::ConfigModel;
+use goldsrc::{ConfigModel, CvarFlags};
 
 #[derive(Debug, Clone, PartialEq, ConfigModel)]
+#[config(cvar_prefix = "grs_adm_")]
 pub struct AdministrationConfig {
-    #[cvar(
-        name = "grs_adm_default_match_cfg",
-        flags = "ARCHIVE|SERVER",
-        description = "Default configuration file executed for competitive matches"
-    )]
+    /// Default configuration file executed for competitive matches
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER)]
     pub default_match_cfg: String,
 
-    #[cvar(
-        name = "grs_adm_default_warmup_cfg",
-        flags = "ARCHIVE|SERVER",
-        description = "Default configuration file executed during pre-match warmup"
-    )]
+    /// Default configuration file executed during pre-match warmup
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER)]
     pub default_warmup_cfg: String,
 
-    #[cvar(
-        name = "grs_adm_restart_delay_secs",
-        flags = "ARCHIVE|SERVER",
-        description = "Default countdown delay in seconds for round restarts"
-    )]
+    /// Default countdown delay in seconds for round restarts
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0..=60)]
     pub restart_delay_secs: i32,
 
-    #[cvar(
-        name = "grs_adm_max_audit_fetch",
-        flags = "ARCHIVE|SERVER",
-        description = "Maximum number of audit log records returned by grs_audit"
-    )]
+    /// Maximum number of audit log records returned by grs_audit
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 1..=1000)]
     pub max_audit_fetch: i32,
 
-    #[cvar(
-        name = "grs_adm_notify_actions",
-        flags = "ARCHIVE|SERVER",
-        description = "Broadcast technical administrative actions to all players (1 = yes, 0 = no)"
-    )]
-    pub notify_actions: i32,
+    /// Broadcast technical administrative actions to all players
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER)]
+    pub notify_actions: bool,
 }
 
 impl Default for AdministrationConfig {
@@ -47,7 +33,7 @@ impl Default for AdministrationConfig {
             default_warmup_cfg: "warmup.cfg".to_string(),
             restart_delay_secs: 1,
             max_audit_fetch: 20,
-            notify_actions: 1,
+            notify_actions: true,
         }
     }
 }

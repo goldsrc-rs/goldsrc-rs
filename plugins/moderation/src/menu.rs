@@ -13,21 +13,33 @@ pub const ACTION_MENU_INSPECT: u32 = 1008;
 
 pub const ACTION_TARGET_BASE: u32 = 2000; // 2000 + target_index (1..32)
 
-/// Builds the root moderator control panel.
-pub fn build_moderator_main_menu() -> Menu {
-    Menu::builder("Модерация: Выбор Действия")
+/// Builds the root moderator control panel using the player's preferred language.
+pub fn build_moderator_main_menu_localized(lang: &str) -> Menu {
+    let title = tr!("moderation", lang, "menus.title");
+    let item_freeze = tr!("moderation", lang, "menus.freeze");
+    let item_gag = tr!("moderation", lang, "menus.gag");
+    let item_mute = tr!("moderation", lang, "menus.mute");
+    let item_slap = tr!("moderation", lang, "menus.slap");
+    let item_slay = tr!("moderation", lang, "menus.slay");
+    let item_kick = tr!("moderation", lang, "menus.kick");
+    let item_ban = tr!("moderation", lang, "menus.ban");
+
+    Menu::builder(title)
         .style(MenuStyle::brackets())
-        .item(MenuItem::new("1. Slap (Толкнуть игрока)", ACTION_MENU_SLAP).keep_open())
-        .item(MenuItem::new("2. Slay (Уничтожить игрока)", ACTION_MENU_SLAY).keep_open())
-        .item(MenuItem::new("3. Freeze (Заморозить/Разморозить)", ACTION_MENU_FREEZE).keep_open())
-        .item(MenuItem::new("4. Gag (Заблокировать текстовый чат)", ACTION_MENU_GAG).keep_open())
-        .item(
-            MenuItem::new("5. Mute (Заблокировать микрофон) [STUB]", ACTION_MENU_MUTE).keep_open(),
-        )
-        .item(MenuItem::new("6. Kick (Отключить от сервера) [STUB]", ACTION_MENU_KICK).keep_open())
-        .item(MenuItem::new("7. Ban (Заблокировать доступ) [STUB]", ACTION_MENU_BAN).keep_open())
-        .item(MenuItem::new("8. Inspect (Инспекция игрока)", ACTION_MENU_INSPECT).keep_open())
+        .item(MenuItem::new(item_slap, ACTION_MENU_SLAP).keep_open())
+        .item(MenuItem::new(item_slay, ACTION_MENU_SLAY).keep_open())
+        .item(MenuItem::new(item_freeze, ACTION_MENU_FREEZE).keep_open())
+        .item(MenuItem::new(item_gag, ACTION_MENU_GAG).keep_open())
+        .item(MenuItem::new(item_mute, ACTION_MENU_MUTE).keep_open())
+        .item(MenuItem::new(item_kick, ACTION_MENU_KICK).keep_open())
+        .item(MenuItem::new(item_ban, ACTION_MENU_BAN).keep_open())
+        .item(MenuItem::new("8. Inspect", ACTION_MENU_INSPECT).keep_open())
         .build()
+}
+
+/// Builds the root moderator control panel with default language.
+pub fn build_moderator_main_menu() -> Menu {
+    build_moderator_main_menu_localized("common")
 }
 
 /// Builds an interactive target selection menu for the specified action ID.

@@ -1,0 +1,69 @@
+# GoldSrc.rs Administration Localization Dictionary
+# Dictionary Name: administration
+
+[config]
+fallback = "en"
+access = "public"
+
+[vars]
+tag = "@{tag('Admin')}"
+
+[translations.en]
+slay_msg = "{tag} Administrator slayed player @{g('{name}')}."
+slap_msg = "{tag} Administrator slapped @{g('{name}')} for @{g('{dmg}')} HP damage."
+teleport_msg = "{tag} Administrator teleported @{g('{name}')}."
+team_msg = "{tag} Transferred @{g('{name}')} to team @{g('{team}')}."
+pause_msg = "{tag} Match paused by administrator."
+unpause_msg = "{tag} Match unpaused by administrator."
+map_change = "{tag} Changing map to @{g('{map}')}..."
+exec_msg = "{tag} Executed configuration preset '@{g('{cfg}')}'."
+
+[translations.en.menus]
+title = "\\y[GoldSrc] Administration Menu"
+slay = "1. Slay Player"
+slap = "2. Slap Player (5 HP)"
+teleport = "3. Teleport Player"
+team = "4. Transfer Team"
+map = "5. Change Map"
+
+[translations.en.errors]
+player_not_found = "Target player not found."
+permission_denied = "Access denied: missing administrative permission '@{g('{cap}')}'."
+command_failed = "Administrative command failed: @{g('{err}')}."
+
+[translations.en.cvars]
+default_match_cfg = "Default configuration file executed for competitive matches."
+default_warmup_cfg = "Default configuration file executed during pre-match warmup."
+restart_delay_secs = "Default countdown delay in seconds for round restarts."
+max_audit_fetch = "Maximum number of audit log records returned by grs_audit."
+notify_actions = "Broadcast technical administrative actions to all players."
+
+[translations.ru]
+slay_msg = "{tag} Администратор уничтожил игрока @{g('{name}')}."
+slap_msg = "{tag} Администратор дал пощечину игроку @{g('{name}')} на @{g('{dmg}')} HP урона."
+teleport_msg = "{tag} Администратор телепортировал игрока @{g('{name}')}."
+team_msg = "{tag} Игрок @{g('{name}')} переведен в команду @{g('{team}')}."
+pause_msg = "{tag} Матч поставлен на паузу администратором."
+unpause_msg = "{tag} Пауза матча снята администратором."
+map_change = "{tag} Смена карты на @{g('{map}')}..."
+exec_msg = "{tag} Выполнен пресет конфигурации '@{g('{cfg}')}'."
+
+[translations.ru.menus]
+title = "\\y[GoldSrc] Меню Администратора"
+slay = "1. Убить игрока"
+slap = "2. Дать пощечину (5 HP)"
+teleport = "3. Телепортировать игрока"
+team = "4. Сменить команду"
+map = "5. Сменить карту"
+
+[translations.ru.errors]
+player_not_found = "Целевой игрок не найден."
+permission_denied = "Доступ запрещен: отсутствует право администратора '@{g('{cap}')}'."
+command_failed = "Ошибка административной команды: @{g('{err}')}."
+
+[translations.ru.cvars]
+default_match_cfg = "Конфигурационный файл по умолчанию для соревновательных матчей."
+default_warmup_cfg = "Конфигурационный файл по умолчанию для разминки."
+restart_delay_secs = "Задержка таймера перед перезапуском раунда в секундах."
+max_audit_fetch = "Максимальное количество записей аудита, возвращаемых grs_audit."
+notify_actions = "Оповещать ли всех игроков о технических административных действиях."

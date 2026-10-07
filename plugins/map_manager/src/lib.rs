@@ -145,10 +145,10 @@ impl MapManager {
             }
 
             log_info!(
-                "[Map Manager] Concluded map vote: winner is '{}'. Setting amx_nextmap and preparing rotation.",
+                "[Map Manager] Concluded map vote: winner is '{}'. Setting grs_nextmap and preparing rotation.",
                 winner
             );
-            server_command(format!("amx_nextmap \"{}\"\n", winner));
+            server_command(format!("grs_nextmap \"{}\"\n", winner));
         }
     }
 
@@ -214,9 +214,8 @@ impl MapManager {
             "N/A".to_string()
         };
 
-        chat_broadcast!(&format!(
-            "[Map Manager] До конца карты осталось: {formatted}"
-        ));
+        let msg = tr!("map_manager", "common", "timeleft_msg", time = formatted);
+        chat_broadcast!(&msg);
     }
 
     /// Displays the currently active map.
@@ -234,7 +233,8 @@ impl MapManager {
         } else {
             "crossfire".to_string()
         };
-        chat_broadcast!(&format!("[Map Manager] Текущая карта: {current}"));
+        let msg = tr!("map_manager", "common", "current_map_msg", map = current);
+        chat_broadcast!(&msg);
     }
 
     /// Displays the chosen next map in rotation.
@@ -248,11 +248,12 @@ impl MapManager {
         let next = if let Ok(lock) = TRACKER.read() {
             lock.as_ref()
                 .and_then(|t| t.next_map.clone())
-                .unwrap_or_else(|| "Ещё не выбрана (ожидается голосование)".to_string())
+                .unwrap_or_else(|| "Ещё не выбрана".to_string())
         } else {
             "Ещё не выбрана".to_string()
         };
-        chat_broadcast!(&format!("[Map Manager] Следующая карта: {next}"));
+        let msg = tr!("map_manager", "common", "next_map_msg", map = next);
+        chat_broadcast!(&msg);
     }
 
     /// Opens the interactive nomination menu.

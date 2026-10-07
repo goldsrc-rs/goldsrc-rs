@@ -594,7 +594,7 @@ mod tests {
         let cfg = ModerationConfig::default();
         let toml_str = cfg.to_toml();
         assert!(toml_str.contains("default_ban_mins = 60"));
-        assert!(toml_str.contains("notify_chat = 1"));
+        assert!(toml_str.contains("notify_chat = true"));
 
         let cvars_str = cfg.to_cvars();
         assert!(cvars_str.contains("grs_mod_default_ban_mins \"60\""));
