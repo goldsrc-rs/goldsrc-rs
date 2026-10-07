@@ -530,20 +530,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
-name = "goldsrc"
-version = "0.17.0"
-dependencies = [
- "crossbeam-channel",
- "goldsrc-api",
- "goldsrc-macros",
- "goldsrc-sys",
- "log",
- "serde",
-]
-
-[[package]]
 name = "goldsrc-api"
-version = "0.17.0"
+version = "0.20.0"
+source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#c4ce4604136416dbf007f6d872509909af44e779"
 dependencies = [
  "goldsrc-spi",
  "goldsrc-sys",
@@ -555,7 +544,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-backend-metamod"
-version = "0.17.0"
+version = "0.20.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
@@ -569,7 +558,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-backend-standalone"
-version = "0.17.0"
+version = "0.20.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
@@ -581,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-core"
-version = "0.17.0"
+version = "0.20.0"
 dependencies = [
  "crossbeam-channel",
  "goldsrc-api",
@@ -604,7 +593,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-extension-metamod"
-version = "0.17.0"
+version = "0.20.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
@@ -615,7 +604,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-extension-reapi"
-version = "0.17.0"
+version = "0.20.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-core",
@@ -628,7 +617,7 @@ dependencies = [
 
 [[package]]
 name = "goldsrc-host-wasm"
-version = "0.17.0"
+version = "0.20.0"
 dependencies = [
  "goldsrc-api",
  "goldsrc-spi",
@@ -643,25 +632,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "goldsrc-macros"
-version = "0.17.0"
-dependencies = [
- "goldsrc-api",
- "proc-macro2",
- "quote",
- "syn 3.0.5",
-]
-
-[[package]]
 name = "goldsrc-spi"
-version = "0.17.0"
+version = "0.20.0"
+source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#c4ce4604136416dbf007f6d872509909af44e779"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "goldsrc-sys"
-version = "0.17.0"
+version = "0.20.0"
+source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#c4ce4604136416dbf007f6d872509909af44e779"
 dependencies = [
  "bindgen",
 ]
