@@ -12,10 +12,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "admin_system"
+name = "administration"
 version = "0.17.0"
 dependencies = [
  "goldsrc",
+ "goldsrc-api",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -123,6 +126,16 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+
+[[package]]
+name = "chat_director"
+version = "0.17.0"
+dependencies = [
+ "goldsrc",
+ "goldsrc-api",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "clang-sys"
@@ -552,6 +565,7 @@ dependencies = [
 name = "goldsrc-api"
 version = "0.17.0"
 dependencies = [
+ "goldsrc-spi",
  "goldsrc-sys",
  "log",
  "serde",
@@ -662,7 +676,7 @@ dependencies = [
 name = "goldsrc-spi"
 version = "0.17.0"
 dependencies = [
- "goldsrc-api",
+ "serde",
 ]
 
 [[package]]
@@ -875,6 +889,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "map_manager"
+version = "0.17.0"
+dependencies = [
+ "goldsrc",
+ "goldsrc-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -887,6 +911,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad38eb12aea514a0466ea40a80fd8cc83637065948eb4a426e4aa46261175227"
 dependencies = [
  "rustix",
+]
+
+[[package]]
+name = "menu_frontend"
+version = "0.17.0"
+dependencies = [
+ "goldsrc",
+ "goldsrc-api",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -905,6 +939,16 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "moderation"
+version = "0.17.0"
+dependencies = [
+ "goldsrc",
+ "goldsrc-api",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1060,6 +1104,16 @@ checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
 dependencies = [
  "proc-macro2",
  "syn 3.0.5",
+]
+
+[[package]]
+name = "privileges"
+version = "0.17.0"
+dependencies = [
+ "goldsrc",
+ "goldsrc-api",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1494,13 +1548,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vip_core"
-version = "0.17.0"
-dependencies = [
- "goldsrc",
-]
 
 [[package]]
 name = "walkdir"

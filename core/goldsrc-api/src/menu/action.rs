@@ -81,27 +81,6 @@ pub fn display_player_menu_page(player_idx: i32, menu: &Menu, page: usize) -> bo
                     text: "",
                 });
             }
-            MenuRendererKind::Chat => {
-                for line in rendered.text.lines() {
-                    player.act(crate::action::Print::chat(line));
-                }
-                player.act(ShowRawMenu {
-                    keys_mask: rendered.keys_mask as i32,
-                    timeout: rendered.timeout,
-                    text: "",
-                });
-            }
-            MenuRendererKind::Motd { .. } => {
-                player.act(crate::action::Print::console(&rendered.text));
-                player.act(ShowRawMenu {
-                    keys_mask: rendered.keys_mask as i32,
-                    timeout: rendered.timeout,
-                    text: "",
-                });
-            }
-            MenuRendererKind::TerminalTui => {
-                player.act(crate::action::Print::console(&rendered.text));
-            }
         }
         set_active_player_menu(player_idx, menu.clone(), page);
         true

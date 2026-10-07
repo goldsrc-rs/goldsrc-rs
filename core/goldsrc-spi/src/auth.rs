@@ -3,7 +3,7 @@
 //! Implemented by external authenticators (e.g. official Steamworks, ReUnion dual-protocol,
 //! Discord OAuth, or custom token authenticators).
 
-use goldsrc_api::client::AuthIdentity;
+use crate::identity::AuthIdentity;
 use std::net::IpAddr;
 
 /// Decision returned by an [`AuthProvider`] when evaluating a client connection handshake.
@@ -52,7 +52,7 @@ pub trait AuthProvider: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use goldsrc_api::client::SteamId;
+    use crate::identity::SteamId;
 
     struct DummySteamProvider;
 

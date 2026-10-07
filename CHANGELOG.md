@@ -10,6 +10,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Zero-Dependency Service Provider Interface (`core/goldsrc-spi`) & DIP Compliance**:
+  - Decoupled `goldsrc-spi` completely from `goldsrc-api`, satisfying the Dependency Inversion Principle (DIP).
+  - Migrated core domain value objects and foundational contracts (`SteamId`, `PlayerGuid`, `murmur3_128`, `AuthIdentity`, `AuthSubject`, `AuthState`, `PlayerIdentity`, `PlayerSessionToken`, `CvarFlags`, `CvarEngine`, `EntitySpawner`) directly into `goldsrc-spi`.
+  - Re-exported all foundational types from `goldsrc-api` and `goldsrc` framework crates, preserving 100% backward compatibility for guest plugins while eliminating circular dependency risks.
+  - Replaced high-level SDK `Player` construction in `EngineEntities` with safe, decoupled `player_is_valid(index)` slot checking.
+- **3-Tier Command Routing & Monopoly Override Architecture (`core/goldsrc-api`)**:
+  - Implemented a 3-tier command routing pipeline: `Pre-hooks` -> `Monopoly Executor (with native fallback)` -> `Post-hooks`.
+  - Added `override_command_executor` and `restore_command_executor` allowing external guest plugins (e.g. moderation or admin suites) to take exclusive execution control over native commands with automatic fallback upon plugin unload.
+  - Added `add_command_pre_hook` and `add_command_post_hook` for fine-grained capability checks, rate-limiting, and audit event dispatching.
+- **Native Moderation Subsystem & Default Executors (`core/goldsrc-core`)**:
+  - Introduced `core/goldsrc-core/src/moderation.rs` with built-in default executors for core commands: `kick`, `mute`, `unmute`, `ban`, `unban`, `banlist`.
+  - Added in-memory `BanRegistry` supporting SteamID/IP bans, duration parsing (`30s`, `10m`, `2h`, `1d`, `perm`), and automatic connection rejection on `PlayerEvent::Connect`.
+  - Added `MuteRegistry` with chat middleware integration enforcing mutes on text chat commands (`say`, `say_team`).
+- **Unified Zero-Noise CLI Specifications & Introspection (`core/goldsrc-core`)**:
+  - Standardized all `grs` CLI commands on canonical plural resources with strictly 1 short alias (`plugins`/`pl`, `sessions`/`sess`, `cvars`/`cv`, `watchers`/`w`, `extensions`/`ext`, `hardware`/`hw`, `status`/`st`, `version`/`ver`, `help`/`?`).
+  - Added `grs sessions` (`grs sess`) command for active client session listing and deep inspection (`info <slot> -f <field> -v -o <format>`).
+  - Added `grs cvars` (`grs cv`) command for inspecting engine cvars, querying metadata (`info <name> -f <field>`), and filtering modified values (`list --diff/-d`).
+
+### Fixed
+
+- **Vector Mathematics Invariant & Subtraction Bug (`core/goldsrc-api`)**:
+  - Corrected copy-paste bug in `Vector3::sub_assign` (`-=`) where the Z-axis was being added (`+= rhs.z`) instead of subtracted (`-= rhs.z`).
+- **Health Value Object Arithmetic & Mod-Friendly Invariants (`core/goldsrc-api`)**:
+  - Standardized `Health::add` and `Health::sub` (`+`, `-`) to delegate to `heal()` and `damage()` ensuring clamp invariants and non-NaN values are strictly preserved.
+  - Added `Health::try_new(current, max)` ensuring non-negative values and finite floats while allowing mod-specific balance overrides (e.g. Zombie Plague 5000 HP).
+- **POSIX Signal Handler Terminal Exit (`core/goldsrc-sys`)**:
+  - Replaced returning from `posix_signal_handler` on fatal signals (`SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE`) with explicit libc `_exit(128 + sig)`, preventing infinite crashing loops on Linux HLDS servers.
+- **FFI Console Spew Panic Barrier (`core/goldsrc-core`)**:
+  - Wrapped `filter_spew_output` console hook callback in `std::panic::catch_unwind` with `AssertUnwindSafe` to prevent Rust panics from propagating across the engine C-ABI boundary into HLDS.
+- **Session Token Identity Validation & Anti-Spoofing (`core/goldsrc-core`)**:
+  - Strengthened `SessionManager::validate_token` to verify `user_id` consistency against active client sessions, preventing session hijacking through forged token generation counters.
+- **Static FFI Global Thread Safety (`backends/goldsrc-backend-metamod`, `backends/goldsrc-backend-standalone`)**:
+  - Wrapped `DUMMY_GLOBALS` in `goldsrc_sys::ffi::SyncWrapper` to guarantee thread safety and prevent compilation errors for raw pointer structs in static memory.
+
+### Removed
+
+- **Speculative & Infeasible Menu MVC Code (`core/goldsrc-api`, `core/goldsrc-core`)**:
+  - Removed speculative `driver.rs` and `widgets.rs` from `goldsrc-api`.
+  - Removed unusable `ChatMenuRenderer`, `MotdMenuRenderer`, and `TerminalTuiRenderer` variants from `MenuRendererKind`, standardizing in-game menus on native `ShowMenu` formatted pages and Director HUD (`Dhud`) overlays.
+  - Removed speculative `GhostSlotTrap` concepts from active engine loops.
+- **Legacy Framework Assumptions & AMXX Purity**:
+  - Completely purged AMX Mod X references, settings, and command relics (`amx_sysinfo`) from roadmaps and engine specifications, reinforcing the sovereign self-contained engine boundary.
+
+## [0.19.0] - 2026-09-30
+
+### Added
+
 - **Architectural Purification, Zero Legacy Shims & Domain Patterns (`core/goldsrc-api`, `core/goldsrc-core`, `framework/goldsrc`)**:
   - Replaced legacy monolith `guards.rs` with zero-sized typestate specifications (`spec.rs`, `Spec<Target>`), logical combinators (`All`, `Any`, `Not`, `NoneOf`), and the frame-scoped refinement guard `Refined<'a, Target, S>` with `RefineExt` integration (`player.refine::<Alive>()`).
   - Purged legacy compatibility re-export shims `goldsrc_api::liblist` and `goldsrc_api::edict` in favor of canonical `goldsrc_api::types::{LibList, EDict, bump_map_generation}`.
@@ -54,6 +101,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Expanded `LogTarget` enum to fully support all subsystem variants in `goldsrc.toml` logging filters.
 - **Robust Entity Health Sanitization Guards (`core/goldsrc-api`)**:
   - Added `is_finite()` validation guards preventing `NaN` and `Infinity` float corruption across entity and player health setters, preserving negative GoldSrc overkill values.
+
+## [0.18.0] - 2026-09-28
+
+### Added
+
 - **Universal `PhasedDag` Topological Ordering Engine (`core/goldsrc-api`)**:
   - Implemented `PhasedDag<P, Id, T>` with Kahn's topological sort algorithm, macro-phase stratification (`Phase` trait), and deterministic tie-breaking (`Phase` $\to$ `Declaration Order` $\to$ `Alphabetical ID`).
   - Added cycle detection (`DagError::CycleDetected`), missing dependency validation (`DagError::MissingDependency`), and cross-phase violation reporting (`DagError::PhaseConflict`).
@@ -64,6 +116,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Standardized DSL and metadata exclusively on `requires` (purging legacy `require` across macros, manifests, and configs).
   - Replaced numeric `priority = 100, 150` with architectural `PluginTier` (`Core` $\to$ `Service` $\to$ `Gameplay` $\to$ `Addon` $\to$ `Analytics`) and explicit `requires` anchors in `plugins.toml` and `#[plugin]`.
   - Added flexible dual deserialization for `requires` in `plugins.toml` supporting both single string (`requires = "dep"`) and array (`requires = ["dep1", "dep2"]`).
+
+## [0.17.0] - 2026-09-20
+
+### Added
+
 - **Algebraic Commutative State Modifiers & Typed Context Blackboard (`core/goldsrc-api` & `core/goldsrc-core`)**:
   - Implemented `CommutativeModifier` with order-independent mathematical evaluation model ($(\text{base} + \sum \text{flat}) \times \prod \text{mult} - \sum \text{red}$), tagged contributions, and block status.
   - Implemented `TypedBlackboard` providing type-safe, thread-safe auxiliary property passing across inter-plugin contexts.

@@ -4,7 +4,7 @@
 pub struct CommandSpec {
     /// Canonical command name.
     pub name: &'static str,
-    /// Command aliases.
+    /// Command aliases (strictly single short alias convention).
     pub aliases: &'static [&'static str],
     /// Grouping category for help output.
     pub category: &'static str,
@@ -32,7 +32,7 @@ impl CommandSpec {
 pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "plugins",
-        aliases: &["pl", "p"],
+        aliases: &["pl"],
         category: "plugin:lifecycle",
         summary: "Manage WASM plugins (list, info, load, unload, reload, pause, unpause, cmds)",
         usage: "grs plugins <subcommand> [OPTIONS] [TARGET]",
@@ -41,7 +41,10 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
                 "list [OPTIONS]",
                 "List loaded plugins (options: --flat, -p, -s, -a, --paused)",
             ),
-            ("info <name|index>", "Show detailed metadata for a plugin"),
+            (
+                "info <name|index> [-f field]",
+                "Show detailed metadata for a plugin or extract field",
+            ),
             ("load <file...>", "Load WASM plugin component(s)"),
             (
                 "unload <name|index...> [-a]",
@@ -63,8 +66,9 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         ],
         examples: &[
             "grs plugins list",
-            "grs pl ps",
+            "grs pl list",
             "grs plugins info vip_core",
+            "grs pl info vip_core -f version",
             "grs plugins load admin_system.wasm",
             "grs plugins reload --all",
             "grs plugins pause vip_menu",
@@ -72,8 +76,55 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         ],
     },
     CommandSpec {
+        name: "sessions",
+        aliases: &["sess"],
+        category: "sys:runtime",
+        summary: "Inspect and manage active player client sessions and userinfo overrides",
+        usage: "grs sessions <list|info> [OPTIONS] [SLOT]",
+        options: &[
+            (
+                "list [-v] [-o format]",
+                "List all active client sessions (slots 1..=32)",
+            ),
+            (
+                "info <slot> [-f field] [-v] [-o format]",
+                "Show detailed session state or extract a specific field",
+            ),
+        ],
+        examples: &[
+            "grs sessions list",
+            "grs sess list",
+            "grs sessions info 1",
+            "grs sess info 1 -f lang",
+            "grs sess info 1 -v",
+        ],
+    },
+    CommandSpec {
+        name: "cvars",
+        aliases: &["cv"],
+        category: "sys:runtime",
+        summary: "Inspect and query engine console variables (cvars) and runtime overrides",
+        usage: "grs cvars <list|info> [OPTIONS] [QUERY]",
+        options: &[
+            (
+                "list [pattern] [--diff/-d] [-o format]",
+                "List engine cvars, optionally filtered or showing modified values only",
+            ),
+            (
+                "info <name> [-f field] [-v] [-o format]",
+                "Inspect detailed cvar information or extract a specific field",
+            ),
+        ],
+        examples: &[
+            "grs cvars list",
+            "grs cv list mp_ --diff",
+            "grs cvars info sv_gravity",
+            "grs cv info sv_gravity -f value",
+        ],
+    },
+    CommandSpec {
         name: "watchers",
-        aliases: &["watch", "w"],
+        aliases: &["w"],
         category: "watcher:fs",
         summary: "Inspect and control filesystem watchers",
         usage: "grs watchers <list|pause|resume> [OPTIONS]",
@@ -94,16 +145,16 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "cmd",
-        aliases: &["exec", "c"],
+        aliases: &["c"],
         category: "exec:dispatch",
         summary: "Execute a plugin command directly through the host dispatcher",
         usage: "grs cmd <command_name> [args...]",
         options: &[],
-        examples: &["grs cmd vip_add 1", "grs cmd test_cvar sv_gravity 600"],
+        examples: &["grs cmd vip_add 1", "grs c kick 1"],
     },
     CommandSpec {
         name: "extensions",
-        aliases: &["ext", "e"],
+        aliases: &["ext"],
         category: "sys:runtime",
         summary: "Inspect registered engine extensions (ReAPI, Metamod, Standalone, etc.)",
         usage: "grs extensions [list|info <name>]",
@@ -118,7 +169,7 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "hardware",
-        aliases: &["hw", "sysinfo"],
+        aliases: &["hw"],
         category: "sys:runtime",
         summary: "Display host hardware telemetry, CPU/RAM usage, and engine tickrate stability",
         usage: "grs hardware [--json]",
@@ -127,7 +178,7 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "status",
-        aliases: &["stat", "st", "s"],
+        aliases: &["st"],
         category: "sys:runtime",
         summary: "Show host runtime stats (active plugins, hot-reload watchers, engine)",
         usage: "grs status",
@@ -136,7 +187,7 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "version",
-        aliases: &["ver", "v"],
+        aliases: &["ver"],
         category: "sys:runtime",
         summary: "Show host runtime and GoldSrc.rs engine version info",
         usage: "grs version",
@@ -153,8 +204,8 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         examples: &[
             "grs help",
             "grs help plugins",
-            "grs help plugin",
-            "grs help watcher",
+            "grs help sessions",
+            "grs help cvars",
         ],
     },
 ];
@@ -167,7 +218,10 @@ pub const BUILTIN_CATEGORIES: &[(&str, &str)] = &[
     ),
     ("watcher:fs", "Filesystem watchers & hot-reload controls"),
     ("exec:dispatch", "Direct command execution & dispatch"),
-    ("sys:runtime", "Engine runtime status & system telemetry"),
+    (
+        "sys:runtime",
+        "Engine runtime status, sessions, cvars & telemetry",
+    ),
     ("sys:help", "Interactive help & introspection system"),
 ];
 

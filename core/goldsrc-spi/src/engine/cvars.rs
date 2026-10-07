@@ -1,6 +1,6 @@
 //! Engine console variables (cvar) operations.
 
-use goldsrc_api::cvar::CvarEngine;
+pub use crate::cvar::{CvarEngine, CvarFlags};
 
 /// Console variable operations extending the base [`CvarEngine`] capability.
 pub trait EngineCvars: CvarEngine + Send + Sync {}

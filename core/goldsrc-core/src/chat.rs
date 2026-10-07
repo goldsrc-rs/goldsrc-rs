@@ -101,6 +101,18 @@ pub fn process_chat_message_with_manager(
 ) -> bool {
     let mut msg = ChatMessage::new(sender, raw_text, scope);
 
+    // 0. Enforce native moderation mute state
+    if crate::moderation::is_player_muted(sender.index()) {
+        if let Some(engine) = crate::host::HostRuntime::engine() {
+            engine.client_print(
+                sender.index(),
+                goldsrc_api::HUD_PRINTCHAT,
+                "[Moderation] You are muted and cannot send chat messages.\n",
+            );
+        }
+        return true;
+    }
+
     // 1. Run native host middleware pipeline (censorship, ranks, custom prefixes)
     let pipeline = match CHAT_PIPELINE.read() {
         Ok(p) => p,

@@ -1,0 +1,15 @@
+[bundle]
+name = "gameplay"
+version = "0.19.0"
+description = "GoldSrc Gameplay & Player Suite (Privileges + Chat Director + Map Manager)"
+author = "GoldSrc.rs Team"
+
+[components.privileges]
+role = "feature"
+path = "privileges.wasm"
+priority = 50
+description = "VIP perks, round equipment delivery, chat prefixes, and slot reservation"
+
+[permissions]
+shared_buckets = ["gameplay/shared", "gameplay/privileges"]
+allowed_cvars = ["grs_vip_*", "grs_priv_*"]

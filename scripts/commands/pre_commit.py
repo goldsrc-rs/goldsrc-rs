@@ -72,11 +72,15 @@ def main(argv=None):
         "check",
         "--target",
         "wasm32-unknown-unknown",
-        "-p", "admin_system",
+        "-p", "moderation",
+        "-p", "administration",
+        "-p", "privileges",
+        "-p", "menu_frontend",
+        "-p", "chat_director",
+        "-p", "map_manager",
         "-p", "test_hud",
         "-p", "test_menu",
         "-p", "test_ecs",
-        "-p", "vip_core",
     ]
     wasm_res = subprocess.run(wasm_cmd, cwd=repo_root, text=True, env=env)
     if wasm_res.returncode != 0:

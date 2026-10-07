@@ -64,6 +64,12 @@ pub fn lifecycle(_attr: TokenStream, _item: TokenStream) -> TokenStream {
     marker_outside_plugin("lifecycle")
 }
 
+/// Helper attribute for declaring command prefix (`#[command_prefix("grs_")]`).
+#[proc_macro_attribute]
+pub fn command_prefix(_attr: TokenStream, _item: TokenStream) -> TokenStream {
+    marker_outside_plugin("command_prefix")
+}
+
 /// Marker attribute for the plugin's `on_load` lifecycle hook.
 #[proc_macro_attribute]
 pub fn on_load(_attr: TokenStream, _item: TokenStream) -> TokenStream {
@@ -114,7 +120,7 @@ pub fn placeholder(_attr: TokenStream, _item: TokenStream) -> TokenStream {
 
 /// Derives the [`ConfigModel`] trait for a struct, providing automatic TOML serialization,
 /// CVAR schema generation, engine registration, and bidirectional synchronization.
-#[proc_macro_derive(ConfigModel, attributes(cvar))]
+#[proc_macro_derive(ConfigModel, attributes(cvar, config, setting))]
 pub fn derive_config_model(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::DeriveInput);
     match crate::config::expand_derive_config_model(input) {

@@ -16,6 +16,16 @@ impl Health {
         Self { current, max }
     }
 
+    /// Creates a validated `Health` value ensuring finite floats and strictly positive max.
+    #[inline]
+    pub fn try_new(current: f32, max: f32) -> Option<Self> {
+        if current.is_finite() && max.is_finite() && max > 0.0 {
+            Some(Self { current, max })
+        } else {
+            None
+        }
+    }
+
     /// Creates a full `Health` instance where `current == max`.
     #[inline]
     pub const fn full(max: f32) -> Self {
@@ -148,16 +158,18 @@ impl PartialOrd<Health> for f32 {
 impl std::ops::Add<f32> for Health {
     type Output = Self;
     #[inline]
-    fn add(self, rhs: f32) -> Self::Output {
-        Self::new(self.current + rhs, self.max)
+    fn add(mut self, rhs: f32) -> Self::Output {
+        self.heal(rhs);
+        self
     }
 }
 
 impl std::ops::Sub<f32> for Health {
     type Output = Self;
     #[inline]
-    fn sub(self, rhs: f32) -> Self::Output {
-        Self::new(self.current - rhs, self.max)
+    fn sub(mut self, rhs: f32) -> Self::Output {
+        self.damage(rhs);
+        self
     }
 }
 

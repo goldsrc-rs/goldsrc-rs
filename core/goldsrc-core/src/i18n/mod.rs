@@ -683,4 +683,56 @@ mod tests {
         // 5. Test server_lang()
         assert_eq!(I18nService::server_lang(), "en");
     }
+
+    #[test]
+    fn test_hierarchical_subsections_flattening_for_cvars_and_errors() {
+        let _lock = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let toml_content = r#"
+            [translations.ru]
+            tag = "[Модерация]"
+
+            [translations.ru.errors]
+            player_not_found = "Игрок не найден или отключился."
+            permission_denied = "У вас нет прав."
+
+            [translations.ru.cvars]
+            default_ban_mins = "Длительность бана по умолчанию."
+            notify_chat = "Оповещать ли чат."
+
+            [translations.ru.menus]
+            title = "Панель управления"
+
+            [translations.en.errors]
+            player_not_found = "Player not found or disconnected."
+
+            [translations.en.cvars]
+            default_ban_mins = "Default ban duration in minutes."
+        "#;
+
+        I18nService::clear();
+        let count = I18nService::load_toml_string("hierarchy_test", toml_content).unwrap();
+        assert_eq!(count, 8);
+
+        assert_eq!(tr!("hierarchy_test", "ru", "tag"), "[Модерация]");
+        assert_eq!(
+            tr!("hierarchy_test", "ru", "errors.player_not_found"),
+            "Игрок не найден или отключился."
+        );
+        assert_eq!(
+            tr!("hierarchy_test", "ru", "cvars.default_ban_mins"),
+            "Длительность бана по умолчанию."
+        );
+        assert_eq!(
+            tr!("hierarchy_test", "ru", "menus.title"),
+            "Панель управления"
+        );
+        assert_eq!(
+            tr!("hierarchy_test", "en", "errors.player_not_found"),
+            "Player not found or disconnected."
+        );
+        assert_eq!(
+            tr!("hierarchy_test", "en", "cvars.default_ban_mins"),
+            "Default ban duration in minutes."
+        );
+    }
 }

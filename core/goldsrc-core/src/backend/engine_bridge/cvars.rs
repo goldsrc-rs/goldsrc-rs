@@ -9,10 +9,93 @@ use std::sync::{LazyLock, Mutex};
 pub type MapNameResolverFn = fn() -> Option<String>;
 
 static MAP_NAME_RESOLVER_FN: std::sync::OnceLock<MapNameResolverFn> = std::sync::OnceLock::new();
+static REGISTERED_CVARS: LazyLock<Mutex<HashMap<String, RegisteredCvar>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Sets a backend-specific resolver for querying the active map name.
 pub fn set_map_name_resolver(resolver: MapNameResolverFn) {
     let _ = MAP_NAME_RESOLVER_FN.set(resolver);
+}
+
+/// Detailed introspection metadata for a console variable.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CvarInfo {
+    pub name: String,
+    pub default_value: String,
+    pub current_value: String,
+    pub current_float: f32,
+    pub flags: i32,
+}
+
+impl CvarInfo {
+    /// Returns `true` if current value differs from default value.
+    pub fn is_modified(&self) -> bool {
+        self.current_value != self.default_value
+    }
+}
+
+/// Retrieves introspection metadata for all registered host cvars.
+pub fn get_registered_cvars() -> Vec<CvarInfo> {
+    let registry = match REGISTERED_CVARS.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    let mut list = Vec::new();
+    for (name, item) in registry.iter() {
+        let cur_str = unsafe {
+            goldsrc_sys::ffi::cstr_to_string_bounded(item.cvar.string, 256)
+                .unwrap_or_else(|| item.default_str.to_string_lossy().into_owned())
+        };
+        list.push(CvarInfo {
+            name: name.clone(),
+            default_value: item.default_str.to_string_lossy().into_owned(),
+            current_value: cur_str,
+            current_float: item.cvar.value,
+            flags: item.cvar.flags,
+        });
+    }
+
+    list.sort_by(|a, b| a.name.cmp(&b.name));
+    list
+}
+
+/// Queries introspection metadata for a single cvar by name.
+pub fn query_cvar_info(name: &str) -> Option<CvarInfo> {
+    let registry = match REGISTERED_CVARS.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    if let Some(item) = registry.get(name) {
+        let cur_str = unsafe {
+            goldsrc_sys::ffi::cstr_to_string_bounded(item.cvar.string, 256)
+                .unwrap_or_else(|| item.default_str.to_string_lossy().into_owned())
+        };
+        return Some(CvarInfo {
+            name: name.to_string(),
+            default_value: item.default_str.to_string_lossy().into_owned(),
+            current_value: cur_str,
+            current_float: item.cvar.value,
+            flags: item.cvar.flags,
+        });
+    }
+
+    // Try engine query if running with active engine
+    if let Some(engine) = crate::host::HostRuntime::engine()
+        && let Some(cur_val) = engine.cvar_get_string(name)
+    {
+        let cur_float = engine.cvar_get_float(name);
+        return Some(CvarInfo {
+            name: name.to_string(),
+            default_value: String::new(),
+            current_value: cur_val,
+            current_float: cur_float,
+            flags: 0,
+        });
+    }
+
+    None
 }
 
 impl CvarEngine for EngineBackend {
@@ -78,9 +161,6 @@ impl CvarEngine for EngineBackend {
         default_value: &str,
         flags: goldsrc_api::cvar::CvarFlags,
     ) -> bool {
-        static REGISTERED_CVARS: LazyLock<Mutex<HashMap<String, RegisteredCvar>>> =
-            LazyLock::new(|| Mutex::new(HashMap::new()));
-
         let mut registry = match REGISTERED_CVARS.lock() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
@@ -119,9 +199,9 @@ impl CvarEngine for EngineBackend {
         registry.insert(
             name.to_string(),
             RegisteredCvar {
-                _cvar: cvar_box,
+                cvar: cvar_box,
                 _name: cname,
-                _string: cval,
+                default_str: cval,
             },
         );
 
@@ -130,9 +210,9 @@ impl CvarEngine for EngineBackend {
 }
 
 struct RegisteredCvar {
-    _cvar: Box<goldsrc_sys::cvar_t>,
+    cvar: Box<goldsrc_sys::cvar_t>,
     _name: std::ffi::CString,
-    _string: std::ffi::CString,
+    default_str: std::ffi::CString,
 }
 
 // SAFETY: Heap buffers in Box and CStrings are kept permanently alive and unmoved.

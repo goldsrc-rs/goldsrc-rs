@@ -8,4 +8,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-goldsrc-api = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]

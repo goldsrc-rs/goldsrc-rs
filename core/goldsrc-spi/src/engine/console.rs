@@ -10,4 +10,7 @@ pub trait EngineConsole: Send + Sync {
 
     /// Executes a server command string in the engine command buffer.
     fn server_command(&self, command: &str);
+
+    /// Sends an engine command for client-side evaluation (pfnClientCommand).
+    fn client_command(&self, _client_index: i32, _command: &str) {}
 }

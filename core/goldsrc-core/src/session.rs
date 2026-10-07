@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-pub use goldsrc_api::client::PlayerSessionToken;
+pub use goldsrc_spi::identity::PlayerSessionToken;
 
 /// Ephemeral session state for a connected client slot (1..=32).
 #[derive(Debug, Clone)]
@@ -92,11 +92,31 @@ impl ClientSessionManager {
         self.sessions.get(&slot)
     }
 
+    /// Returns an ordered list of all active client sessions by slot index.
+    pub fn active_sessions(&self) -> Vec<&ClientSession> {
+        let mut list: Vec<&ClientSession> = self.sessions.values().collect();
+        list.sort_by_key(|s| s.slot);
+        list
+    }
+
+    /// Returns the number of active client sessions.
+    pub fn len(&self) -> usize {
+        self.sessions.len()
+    }
+
+    /// Returns `true` if there are no active client sessions.
+    pub fn is_empty(&self) -> bool {
+        self.sessions.is_empty()
+    }
+
     /// Verifies if a given generational token is still valid.
     pub fn is_token_valid(&self, token: PlayerSessionToken) -> bool {
         self.sessions
             .get(&token.slot)
-            .map(|sess| sess.generation == token.generation)
+            .map(|sess| {
+                sess.generation == token.generation
+                    && (token.user_id == 0 || sess.user_id == 0 || sess.user_id == token.user_id)
+            })
             .unwrap_or(false)
     }
 
@@ -179,5 +199,9 @@ mod tests {
         // Bob's token is valid, but Alice's token is now completely invalid!
         assert!(mgr.is_token_valid(bob_token));
         assert!(!mgr.is_token_valid(alice_token));
+
+        // Mismatched user_id with same slot & generation is also rejected
+        let spoofed_bob = PlayerSessionToken::new(1, 2, 9999);
+        assert!(!mgr.is_token_valid(spoofed_bob));
     }
 }

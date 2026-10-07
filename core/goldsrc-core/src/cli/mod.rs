@@ -156,23 +156,35 @@ mod tests {
     fn test_find_command_spec() {
         assert!(find_command_spec("plugins").is_some());
         assert!(find_command_spec("pl").is_some());
-        assert!(find_command_spec("p").is_some());
+        assert!(find_command_spec("p").is_none());
         assert!(find_command_spec("ps").is_none());
         assert!(find_command_spec("rld").is_none());
         assert!(find_command_spec("reload").is_none());
+        assert!(find_command_spec("sessions").is_some());
+        assert!(find_command_spec("sess").is_some());
+        assert!(find_command_spec("cvars").is_some());
+        assert!(find_command_spec("cv").is_some());
         assert!(find_command_spec("watchers").is_some());
-        assert!(find_command_spec("watch").is_some());
+        assert!(find_command_spec("watch").is_none());
         assert!(find_command_spec("w").is_some());
         assert!(find_command_spec("cmd").is_some());
-        assert!(find_command_spec("exec").is_some());
         assert!(find_command_spec("c").is_some());
+        assert!(find_command_spec("exec").is_none());
         assert!(find_command_spec("status").is_some());
         assert!(find_command_spec("st").is_some());
-        assert!(find_command_spec("s").is_some());
+        assert!(find_command_spec("s").is_none());
+        assert!(find_command_spec("stat").is_none());
         assert!(find_command_spec("version").is_some());
         assert!(find_command_spec("ver").is_some());
-        assert!(find_command_spec("v").is_some());
+        assert!(find_command_spec("v").is_none());
+        assert!(find_command_spec("hardware").is_some());
+        assert!(find_command_spec("hw").is_some());
+        assert!(find_command_spec("sysinfo").is_none());
+        assert!(find_command_spec("extensions").is_some());
+        assert!(find_command_spec("ext").is_some());
+        assert!(find_command_spec("e").is_none());
         assert!(find_command_spec("help").is_some());
+        assert!(find_command_spec("?").is_some());
         assert!(find_command_spec("nonexistent").is_none());
         assert!(find_command_spec("foobar_xyz").is_none());
     }
@@ -345,5 +357,29 @@ mod tests {
         assert!(out_hw_json.contains("\"cpu\""));
         assert!(out_hw_json.contains("\"memory\""));
         assert!(out_hw_json.contains("\"performance\""));
+
+        // Test `grs sessions list` & `grs sess list`
+        let mut out_sess = String::new();
+        let args_sess = vec![
+            OsString::from("grs"),
+            OsString::from("sess"),
+            OsString::from("list"),
+        ];
+        dispatch_host_command(args_sess, None, ("0.10.0", "abc", "x86"), |s| {
+            out_sess.push_str(s);
+        });
+        assert!(out_sess.contains("Active Client Sessions"));
+
+        // Test `grs cvars list` & `grs cv list`
+        let mut out_cv = String::new();
+        let args_cv = vec![
+            OsString::from("grs"),
+            OsString::from("cv"),
+            OsString::from("list"),
+        ];
+        dispatch_host_command(args_cv, None, ("0.10.0", "abc", "x86"), |s| {
+            out_cv.push_str(s);
+        });
+        assert!(out_cv.contains("Host Console Variables"));
     }
 }

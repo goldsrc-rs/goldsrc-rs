@@ -274,7 +274,18 @@ impl HostRuntime {
 
         goldsrc_api::client::player::set_player_resolver_hook(|index| {
             if let Some(engine) = HostRuntime::engine() {
-                engine.player_handle(index)
+                if engine.player_is_valid(index) {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        Some(goldsrc_api::Player::from_index(index))
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        Some(goldsrc_api::Player::new(index))
+                    }
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -421,62 +432,42 @@ impl HostRuntime {
 
         // 3. Initialize watcher service and register default watchers
         let mut watcher_service = crate::watcher::WatcherService::new();
+        let mut registered_watchers = Vec::new();
 
         let existing_plugin_dir = crate::paths::PathResolver::existing_plugin_dir(backend);
-        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec::directory(
+        if let Ok(()) = watcher_service.register(crate::watcher::WatcherSpec::directory(
             "core:plugins",
             &existing_plugin_dir,
             crate::watcher::WatcherFilter::Extension("wasm"),
             true,
         )) {
-            log::warn!(
-                target: log_targets::CORE,
-                "Failed to register plugin watcher on \"{}\": {e}",
-                PathResolver::normalize(&existing_plugin_dir)
-            );
-        } else {
-            log::info!(
-                target: log_targets::CORE,
-                "Watcher registered: 'core:plugins' on \"{}\"",
-                PathResolver::normalize(&existing_plugin_dir)
-            );
+            registered_watchers.push("core:plugins");
         }
 
         let config_dir = crate::paths::PathResolver::existing_config_dir(backend);
         let plugins_config_path = config_dir.join("plugins.toml");
-        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec::file(
+        if let Ok(()) = watcher_service.register(crate::watcher::WatcherSpec::file(
             "core:configs",
             &plugins_config_path,
         )) {
-            log::warn!(
-                target: log_targets::CORE,
-                "Failed to register config watcher on \"{}\": {e}",
-                PathResolver::normalize(&plugins_config_path)
-            );
-        } else {
-            log::info!(
-                target: log_targets::CORE,
-                "Watcher registered: 'core:configs' on \"{}\"",
-                PathResolver::normalize(&plugins_config_path)
-            );
+            registered_watchers.push("core:configs");
         }
 
-        if let Err(e) = watcher_service.register(crate::watcher::WatcherSpec::directory(
+        if let Ok(()) = watcher_service.register(crate::watcher::WatcherSpec::directory(
             "i18n:dicts",
             &lang_dir,
             crate::watcher::WatcherFilter::Extension("toml"),
             true,
         )) {
-            log::warn!(
-                target: log_targets::CORE,
-                "Failed to register i18n watcher on \"{}\": {e}",
-                PathResolver::normalize(&lang_dir)
-            );
-        } else {
+            registered_watchers.push("i18n:dicts");
+        }
+
+        if !registered_watchers.is_empty() {
             log::info!(
                 target: log_targets::CORE,
-                "Watcher registered: 'i18n:dicts' on \"{}\"",
-                PathResolver::normalize(&lang_dir)
+                "Hot-reload watchers active ({}/3): [{}]",
+                registered_watchers.len(),
+                registered_watchers.join(", ")
             );
         }
 
@@ -568,30 +559,55 @@ impl HostRuntime {
             }
         };
 
-        // Load plugins based on plugins.toml activation status
+        // Load plugins based on plugins.toml activation status with consolidated batch report
+        let mut active_plugins = Vec::new();
+        let mut paused_plugins_list = Vec::new();
+        let mut failed_plugins = Vec::new();
+
         for (rel_name, path) in sorted_plugins {
             let is_enabled = plugins_config.is_plugin_enabled(&rel_name);
             match manager.load_plugin(&path) {
                 Ok(plugin_name) => {
-                    log::info!(
-                        target: log_targets::WASM,
-                        "Loaded plugin '{}' from \"{}\"",
-                        rel_name,
-                        PathResolver::normalize(&path)
-                    );
                     if !is_enabled {
                         let _ = manager.pause_plugin(&plugin_name, true);
+                        paused_plugins_list.push(rel_name);
+                    } else {
+                        active_plugins.push(rel_name);
                     }
                 }
                 Err(e) => {
-                    log::error!(
-                        target: log_targets::WASM,
-                        "Failed to load plugin '{}' (\"{}\"): {e}",
-                        rel_name,
-                        PathResolver::normalize(&path)
-                    );
+                    failed_plugins.push((rel_name, e.to_string()));
                 }
             }
+        }
+
+        let total = active_plugins.len() + paused_plugins_list.len() + failed_plugins.len();
+        log::info!(
+            target: log_targets::WASM,
+            "Plugins startup summary: {total} total ({active} active, {paused} paused, {failed} failed)",
+            active = active_plugins.len(),
+            paused = paused_plugins_list.len(),
+            failed = failed_plugins.len(),
+        );
+        if !active_plugins.is_empty() {
+            log::info!(
+                target: log_targets::WASM,
+                "  Active plugins: [{}]",
+                active_plugins.join(", ")
+            );
+        }
+        if !paused_plugins_list.is_empty() {
+            log::info!(
+                target: log_targets::WASM,
+                "  Paused plugins: [{}]",
+                paused_plugins_list.join(", ")
+            );
+        }
+        for (name, err) in failed_plugins {
+            log::error!(
+                target: log_targets::WASM,
+                "  Failed to load '{name}': {err}"
+            );
         }
 
         let paused_plugins = std::collections::HashMap::new();
@@ -616,6 +632,9 @@ impl HostRuntime {
 
         // Evaluate initial rules (e.g. initial pause/cvar states) across all scopes
         Self::evaluate_rules("", 0);
+
+        // Register default moderation command executors (kick, mute, ban)
+        crate::moderation::register_moderation_commands();
 
         Ok(())
     }
@@ -814,6 +833,20 @@ impl HostRuntime {
                         &current_map,
                         player_count,
                     );
+
+                    // Native ban enforcement check
+                    if let Some(engine) = Self::engine() {
+                        let auth = engine.player_auth_id(slot).unwrap_or_default();
+                        let ip = engine.player_ip(slot).unwrap_or_default();
+                        let ban = crate::moderation::is_identity_banned(&auth)
+                            .or_else(|| crate::moderation::is_identity_banned(&ip));
+                        if let Some(b) = ban {
+                            crate::moderation::drop_client(
+                                slot,
+                                &format!("You are banned: {}", b.reason),
+                            );
+                        }
+                    }
                 }
                 PlayerEvent::Disconnect => {
                     // 1. Session cleanup
@@ -937,17 +970,34 @@ impl HostRuntime {
             results
         };
 
-        for (rule_name, res) in results {
-            match res {
-                Ok(_) => {
-                    log::info!(target: log_targets::RULES, "Executed reactive rule '{}'", rule_name)
-                }
-                Err(errors) => log::warn!(
+        if !results.is_empty() {
+            let executed: Vec<&str> = results
+                .iter()
+                .filter(|(_, res)| res.is_ok())
+                .map(|(name, _)| name.as_str())
+                .collect();
+            let failed: Vec<(&str, &[String])> = results
+                .iter()
+                .filter_map(|(name, res)| match res {
+                    Err(errs) => Some((name.as_str(), errs.as_slice())),
+                    Ok(_) => None,
+                })
+                .collect();
+
+            if !executed.is_empty() {
+                log::info!(
                     target: log_targets::RULES,
-                    "Failed to execute rule '{}': {:?}",
-                    rule_name,
-                    errors
-                ),
+                    "Reactive rules evaluated ({}/{} applied): [{}]",
+                    executed.len(),
+                    results.len(),
+                    executed.join(", ")
+                );
+            }
+            for (rule_name, errors) in failed {
+                log::warn!(
+                    target: log_targets::RULES,
+                    "Failed to execute rule '{rule_name}': {errors:?}"
+                );
             }
         }
     }

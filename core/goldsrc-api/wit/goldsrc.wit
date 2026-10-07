@@ -70,6 +70,32 @@ interface api {
     /// Sets a player's armor value.
     host-player-set-armorvalue: func(index: s32, armor: f32);
 
+    /// Retrieves a player's SteamID / AuthID string (e.g. "STEAM_0:1:12345678").
+    host-player-auth-id: func(index: s32) -> option<string>;
+
+    /// Retrieves a player's IP address string without port (e.g. "192.168.1.100").
+    host-player-ip: func(index: s32) -> option<string>;
+
+    /// Retrieves a player's server-assigned UserID integer.
+    host-player-user-id: func(index: s32) -> s32;
+
+    /// Sets player voice listening permission (muting/unmuting receiver from hearing sender).
+    host-player-set-listening: func(receiver: s32, sender: s32, listen: bool) -> bool;
+
+    /// Sets a player's max movement speed (e.g. 0.0 to freeze, 250.0 standard).
+    host-player-set-maxspeed: func(index: s32, speed: f32);
+
+    /// --- Engine Console & Command Execution API ---
+
+    /// Enqueues command string into server console buffer (pfnServerCommand).
+    host-server-command: func(command: string);
+
+    /// Sends an engine command for client-side evaluation (pfnClientCommand).
+    host-client-command: func(player-index: s32, command: string);
+
+    /// Applies a declarative game mode or match preset atomically (Infrastructure as Code).
+    host-config-exec: func(preset-path: string) -> result<bool, string>;
+
     /// --- Cvar API ---
 
     /// Gets a console variable value as a float.

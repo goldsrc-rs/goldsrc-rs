@@ -43,6 +43,7 @@ pub fn parse_plugin_and_helpers(
         license: cargo_license,
         bundle: None,
         role: None,
+        command_prefix: String::new(),
         requires: Vec::new(),
         permissions: Vec::new(),
         load_time: "anytime".to_string(),
@@ -111,6 +112,12 @@ pub fn parse_plugin_and_helpers(
                     }
                     Ok(())
                 });
+            }
+            false
+        } else if attr.path().is_ident("command_prefix") || attr.path().is_ident("commands_prefix")
+        {
+            if let Ok(Lit::Str(s)) = attr.parse_args::<Lit>() {
+                out.command_prefix = s.value();
             }
             false
         } else if attr.path().is_ident("requires") {
@@ -301,6 +308,8 @@ fn apply_kv_meta(
             ));
         }
         out.role = Some(lower);
+    } else if ident == "command_prefix" || ident == "commands_prefix" {
+        out.command_prefix = value;
     } else {
         return Err(syn::Error::new_spanned(
             &nv.path,

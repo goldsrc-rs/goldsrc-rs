@@ -78,35 +78,39 @@ mod imp {
         spew_type: i32,
         msg: *const std::os::raw::c_char,
     ) -> i32 {
-        if !msg.is_null() {
-            let cstr = unsafe { std::ffi::CStr::from_ptr(msg) };
-            let bytes = cstr.to_bytes();
-            let is_shutdown_noise = bytes
-                .windows(b"Illegal termination of worker thread".len())
-                .any(|w| w == b"Illegal termination of worker thread")
-                || bytes
-                    .windows(b"CWorkThreadPool".len())
-                    .any(|w| w == b"CWorkThreadPool")
-                || (bytes
-                    .windows(b"Assertion Failed".len())
-                    .any(|w| w == b"Assertion Failed")
-                    && bytes
-                        .windows(b"threadtools.cpp".len())
-                        .any(|w| w == b"threadtools.cpp"));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if !msg.is_null() {
+                let cstr = unsafe { std::ffi::CStr::from_ptr(msg) };
+                let bytes = cstr.to_bytes();
+                let is_shutdown_noise = bytes
+                    .windows(b"Illegal termination of worker thread".len())
+                    .any(|w| w == b"Illegal termination of worker thread")
+                    || bytes
+                        .windows(b"CWorkThreadPool".len())
+                        .any(|w| w == b"CWorkThreadPool")
+                    || (bytes
+                        .windows(b"Assertion Failed".len())
+                        .any(|w| w == b"Assertion Failed")
+                        && bytes
+                            .windows(b"threadtools.cpp".len())
+                            .any(|w| w == b"threadtools.cpp"));
 
-            if is_shutdown_noise {
-                // SPEW_CONTINUE (1): suppress output and prevent debugger break / assertion failure
-                return 1;
+                if is_shutdown_noise {
+                    // SPEW_CONTINUE (1): suppress output and prevent debugger break / assertion failure
+                    return 1;
+                }
             }
-        }
 
-        let orig_ptr = ORIG_SPEW_FUNC.load(Ordering::Relaxed);
-        if !orig_ptr.is_null() {
-            let orig_fn: SpewOutputFuncFn = unsafe { std::mem::transmute(orig_ptr) };
-            return unsafe { orig_fn(spew_type, msg) };
-        }
+            let orig_ptr = ORIG_SPEW_FUNC.load(Ordering::Relaxed);
+            if !orig_ptr.is_null() {
+                let orig_fn: SpewOutputFuncFn = unsafe { std::mem::transmute(orig_ptr) };
+                return unsafe { orig_fn(spew_type, msg) };
+            }
 
-        1
+            1
+        }));
+
+        result.unwrap_or(1)
     }
 
     /// Patch function entry point with `mov al, 1; ret` (3 bytes: 0xB0, 0x01, 0xC3).
