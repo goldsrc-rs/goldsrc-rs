@@ -6,7 +6,7 @@ Welcome to the architectural specification for **GoldSrc.rs** — a modern, modu
 
 ## 1. System Overview
 
-GoldSrc.rs bridges the legacy GoldSrc C/C++ engine environment (HLDS, ReHLDS) with modern Rust systems engineering and isolated WebAssembly (WASM) guest plugins.
+GoldSrc.rs bridges the legacy GoldSrc C/C++ engine environment (HLDS, ReHLDS) with modern Rust systems engineering, high-performance modular domain services, and isolated WebAssembly (WASM) guest plugins.
 
 ```mermaid
 flowchart TB
@@ -20,88 +20,207 @@ flowchart TB
         Metamod["goldsrc-backend-metamod\n(Metamod Plugin)"]
     end
 
-    subgraph Core ["Core Runtime Layer (goldsrc-core)"]
-        HostRuntime["HostRuntime (Root Container)"]
+    subgraph Extensions ["Extension Layer (C-ABI Bridges)"]
+        ExtMetamod["goldsrc-extension-metamod\n(meta_api.h hooks)"]
+        ExtReApi["goldsrc-extension-reapi\n(ReHLDS & ReGameDLL FFI)"]
+    end
+
+    subgraph Core ["Core Orchestrator (goldsrc-core)"]
+        HostRuntime["HostRuntime (Micro-Kernel Orchestrator)"]
         RuleOrch["RuleOrchestrator\n(Reactive Rules & Scopes)"]
-        NetDispatcher["NetworkMessageDispatcher\n(TextMsg / SayText)"]
         ConfigSvc["ConfigService & File Watchers"]
         I18nSvc["I18nService\n(Per-Player Localization)"]
         StorageEngine["SqliteStorageEngine\n(WAL Mode, MPSC Worker)"]
     end
 
-    subgraph HostWasm ["WASM Host Layer (goldsrc-host-wasm)"]
-        WasmEngine["Wasmtime Engine (Pulley32)"]
-        PluginMgr["PluginManager (Lifecycle FSM)"]
-        CmdRegistry["CommandRegistry & Aliases"]
-        EpochTimer["Epoch Interruption Worker"]
+    subgraph Services ["Modular Domain Services Layer (services/)"]
+        SvcPlaceholders["goldsrc-service-placeholders\n(Registry & String Interpolator)"]
+        SvcMenu["goldsrc-service-menu\n(Menu State Machine & Renderers)"]
+        SvcChat["goldsrc-service-chat\n(SMA Pipeline & Pluggable Triggers)"]
+        SvcModeration["goldsrc-service-moderation\n(Sanctions, Mute & Ban Managers)"]
+    end
+
+    subgraph Hosts ["Host Execution Layer (hosts/)"]
+        HostWasm["goldsrc-host-wasm\n(Wasmtime Component Model)"]
+        HostNative["goldsrc-host-native (Roadmap)\n(Zero-Overhead Native DLL Host)"]
     end
 
     subgraph GuestPlugins ["Guest Plugins Layer (WASM Components)"]
-        PluginA["vip_core.wasm (Service)"]
-        PluginB["test_hud.wasm (Gameplay)"]
-        PluginC["cstrike_vip_menu.wasm (Addon)"]
+        PluginA["moderation.wasm"]
+        PluginB["chat_director.wasm"]
+        PluginC["menu_frontend.wasm"]
     end
 
     EngineCore <-->|C-ABI FFI| Backends
     Backends <-->|Engine Bridge| HostRuntime
+    Backends -.->|Raw Hooks| Extensions
+    Extensions -->|Safe SPI Traits| HostRuntime
+
     HostRuntime --> RuleOrch
-    HostRuntime --> NetDispatcher
     HostRuntime --> ConfigSvc
     HostRuntime --> I18nSvc
     HostRuntime --> StorageEngine
-    HostRuntime <-->|WASM Component Model| PluginMgr
-    PluginMgr --> WasmEngine
-    PluginMgr --> CmdRegistry
-    EpochTimer -.->|Interrupt Epochs| WasmEngine
-    WasmEngine <-->|WIT Interfaces| GuestPlugins
+
+    HostRuntime --> SvcPlaceholders
+    HostRuntime --> SvcMenu
+    HostRuntime --> SvcChat
+    HostRuntime --> SvcModeration
+
+    SvcPlaceholders --> SvcChat
+    SvcChat --> SvcModeration
+
+    HostRuntime <-->|Component Model Sandbox| HostWasm
+    HostRuntime -.->|Native C-ABI Plugins| HostNative
+    HostWasm <-->|WIT Interfaces| GuestPlugins
 ```
 
 ---
 
 ## 2. Workspace & Crate Structure
 
-The repository is organized into distinct functional layers:
+The `goldsrc-runtime` repository houses the host engine, C-ABI backends, modular domain services, and execution hosts:
 
 ```text
-goldsrc-rs/
+goldsrc-runtime/
+├── backends/                                   # Engine ingestion & FFI lifecycle adapters
+│   ├── goldsrc-backend-metamod/                # Metamod C-ABI plugin adapter (meta_api.h)
+│   └── goldsrc-backend-standalone/             # Standalone proxy GameDLL adapter (GetEntityAPI2)
 ├── core/
-│   ├── goldsrc-api/                # Safe guest/host shared domain types, traits, DAG, ECS, and builders
-│   ├── goldsrc-spi/                # Host-side Service Provider Interfaces (pure engine & subsystem traits)
-│   ├── goldsrc-core/               # Host runtime, config, i18n, storage, logging, rule engine, FFI bridge
-│   └── goldsrc-sys/                # Low-level raw FFI bindings to GoldSrc/Metamod headers (unsafe)
-├── backends/
-│   ├── goldsrc-backend-metamod/    # Metamod C-ABI adapter (meta_api.h)
-│   └── goldsrc-backend-standalone/ # Proxy GameDLL adapter (GetEntityAPI2 / liblist.gam)
-├── hosts/
-│   └── goldsrc-host-wasm/          # Wasmtime runtime, Component Model bindings, epoch timer, plugin manager
-├── framework/
-│   ├── goldsrc/                    # Lightweight developer SDK for WASM guest plugins
-│   └── goldsrc-macros/             # Procedural macros (#[plugin], #[command], #[event], #[system])
-├── plugins/                        # Standard production plugins (admin_system, vip_core)
-├── examples/                       # Reference examples (test_chat, test_ecs, test_hud, test_i18n, test_menu)
-├── references/                     # C/C++ reference headers (HLSDK, Metamod, ReHLDS, ReGameDLL)
-├── resources/                      # Configuration templates, default localization files, gamedata
-└── scripts/                        # Modular Python toolchain (build, deploy, verify, analyze, setup)
+│   └── goldsrc-core/                           # Pure Micro-Kernel Orchestrator (HostRuntime, Storage, I18n, Rules)
+├── extensions/                                 # Low-level C/C++ ABI bridges to external engine/mod APIs
+│   ├── goldsrc-extension-metamod/              # Safe Rust abstraction over Metamod callbacks
+│   └── goldsrc-extension-reapi/                # Safe Rust bridge to ReHLDS and ReGameDLL C-ABIs
+├── hosts/                                      # Plugin execution runtimes
+│   └── goldsrc-host-wasm/                      # Wasmtime runtime, Component Model sandbox, Epoch timer
+├── services/                                   # Pure Rust high-level domain subsystems
+│   ├── goldsrc-service-placeholders/           # Universal placeholder registry & token interpolator
+│   ├── goldsrc-service-menu/                   # Interactive player menus, pagination, cooldowns, DHUD
+│   ├── goldsrc-service-chat/                   # SMA chat pipeline (stitch-rs), triggers, and target routing
+│   └── goldsrc-service-moderation/             # Native server sanctions (kick, mute, ban), MuteChatLayer
+├── resources/                                  # Default configuration templates and language dictionaries
+└── scripts/                                    # Toolchain & deployment automation scripts
 ```
+
+### External Ecosystem Repositories
+
+GoldSrc.rs enforces strict repository separation to eliminate monolithic build bloat and prevent circular dependencies:
+
+- **[`goldsrc-sdk`](https://github.com/goldsrc-rs/goldsrc-sdk)**: Pure guest SDK (`goldsrc-api`, procedural macros `goldsrc-macros`, SPI definitions `goldsrc-spi`, and raw FFI bindings `goldsrc-sys`). Contains zero runtime host dependencies.
+- **[`goldsrc-plugins-standard`](https://github.com/goldsrc-rs/goldsrc-plugins-standard)**: Standard canonical WASM plugins suite (`administration`, `chat_director`, `map_manager`, `menu_frontend`, `moderation`, `privileges`).
+- **[`goldsrc`](https://github.com/goldsrc-rs/goldsrc)**: Facade crate, developer CLI (`grs`), and architectural standards hub.
+- **[`goldsrc-template-plugin-rust`](https://github.com/goldsrc-rs/goldsrc-template-plugin-rust)**: Template repository for scaffolding new WASM plugins via `cargo generate`.
 
 ---
 
-## 3. System Taxonomy & Role Suffixes
+## 3. Strict Architectural Taxonomy: Extensions vs Services
+
+A critical architectural invariant in GoldSrc.rs is the strict separation between **Extensions** (`extensions/`) and **Services** (`services/`):
+
+| Dimension | **Extensions (`extensions/`)** | **Services (`services/`)** |
+| :--- | :--- | :--- |
+| **Architectural Scope** | **Low-level C/C++ ABI Adapter** | **Pure Rust Domain Subsystem** |
+| **Primary Responsibility** | Bridge foreign, unsafe engine and mod interfaces (Metamod, ReHLDS, ReGameDLL) into safe Rust traits. | Implement platform business and gameplay capabilities (chat pipelines, menus, moderation, placeholders). |
+| **Memory & Safety Boundary** | Crosses foreign C-ABI memory. Uses `unsafe` with audited `// SAFETY:` blocks, pointer checks, and panic barriers. | 100% Safe Rust. Never touches raw engine pointers directly. |
+| **Dependencies** | `goldsrc-spi`, `goldsrc-api`, foreign C headers (ReHLDS/Metamod). | `goldsrc-api`, `goldsrc-spi`, `stitch-rs`. **Zero C-ABI dependencies.** |
+| **Portability & Reuse** | Bound to specific native engine binaries (x86 Linux ELF / Windows DLL). | Fully portable: runs identically in WASM guests, Native Host, standalone CLI tools, or headless unit test suites. |
+| **Examples** | `goldsrc-extension-reapi`, `goldsrc-extension-metamod`. | `goldsrc-service-placeholders`, `goldsrc-service-menu`, `goldsrc-service-chat`, `goldsrc-service-moderation`. |
+
+> [!IMPORTANT]
+> **Boundary Rule:**  
+> A `Service` must **never** directly depend on an `Extension` or import foreign C headers. All interaction between Services and the engine occurs via runtime-neutral `goldsrc-api` handles or `goldsrc-spi` engine bridge traits.
+
+---
+
+## 4. The Sewing Machine Architecture (SMA / `stitch-rs`) in Services
+
+High-throughput systems (such as `goldsrc-service-chat`) adopt the **Sewing Machine Architecture (SMA)** pioneered by [stitch-rs](https://github.com/ulquiorracode/stitch-rs) to achieve zero allocations and microsecond execution on hot paths:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Engine as Engine / Client Say
+    participant SvcChat as goldsrc-service-chat
+    participant Layer1 as Layer 1: Censorship (on_enter)
+    participant Layer2 as Layer 2: MuteCheck (on_enter)
+    participant Core as Terminal Broadcast Handler
+    participant Layer2Exit as Layer 2: MuteCheck (on_exit)
+    participant Layer1Exit as Layer 1: Censorship (on_exit)
+
+    Engine->>SvcChat: process_chat_message(sender, raw_text, scope)
+    SvcChat->>Layer1: on_enter(&mut msg) -> FlowControl::Proceed
+    SvcChat->>Layer2: on_enter(&mut msg) -> FlowControl::Proceed
+    Note over SvcChat,Core: Descent Phase Completed (U-Cycle bottom)
+    SvcChat->>Core: Format text, split 180-byte chunks, broadcast
+    Note over SvcChat,Layer1Exit: Ascent Phase (U-Cycle return traversal)
+    SvcChat->>Layer2Exit: on_exit(&mut msg, &mut outcome)
+    SvcChat->>Layer1Exit: on_exit(&mut msg, &mut outcome)
+    SvcChat-->>Engine: Handled (true)
+```
+
+### SMA Core Principles
+
+1. **Strictly Bounded U-Cycle Traversal**:
+   Middleware layers execute in two explicit phases: descent (`on_enter`) and ascent (`on_exit`). Ascent only executes for layers that successfully descended.
+2. **Zero-Allocation Short-Circuiting**:
+   Flow control is governed by `FlowControl<P, S, H>`:
+   - `FlowControl::Proceed(())`: Continue descent to subsequent layers.
+   - `FlowControl::ShortCircuit(())`: Skip remaining descent layers, jump straight to terminal handler and ascent.
+   - `FlowControl::Halt(())`: Immediately abort execution (e.g. muted player or censored text), skipping the terminal handler.
+3. **Decoupled Triggers vs Commands**:
+   Chat messages containing commands (`/vip`, `!menu`, `rtv`) are intercepted by pluggable `ChatTrigger` handlers before entering the chat formatting pipeline, preventing command strings from leaking into public player chat.
+
+---
+
+## 5. Execution Hosts: WASM Sandbox vs Future Native Host
+
+GoldSrc.rs supports a multi-host architecture to balance absolute safety against maximum raw performance:
+
+```mermaid
+graph TD
+    classDef wasm fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef native fill:#742a2a,stroke:#9b2c2c,stroke-width:2px,color:#fff;
+    classDef api fill:#22543d,stroke:#2f855a,stroke-width:2px,color:#fff;
+
+    API["goldsrc-api (Runtime-Neutral Rust Contracts)"]:::api
+
+    HostWasm["hosts/goldsrc-host-wasm (Wasmtime Runtime)"]:::wasm
+    HostNative["hosts/goldsrc-host-native (Roadmap: Native DLLs)"]:::native
+
+    WasmPlugins["Community Plugins (WASM Components)\n- Isolated memory space\n- Epoch instruction limits\n- Memory corruption immune"]:::wasm
+    NativeModules["Performance-Critical Modules (C-ABI / Pure Rust)\n- Direct memory access\n- Zero call virtualization overhead\n- Target: goldsrc-ac (Anti-Cheat)"]:::native
+
+    API --> HostWasm
+    API --> HostNative
+
+    HostWasm --> WasmPlugins
+    HostNative --> NativeModules
+```
+
+### Why `goldsrc-api` is Runtime-Agnostic
+
+1. **Decoupling `.wit` from Guest SDK**:
+   The WebAssembly Component Model specification (`.wit`) is a transport and binding artifact for `goldsrc-host-wasm`, not an intrinsic requirement of the GoldSrc domain.
+2. **Path for Native Host (`goldsrc-ac`)**:
+   Modules like anti-cheats (`goldsrc-ac`) require direct process memory scanning, high-frequency tick hooks, and raw instruction inspection. Virtualizing these operations through WASM creates unacceptable latency. By keeping `goldsrc-api` pure Rust, the same API traits can execute either sandboxed in WASM or natively in high-performance DLL modules.
+
+---
+
+## 6. System Taxonomy & Role Suffixes
 
 To maintain architectural purity and prevent God Objects, GoldSrc.rs strictly enforces standard role suffixes across all crates and components:
 
 | Suffix | Responsibility | Architectural Invariants | Current / Target Examples |
 | :--- | :--- | :--- | :--- |
 | **`Engine`** | Low-level computational engine, execution driver, or external runtime platform. | Operates on raw bytecode, low-level OS/C-ABI, AST parsing, or DB connections. Agnostic of high-level gameplay rules. | `wasmtime::Engine`, `goldsrc_api::Engine` (C-ABI bridge), `SqliteStorageEngine`, `RuleEngine` (AST evaluator). |
-| **`Orchestrator`** | High-level workflow coordinator managing lifecycle, phase DAGs, and multi-system synchronization. | Does not execute low-level operations directly. Coordinates the execution order across multiple independent subsystems. | `RuleOrchestrator` (game triggers $\to$ AST evaluation $\to$ plugin/cvar toggles), `PluginOrchestrator` (discovery $\to$ Phased DAG $\to$ load order). |
-| **`Manager`** | State machine and lifecycle owner for a pool of homogeneous domain entities. | Owns collections (`Vec`, `HashMap`), executes state transitions (`Running`, `Paused`, `Unloaded`, `Blocked`), and performs CRUD. | `PluginManager` (owns `Vec<LoadedPlugin>` and Wasmtime stores), `MenuManager` (owns player menu sessions). |
+| **`Orchestrator`** | High-level workflow coordinator managing lifecycle, phase DAGs, and multi-system synchronization. | Does not execute low-level operations directly. Coordinates the execution order across multiple independent subsystems. | `RuleOrchestrator` (game triggers $\to$ AST evaluation $\to$ plugin/cvar toggles), `HostRuntime` (micro-kernel host coordinator). |
+| **`Manager`** | State machine and lifecycle owner for a pool of homogeneous domain entities. | Owns collections (`Vec`, `HashMap`), executes state transitions (`Running`, `Paused`, `Unloaded`, `Blocked`), and performs CRUD. | `PluginManager` (owns `Vec<LoadedPlugin>` and Wasmtime stores), `MenuSessionManager` (owns player menu sessions), `BanRegistry`. |
 | **`Registry`** | Passive or semi-passive catalog for lookups and symbol resolution. | Key-value or alias indexing. Does not own lifecycle or execute domain business logic. | `CommandRegistry` (command name/alias $\to$ owners), `PlaceholderRegistry` (tag $\to$ handler), `RuleRegistry` (predicate name $\to$ evaluator). |
 | **`Service`** | Self-contained domain capability provider. | Encapsulates specific domain logic behind a clean API. May maintain internal caches or worker threads. Pluggable implementations implement service traits. | `ConfigService` (TOML watching & reload events), `I18nService` (translation by player locale), `AuthService` (player capabilities). |
-| **`Dispatcher`** | Message/event router delivering payloads between producers and consumers. | Decouples senders from receivers. Routes 1-to-1 or 1-to-many. Does not hold persistent business state. | `EventDispatcher` (dispatches events to WASM plugins), `NetworkMessageDispatcher` (packs GoldSrc `TextMsg`/`SayText` network frames), `HookDispatcher`. |
+| **`Dispatcher`** | Message/event router delivering payloads between producers and consumers. | Decouples senders from receivers. Routes 1-to-1 or 1-to-many. Does not hold persistent business state. | `EventDispatcher` (dispatches events to WASM plugins), `NetworkMessageDispatcher` (packs GoldSrc `TextMsg`/`SayText` network frames). |
 | **`Router`** | Input argument parser and direct endpoint dispatcher. | Parses incoming raw command lines, text tokens, or network inputs and routes to matching handlers. | `CliRouter` (`dispatch_host_command`), `CommandRouter` (chat `/cmd` and console dispatch). |
 | **`Bridge`** | Technical adapter across foreign runtime or ABI boundaries. | Connects two fundamentally different environments (e.g. C/C++ FFI, WIT component interfaces, or OS-level bindings). | `ReApiBridge` (ReHLDS/ReGameDLL FFI), `MetamodBridge`, `EngineBridge`. |
 
-### 3.1 Entity Identity & Handle Taxonomy
+### 6.1 Entity Identity & Handle Taxonomy
 
 To guarantee impenetrable engine thread-safety, zero-cost abstractions, and eliminate Slot Recycling Hazards (e.g. background tasks resolving recycled slots), GoldSrc.rs strictly categorizes entity and client identifiers:
 
@@ -113,9 +232,9 @@ To guarantee impenetrable engine thread-safety, zero-cost abstractions, and elim
 
 ---
 
-## 4. Key Runtime Data Flows
+## 7. Key Runtime Data Flows
 
-### 4.1. Server Frame Ticking (`on_server_frame`)
+### 7.1. Server Frame Ticking (`on_server_frame`)
 
 ```mermaid
 sequenceDiagram
@@ -123,11 +242,13 @@ sequenceDiagram
     participant Backend as Backend (Standalone/Metamod)
     participant Host as HostRuntime
     participant Watcher as ConfigWatcher
+    participant MenuSvc as goldsrc-service-menu
     participant PluginMgr as PluginManager
     participant Guest as WASM Guest Plugins
 
     Engine->>Backend: StartFrame / DispatchThink
     Backend->>Host: HostRuntime::on_server_frame()
+    Host->>MenuSvc: tick_frame(current_time, engine) (auto-expire timed menus)
     Host->>PluginMgr: with_manager()
     PluginMgr->>Watcher: drain_watcher_events()
     Watcher-->>PluginMgr: changed_paths (.wasm, .toml)
@@ -136,39 +257,22 @@ sequenceDiagram
     Host->>Host: logging::flush()
 ```
 
-### 4.2. Command & Chat Ingestion Flow
+### 7.2. Command & Chat Ingestion Flow
 
 ```mermaid
 flowchart LR
     PlayerClient["Player Client\n(say /vip or console vipmenu)"] --> Backend
-    Backend --> Dispatcher["Command Dispatcher\n(dispatcher.rs)"]
-    Dispatcher --> CmdRegistry{"CommandRegistry\nLookup"}
-    CmdRegistry -- "Target Plugin Paused" --> Notice["CLI Notice:\nPlugin is PAUSED"]
-    CmdRegistry -- "Target Plugin Active" --> CheckCap{"Capability Check\n(admin.*, vip.*)"}
-    CheckCap -- "Denied" --> Denied["Access Denied"]
-    CheckCap -- "Allowed" --> Guest["WASM Plugin:\non_command(cmd, caller, args)"]
-    Guest -- "Handled (true)" --> Suppress["Suppress GameDLL\n(MRES_SUPERCEDE)"]
-    Guest -- "Unhandled (false)" --> Forward["Forward to GameDLL"]
-```
-
-### 4.3. Reactive Rule Orchestration Flow
-
-```mermaid
-flowchart TB
-    Trigger["Game Event Trigger\n(MapChange, PlayerConnect, CvarChange)"] --> ScopeFilter{"RuleScope Filter\n(Evaluate affected scope only)"}
-    ScopeFilter --> RuleOrch["RuleOrchestrator"]
-    RuleOrch --> CheckOverride{"Is Plugin in\nmanual_overrides?"}
-    CheckOverride -- "Yes (Admin Override)" --> Skip["Preserve Manual Admin State"]
-    CheckOverride -- "No (Dynamic)" --> ASTEval["RuleEngine AST Evaluation\n(when: map, players, time, cvar)"]
-    ASTEval --> EdgeDetect{"Edge Detected?\n(State changed from previous)"}
-    EdgeDetect -- "No Change" --> NoOp["No-Op (Suppress redundant execution)"]
-    EdgeDetect -- "State Transition" --> Actions["Execute Rule Actions\n(pause, unpause, set_cvar, group)"]
-    Actions --> UpdatePlugins["Update Plugin Status & Recalculate DAG"]
+    Backend --> Host["HostRuntime\n(dispatcher.rs)"]
+    Host --> ChatSvc["goldsrc-service-chat\n(evaluate_chat_triggers)"]
+    ChatSvc -- "Consumed by Trigger (/cmd)" --> DispatchCmd["PluginManager / Native Dispatcher"]
+    ChatSvc -- "Standard Chat" --> SMAPipeline["SMA ChatPipeline (Censorship, Ranks, Mute)"]
+    SMAPipeline -- "Muted / Censored" --> Suppress["Drop Message & Client Print"]
+    SMAPipeline -- "Approved" --> Broadcast["Broadcast Safe 180-byte Chunks"]
 ```
 
 ---
 
-## 5. Architectural Principles
+## 8. Architectural Principles
 
 1. **Zero Hardcoded Environment Paths**:
    All filesystem interactions must resolve paths dynamically through `PathResolver` relative to game directory (`cstrike/`, `valve/`) or localized `.goldsrc.local.toml`.
@@ -181,105 +285,5 @@ flowchart TB
    `goldsrc-core` and `goldsrc-api` contain zero game-specific assumptions (no CS 1.6 specific weapons, teams, or buyzone rules). Mod-specific features reside in dedicated extension crates (e.g. `goldsrc-game-cstrike`).
 5. **Defensive Resource Management & Narrow Lock Scopes**:
    Re-entrant mutex calls are actively guarded (`HostRuntime::with_manager`). Long operations (rule evaluation, file reading) drop locks before execution.
-
----
-
-## 6. State-Guarded Engine Boundary Architecture
-
-GoldSrc.rs enforces a mathematically coherent, type-safe boundary over the unsafe, mutable C-ABI memory of the GoldSrc/ReHLDS engine (`edict_t*`, `entvars_t*`). This architecture eliminates whole classes of server-crashing bugs (null pointer dereferences, accessing disconnected players, and order-dependent hook conflicts) via zero-cost compiler proofs.
-
-```mermaid
-graph TD
-    subgraph StateSpace ["1. State Space & Dimensions"]
-        Target["Domain Entity / Player Handle\n(Entity, Player)"]
-        Properties["Value Objects: Property&lt;Target&gt;\n(Health, Armor, Origin, Velocity)"]
-        Target -->|queries / mutates via CQS| Properties
-    end
-
-    subgraph Verification ["2. Compile-Time Invariants & Specifications"]
-        Markers["ZST Typestate Markers\n(Alive, Dead, Connected, InBuyZone)"]
-        Specs["Specifications: Spec&lt;Target&gt;\n(All&lt;(Alive, Connected)&gt;, Any&lt;...&gt;)"]
-        Refined["Witness Token: Refined&lt;'a, Target, S&gt;\n(Frame-scoped lifetime 'a)"]
-
-        Markers --> Specs
-        Properties -->|inspected by| Specs
-        Specs -->|proven via try_new| Refined
-        Target -->|borrowed by| Refined
-    end
-
-    subgraph ControlFlow ["3. Control Flow & Interceptor Pipeline"]
-        Pipeline["Interceptor Pipeline (Chain of Responsibility)\n(Validation / Cooldown / Audit / Execution)"]
-        Actions["Actions & State Transitions\n(DamageAction, BuyWeaponAction, Teleport)"]
-        Engine["Engine C-ABI Boundary\n(g_engfuncs.pfnSetOrigin, TakeDamage)"]
-
-        Pipeline -->|intercepts / authorizes / modifies| Actions
-        Refined -->|passed as required witness| Actions
-        Actions -->|applies final mutation via PropSet| Engine
-    end
-
-    style StateSpace fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff
-    style Verification fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#fff
-    style ControlFlow fill:#18181b,stroke:#f59e0b,stroke-width:2px,color:#fff
-```
-
-### 6.1. The Four Pillars
-
-1. **Rich Value Objects over Naked Primitives**:
-   Measurements (`Health`, `Armor`, `Origin`, `Velocity`) are self-validating newtypes. Passing an `Armor` value into a `Health` parameter is rejected at compile time.
-2. **Symmetrical Command-Query Separation (CQS)**:
-   - `PropGet<Target>`: Pure, non-mutating reading of engine properties.
-   - `PropSet<Target>`: Explicit mutation that safely orchestrates engine side effects (e.g. updating BSP collision nodes on `Origin` mutation).
-   - `Prop<Target>`: Blanket trait for symmetric read-write properties (`PropGet + PropSet`).
-3. **Compile-Time Specifications & Zero-Sized Typestate (ZST)**:
-   - State phases (`Alive`, `Dead`, `Connected`, `InBuyZone`) are Zero-Sized Types (`size_of::<T>() == 0`), incurring zero runtime memory overhead.
-   - Compound invariants use tuple-based variadic specifications: `All<(Alive, Connected, InBuyZone)>`.
-   - Functions requiring preconditions accept a `Refined<'a, Target, Spec>`, guaranteeing that runtime checks occur once at the handler boundary and are completely elided inside leaf functions.
-4. **Universal Interceptor Pipeline (Chain of Responsibility)**:
-   A composable `Pipeline<Ctx>` with `Interceptor<Ctx>` middleware wraps engine hooks, action dispatches, and property mutations. Interceptors can inspect, modify (e.g. via `CommutativeModifier`), bypass (`Handled`), or completely suppress (`Block` / `MRES_SUPERCEDE`) execution.
-
-### 6.2. Engine Invariant Defense Rules
-
-- **Frame-Scoped Lifetimes (`'a`)**:
-  `Refined<'a, Target, S>` guards must never be stored across frame ticks. Entities in GoldSrc can be recycled or disconnected by engine callbacks at any microsecond; long-term references must store stable `EntityIndex` or serial handles and re-validate via `refine::<Spec>()` on subsequent ticks.
-- **Re-entrancy Safety**:
-  Calling an `Action` that invokes native C-ABI functions (e.g. `TakeDamage`) can synchronously trigger recursive engine hooks before the initial call returns. Interceptors and actions must release internal mutexes/locks prior to crossing the FFI boundary.
-- **Entity Generation / Serial Number Tracking**:
-  Entity slot indices ($1..32$ for players, $33..N$ for entities) are recycled by GoldSrc upon deletion. All `Spec` verifications must check generation serial counters to prevent operations against resurrected entity handles.
-
----
-
-## 7. Engine Extensions & Compatibility Layer (ReAPI / CExt / AMX)
-
-GoldSrc.rs features a decoupled, modular extension detection and integration system enabling WASM guest plugins and host subsystems to dynamically query native engine mods and capabilities (e.g., ReAPI, ReHLDS, RegameDLL, Metamod extensions, or custom C/C++ modules).
-
-```mermaid
-flowchart LR
-    subgraph HostCore ["Host Core (goldsrc-core & goldsrc-spi)"]
-        ExtRegistry["ExtensionRegistry\n(SemVer Matching)"]
-        SPI["EngineExtensions Trait\n(ISP Separation)"]
-        Bridge["EngineBackend Bridge\n(Dynamic Probe & Safe Fallback)"]
-    end
-
-    subgraph GuestLayer ["Guest Plugins & SDK (framework/goldsrc)"]
-        ExtMod["goldsrc::extension\n(is_available / version)"]
-        ReApi["goldsrc::reapi\n(has_reapi / reapi_version)"]
-        PluginReq["#[plugin(requires = ['ext:reapi'])]"]
-    end
-
-    ExtRegistry --> SPI
-    SPI --> Bridge
-    Bridge <-->|WIT: goldsrc:engine/api| ExtMod
-    ExtMod --> ReApi
-    PluginReq -.->|DAG Validation| ExtRegistry
-```
-
-### 7.1. Structural Principles
-
-1. **Interface Segregation (ISP)**:
-   The `EngineExtensions` trait in `goldsrc_spi::engine` isolates extension checks from basic physics, precache, or message primitives. Mock test engines provide zero-cost default implementations (`impl EngineExtensions for MockEngine {}`).
-2. **SemVer-Aware Requirements**:
-   Plugins can declare requirements via `requires = ["ext:reapi>=1.2.0"]`. The host validates these constraints during DAG initialization, gracefully preventing unsatisfied plugins from executing without panicking.
-3. **Safe Guest Queries**:
-   Guest WASM plugins query extensions through `goldsrc::extension::is_available("reapi", Some(">=1.2.0"))` or helper wrappers like `goldsrc::reapi::has_reapi()`. If running outside the WASM runtime or if the extension is absent, safe default fallbacks prevent guest crashes.
-4. **Interactive CLI Diagnostics**:
-   The engine console command `goldsrc extensions` lists all registered extensions, active versions, and health statuses directly in the server console.
+6. **The Scrooge Systems Mindset (Zero-Waste Mechanical Sympathy)**:
+   Every byte and CPU cycle counts. Data layouts align with 64-byte cache lines; allocations on frame-tick hot paths are strictly zero. Speculative complexity without measured Criterion benchmark proof is rejected.
