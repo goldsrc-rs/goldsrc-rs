@@ -1,0 +1,13 @@
+[package]
+name = "goldsrc-service-chat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Chat processing pipeline, triggers, and recipient routing for GoldSrc.rs"
+
+[dependencies]
+goldsrc-api = { workspace = true }
+goldsrc-spi = { workspace = true }
+goldsrc-service-placeholders = { workspace = true }
+stitch-rs = { workspace = true }
+log = { workspace = true }

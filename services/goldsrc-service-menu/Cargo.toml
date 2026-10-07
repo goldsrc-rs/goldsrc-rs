@@ -1,0 +1,11 @@
+[package]
+name = "goldsrc-service-menu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Interactive player menu session manager and network renderer for GoldSrc.rs"
+
+[dependencies]
+goldsrc-api = { workspace = true }
+goldsrc-spi = { workspace = true }
+log = { workspace = true }

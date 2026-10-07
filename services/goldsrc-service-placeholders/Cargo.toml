@@ -1,0 +1,12 @@
+[package]
+name = "goldsrc-service-placeholders"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Universal placeholder engine, registry, and string interpolator for GoldSrc.rs"
+
+[dependencies]
+goldsrc-api = { workspace = true }
+goldsrc-spi = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }

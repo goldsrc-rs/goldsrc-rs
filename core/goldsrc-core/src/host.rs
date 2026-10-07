@@ -356,6 +356,7 @@ impl HostRuntime {
                 }
             }
         });
+        crate::menu::init_menu_hooks();
 
         let mut manager = PluginManager::new(engine.clone())
             .map_err(|e| HostError::Manager(format!("[GoldSrc.rs {backend_name}] {e}")))?;
@@ -634,6 +635,7 @@ impl HostRuntime {
         Self::evaluate_rules("", 0);
 
         // Register default moderation command executors (kick, mute, ban)
+        crate::moderation::set_engine_provider(HostRuntime::engine);
         crate::moderation::register_moderation_commands();
 
         // Register default chat command trigger adapter
