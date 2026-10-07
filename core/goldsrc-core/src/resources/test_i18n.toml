@@ -1,0 +1,6 @@
+[meta]
+code = "en"
+name = "English"
+
+[test_i18n]
+greeting = "Hello, {player}!"
