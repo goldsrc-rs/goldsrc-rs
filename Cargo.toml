@@ -36,7 +36,7 @@ goldsrc-backend-metamod = { path = "backends/goldsrc-backend-metamod", version =
 goldsrc-backend-standalone = { path = "backends/goldsrc-backend-standalone", version = "0.20.0" }
 goldsrc-host-wasm = { path = "hosts/goldsrc-host-wasm", version = "0.20.0" }
 
-wasmtime = { version = "48.0", default-features = false, features = [
+wasmtime = { version = "49.0", default-features = false, features = [
     "cranelift",
     "pulley",
     "component-model",
