@@ -575,6 +575,10 @@ dependencies = [
  "crossbeam-channel",
  "goldsrc-api",
  "goldsrc-host-wasm",
+ "goldsrc-service-chat",
+ "goldsrc-service-menu",
+ "goldsrc-service-moderation",
+ "goldsrc-service-placeholders",
  "goldsrc-spi",
  "goldsrc-sys",
  "lexopt",
@@ -631,6 +635,48 @@ dependencies = [
  "wasmtime",
  "wit-component 0.259.0",
  "wit-parser 0.259.0",
+]
+
+[[package]]
+name = "goldsrc-service-chat"
+version = "0.20.0"
+dependencies = [
+ "goldsrc-api",
+ "goldsrc-service-placeholders",
+ "goldsrc-spi",
+ "log",
+ "stitch-rs",
+]
+
+[[package]]
+name = "goldsrc-service-menu"
+version = "0.20.0"
+dependencies = [
+ "goldsrc-api",
+ "goldsrc-spi",
+ "log",
+]
+
+[[package]]
+name = "goldsrc-service-moderation"
+version = "0.20.0"
+dependencies = [
+ "goldsrc-api",
+ "goldsrc-service-chat",
+ "goldsrc-spi",
+ "log",
+ "stitch-rs",
+ "thiserror",
+]
+
+[[package]]
+name = "goldsrc-service-placeholders"
+version = "0.20.0"
+dependencies = [
+ "goldsrc-api",
+ "goldsrc-spi",
+ "log",
+ "thiserror",
 ]
 
 [[package]]

@@ -6,6 +6,10 @@ members = [
     "hosts/goldsrc-host-wasm",
     "extensions/goldsrc-extension-reapi",
     "extensions/goldsrc-extension-metamod",
+    "services/goldsrc-service-placeholders",
+    "services/goldsrc-service-menu",
+    "services/goldsrc-service-chat",
+    "services/goldsrc-service-moderation",
 ]
 default-members = [
     "core/goldsrc-core",
@@ -14,6 +18,10 @@ default-members = [
     "hosts/goldsrc-host-wasm",
     "extensions/goldsrc-extension-reapi",
     "extensions/goldsrc-extension-metamod",
+    "services/goldsrc-service-placeholders",
+    "services/goldsrc-service-menu",
+    "services/goldsrc-service-chat",
+    "services/goldsrc-service-moderation",
 ]
 resolver = "3"
 
@@ -35,6 +43,10 @@ goldsrc-extension-metamod = { path = "extensions/goldsrc-extension-metamod", ver
 goldsrc-backend-metamod = { path = "backends/goldsrc-backend-metamod", version = "0.20.0" }
 goldsrc-backend-standalone = { path = "backends/goldsrc-backend-standalone", version = "0.20.0" }
 goldsrc-host-wasm = { path = "hosts/goldsrc-host-wasm", version = "0.20.0" }
+goldsrc-service-placeholders = { path = "services/goldsrc-service-placeholders", version = "0.20.0" }
+goldsrc-service-menu = { path = "services/goldsrc-service-menu", version = "0.20.0" }
+goldsrc-service-chat = { path = "services/goldsrc-service-chat", version = "0.20.0" }
+goldsrc-service-moderation = { path = "services/goldsrc-service-moderation", version = "0.20.0" }
 
 wasmtime = { version = "49.0", default-features = false, features = [
     "cranelift",
