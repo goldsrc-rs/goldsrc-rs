@@ -501,14 +501,12 @@ impl PluginManager {
 
     /// Dispatches a server command to the plugins that registered it.
     pub fn dispatch_command(&mut self, cmd: &str, caller: i32, args: &str) -> bool {
-        let Some(owners) = self.command_registry.get_handlers(cmd) else {
-            return false;
-        };
-        let owners = owners.to_vec();
-        for idx in owners {
-            if let Some(plugin) = self.plugins.get_mut(idx) {
-                if plugin.call_on_command(cmd, caller, args).unwrap_or(false) {
-                    return true;
+        if let Some(owners) = self.command_registry.get_handlers(cmd) {
+            for &idx in owners {
+                if let Some(plugin) = self.plugins.get_mut(idx) {
+                    if plugin.call_on_command(cmd, caller, args).unwrap_or(false) {
+                        return true;
+                    }
                 }
             }
         }
@@ -611,18 +609,24 @@ impl PluginManager {
     /// Returns Some(final_text) if accepted, or None if suppressed.
     pub fn dispatch_chat(&mut self, sender: i32, text: &str, is_team: bool) -> Option<String> {
         let mut current_text = text.to_string();
-        for plugin in &mut self.plugins {
-            if plugin.has_export("on-chat") {
-                match plugin.call_on_chat(sender, &current_text, is_team) {
-                    Ok(Some(transformed)) => {
-                        current_text = transformed;
-                    }
-                    Ok(None) => return None, // Suppressed by plugin
-                    Err(_) => {}
-                }
+        let mut ctx = crate::pipeline::ChatContext {
+            sender,
+            is_team,
+            current_text: &mut current_text,
+        };
+        let intent = crate::pipeline::ChatIntent { text };
+
+        match crate::pipeline::execute_chat_pipeline(&mut self.plugins, &mut ctx, intent) {
+            Ok(_) => Some(current_text),
+            Err(crate::pipeline::ChatDropReason::SuppressedByPlugin(name)) => {
+                log::trace!(
+                    target: goldsrc_api::consts::log_targets::WASM,
+                    "Chat message from sender {sender} suppressed by plugin '{name}'"
+                );
+                None
             }
+            Err(_) => None,
         }
-        Some(current_text)
     }
 }
 

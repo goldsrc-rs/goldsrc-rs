@@ -21,6 +21,7 @@ notify = { workspace = true }
 libloading = { workspace = true }
 thiserror = { workspace = true }
 semver = { workspace = true }
+stitch-rs = { workspace = true }
 sysinfo = "0.39.6"
 
 [features]
