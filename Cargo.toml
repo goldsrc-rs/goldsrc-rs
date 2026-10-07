@@ -58,6 +58,7 @@ log = "0.4.33"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 crossbeam-channel = "0.5"
 semver = "1.0"
+stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main" }
 
 [profile.dev]
 opt-level = 0

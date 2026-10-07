@@ -1,7 +1,7 @@
 //! Runtime Menu Session Manager, pagination router, and network renderers.
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use goldsrc_api::consts::log_targets;
 use goldsrc_api::menu::{
@@ -11,14 +11,14 @@ use goldsrc_spi::engine::Engine;
 
 /// Active menu session for a single connected player.
 pub struct PlayerMenuSession {
-    pub menu: Menu,
+    pub menu: Arc<Menu>,
     pub current_page: usize,
-    pub history_stack: Vec<(Menu, usize)>,
+    pub history_stack: Vec<(Arc<Menu>, usize)>,
     pub rendered_page: Option<RenderedMenuPage>,
     pub expiry_time: Option<f32>,
 }
 
-type PendingParentSession = (Menu, usize, Vec<(Menu, usize)>);
+type PendingParentSession = (Arc<Menu>, usize, Vec<(Arc<Menu>, usize)>);
 
 /// Global session manager handling interactive player menus.
 pub struct MenuSessionManager {
@@ -84,7 +84,7 @@ impl MenuSessionManager {
         };
 
         let mut session = PlayerMenuSession {
-            menu: new_menu,
+            menu: Arc::new(new_menu),
             current_page: 0,
             history_stack: history,
             rendered_page: None,
@@ -350,7 +350,7 @@ impl MenuSessionManager {
         };
 
         let session = PlayerMenuSession {
-            menu: Menu::builder("").build(),
+            menu: Arc::new(Menu::builder("").build()),
             current_page: 0,
             history_stack: Vec::new(),
             rendered_page: Some(rendered),
@@ -403,7 +403,7 @@ impl MenuSessionManager {
             let player = goldsrc_api::Player::new(player_idx);
             use goldsrc_api::ClientExt;
             let lang = player.lang();
-            session.menu.style = session.menu.style.clone().with_lang(&lang);
+            Arc::make_mut(&mut session.menu).style = session.menu.style.clone().with_lang(&lang);
             Self::render_and_send_session(
                 round_number,
                 round_start_time,
@@ -423,7 +423,7 @@ impl MenuSessionManager {
             let player = goldsrc_api::Player::new(player_idx);
             use goldsrc_api::ClientExt;
             let lang = player.lang();
-            session.menu.style = session.menu.style.clone().with_lang(&lang);
+            Arc::make_mut(&mut session.menu).style = session.menu.style.clone().with_lang(&lang);
             Self::render_and_send_session(
                 round_number,
                 round_start_time,

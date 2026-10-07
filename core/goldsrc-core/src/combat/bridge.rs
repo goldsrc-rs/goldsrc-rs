@@ -1,17 +1,19 @@
-//! Dual-tier combat hook bridge (`CombatBridge`) for GoldSrc.
+//! Dual-tier combat hook bridge (`CombatBridge`) for GoldSrc using `stitch-rs`.
 //!
 //! Provides two-tier interception:
 //! - Tier 1: ReGameDLL API hooks (direct API hookchains when ReGameDLL is active)
 //! - Tier 2: Dynamic C++ VTable virtual function hooking fallback
 //!
-//! Evaluates hooks through a phased pipeline:
-//! `EventPhase::Filter` -> `EventPhase::Handle` -> `EventPhase::Observe`
-//! with order-independent commutative algebraic modifiers.
+//! Evaluates hooks through a monomorphic U-Cycle pipeline implementing The Sewing Machine Architecture:
+//! - Descent (`on_enter`): Filter & Protection checks with immediate short-circuit/halt (`FlowControl::Halt`).
+//! - Puncture point (`TerminalHandler`): Mutation and algebraic damage calculation.
+//! - Ascent (`on_exit`): Observations, metrics, sound, visual feedback, and post-strike telemetry.
 
 use crate::hooks::entity::{KilledContext, TakeDamageContext, entity_hooks};
 use crate::hooks::types::{HookResult, HookTiming};
 use goldsrc_api::dag::EventPhase;
-use std::sync::{LazyLock, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
+use stitch_rs::flow::FlowControl;
 
 /// Operational tier active for combat interception.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,28 +24,56 @@ pub enum CombatTier {
     Tier2VTable,
 }
 
-/// Callback signature for phased TakeDamage interception.
-pub type PhasedTakeDamageHook =
-    Box<dyn Fn(&mut TakeDamageContext, EventPhase) -> HookResult<i32> + Send + Sync + 'static>;
-
-/// Callback signature for phased Killed interception.
-pub type PhasedKilledHook =
-    Box<dyn Fn(&KilledContext, EventPhase) -> HookResult<()> + Send + Sync + 'static>;
-
-/// Internal registry for phased combat handlers.
-#[derive(Default)]
-struct PhasedCombatRegistry {
-    filter_damage: Vec<PhasedTakeDamageHook>,
-    handle_damage: Vec<PhasedTakeDamageHook>,
-    observe_damage: Vec<PhasedTakeDamageHook>,
-
-    filter_killed: Vec<PhasedKilledHook>,
-    handle_killed: Vec<PhasedKilledHook>,
-    observe_killed: Vec<PhasedKilledHook>,
+/// Abstract take damage interceptor middleware based on `stitch-rs`.
+pub trait TakeDamageLayer: Send + Sync {
+    fn on_enter(&self, ctx: &mut TakeDamageContext) -> FlowControl<(), (), HookResult<i32>>;
+    fn on_exit(&self, ctx: &mut TakeDamageContext, outcome: &mut Result<(), HookResult<i32>>);
 }
 
-static COMBAT_REGISTRY: LazyLock<RwLock<PhasedCombatRegistry>> =
-    LazyLock::new(|| RwLock::new(PhasedCombatRegistry::default()));
+/// Abstract killed interceptor middleware based on `stitch-rs`.
+pub trait KilledLayer: Send + Sync {
+    fn on_enter(&self, ctx: &KilledContext) -> FlowControl<(), (), HookResult<()>>;
+    fn on_exit(&self, ctx: &KilledContext, outcome: &mut Result<(), HookResult<()>>);
+}
+
+/// Functional adapter implementing `TakeDamageLayer`.
+struct FnTakeDamageLayer<F1, F2> {
+    filter_or_handle: F1,
+    observe: Option<F2>,
+}
+
+impl<F1, F2> TakeDamageLayer for FnTakeDamageLayer<F1, F2>
+where
+    F1: Fn(&mut TakeDamageContext) -> HookResult<i32> + Send + Sync,
+    F2: Fn(&TakeDamageContext) + Send + Sync,
+{
+    fn on_enter(&self, ctx: &mut TakeDamageContext) -> FlowControl<(), (), HookResult<i32>> {
+        let res = (self.filter_or_handle)(ctx);
+        if res.is_superceded() {
+            FlowControl::Halt(res)
+        } else {
+            FlowControl::Proceed(())
+        }
+    }
+
+    fn on_exit(&self, ctx: &mut TakeDamageContext, outcome: &mut Result<(), HookResult<i32>>) {
+        if outcome.is_ok()
+            && let Some(ref obs) = self.observe
+        {
+            obs(ctx);
+        }
+    }
+}
+
+/// Dynamic SMA Pipeline Chain for Combat Events.
+#[derive(Default)]
+struct CombatPipelineRegistry {
+    damage_layers: Vec<Arc<dyn TakeDamageLayer>>,
+    killed_layers: Vec<Arc<dyn KilledLayer>>,
+}
+
+static COMBAT_REGISTRY: LazyLock<RwLock<CombatPipelineRegistry>> =
+    LazyLock::new(|| RwLock::new(CombatPipelineRegistry::default()));
 
 /// Central facade for combat event dispatching and registration.
 pub struct CombatBridge;
@@ -58,17 +88,35 @@ impl CombatBridge {
         }
     }
 
-    /// Registers a TakeDamage hook in a specific semantic event phase.
+    /// Registers a custom `TakeDamageLayer` middleware.
+    pub fn register_take_damage_layer(layer: Arc<dyn TakeDamageLayer>) {
+        if let Ok(mut reg) = COMBAT_REGISTRY.write() {
+            reg.damage_layers.push(layer);
+        }
+    }
+
+    /// Registers a TakeDamage hook in a specific semantic event phase (backward-compatibility helper).
     pub fn register_take_damage<F>(phase: EventPhase, callback: F)
     where
         F: Fn(&mut TakeDamageContext, EventPhase) -> HookResult<i32> + Send + Sync + 'static,
     {
-        if let Ok(mut reg) = COMBAT_REGISTRY.write() {
-            let boxed = Box::new(callback);
-            match phase {
-                EventPhase::Filter => reg.filter_damage.push(boxed),
-                EventPhase::Handle => reg.handle_damage.push(boxed),
-                EventPhase::Observe => reg.observe_damage.push(boxed),
+        match phase {
+            EventPhase::Filter | EventPhase::Handle => {
+                let layer = Arc::new(FnTakeDamageLayer {
+                    filter_or_handle: move |ctx: &mut TakeDamageContext| callback(ctx, phase),
+                    observe: None::<fn(&TakeDamageContext)>,
+                });
+                Self::register_take_damage_layer(layer);
+            }
+            EventPhase::Observe => {
+                let layer = Arc::new(FnTakeDamageLayer {
+                    filter_or_handle: |_ctx: &mut TakeDamageContext| HookResult::Ignored,
+                    observe: Some(move |ctx: &TakeDamageContext| {
+                        let mut copy = ctx.clone();
+                        let _ = callback(&mut copy, EventPhase::Observe);
+                    }),
+                });
+                Self::register_take_damage_layer(layer);
             }
         }
     }
@@ -78,17 +126,40 @@ impl CombatBridge {
     where
         F: Fn(&KilledContext, EventPhase) -> HookResult<()> + Send + Sync + 'static,
     {
-        if let Ok(mut reg) = COMBAT_REGISTRY.write() {
-            let boxed = Box::new(callback);
-            match phase {
-                EventPhase::Filter => reg.filter_killed.push(boxed),
-                EventPhase::Handle => reg.handle_killed.push(boxed),
-                EventPhase::Observe => reg.observe_killed.push(boxed),
+        struct FnKilledLayer<F> {
+            cb: F,
+            phase: EventPhase,
+        }
+        impl<F> KilledLayer for FnKilledLayer<F>
+        where
+            F: Fn(&KilledContext, EventPhase) -> HookResult<()> + Send + Sync,
+        {
+            fn on_enter(&self, ctx: &KilledContext) -> FlowControl<(), (), HookResult<()>> {
+                if self.phase != EventPhase::Observe {
+                    let res = (self.cb)(ctx, self.phase);
+                    if res.is_superceded() {
+                        return FlowControl::Halt(res);
+                    }
+                }
+                FlowControl::Proceed(())
             }
+
+            fn on_exit(&self, ctx: &KilledContext, outcome: &mut Result<(), HookResult<()>>) {
+                if outcome.is_ok() && self.phase == EventPhase::Observe {
+                    let _ = (self.cb)(ctx, self.phase);
+                }
+            }
+        }
+
+        if let Ok(mut reg) = COMBAT_REGISTRY.write() {
+            reg.killed_layers.push(Arc::new(FnKilledLayer {
+                cb: callback,
+                phase,
+            }));
         }
     }
 
-    /// Dispatches a `TakeDamage` event through the complete phased pipeline.
+    /// Dispatches a `TakeDamage` event through the complete SMA pipeline.
     /// Returns the final hook verdict and the calculated mutated damage.
     pub fn dispatch_take_damage(
         victim: i32,
@@ -99,32 +170,50 @@ impl CombatBridge {
     ) -> (HookResult<i32>, f32) {
         let mut ctx = TakeDamageContext::new(victim, inflictor, attacker, damage, bits_damage_type);
 
-        // 1. Phased Pipeline Execution
-        if let Ok(reg) = COMBAT_REGISTRY.read() {
-            // Phase 1: Filter (protection, early cancellation, godmode)
-            for hook in &reg.filter_damage {
-                let res = hook(&mut ctx, EventPhase::Filter);
-                if res.is_superceded() {
-                    return (res, 0.0);
-                }
-            }
+        // 1. Fetch registered layers snapshot
+        let layers = if let Ok(reg) = COMBAT_REGISTRY.read() {
+            reg.damage_layers.clone()
+        } else {
+            Vec::new()
+        };
 
-            // Phase 2: Handle (commutative damage bonuses, reductions, multipliers)
-            for hook in &reg.handle_damage {
-                let res = hook(&mut ctx, EventPhase::Handle);
-                ctx.sync_damage();
-                if res.is_superceded() {
-                    return (res, 0.0);
-                }
-            }
+        // 2. Execute SMA U-Cycle traversal: Descent (on_enter) -> Puncture -> Ascent (on_exit)
+        let mut halted_res = None;
+        let mut entered_count = 0;
 
-            // Phase 3: Observe (metrics, analytics, sound/visual feedback)
-            for hook in &reg.observe_damage {
-                let _ = hook(&mut ctx, EventPhase::Observe);
+        for layer in &layers {
+            match layer.on_enter(&mut ctx) {
+                FlowControl::Proceed(()) => {
+                    ctx.sync_damage();
+                    entered_count += 1;
+                }
+                FlowControl::ShortCircuit(()) => {
+                    ctx.sync_damage();
+                    entered_count += 1;
+                    break;
+                }
+                FlowControl::Halt(res) => {
+                    halted_res = Some(res);
+                    break;
+                }
             }
         }
 
-        // 2. Legacy / Direct VTable EntityHookRegistry Dispatch
+        // 3. Ascent phase: unwind executed layers in reverse order for observation
+        let mut outcome = match halted_res {
+            Some(res) => Err(res),
+            None => Ok(()),
+        };
+
+        for layer in layers.iter().take(entered_count).rev() {
+            layer.on_exit(&mut ctx, &mut outcome);
+        }
+
+        if let Err(res) = outcome {
+            return (res, 0.0);
+        }
+
+        // 4. Legacy / Direct VTable EntityHookRegistry Dispatch
         let vtable_res = if let Ok(reg) = entity_hooks().read() {
             reg.dispatch_take_damage(&mut ctx, HookTiming::Pre)
         } else {
@@ -139,7 +228,7 @@ impl CombatBridge {
         (vtable_res, final_damage)
     }
 
-    /// Dispatches a `Killed` event through the complete phased pipeline.
+    /// Dispatches a `Killed` event through the complete SMA pipeline.
     pub fn dispatch_killed(victim: i32, attacker: i32, gib_mode: i32) -> HookResult<()> {
         let ctx = KilledContext {
             victim,
@@ -147,31 +236,44 @@ impl CombatBridge {
             gib_mode,
         };
 
-        // 1. Phased Pipeline Execution
-        if let Ok(reg) = COMBAT_REGISTRY.read() {
-            // Phase 1: Filter
-            for hook in &reg.filter_killed {
-                let res = hook(&ctx, EventPhase::Filter);
-                if res.is_superceded() {
-                    return res;
-                }
-            }
+        let layers = if let Ok(reg) = COMBAT_REGISTRY.read() {
+            reg.killed_layers.clone()
+        } else {
+            Vec::new()
+        };
 
-            // Phase 2: Handle
-            for hook in &reg.handle_killed {
-                let res = hook(&ctx, EventPhase::Handle);
-                if res.is_superceded() {
-                    return res;
-                }
-            }
+        let mut halted_res = None;
+        let mut entered_count = 0;
 
-            // Phase 3: Observe
-            for hook in &reg.observe_killed {
-                let _ = hook(&ctx, EventPhase::Observe);
+        for layer in &layers {
+            match layer.on_enter(&ctx) {
+                FlowControl::Proceed(()) => {
+                    entered_count += 1;
+                }
+                FlowControl::ShortCircuit(()) => {
+                    entered_count += 1;
+                    break;
+                }
+                FlowControl::Halt(res) => {
+                    halted_res = Some(res);
+                    break;
+                }
             }
         }
 
-        // 2. Legacy / Direct VTable EntityHookRegistry Dispatch
+        let mut outcome = match halted_res {
+            Some(res) => Err(res),
+            None => Ok(()),
+        };
+
+        for layer in layers.iter().take(entered_count).rev() {
+            layer.on_exit(&ctx, &mut outcome);
+        }
+
+        if let Err(res) = outcome {
+            return res;
+        }
+
         if let Ok(reg) = entity_hooks().read() {
             reg.dispatch_killed(&ctx, HookTiming::Pre)
         } else {

@@ -307,10 +307,6 @@ pub fn register_placeholder<F>(name: &str, description: &str, handler: F)
 where
     F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
 {
-    #[cfg(target_arch = "wasm32")]
-    {
-        goldsrc_api::bindings::goldsrc::engine::api::host_register_placeholder(name, description);
-    }
     let mut reg = match PLACEHOLDER_REGISTRY.write() {
         Ok(r) => r,
         Err(e) => e.into_inner(),
@@ -336,13 +332,6 @@ pub fn register_placeholder_with_metadata<F>(
 ) where
     F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
 {
-    #[cfg(target_arch = "wasm32")]
-    {
-        goldsrc_api::bindings::goldsrc::engine::api::host_register_placeholder(
-            &metadata.name,
-            &metadata.description,
-        );
-    }
     let mut reg = match PLACEHOLDER_REGISTRY.write() {
         Ok(r) => r,
         Err(e) => e.into_inner(),

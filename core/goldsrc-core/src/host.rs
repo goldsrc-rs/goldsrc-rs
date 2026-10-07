@@ -636,6 +636,9 @@ impl HostRuntime {
         // Register default moderation command executors (kick, mute, ban)
         crate::moderation::register_moderation_commands();
 
+        // Register default chat command trigger adapter
+        crate::chat::register_chat_trigger(std::sync::Arc::new(crate::chat::CommandChatTrigger));
+
         Ok(())
     }
 

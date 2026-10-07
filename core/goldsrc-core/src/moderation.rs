@@ -579,6 +579,35 @@ pub fn register_moderation_commands() {
             true
         },
     );
+
+    // Register SMA chat layer for mute enforcement
+    crate::chat::register_chat_layer(std::sync::Arc::new(MuteChatLayer));
+}
+
+/// Chat layer interceptor enforcing player moderation mute state via SMA U-cycle.
+pub struct MuteChatLayer;
+
+impl crate::chat::ChatLayer for MuteChatLayer {
+    fn on_enter(
+        &self,
+        msg: &mut goldsrc_api::chat::ChatMessage,
+    ) -> stitch_rs::flow::FlowControl<(), (), ()> {
+        if is_player_muted(msg.sender.index()) {
+            if let Some(engine) = crate::host::HostRuntime::engine() {
+                engine.client_print(
+                    msg.sender.index(),
+                    HUD_PRINTCHAT,
+                    "[Moderation] You are muted and cannot send chat messages.\n",
+                );
+            }
+            msg.is_blocked = true;
+            stitch_rs::flow::FlowControl::Halt(())
+        } else {
+            stitch_rs::flow::FlowControl::Proceed(())
+        }
+    }
+
+    fn on_exit(&self, _msg: &mut goldsrc_api::chat::ChatMessage, _outcome: &mut Result<(), ()>) {}
 }
 
 #[cfg(test)]

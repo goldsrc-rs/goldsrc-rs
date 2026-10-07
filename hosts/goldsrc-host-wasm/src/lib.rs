@@ -11,11 +11,14 @@ pub mod bindings;
 pub mod error;
 /// Plugin lifecycle management and hot-reload.
 pub mod manager;
+/// Monomorphic U-cycle processing pipelines via stitch-rs.
+pub mod pipeline;
 /// Loaded plugin instance and metadata types.
 pub mod plugin;
 
 pub use error::{CommandError, HostError, LoadError};
 pub use manager::{CommandRegistry, PauseAllOutcome, PauseOutcome, PluginInfo, PluginManager};
+pub use pipeline::*;
 pub use plugin::PluginStatus;
 
 pub type PrintCallback = fn(&str);

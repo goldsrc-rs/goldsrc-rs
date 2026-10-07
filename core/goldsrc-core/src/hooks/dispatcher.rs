@@ -54,9 +54,9 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         }
 
         // Fallback: dispatch raw slot to WASM plugins event "menu_select" (8 bytes payload: [player_idx: i32, slot: u32])
-        let mut payload = Vec::with_capacity(8);
-        payload.extend_from_slice(&player_idx.to_le_bytes());
-        payload.extend_from_slice(&(slot as u32).to_le_bytes());
+        let mut payload = [0u8; 8];
+        payload[0..4].copy_from_slice(&player_idx.to_le_bytes());
+        payload[4..8].copy_from_slice(&(slot as u32).to_le_bytes());
 
         let targeted = if let Some(owner) = goldsrc_host_wasm::get_active_menu_owner(player_idx) {
             HostRuntime::with_manager(|m| {
@@ -94,35 +94,8 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
                 // Suppress empty chat messages
                 return true;
             }
-            let trimmed_text = text.trim();
-            if let Some(first_space_idx) = trimmed_text.find(|c: char| c.is_whitespace()) {
-                let trigger = &trimmed_text[..first_space_idx];
-                let rest_args = trimmed_text[first_space_idx..].trim_start();
-                let clean_trigger = trigger.trim_start_matches(['/', '!']);
 
-                // 1. Try exact clean trigger (e.g. "vip" or "vipmenu")
-                if manager.dispatch_command(clean_trigger, player_idx, rest_args) {
-                    return true;
-                }
-                // 2. Try raw trigger (e.g. "/vip")
-                if manager.dispatch_command(trigger, player_idx, rest_args) {
-                    return true;
-                }
-            } else {
-                let trigger = trimmed_text;
-                let clean_trigger = trigger.trim_start_matches(['/', '!']);
-
-                // 1. Try exact clean trigger (e.g. "vip" or "vipmenu")
-                if manager.dispatch_command(clean_trigger, player_idx, "") {
-                    return true;
-                }
-                // 2. Try raw trigger (e.g. "/vip")
-                if manager.dispatch_command(trigger, player_idx, "") {
-                    return true;
-                }
-            }
-
-            // Route standard player chat through the chat interceptor / placeholder pipeline
+            // Route standard player chat directly through the chat pipeline
             let sender = goldsrc_api::client::Player::new(player_idx);
             let scope = if cmd.eq_ignore_ascii_case("say_team") {
                 goldsrc_api::chat::ChatScope::same_team()

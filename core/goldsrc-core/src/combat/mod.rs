@@ -2,4 +2,4 @@
 
 pub mod bridge;
 
-pub use bridge::{CombatBridge, CombatTier, PhasedKilledHook, PhasedTakeDamageHook};
+pub use bridge::{CombatBridge, CombatTier, KilledLayer, TakeDamageLayer};
