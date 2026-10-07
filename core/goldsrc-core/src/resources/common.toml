@@ -1,0 +1,6 @@
+[meta]
+code = "en"
+name = "English"
+
+[common]
+prefix = "^4[GoldSrc.rs]^1 "

@@ -1,0 +1,10 @@
+# GoldSrc.rs Plugins Configuration Template
+# Format: TOML
+
+[general]
+auto_reload = true
+
+[plugins]
+# Example:
+# [plugins.coreutils]
+# enabled = true
