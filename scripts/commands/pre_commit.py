@@ -64,30 +64,16 @@ def main(argv=None):
     test_time = time.perf_counter() - t_test
     print(f"  -> Tests OK ({test_time:.2f}s)")
 
-    # 4. WASM Plugins Build Check
-    t_wasm = time.perf_counter()
-    print("\n[4/4] Checking WASM plugins compilation...")
-    wasm_cmd = [
-        "cargo",
-        "check",
-        "--target",
-        "wasm32-unknown-unknown",
-        "-p", "moderation",
-        "-p", "administration",
-        "-p", "privileges",
-        "-p", "menu_frontend",
-        "-p", "chat_director",
-        "-p", "map_manager",
-        "-p", "test_hud",
-        "-p", "test_menu",
-        "-p", "test_ecs",
-    ]
-    wasm_res = subprocess.run(wasm_cmd, cwd=repo_root, text=True, env=env)
-    if wasm_res.returncode != 0:
-        print("WASM plugins check failed!", file=sys.stderr)
+    # 4. Host runtime targets check (WASM plugins are now tested in goldsrc-plugins-standard)
+    t_host = time.perf_counter()
+    print("\n[4/4] Checking host runtime crates...")
+    host_cmd = ["cargo", "check", "--workspace"]
+    host_res = subprocess.run(host_cmd, cwd=repo_root, text=True, env=env)
+    if host_res.returncode != 0:
+        print("Host runtime check failed!", file=sys.stderr)
         return 1
-    wasm_time = time.perf_counter() - t_wasm
-    print(f"  -> WASM plugins OK ({wasm_time:.2f}s)")
+    host_time = time.perf_counter() - t_host
+    print(f"  -> Host crates OK ({host_time:.2f}s)")
 
     total_time = time.perf_counter() - t_start
     print(f"\n========================================")
@@ -96,7 +82,7 @@ def main(argv=None):
     print(f"  • Cargo fmt     : {fmt_time:.2f}s")
     print(f"  • Cargo clippy  : {clippy_time:.2f}s")
     print(f"  • Cargo test    : {test_time:.2f}s")
-    print(f"  • WASM check    : {wasm_time:.2f}s")
+    print(f"  • Host check    : {host_time:.2f}s")
     print(f"  --------------------------------------")
     print(f"  • Total Time    : {total_time:.2f}s")
     print(f"========================================")
