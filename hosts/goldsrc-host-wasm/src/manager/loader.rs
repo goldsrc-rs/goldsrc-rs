@@ -81,7 +81,7 @@ fn save_aot_cache(
                     );
                     let _ = fs::remove_file(&tmp_file);
                 } else {
-                    log::debug!(
+                    log::info!(
                         target: log_targets::WASM,
                         "AOT compiled '{plugin_name}' cached ({:.2} KB)",
                         cwasm_bytes.len() as f64 / 1024.0

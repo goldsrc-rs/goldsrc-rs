@@ -47,4 +47,40 @@ impl std::fmt::Display for ModerationError {
     }
 }
 
+impl ModerationError {
+    /// Formats the domain error using the localization dictionary for the specified language.
+    pub fn format_localized(&self, lang: &str) -> String {
+        match self {
+            Self::PlayerNotFound(id) => {
+                goldsrc::tr!("moderation", lang, "errors.player_not_found", id = id)
+            }
+            Self::InvalidPlayerState(idx, state) => {
+                goldsrc::tr!(
+                    "moderation",
+                    lang,
+                    "errors.invalid_state",
+                    idx = idx,
+                    state = state
+                )
+            }
+            Self::PermissionDenied(cap) => {
+                goldsrc::tr!("moderation", lang, "errors.permission_denied", cap = cap)
+            }
+            Self::InvalidArgument(msg) => {
+                goldsrc::tr!("moderation", lang, "errors.invalid_argument", msg = msg)
+            }
+            Self::FeatureUnsupported {
+                feature,
+                missing_wit_binding,
+                reason,
+            } => {
+                format!(
+                    "[HOST GAP] Feature '{feature}' cannot execute: missing WIT binding '{missing_wit_binding}'. Reason: {reason}"
+                )
+            }
+            Self::Storage(err) => goldsrc::tr!("moderation", lang, "errors.storage", err = err),
+        }
+    }
+}
+
 impl std::error::Error for ModerationError {}

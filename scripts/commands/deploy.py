@@ -481,6 +481,12 @@ def deploy_lang_dictionaries(repo_root: Path, game_path: Path, backend: str = "m
             if lang_folder.is_dir() and lang_folder not in sources:
                 sources.append(lang_folder)
 
+    plugins_dir = repo_root / "plugins"
+    if plugins_dir.exists():
+        for lang_folder in plugins_dir.glob("**/lang"):
+            if lang_folder.is_dir() and lang_folder not in sources:
+                sources.append(lang_folder)
+
     copied_files: set[str] = set()
     for src_dir in sources:
         if src_dir.exists() and src_dir.is_dir():

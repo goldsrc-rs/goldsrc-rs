@@ -82,9 +82,13 @@ impl ChatDirector {
                 && let Err(wait_secs) = service.check_and_update(sender, now, flood_interval)
             {
                 msg.block();
-                msg.sender.print_notify(format!(
-                    "[Антифлуд] Подождите {wait_secs:.1} сек. перед следующим сообщением!"
-                ));
+                let warn_msg = tr!(
+                    "chat_director",
+                    &msg.sender,
+                    "flood_warning",
+                    wait = format!("{wait_secs:.1}")
+                );
+                msg.sender.print_notify(&warn_msg);
                 return false;
             }
 
@@ -133,7 +137,7 @@ impl ChatDirector {
         let now = host_time();
         let (interval, enable_dhud) = if let Ok(lock) = CONFIG.read() {
             if let Some(c) = lock.as_ref() {
-                (c.broadcast_interval, c.enable_dhud_banners != 0)
+                (c.broadcast_interval, c.enable_dhud_banners)
             } else {
                 (60.0, true)
             }

@@ -10,16 +10,26 @@ pub const ACTION_ADM_CFG_WARMUP: u32 = 3005;
 pub const ACTION_ADM_MAP_CHANGE: u32 = 3006;
 pub const ACTION_ADM_STAFF_LIST: u32 = 3007;
 
-/// Builds the root administrator control menu.
-pub fn build_admin_main_menu() -> Menu {
-    Menu::builder("Администрация: Управление Сервером")
+/// Builds the root administrator control menu using localized dictionary.
+pub fn build_admin_main_menu_localized(lang: &str) -> Menu {
+    let title = tr!("administration", lang, "menus.title");
+    let item_slay = tr!("administration", lang, "menus.slay");
+    let item_slap = tr!("administration", lang, "menus.slap");
+    let item_teleport = tr!("administration", lang, "menus.teleport");
+    let item_team = tr!("administration", lang, "menus.team");
+    let item_map = tr!("administration", lang, "menus.map");
+
+    Menu::builder(title)
         .style(MenuStyle::brackets())
-        .item(MenuItem::new("1. Рестарт раунда (1 сек)", ACTION_ADM_RESTART_1).keep_open())
-        .item(MenuItem::new("2. Рестарт раунда (3 сек)", ACTION_ADM_RESTART_3).keep_open())
-        .item(MenuItem::new("3. Техническая пауза матча [STUB]", ACTION_ADM_PAUSE).keep_open())
-        .item(MenuItem::new("4. Загрузить Clanwar конфиг [STUB]", ACTION_ADM_CFG_CW).keep_open())
-        .item(MenuItem::new("5. Загрузить Warmup конфиг [STUB]", ACTION_ADM_CFG_WARMUP).keep_open())
-        .item(MenuItem::new("6. Смена карты [STUB]", ACTION_ADM_MAP_CHANGE).keep_open())
-        .item(MenuItem::new("7. Список персонала сервера", ACTION_ADM_STAFF_LIST).keep_open())
+        .item(MenuItem::new(item_slay, ACTION_ADM_RESTART_1).keep_open())
+        .item(MenuItem::new(item_slap, ACTION_ADM_RESTART_3).keep_open())
+        .item(MenuItem::new(item_teleport, ACTION_ADM_PAUSE).keep_open())
+        .item(MenuItem::new(item_team, ACTION_ADM_CFG_CW).keep_open())
+        .item(MenuItem::new(item_map, ACTION_ADM_MAP_CHANGE).keep_open())
         .build()
+}
+
+/// Builds the root administrator control menu with default language.
+pub fn build_admin_main_menu() -> Menu {
+    build_admin_main_menu_localized("common")
 }

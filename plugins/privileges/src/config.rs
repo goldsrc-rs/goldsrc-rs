@@ -1,56 +1,36 @@
 //! Privileges configuration model derived into TOML file format and CVAR registrations.
 
-use goldsrc::ConfigModel;
+use goldsrc::{ConfigModel, CvarFlags};
 
 #[derive(Debug, Clone, PartialEq, ConfigModel)]
+#[config(cvar_prefix = "grs_vip_")]
 pub struct PrivilegesConfig {
-    #[cvar(
-        name = "grs_vip_bonus_hp",
-        flags = "ARCHIVE|SERVER",
-        description = "Starting round HP provided to VIP players (e.g. 100)"
-    )]
+    /// Starting round HP provided to VIP players (e.g. 100)
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0.0..=250.0)]
     pub bonus_hp: f32,
 
-    #[cvar(
-        name = "grs_vip_bonus_armor",
-        flags = "ARCHIVE|SERVER",
-        description = "Starting round armor provided to VIP players (e.g. 100)"
-    )]
+    /// Starting round armor provided to VIP players (e.g. 100)
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0.0..=250.0)]
     pub bonus_armor: f32,
 
-    #[cvar(
-        name = "grs_vip_regen_hp",
-        flags = "ARCHIVE|SERVER",
-        description = "Passive health regeneration per post-think tick (0.0 to disable)"
-    )]
+    /// Passive health regeneration per post-think tick (0.0 to disable)
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0.0..=10.0)]
     pub regen_hp: f32,
 
-    #[cvar(
-        name = "grs_vip_auto_equip_round",
-        flags = "ARCHIVE|SERVER",
-        description = "Minimum round number before auto equipment perks are granted"
-    )]
+    /// Minimum round number before auto equipment perks are granted
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 1..=20)]
     pub auto_equip_round: i32,
 
-    #[cvar(
-        name = "grs_vip_awp_round",
-        flags = "ARCHIVE|SERVER",
-        description = "Minimum round number before AWP sniper rifle selection is allowed"
-    )]
+    /// Minimum round number before AWP sniper rifle selection is allowed
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 1..=20)]
     pub awp_round: i32,
 
-    #[cvar(
-        name = "grs_vip_chat_prefix",
-        flags = "ARCHIVE|SERVER",
-        description = "Enable [VIP] prefix in global and team chat messages (1 = yes, 0 = no)"
-    )]
-    pub chat_prefix: i32,
+    /// Enable [VIP] prefix in global and team chat messages
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER)]
+    pub chat_prefix: bool,
 
-    #[cvar(
-        name = "grs_vip_reserved_slots",
-        flags = "ARCHIVE|SERVER",
-        description = "Number of player slots reserved for VIP players"
-    )]
+    /// Number of player slots reserved for VIP players
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0..=16)]
     pub reserved_slots: i32,
 }
 
@@ -62,7 +42,7 @@ impl Default for PrivilegesConfig {
             regen_hp: 0.1,
             auto_equip_round: 2,
             awp_round: 3,
-            chat_prefix: 1,
+            chat_prefix: true,
             reserved_slots: 2,
         }
     }

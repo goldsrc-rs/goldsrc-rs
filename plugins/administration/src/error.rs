@@ -41,4 +41,38 @@ impl std::fmt::Display for AdministrationError {
     }
 }
 
+impl AdministrationError {
+    /// Formats the domain error using the localization dictionary for the specified language.
+    pub fn format_localized(&self, lang: &str) -> String {
+        match self {
+            Self::TargetNotFound(_) => {
+                goldsrc::tr!("administration", lang, "errors.player_not_found")
+            }
+            Self::PermissionDenied(cap) => {
+                goldsrc::tr!(
+                    "administration",
+                    lang,
+                    "errors.permission_denied",
+                    cap = cap
+                )
+            }
+            Self::InvalidArgument(msg) => {
+                goldsrc::tr!("administration", lang, "errors.command_failed", err = msg)
+            }
+            Self::FeatureUnsupported {
+                feature,
+                missing_wit_binding,
+                reason,
+            } => {
+                format!(
+                    "[HOST GAP] Administration feature '{feature}' cannot execute: missing WIT binding '{missing_wit_binding}'. Reason: {reason}"
+                )
+            }
+            Self::Storage(err) => {
+                goldsrc::tr!("administration", lang, "errors.command_failed", err = err)
+            }
+        }
+    }
+}
+
 impl std::error::Error for AdministrationError {}

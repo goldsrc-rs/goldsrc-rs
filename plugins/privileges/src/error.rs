@@ -57,4 +57,41 @@ impl std::fmt::Display for PrivilegesError {
     }
 }
 
+impl PrivilegesError {
+    /// Formats the domain error using the localization dictionary for the specified language.
+    pub fn format_localized(&self, lang: &str) -> String {
+        match self {
+            Self::PlayerNotConnected(idx) => format!("Player #{idx} is not connected"),
+            Self::Unauthorized(cap) => {
+                goldsrc::tr!("privileges", lang, "errors.unauthorized", cap = cap)
+            }
+            Self::AlreadyClaimedThisRound => {
+                goldsrc::tr!("privileges", lang, "errors.already_claimed")
+            }
+            Self::RoundRestricted {
+                current_round,
+                allowed_from_round,
+            } => {
+                goldsrc::tr!(
+                    "privileges",
+                    lang,
+                    "errors.round_restricted",
+                    allowed = allowed_from_round,
+                    cur = current_round
+                )
+            }
+            Self::FeatureUnsupported {
+                feature,
+                missing_wit_binding,
+                reason,
+            } => {
+                format!(
+                    "[HOST GAP] Privilege feature '{feature}' cannot execute: missing WIT binding '{missing_wit_binding}'. Reason: {reason}"
+                )
+            }
+            Self::Storage(err) => err.clone(),
+        }
+    }
+}
+
 impl std::error::Error for PrivilegesError {}

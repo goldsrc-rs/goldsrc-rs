@@ -1,35 +1,24 @@
 //! Map manager configuration model derived into TOML file format and CVAR registrations.
 
-use goldsrc::ConfigModel;
+use goldsrc::{ConfigModel, CvarFlags};
 
 #[derive(Debug, Clone, PartialEq, ConfigModel)]
+#[config(cvar_prefix = "grs_map_")]
 pub struct MapManagerConfig {
-    #[cvar(
-        name = "grs_map_vote_trigger_mins",
-        flags = "ARCHIVE|SERVER",
-        description = "Minutes before map end to automatically trigger end-of-map vote"
-    )]
+    /// Minutes before map end to automatically trigger end-of-map vote
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0.5..=30.0)]
     pub vote_trigger_mins: f32,
 
-    #[cvar(
-        name = "grs_map_vote_duration_secs",
-        flags = "ARCHIVE|SERVER",
-        description = "Duration in seconds for interactive map vote polling"
-    )]
+    /// Duration in seconds for interactive map vote polling
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 5..=120)]
     pub vote_duration_secs: i32,
 
-    #[cvar(
-        name = "grs_map_block_recent_count",
-        flags = "ARCHIVE|SERVER",
-        description = "Number of recently played maps blocked from rotation and nominations"
-    )]
+    /// Number of recently played maps blocked from rotation and nominations
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER, range = 0..=20)]
     pub block_recent_count: i32,
 
-    #[cvar(
-        name = "grs_map_default_pool",
-        flags = "ARCHIVE|SERVER",
-        description = "Comma-separated default pool of maps in rotation"
-    )]
+    /// Comma-separated default pool of maps in rotation
+    #[cvar(flags = CvarFlags::ARCHIVE | CvarFlags::SERVER)]
     pub default_pool: String,
 }
 
