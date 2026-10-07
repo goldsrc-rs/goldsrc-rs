@@ -147,10 +147,7 @@ pub fn instantiate_plugin<P: AsRef<Path>>(
         } else {
             let mut resolve = wit_parser::Resolve::default();
             let pkg = resolve
-                .push_str(
-                    "goldsrc.wit",
-                    include_str!("../../../../core/goldsrc-api/wit/goldsrc.wit"),
-                )
+                .push_str("goldsrc.wit", include_str!("../../wit/goldsrc.wit"))
                 .unwrap();
             let world_id = resolve
                 .select_world(&[pkg], Some("goldsrc-plugin"))
