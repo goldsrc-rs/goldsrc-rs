@@ -53,22 +53,20 @@ fn main() {
                 .join("metamod")
         });
 
-    // Check that references exist
-    if !hlsdk.join("engine").join("eiface.h").exists() {
+    // Check if references exist; if not, fall back to pregenerated bindings for standalone/SDK usage.
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    if !hlsdk.join("engine").join("eiface.h").exists() || !metamod.join("meta_api.h").exists() {
+        let pregenerated = manifest_dir.join("src").join("bindings_pregenerated.rs");
+        if pregenerated.exists() {
+            std::fs::copy(&pregenerated, out_path.join("bindings.rs"))
+                .expect("Failed to copy pregenerated bindings");
+            return;
+        }
         panic!(
-            "\n\nERROR: HLSDK not found at {}\n\
+            "\n\nERROR: HLSDK not found at {} and bindings_pregenerated.rs missing.\n\
              Run the setup script first:\n\
                python3 scripts/setup.py\n\n",
             hlsdk.display()
-        );
-    }
-
-    if !metamod.join("meta_api.h").exists() {
-        panic!(
-            "\n\nERROR: metamod-r not found at {}\n\
-             Run the setup script first:\n\
-               python3 scripts/setup.py\n\n",
-            metamod.display()
         );
     }
 

@@ -11,17 +11,6 @@ members = [
     "extensions/goldsrc-extension-metamod",
     "framework/goldsrc",
     "framework/goldsrc-macros",
-    "plugins/moderation",
-    "plugins/administration",
-    "plugins/privileges",
-    "plugins/menu_frontend",
-    "plugins/chat_director",
-    "plugins/map_manager",
-    "examples/test_chat",
-    "examples/test_ecs",
-    "examples/test_hud",
-    "examples/test_i18n",
-    "examples/test_menu",
 ]
 default-members = [
     "core/goldsrc-sys",
