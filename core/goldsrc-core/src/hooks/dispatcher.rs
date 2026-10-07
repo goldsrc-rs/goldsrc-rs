@@ -54,9 +54,9 @@ pub fn dispatch_client_command(player_idx: i32, cmd: &str, raw_args: &str) -> bo
         }
 
         // Fallback: dispatch raw slot to WASM plugins event "menu_select" (8 bytes payload: [player_idx: i32, slot: u32])
-        let mut payload = Vec::with_capacity(8);
-        payload.extend_from_slice(&player_idx.to_le_bytes());
-        payload.extend_from_slice(&(slot as u32).to_le_bytes());
+        let mut payload = [0u8; 8];
+        payload[0..4].copy_from_slice(&player_idx.to_le_bytes());
+        payload[4..8].copy_from_slice(&(slot as u32).to_le_bytes());
 
         let targeted = if let Some(owner) = goldsrc_host_wasm::get_active_menu_owner(player_idx) {
             HostRuntime::with_manager(|m| {

@@ -257,19 +257,7 @@ pub fn process_chat_message_with_manager(
         return true;
     }
 
-    // 1. Enforce native moderation mute state
-    if crate::moderation::is_player_muted(sender.index()) {
-        if let Some(engine) = crate::host::HostRuntime::engine() {
-            engine.client_print(
-                sender.index(),
-                goldsrc_api::HUD_PRINTCHAT,
-                "[Moderation] You are muted and cannot send chat messages.\n",
-            );
-        }
-        return true;
-    }
-
-    // 2. Run SMA U-Cycle pipeline over registered layers (censorship, ranks, custom prefixes)
+    // 1. Run SMA U-Cycle pipeline over registered layers (censorship, ranks, mute, custom prefixes)
     let layers = match CHAT_PIPELINE.read() {
         Ok(p) => p.clone(),
         Err(e) => e.into_inner().clone(),

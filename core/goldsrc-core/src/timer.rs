@@ -270,6 +270,24 @@ impl TimerService {
             *time_guard = current_time;
         }
 
+        // 0. Zero-allocation fast path for idle frames
+        let has_work = {
+            let queues = self.queues.lock().unwrap_or_else(|e| e.into_inner());
+            let expired_ticks = queues
+                .tick_heap
+                .peek()
+                .is_some_and(|top| top.target_tick <= current_tick);
+            let expired_times = queues
+                .time_heap
+                .peek()
+                .is_some_and(|top| top.target_time <= current_time);
+            expired_ticks || expired_times
+        };
+
+        if !has_work {
+            return 0;
+        }
+
         // 1. Drain expired tick and time items under lock
         let (expired_ticks, expired_times) = {
             let mut queues = self.queues.lock().unwrap_or_else(|e| e.into_inner());
