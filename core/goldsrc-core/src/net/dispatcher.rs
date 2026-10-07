@@ -57,16 +57,25 @@ impl NetworkMessageDispatcher {
         msg_dest: i32,
         formatted: &str,
     ) {
+        let mut payload = formatted.to_string();
+        // AMX Mod X protocol: if format string is used, double newline is needed for notify/console in cstrike
+        if (msg_dest == HUD_PRINTNOTIFY || msg_dest == HUD_PRINTCONSOLE)
+            && !payload.ends_with("\n\n")
+        {
+            payload.push('\n');
+        }
+        Self::send_text_msg_preformatted(engine, player_index, msg_dest, &payload);
+    }
+
+    /// Sends a preformatted `TextMsg` payload directly to the wire, avoiding redundant allocations.
+    pub fn send_text_msg_preformatted(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        player_index: i32,
+        msg_dest: i32,
+        payload: &str,
+    ) {
         let text_msg_id = engine.reg_user_msg("TextMsg", -1);
         if text_msg_id > 0 && text_msg_id < 255 {
-            let mut payload = formatted.to_string();
-            // AMX Mod X protocol: if format string is used, double newline is needed for notify/console in cstrike
-            if (msg_dest == HUD_PRINTNOTIFY || msg_dest == HUD_PRINTCONSOLE)
-                && !payload.ends_with("\n\n")
-            {
-                payload.push('\n');
-            }
-
             let safe_msg = if payload.len() > 185 {
                 let mut end = 185;
                 while end > 0 && !payload.is_char_boundary(end) {
@@ -74,7 +83,7 @@ impl NetworkMessageDispatcher {
                 }
                 &payload[..end]
             } else {
-                &payload
+                payload
             };
 
             engine.message_begin(
@@ -89,7 +98,7 @@ impl NetworkMessageDispatcher {
             engine.message_end();
         } else {
             // Fallback to direct client_print
-            engine.client_print(player_index, msg_dest, formatted);
+            engine.client_print(player_index, msg_dest, payload);
         }
     }
 
@@ -101,6 +110,21 @@ impl NetworkMessageDispatcher {
         message: &str,
     ) {
         let formatted = goldsrc_api::format_say_text(message);
+        let payload = if !formatted.starts_with(['\x01', '\x02', '\x03', '\x04']) {
+            format!("\x01{formatted}")
+        } else {
+            formatted
+        };
+        Self::send_say_text_preformatted(engine, receiver_index, sender_index, &payload);
+    }
+
+    /// Sends a preformatted `SayText` payload directly to the client.
+    pub fn send_say_text_preformatted(
+        engine: &dyn goldsrc_spi::engine::Engine,
+        receiver_index: i32,
+        sender_index: i32,
+        payload: &str,
+    ) {
         let say_text_id = engine.reg_user_msg("SayText", -1);
         if say_text_id > 0 && say_text_id < 255 {
             engine.message_begin(
@@ -112,11 +136,6 @@ impl NetworkMessageDispatcher {
             // 1. Sender entity index for team color ^3 resolution
             engine.write_byte(sender_index);
             // 2. Chat message payload (starts with \x02 / \x01 in CS 1.6 client)
-            let payload = if !formatted.starts_with(['\x01', '\x02', '\x03', '\x04']) {
-                format!("\x01{formatted}")
-            } else {
-                formatted
-            };
             let safe_msg = if payload.len() > SAFE_SAYTEXT_LIMIT {
                 let mut end = SAFE_SAYTEXT_LIMIT;
                 while end > 0 && !payload.is_char_boundary(end) {
@@ -124,39 +143,53 @@ impl NetworkMessageDispatcher {
                 }
                 &payload[..end]
             } else {
-                &payload
+                payload
             };
             engine.write_string(safe_msg);
             engine.message_end();
         } else {
             // Fallback to HUD_PRINTCHAT via ClientPrintf if SayText user message isn't registered yet
-            let safe_text = format!("{formatted}\n");
+            let safe_text = format!("{payload}\n");
             engine.client_print(receiver_index, goldsrc_api::HUD_PRINTCHAT, &safe_text);
         }
     }
 
     /// Broadcasts a `TextMsg` to all connected clients (`MessageDest::All`).
+    /// Pre-formats message once, eliminating 32 duplicate heap string allocations.
     pub fn broadcast_text_msg(
         engine: &dyn goldsrc_spi::engine::Engine,
         msg_dest: i32,
         message: &str,
     ) {
+        let mut payload = message.to_string();
+        if (msg_dest == HUD_PRINTNOTIFY || msg_dest == HUD_PRINTCONSOLE)
+            && !payload.ends_with("\n\n")
+        {
+            payload.push('\n');
+        }
         for idx in 1..=32 {
             if engine.entity_is_valid(idx) {
-                Self::send_text_msg(engine, idx, msg_dest, message);
+                Self::send_text_msg_preformatted(engine, idx, msg_dest, &payload);
             }
         }
     }
 
     /// Broadcasts a `SayText` message to all connected clients (`MessageDest::All`).
+    /// Pre-formats chat line once, eliminating up to 64 duplicate heap allocations.
     pub fn broadcast_say_text(
         engine: &dyn goldsrc_spi::engine::Engine,
         sender_index: i32,
         message: &str,
     ) {
+        let formatted = goldsrc_api::format_say_text(message);
+        let payload = if !formatted.starts_with(['\x01', '\x02', '\x03', '\x04']) {
+            format!("\x01{formatted}")
+        } else {
+            formatted
+        };
         for idx in 1..=32 {
             if engine.entity_is_valid(idx) {
-                Self::send_say_text(engine, idx, sender_index, message);
+                Self::send_say_text_preformatted(engine, idx, sender_index, &payload);
             }
         }
     }
