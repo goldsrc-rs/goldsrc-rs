@@ -214,26 +214,21 @@ pub struct LogConfig {
     /// Minimum level to emit. Default: `Info`.
     #[serde(default = "default_level")]
     pub level: LogLevel,
-
     /// Custom format template utilizing placeholders (e.g. "[{log:date-time}][{log:level}][{log:target}] {log:message}").
     #[serde(default = "default_format")]
     pub format: String,
-
-    /// Write log lines to `<logs_dir>/goldsrc.log`.
-    #[serde(default = "default_true")]
-    pub file_output: bool,
-
-    /// Forward log lines to the server console via the registered callback.
-    #[serde(default = "default_true")]
-    pub console_output: bool,
-
     /// Restrict output to these targets. Empty vec = all targets allowed.
     #[serde(default)]
     pub targets: Vec<LogTarget>,
-
     /// Dedicated error output and crash dump configuration.
     #[serde(default)]
     pub errors: ErrorLogConfig,
+    /// Write log lines to `<logs_dir>/goldsrc.log`.
+    #[serde(default = "default_true")]
+    pub file_output: bool,
+    /// Forward log lines to the server console via the registered callback.
+    #[serde(default = "default_true")]
+    pub console_output: bool,
 }
 
 fn default_level() -> LogLevel {

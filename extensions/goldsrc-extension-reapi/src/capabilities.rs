@@ -6,18 +6,18 @@
 /// Status of ReAPI components detected at runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ReApiStatus {
-    /// Whether ReHLDS engine is active.
-    pub rehlds_active: bool,
     /// ReHLDS major version (if active).
     pub rehlds_major: i32,
     /// ReHLDS minor version (if active).
     pub rehlds_minor: i32,
-    /// Whether ReGameDLL is active.
-    pub regamedll_active: bool,
     /// ReGameDLL major version (if active).
     pub regamedll_major: i32,
     /// ReGameDLL minor version (if active).
     pub regamedll_minor: i32,
+    /// Whether ReHLDS engine is active.
+    pub rehlds_active: bool,
+    /// Whether ReGameDLL is active.
+    pub regamedll_active: bool,
 }
 
 impl ReApiStatus {

@@ -77,18 +77,18 @@ pub enum ReportEvent {
 /// Aggregated statistical summary calculated upon report finalization.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReportSummary {
-    /// Total rounds played.
-    pub total_rounds: u32,
     /// Score per team (e.g. {"TERRORIST": 16, "CT": 14}).
     pub team_scores: HashMap<String, u32>,
-    /// Total kills recorded.
-    pub total_kills: u32,
-    /// Total damage recorded across all participants.
-    pub total_damage: f32,
     /// Kills per player slot (`player_slot -> kill_count`).
     pub player_kills: HashMap<i32, u32>,
     /// Damage dealt per player slot (`player_slot -> damage_dealt`).
     pub player_damage: HashMap<i32, f32>,
+    /// Total rounds played.
+    pub total_rounds: u32,
+    /// Total kills recorded.
+    pub total_kills: u32,
+    /// Total damage recorded across all participants.
+    pub total_damage: f32,
 }
 
 impl ReportSummary {

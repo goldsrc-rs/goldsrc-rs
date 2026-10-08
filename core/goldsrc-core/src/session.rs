@@ -7,16 +7,16 @@ pub use goldsrc_spi::identity::PlayerSessionToken;
 /// Ephemeral session state for a connected client slot (1..=32).
 #[derive(Debug, Clone)]
 pub struct ClientSession {
-    /// Slot index of the client (1..=32).
-    pub slot: i32,
     /// Monotonically increasing connection generation counter.
     pub generation: u64,
-    /// Engine user ID (`pfnGetPlayerUserId`) assigned by server.
-    pub user_id: u32,
     /// Overridden or cached userinfo key-value pairs (e.g. "_lang", "rate", "name").
     pub userinfo_overrides: HashMap<String, String>,
     /// Custom plugin/system metadata or tags associated with this session.
     pub metadata: HashMap<String, String>,
+    /// Slot index of the client (1..=32).
+    pub slot: i32,
+    /// Engine user ID (`pfnGetPlayerUserId`) assigned by server.
+    pub user_id: u32,
 }
 
 impl ClientSession {
@@ -115,7 +115,9 @@ impl ClientSessionManager {
             .get(&token.slot())
             .map(|sess| {
                 sess.generation == token.generation()
-                    && (token.user_id() == 0 || sess.user_id == 0 || sess.user_id == token.user_id())
+                    && (token.user_id() == 0
+                        || sess.user_id == 0
+                        || sess.user_id == token.user_id())
             })
             .unwrap_or(false)
     }

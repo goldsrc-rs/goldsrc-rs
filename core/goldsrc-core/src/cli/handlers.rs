@@ -668,7 +668,12 @@ pub fn handle_sessions<F: FnMut(&str)>(spec: &CommandSpec, mut parser: lexopt::P
                     "lang" => out(&format!("{}\n", sess.lang().unwrap_or(""))),
                     "token" => {
                         let t = sess.token();
-                        out(&format!("{}:{}:{}\n", t.slot(), t.generation(), t.user_id()));
+                        out(&format!(
+                            "{}:{}:{}\n",
+                            t.slot(),
+                            t.generation(),
+                            t.user_id()
+                        ));
                     }
                     custom_key => {
                         if let Some(val) = sess.get_userinfo(custom_key) {
@@ -707,7 +712,9 @@ pub fn handle_sessions<F: FnMut(&str)>(spec: &CommandSpec, mut parser: lexopt::P
             let tok = sess.token();
             out(&format!(
                 "  Session Token: slot={}, gen={}, uid={}\n",
-                tok.slot(), tok.generation(), tok.user_id()
+                tok.slot(),
+                tok.generation(),
+                tok.user_id()
             ));
             out(&format!(
                 "  Language:      {}\n",

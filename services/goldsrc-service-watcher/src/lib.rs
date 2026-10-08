@@ -271,12 +271,12 @@ pub struct WatcherStatus {
     pub target_type: &'static str,
     pub path: PathBuf,
     pub filter_desc: String,
-    pub recursive: bool,
-    pub is_paused: bool,
     pub debounce_ms: u64,
     pub events_fired: u64,
     #[serde(skip_serializing)]
     pub last_event: Option<Instant>,
+    pub recursive: bool,
+    pub is_paused: bool,
 }
 
 /// Errors that can occur during watcher registration and operation.
@@ -295,10 +295,10 @@ pub enum WatcherError {
 struct InternalWatcherEntry {
     spec: WatcherSpec,
     _handle: notify::RecommendedWatcher,
-    is_paused: bool,
     events_fired: u64,
     last_event: Option<Instant>,
     last_reload_by_path: HashMap<PathBuf, Instant>,
+    is_paused: bool,
 }
 
 /// Centralized filesystem watcher service managing system and plugin hot-reload hooks.

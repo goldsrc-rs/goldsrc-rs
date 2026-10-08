@@ -137,9 +137,9 @@ impl BanRegistry {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct MuteRecord {
-    pub slot: i32,
     pub expires_at: Option<Instant>,
     pub reason: String,
+    pub slot: i32,
 }
 
 /// In-memory player mute registry.

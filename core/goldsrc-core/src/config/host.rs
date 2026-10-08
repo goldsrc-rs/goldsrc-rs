@@ -47,18 +47,15 @@ impl CoreConfig {
 /// Hot-reload and file-system watcher configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatcherConfig {
-    /// Whether automatic hot-reload on `.wasm` modification is enabled.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-
     /// Debounce delay in milliseconds to avoid reading partially written files.
     #[serde(default = "default_debounce_ms")]
     pub debounce_ms: u64,
-
     /// Policy for when a `.wasm` file is deleted from disk.
     #[serde(default)]
     pub on_file_deleted: OnFileDeleted,
-
+    /// Whether automatic hot-reload on `.wasm` modification is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     /// Whether to watch `.toml` plugin config changes.
     #[serde(default = "default_true")]
     pub watch_configs: bool,

@@ -30,6 +30,10 @@ pub enum VTableTier {
 #[repr(C, align(64))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct TakeDamageContext {
+    /// Algebraic, order-independent damage modifier pipeline.
+    pub modifiers: CommutativeModifier,
+    /// Context blackboard for inter-plugin auxiliary metadata.
+    pub blackboard: TypedBlackboard,
     /// Victim entity index.
     pub victim: i32,
     /// Inflictor entity index (e.g. grenade, rocket, or weapon holder).
@@ -40,10 +44,6 @@ pub struct TakeDamageContext {
     pub damage: f32,
     /// Damage type bits (`DMG_GENERIC`, `DMG_BULLET`, `DMG_BLAST`, etc.).
     pub bits_damage_type: i32,
-    /// Algebraic, order-independent damage modifier pipeline.
-    pub modifiers: CommutativeModifier,
-    /// Context blackboard for inter-plugin auxiliary metadata.
-    pub blackboard: TypedBlackboard,
 }
 
 impl TakeDamageContext {

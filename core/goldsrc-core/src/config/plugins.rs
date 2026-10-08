@@ -23,21 +23,21 @@ pub struct PluginDebugConfig {
     /// Logging verbosity level.
     #[serde(default)]
     pub level: PluginLogLevel,
-    /// Whether to profile per-tick and event execution times.
-    #[serde(default)]
-    pub profile: bool,
     /// Specific events to trace/log.
     #[serde(default)]
     pub log_events: Vec<String>,
-    /// Whether to log command invocations and arguments.
-    #[serde(default = "default_true")]
-    pub log_commands: bool,
     /// Watchdog epoch deadline override (default: 100 epochs = ~200ms).
     #[serde(default = "default_epoch_limit")]
     pub epoch_limit: u64,
     /// Dedicated log file for this plugin (in `logs/` directory).
     #[serde(default)]
     pub log_file: Option<String>,
+    /// Whether to profile per-tick and event execution times.
+    #[serde(default)]
+    pub profile: bool,
+    /// Whether to log command invocations and arguments.
+    #[serde(default = "default_true")]
+    pub log_commands: bool,
 }
 
 fn default_true() -> bool {
@@ -114,9 +114,6 @@ where
 pub struct PluginEntry {
     /// Plugin name or relative path (e.g. "admin_system", "test_suite/test_hud").
     pub name: String,
-    /// Whether the plugin is enabled for loading.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
     /// Architectural loading tier (Core -> Service -> Gameplay -> Addon -> Analytics).
     #[serde(default)]
     pub tier: PluginTier,
@@ -126,17 +123,20 @@ pub struct PluginEntry {
     /// Debugging and profiling configuration.
     #[serde(default)]
     pub debug: Option<PluginDebugSetting>,
+    /// Whether the plugin is enabled for loading.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 /// A named profile group of plugins (e.g. `[groups.vip_pack]`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PluginGroup {
-    /// Whether the entire group is enabled.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
     /// List of plugin names or relative paths belonging to this group.
     #[serde(default)]
     pub plugins: Vec<String>,
+    /// Whether the entire group is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 /// A reactive lifecycle rule in `plugins.toml`.
@@ -175,9 +175,6 @@ impl RuleConfig {
 /// Individual plugin entry representation before resolving name.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PluginEntryItem {
-    /// Whether the plugin is enabled for loading.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
     /// Architectural loading tier (Core -> Service -> Gameplay -> Addon -> Analytics).
     #[serde(default)]
     pub tier: PluginTier,
@@ -187,6 +184,9 @@ pub struct PluginEntryItem {
     /// Debugging and profiling configuration.
     #[serde(default)]
     pub debug: Option<PluginDebugSetting>,
+    /// Whether the plugin is enabled for loading.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 /// Flexible representation of `plugins` section supporting both array and named table (map).
