@@ -23,6 +23,7 @@ use std::time::Instant;
 
 static RUNTIME: OnceLock<Mutex<HostRuntime>> = OnceLock::new();
 static ENGINE_INSTANCE: OnceLock<std::sync::Arc<dyn goldsrc_spi::engine::Engine>> = OnceLock::new();
+static BACKEND_TYPE: OnceLock<BackendType> = OnceLock::new();
 
 thread_local! {
     static IN_MANAGER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -258,18 +259,71 @@ impl HostRuntime {
         );
 
         let _ = ENGINE_INSTANCE.set(engine.clone());
+        let _ = BACKEND_TYPE.set(backend);
 
         goldsrc_host_wasm::set_translate_callback(|caller, dict, lang, key| {
             crate::i18n::I18nService::translate_with_caller(caller, dict, lang, key, &[], &[])
         });
 
+        goldsrc_host_wasm::set_vfs_callbacks(
+            |_caller, rel_path| {
+                if rel_path.contains("..") {
+                    return Err("Access denied: path traversal not permitted".to_string());
+                }
+                let resolved = Self::resolve_vfs_path(rel_path)
+                    .ok_or_else(|| format!("File not found: {rel_path}"))?;
+                std::fs::read_to_string(&resolved)
+                    .map_err(|e| format!("Failed to read '{rel_path}': {e}"))
+            },
+            |_caller, rel_path| {
+                if rel_path.contains("..") {
+                    return Err("Access denied: path traversal not permitted".to_string());
+                }
+                let resolved = Self::resolve_vfs_path(rel_path)
+                    .ok_or_else(|| format!("File not found: {rel_path}"))?;
+                std::fs::read(&resolved).map_err(|e| format!("Failed to read '{rel_path}': {e}"))
+            },
+            |_caller, rel_path| {
+                if rel_path.contains("..") {
+                    return Err("Access denied: path traversal not permitted".to_string());
+                }
+                let backend = BACKEND_TYPE.get().copied().unwrap_or(BackendType::Metamod);
+                let fw_dir = PathResolver::framework_dir(backend);
+                let resolved = if rel_path == "." || rel_path.is_empty() {
+                    fw_dir
+                } else if let Some(found) = Self::resolve_vfs_path(rel_path) {
+                    found
+                } else {
+                    return Err(format!("Directory not found: {rel_path}"));
+                };
+                let read_dir = std::fs::read_dir(&resolved)
+                    .map_err(|e| format!("Failed to read directory '{rel_path}': {e}"))?;
+                let mut entries = Vec::new();
+                for entry in read_dir.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    let metadata = entry.metadata().ok();
+                    let is_dir = metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false);
+                    let size = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+                    entries.push((name, is_dir, size));
+                }
+                Ok(entries)
+            },
+        );
+
         goldsrc_host_wasm::set_format_placeholders_callback(|player_idx, text| {
-            let player = if player_idx > 0 {
-                goldsrc_api::Player::new(player_idx)
+            let player = if (1..=32).contains(&player_idx) {
+                Some(goldsrc_api::Player::new(player_idx))
             } else {
-                goldsrc_api::Player::new(0)
+                None
             };
             crate::placeholders::format_placeholders(text, player)
+        });
+
+        goldsrc_host_wasm::set_feature_query_callback(|token| {
+            crate::features::has_feature(goldsrc_spi::hash::FeatureToken(token))
+        });
+        goldsrc_api::engine::server::set_feature_query_hook(|token| {
+            crate::features::has_feature(goldsrc_spi::hash::FeatureToken(token))
         });
 
         goldsrc_api::client::player::set_player_resolver_hook(|index| {
@@ -288,6 +342,13 @@ impl HostRuntime {
                 }
             } else {
                 None
+            }
+        });
+        goldsrc_api::client::player::set_player_validity_hook(|index| {
+            if let Some(engine) = HostRuntime::engine() {
+                engine.player_is_valid(index)
+            } else {
+                false
             }
         });
         goldsrc_api::client::player::set_player_name_hook(|index| {
@@ -642,6 +703,48 @@ impl HostRuntime {
         crate::chat::register_chat_trigger(std::sync::Arc::new(crate::chat::CommandChatTrigger));
 
         Ok(())
+    }
+
+    /// Resolves candidate relative path checking addon framework directories, mod dir, and server root.
+    pub fn resolve_vfs_path(rel_path: &str) -> Option<std::path::PathBuf> {
+        let p = std::path::Path::new(rel_path);
+
+        let backend = BACKEND_TYPE.get().copied().unwrap_or(BackendType::Metamod);
+        let fw_dir = PathResolver::framework_dir(backend);
+
+        // Candidate 1: inside framework dir (e.g. cstrike/addons/goldsrc/<rel_path> or <mod>/goldsrc/<rel_path>)
+        let in_fw = fw_dir.join(p);
+        if in_fw.exists() {
+            return Some(in_fw);
+        }
+
+        // Candidate 2: inside configs dir
+        let in_configs = PathResolver::existing_config_dir(backend).join(p);
+        if in_configs.exists() {
+            return Some(in_configs);
+        }
+
+        // Candidate 3: inside logs dir
+        let in_logs = PathResolver::existing_log_dir(backend).join(p);
+        if in_logs.exists() {
+            return Some(in_logs);
+        }
+
+        // Candidate 4: inside plugins dir
+        let in_plugins = PathResolver::existing_plugin_dir(backend).join(p);
+        if in_plugins.exists() {
+            return Some(in_plugins);
+        }
+
+        // Candidate 5: fallback without mod prefix (addons/goldsrc/<rel_path>)
+        let in_alt = std::path::PathBuf::from(goldsrc_api::consts::ADDONS_DIR_NAME)
+            .join(goldsrc_api::consts::FRAMEWORK_NAME)
+            .join(p);
+        if in_alt.exists() {
+            return Some(in_alt);
+        }
+
+        None
     }
 
     /// Returns a clone of the Engine reference if initialized.

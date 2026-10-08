@@ -149,8 +149,8 @@ fn is_default_config(cfg: &DictConfig) -> bool {
 
 impl LangDict {
     /// Creates a new `LangDictBuilder` for fluent dictionary construction.
-    pub fn builder(dict_name: impl Into<String>) -> crate::i18n::builder::LangDictBuilder {
-        crate::i18n::builder::LangDictBuilder::new(dict_name)
+    pub fn builder(dict_name: impl Into<String>) -> crate::builder::LangDictBuilder {
+        crate::builder::LangDictBuilder::new(dict_name)
     }
 
     /// Serializes this dictionary to a formatted TOML string.

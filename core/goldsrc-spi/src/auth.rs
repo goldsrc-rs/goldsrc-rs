@@ -21,6 +21,7 @@ pub enum HandshakeDecision {
 }
 
 /// Network context provided to an [`AuthProvider`] during connection handshake.
+#[repr(C, align(64))]
 #[derive(Debug, Clone)]
 pub struct HandshakeContext<'a> {
     /// Slot index assigned to the connecting client (1..=32).

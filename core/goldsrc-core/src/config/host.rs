@@ -200,11 +200,21 @@ impl HostConfig {
                     return cfg;
                 }
                 Err(e) => {
-                    log::warn!(
+                    let ts = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    let backup_path = path.with_extension(format!("corrupted.{ts}.toml"));
+                    let _ = std::fs::copy(&path, &backup_path);
+                    log::error!(
                         target: log_targets::CORE,
-                        "Failed to parse '{}': {e}. Using sanitized defaults.",
-                        path.display()
+                        "Failed to parse '{}': {e}. Preserved backup at '{}'. Running with safe in-memory defaults (original file NOT overwritten).",
+                        path.display(),
+                        backup_path.display()
                     );
+                    let mut default_cfg = HostConfig::default_for(backend);
+                    default_cfg.sanitize();
+                    return default_cfg;
                 }
             }
         }
@@ -212,7 +222,7 @@ impl HostConfig {
         let mut default_cfg = HostConfig::default_for(backend);
         default_cfg.sanitize();
 
-        // Write default configuration file if not present
+        // Write default configuration file ONLY if it did not exist initially
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }

@@ -326,7 +326,7 @@ impl I18nService {
 macro_rules! tr {
     ($dict:expr, $lang:expr, $key:expr) => {{
         use goldsrc_api::AsLangCode as _;
-        $crate::i18n::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], &[])
+        $crate::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], &[])
     }};
     ($dict:expr, $lang:expr, $key:expr, $( $k:ident = $v:expr ),* $(,)?) => {{
         use goldsrc_api::AsLangCode as _;
@@ -335,7 +335,7 @@ macro_rules! tr {
         let __named: &[(&str, &str)] = &[
             $( (stringify!($k), __owned_iter.next().unwrap().as_str()) ),*
         ];
-        $crate::i18n::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, __named, &[])
+        $crate::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, __named, &[])
     }};
     ($dict:expr, $lang:expr, $key:expr, $( $pos:expr ),* $(,)?) => {{
         use goldsrc_api::AsLangCode as _;
@@ -344,7 +344,7 @@ macro_rules! tr {
         let __pos: &[&str] = &[
             $( __owned_iter.next().unwrap().as_str() ),*
         ];
-        $crate::i18n::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], __pos)
+        $crate::I18nService::translate($dict, (&$lang).as_lang_code().as_ref(), $key, &[], __pos)
     }};
 }
 

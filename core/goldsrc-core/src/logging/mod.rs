@@ -169,6 +169,45 @@ impl LogTarget {
     }
 }
 
+/// Console output mode for errors and panics.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConsoleErrorMode {
+    /// Concise notification: summary in console + notice indicating full log location.
+    #[default]
+    Notify,
+    /// Verbose multi-line stack trace directly in server console.
+    Full,
+    /// Suppress error output in server console completely.
+    Off,
+}
+
+/// Dedicated error output configuration under `[logging.errors]` in `goldsrc.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorLogConfig {
+    /// How errors are reported to the server console. Default: `Notify`.
+    #[serde(default)]
+    pub console_mode: ConsoleErrorMode,
+
+    /// Whether to write errors to `logs/error_YYYY-MM-DD.log`. Default: `true`.
+    #[serde(default = "default_true")]
+    pub server_log: bool,
+
+    /// Whether to write dedicated crash reports to `logs/plugins/<plugin_name>.log`. Default: `true`.
+    #[serde(default = "default_true")]
+    pub plugin_log: bool,
+}
+
+impl Default for ErrorLogConfig {
+    fn default() -> Self {
+        Self {
+            console_mode: ConsoleErrorMode::Notify,
+            server_log: true,
+            plugin_log: true,
+        }
+    }
+}
+
 /// The `[logging]` section of `goldsrc.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -191,6 +230,10 @@ pub struct LogConfig {
     /// Restrict output to these targets. Empty vec = all targets allowed.
     #[serde(default)]
     pub targets: Vec<LogTarget>,
+
+    /// Dedicated error output and crash dump configuration.
+    #[serde(default)]
+    pub errors: ErrorLogConfig,
 }
 
 fn default_level() -> LogLevel {
@@ -211,6 +254,7 @@ impl Default for LogConfig {
             file_output: true,
             console_output: true,
             targets: Vec::new(), // all targets
+            errors: ErrorLogConfig::default(),
         }
     }
 }
@@ -407,16 +451,93 @@ impl GoldSrcLogger {
                 let _ = writer.write_all(plain_line.as_bytes());
             }
 
-            // Write to dedicated error file if level is Error
+            // Write to dedicated error file if level is Error and server_log is enabled
             if level == LogLevel::Error
+                && self.config.errors.server_log
                 && let Some(ref mut err_writer) = self.error_writer
             {
                 let _ = err_writer.write_all(plain_line.as_bytes());
+                let _ = err_writer.flush();
+            }
+
+            // Dedicated per-plugin crash log if enabled
+            if level == LogLevel::Error && self.config.errors.plugin_log {
+                let plugin_name = if let Some(rest) = message.strip_prefix("[CRASH:") {
+                    rest.split(']').next()
+                } else if target == LogTarget::Plugin {
+                    if message.starts_with('[')
+                        && let Some(end) = message.find(']')
+                    {
+                        Some(&message[1..end])
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(name) = plugin_name {
+                    let plugins_log_dir = self.logs_dir.join("plugins");
+                    let _ = fs::create_dir_all(&plugins_log_dir);
+                    let plugin_log_path = plugins_log_dir.join(format!("{name}.log"));
+                    if let Ok(mut file) = OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(plugin_log_path)
+                    {
+                        let _ = file.write_all(plain_line.as_bytes());
+                        let _ = file.flush();
+                    }
+                }
             }
         }
 
         // Return formatted console string to be dispatched OUTSIDE of the logger lock
         if self.config.console_output && self.console_cb.is_some() {
+            if level == LogLevel::Error {
+                match self.config.errors.console_mode {
+                    ConsoleErrorMode::Off => return None,
+                    ConsoleErrorMode::Notify => {
+                        let (headline, subline) = if let Some(rest) =
+                            message.strip_prefix("[CRASH:")
+                        {
+                            let name = rest.split(']').next().unwrap_or("unknown");
+                            let cause = message
+                                .lines()
+                                .find(|l| l.contains("Root Cause:"))
+                                .unwrap_or("trapped");
+                            let loc = message
+                                .lines()
+                                .find(|l| l.contains("Primary Location:"))
+                                .unwrap_or("");
+                            (
+                                format!(
+                                    "\x1b[31m[ERROR]\x1b[0m\x1b[35m[plugin]\x1b[0m Plugin '{name}' {cause} {loc}"
+                                ),
+                                format!(
+                                    "\x1b[31m[ERROR]\x1b[0m\x1b[35m[plugin]\x1b[0m Full crash backtrace written to: logs/error_{today}.log & logs/plugins/{name}.log"
+                                ),
+                            )
+                        } else {
+                            let first_line = message.lines().next().unwrap_or(message);
+                            (
+                                format!(
+                                    "\x1b[31m[ERROR]\x1b[0m\x1b[35m[{}]\x1b[0m {first_line}",
+                                    target.as_str()
+                                ),
+                                format!(
+                                    "\x1b[31m[ERROR]\x1b[0m Full diagnostic details written to: logs/error_{today}.log"
+                                ),
+                            )
+                        };
+                        return Some(format!("{headline}\n{subline}\n"));
+                    }
+                    ConsoleErrorMode::Full => {
+                        // proceed to normal full console output
+                    }
+                }
+            }
+
             let level_color = match level {
                 LogLevel::Trace => "\x1b[36m",
                 LogLevel::Debug => "\x1b[90m",
@@ -612,5 +733,44 @@ mod tests {
             formatted,
             "[2026-09-05 14:30:00][WARN][wasm] Epoch deadline exceeded"
         );
+    }
+
+    #[test]
+    fn test_error_log_config_defaults() {
+        let cfg = ErrorLogConfig::default();
+        assert_eq!(cfg.console_mode, ConsoleErrorMode::Notify);
+        assert!(cfg.server_log);
+        assert!(cfg.plugin_log);
+    }
+
+    #[test]
+    fn test_emit_error_notify_console_mode() {
+        let cfg = LogConfig {
+            level: LogLevel::Info,
+            errors: ErrorLogConfig {
+                console_mode: ConsoleErrorMode::Notify,
+                server_log: true,
+                plugin_log: true,
+            },
+            file_output: false,
+            console_output: true,
+            ..Default::default()
+        };
+        let mut logger = GoldSrcLogger::new(
+            cfg,
+            None,
+            BackendType::Metamod,
+            Some(std::sync::Arc::new(|_| {})),
+        );
+        let crash_msg = "[CRASH:test_plugin]\nRoot Cause: UnreachableCodeReached\nPrimary Location: src/lib.rs:42:5\nDemangled Backtrace:\n  frame 0";
+        let console_res = logger.emit(LogLevel::Error, LogTarget::Plugin, crash_msg);
+        assert!(console_res.is_some());
+        let line = console_res.unwrap();
+        assert!(line.contains("Plugin 'test_plugin'"));
+        assert!(line.contains("Root Cause: UnreachableCodeReached"));
+        assert!(line.contains("Primary Location: src/lib.rs:42:5"));
+        assert!(line.contains("Full crash backtrace written to:"));
+        // Ensure it does NOT contain the 30-line backtrace frames in notify mode
+        assert!(!line.contains("Demangled Backtrace"));
     }
 }

@@ -16,24 +16,6 @@ pub trait ChatLayer: Send + Sync {
     fn on_exit(&self, msg: &mut ChatMessage, outcome: &mut Result<(), ()>);
 }
 
-/// Functional adapter for legacy chat middleware closure.
-struct FnChatLayer<F>(F);
-
-impl<F> ChatLayer for FnChatLayer<F>
-where
-    F: Fn(&mut ChatMessage) -> bool + Send + Sync,
-{
-    fn on_enter(&self, msg: &mut ChatMessage) -> FlowControl<(), (), ()> {
-        if (self.0)(msg) && !msg.is_blocked {
-            FlowControl::Proceed(())
-        } else {
-            FlowControl::Halt(())
-        }
-    }
-
-    fn on_exit(&self, _msg: &mut ChatMessage, _outcome: &mut Result<(), ()>) {}
-}
-
 /// Global chat processing pipeline registry.
 static CHAT_PIPELINE: LazyLock<RwLock<Vec<Arc<dyn ChatLayer>>>> =
     LazyLock::new(|| RwLock::new(Vec::new()));
@@ -76,14 +58,6 @@ pub fn register_chat_layer(layer: Arc<dyn ChatLayer>) {
         Err(e) => e.into_inner(),
     };
     pipeline.push(layer);
-}
-
-/// Registers a legacy functional chat filter in the global pipeline.
-pub fn register_chat_middleware<F>(middleware: F)
-where
-    F: Fn(&mut ChatMessage) -> bool + Send + Sync + 'static,
-{
-    register_chat_layer(Arc::new(FnChatLayer(middleware)));
 }
 
 /// Context provider for dynamic command dispatching, external chat middleware, and placeholders.
@@ -144,11 +118,11 @@ pub fn evaluate_chat_triggers(
     raw_text: &str,
 ) -> bool {
     let triggers = match CHAT_TRIGGERS.read() {
-        Ok(t) => t.clone(),
-        Err(e) => e.into_inner().clone(),
+        Ok(t) => t,
+        Err(e) => e.into_inner(),
     };
 
-    for trigger in &triggers {
+    for trigger in triggers.iter() {
         let ctx = context
             .as_mut()
             .map(|c| &mut **c as &mut dyn ChatDispatcherContext);
@@ -240,8 +214,8 @@ pub fn dispatch_local_chat_middleware(
     };
     let mut msg = ChatMessage::new(sender, text, scope);
     let layers = match CHAT_PIPELINE.read() {
-        Ok(p) => p.clone(),
-        Err(e) => e.into_inner().clone(),
+        Ok(p) => p,
+        Err(e) => e.into_inner(),
     };
 
     if run_chat_layers(&layers, &mut msg).is_err() {

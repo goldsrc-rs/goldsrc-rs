@@ -308,10 +308,10 @@ impl LoadedPlugin {
         self.status = PluginStatus::Poisoned {
             error: err.to_string(),
         };
+        let report = crate::crash::format_crash_report(&self.name, err);
         crate::host_log(&format!(
-            "Plugin '{}' panicked and was poisoned: {err}\nRoot cause: {:#?}\nError details: {err:#?}",
-            self.name,
-            err.root_cause()
+            "[ERROR] [CRASH:{}]\n{}",
+            self.name, report.full_report
         ));
     }
 }

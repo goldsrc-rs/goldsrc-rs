@@ -1,0 +1,49 @@
+[workspace]
+schema_version = "1.0.0"
+root = "."
+topology = "hexagonal"
+
+[rules]
+SMA-TAXO-001 = "deny"
+SMA-TAXO-002 = "deny"
+SMA-TAXO-003 = "deny"
+SMA-TAXO-004 = "deny"
+SMA-TAXO-005 = "deny"
+SMA-TAXO-006 = "deny"
+SMA-TAXO-007 = "deny"
+SMA-TAXO-008 = "deny"
+SMA-SCROOGE-010 = "deny"
+SMA-SCROOGE-011 = "deny"
+SMA-SCROOGE-012 = "deny"
+SMA-SCROOGE-013 = "deny"
+SMA-SCROOGE-014 = "warn"
+SMA-SCROOGE-015 = "warn"
+SMA-HOTPATH-020 = "deny"
+SMA-HOTPATH-021 = "deny"
+SMA-HOTPATH-024 = "deny"
+SMA-BOUND-030 = "deny"
+SMA-CONCUR-040 = "deny"
+
+[boundaries]
+core_crates = ["goldsrc-core", "goldsrc-api"]
+port_crates = ["goldsrc-spi"]
+adapter_crates = ["goldsrc-backend-metamod", "goldsrc-backend-standalone"]
+
+[[boundaries.forbidden_dependencies]]
+from = "core_crates"
+to = "adapter_crates"
+
+[[boundaries.forbidden_dependencies]]
+from = "port_crates"
+to = "adapter_crates"
+
+[scopes."rules"]
+role = "rules-engine"
+strict_hotpath = false
+allow_heap = true
+
+[scopes."rules".rules]
+SMA-SCROOGE-010 = "allow"
+SMA-SCROOGE-011 = "allow"
+SMA-SCROOGE-012 = "allow"
+SMA-HOTPATH-020 = "allow"

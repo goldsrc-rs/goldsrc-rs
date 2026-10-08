@@ -1,6 +1,6 @@
 //! Fluent builder API for constructing language dictionaries.
 
-use crate::i18n::dict::{DictAccess, DictConfig, LangDict, LangTable};
+use crate::dict::{DictAccess, DictConfig, LangDict, LangTable};
 use std::collections::HashMap;
 
 /// Builder for constructing configuration of a language dictionary.

@@ -1,0 +1,24 @@
+[package]
+name = "goldsrc-service-reports"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Deterministic and scheduled report aggregator with pluggable exporters for GoldSrc.rs"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+goldsrc-api = { workspace = true }
+goldsrc-spi = { workspace = true }
+goldsrc-service-storage = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+goldsrc-service-storage = { workspace = true }
+
+[features]
+default = ["storage"]
+storage = ["dep:goldsrc-service-storage"]

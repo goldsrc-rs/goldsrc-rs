@@ -80,9 +80,10 @@ pub fn send_hud_message(engine: &dyn Engine, player_idx: Option<i32>, msg: &HudM
             const SVC_DIRECTOR: i32 = 51;
             const DRC_CMD_MESSAGE: i32 = 6;
 
-            let text_bytes = msg.text.as_bytes();
-            // Truncate to safe AMX Mod X / Client buffer limit (128 bytes)
-            let len = text_bytes.len().min(128);
+            let mut len = msg.text.len().min(128);
+            while len > 0 && !msg.text.is_char_boundary(len) {
+                len -= 1;
+            }
             let safe_text = &msg.text[..len];
 
             // Pack color into 0x00RRGGBB format
@@ -103,5 +104,23 @@ pub fn send_hud_message(engine: &dyn Engine, player_idx: Option<i32>, msg: &HudM
             engine.write_string(safe_text);
             engine.message_end();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_hud_utf8_char_boundary_truncation() {
+        // Construct Russian Cyrillic string where byte 128 falls in the middle of a 2-byte character
+        let russian_text = "Тестовое сообщение для проверки корректности обрезки многобайтовых символов UTF-8 в Director HUD";
+        assert!(russian_text.len() > 128);
+
+        let mut len = russian_text.len().min(128);
+        while len > 0 && !russian_text.is_char_boundary(len) {
+            len -= 1;
+        }
+        let safe = &russian_text[..len];
+        assert!(safe.len() <= 128);
+        assert!(std::str::from_utf8(safe.as_bytes()).is_ok());
     }
 }

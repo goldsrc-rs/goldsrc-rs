@@ -570,15 +570,27 @@ impl PluginManager {
 
     /// Calls `on_frame` on every (non-paused) plugin.
     pub fn call_on_frame(&mut self) {
+        let mut had_poison = false;
         for plugin in &mut self.plugins {
-            let _ = plugin.call_on_frame();
+            if plugin.call_on_frame().is_err() {
+                had_poison = true;
+            }
+        }
+        if had_poison {
+            self.recalculate_dependency_states();
         }
     }
 
     /// Calls `on_event` on every (non-paused) plugin.
     pub fn call_on_event(&mut self, name: &str, data: &[u8]) {
+        let mut had_poison = false;
         for plugin in &mut self.plugins {
-            let _ = plugin.call_on_event(name, data);
+            if plugin.call_on_event(name, data).is_err() {
+                had_poison = true;
+            }
+        }
+        if had_poison {
+            self.recalculate_dependency_states();
         }
     }
 

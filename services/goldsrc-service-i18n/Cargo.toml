@@ -1,0 +1,13 @@
+[package]
+name = "goldsrc-service-i18n"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Internationalization (i18n), localization, dictionary, and macro compilation service for GoldSrc.rs"
+
+[dependencies]
+goldsrc-api = { workspace = true }
+toml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }

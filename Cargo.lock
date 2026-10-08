@@ -429,15 +429,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "fsevent-sys"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "futures"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -532,7 +523,6 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 [[package]]
 name = "goldsrc-api"
 version = "0.20.0"
-source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#a879118b2e161d7f5b6bfa3bbb240fdf4ed89307"
 dependencies = [
  "goldsrc-spi",
  "goldsrc-sys",
@@ -553,6 +543,7 @@ dependencies = [
  "goldsrc-spi",
  "goldsrc-sys",
  "libc",
+ "stitch-rs",
  "windows-sys 0.61.2",
 ]
 
@@ -566,6 +557,7 @@ dependencies = [
  "goldsrc-spi",
  "goldsrc-sys",
  "libloading 0.9.0",
+ "stitch-rs",
 ]
 
 [[package]]
@@ -576,21 +568,23 @@ dependencies = [
  "goldsrc-api",
  "goldsrc-host-wasm",
  "goldsrc-service-chat",
+ "goldsrc-service-i18n",
  "goldsrc-service-menu",
  "goldsrc-service-moderation",
  "goldsrc-service-placeholders",
+ "goldsrc-service-storage",
+ "goldsrc-service-telemetry",
+ "goldsrc-service-timer",
+ "goldsrc-service-watcher",
  "goldsrc-spi",
  "goldsrc-sys",
  "lexopt",
  "libloading 0.9.0",
  "log",
- "notify",
- "rusqlite",
  "semver",
  "serde",
  "serde_json",
  "stitch-rs",
- "sysinfo",
  "thiserror",
  "toml",
  "windows-sys 0.61.2",
@@ -627,6 +621,7 @@ dependencies = [
  "goldsrc-api",
  "goldsrc-spi",
  "log",
+ "rustc-demangle",
  "semver",
  "serde",
  "stitch-rs",
@@ -646,6 +641,17 @@ dependencies = [
  "goldsrc-spi",
  "log",
  "stitch-rs",
+]
+
+[[package]]
+name = "goldsrc-service-i18n"
+version = "0.20.0"
+dependencies = [
+ "goldsrc-api",
+ "log",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]
@@ -680,17 +686,72 @@ dependencies = [
 ]
 
 [[package]]
-name = "goldsrc-spi"
+name = "goldsrc-service-reports"
 version = "0.20.0"
-source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#a879118b2e161d7f5b6bfa3bbb240fdf4ed89307"
+dependencies = [
+ "goldsrc-api",
+ "goldsrc-service-storage",
+ "goldsrc-spi",
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "goldsrc-service-storage"
+version = "0.20.0"
+dependencies = [
+ "crossbeam-channel",
+ "goldsrc-api",
+ "goldsrc-spi",
+ "log",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "goldsrc-service-telemetry"
+version = "0.20.0"
 dependencies = [
  "serde",
+ "sysinfo",
+]
+
+[[package]]
+name = "goldsrc-service-timer"
+version = "0.20.0"
+dependencies = [
+ "goldsrc-api",
+ "log",
+]
+
+[[package]]
+name = "goldsrc-service-watcher"
+version = "0.20.0"
+dependencies = [
+ "crossbeam-channel",
+ "goldsrc-api",
+ "log",
+ "notify",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "goldsrc-spi"
+version = "0.20.0"
+dependencies = [
+ "serde",
+ "stitch-core",
+ "stitch-macros",
 ]
 
 [[package]]
 name = "goldsrc-sys"
 version = "0.20.0"
-source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#a879118b2e161d7f5b6bfa3bbb240fdf4ed89307"
 dependencies = [
  "bindgen",
 ]
@@ -947,7 +1008,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d3d07927151ff8575b7087f245456e549fea62edf0ec4e565a5ee50c8402bc3"
 dependencies = [
  "bitflags",
- "fsevent-sys",
  "inotify",
  "kqueue",
  "libc",
@@ -1348,9 +1408,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
+name = "stitch-core"
+version = "0.2.0"
+
+[[package]]
+name = "stitch-macros"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "stitch-rs"
-version = "0.1.0"
-source = "git+https://github.com/ulquiorracode/stitch-rs.git?branch=main#30b0fe64a0eed2f41c668618b15586ed865433ac"
+version = "0.2.0"
+dependencies = [
+ "stitch-core",
+ "stitch-macros",
+]
 
 [[package]]
 name = "syn"

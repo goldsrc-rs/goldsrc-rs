@@ -43,7 +43,7 @@ pub trait EntityHooks: Send + Sync {
     fn server_activate(&self, edict_list: *mut edict_t, edict_count: i32, client_max: i32) {}
     /// `pfnServerDeactivate` — map ending / shutdown.
     fn server_deactivate(&self) {}
-    /// `pfnClientConnect`. Returns the connect verdict (0 = reject).
+    /// `pfnClientConnect`. Returns the connect verdict (1 = allow, 0 = reject).
     fn client_connect(
         &self,
         edict: *mut edict_t,
@@ -52,7 +52,7 @@ pub trait EntityHooks: Send + Sync {
         address: *const c_char,
         reject_reason: *mut c_char,
     ) -> i32 {
-        0
+        1
     }
     /// `pfnClientDisconnect`.
     fn client_disconnect(&self, edict: *mut edict_t, index: i32) {}
@@ -514,13 +514,11 @@ pub unsafe extern "C" fn api_spawn_post(pent: *mut edict_t) -> c_int {
         }
         let index = unsafe { edict_index(pent) };
         if index >= 0 {
-            let _ = crate::hooks::entity_hooks().read().map(|reg| {
-                reg.dispatch_generic(
-                    goldsrc_api::gamedata::VTableFunc::Spawn,
-                    index,
-                    crate::hooks::HookTiming::Post,
-                )
-            });
+            let _ = crate::hooks::vtable::VTableBridge::dispatch_generic(
+                goldsrc_api::gamedata::VTableFunc::Spawn,
+                index,
+                crate::hooks::HookTiming::Post,
+            );
         }
         0
     })

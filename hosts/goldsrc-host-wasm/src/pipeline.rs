@@ -6,11 +6,14 @@
 use crate::plugin::LoadedPlugin;
 
 /// Context passing through the chat processing U-cycle.
+#[repr(C, align(64))]
 pub struct ChatContext<'a> {
     pub sender: i32,
     pub is_team: bool,
     pub current_text: &'a mut String,
 }
+
+impl<'a> stitch_rs::Blackboard for ChatContext<'a> {}
 
 /// The intent entering the chat pipeline.
 #[derive(Debug, Clone, PartialEq, Eq)]

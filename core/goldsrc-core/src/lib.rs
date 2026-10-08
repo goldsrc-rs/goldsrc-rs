@@ -6,9 +6,9 @@ pub mod bundle;
 pub mod chat;
 #[cfg(feature = "cli")]
 pub mod cli;
-pub mod combat;
 pub mod config;
 pub mod extension;
+pub mod features;
 pub mod hardware;
 pub mod hooks;
 pub mod host;
@@ -33,7 +33,6 @@ pub use chat::{
     ChatTargetResolver, process_chat_message, register_chat_target_resolver,
     unregister_chat_target_resolver,
 };
-pub use combat::{CombatBridge, CombatTier};
 pub use config::plugins as plugins_config;
 pub use config::{
     ConfigBinder, HostConfig, PluginDebugConfig, PluginDebugSetting, PluginEntry, PluginGroup,
@@ -41,6 +40,7 @@ pub use config::{
 };
 pub use extension::{ExtensionRegistry, extension_registry};
 pub use hardware::{SystemInfoService, SystemMetricsSnapshot, system_info};
+pub use hooks::{VTableBridge, VTableTier};
 pub use host::{EventPayload, HostEvent, HostRuntime, PlayerEvent};
 pub use i18n::I18nService;
 pub use net::NetworkMessageDispatcher;

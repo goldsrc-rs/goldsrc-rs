@@ -12,7 +12,7 @@ pub use specs::{
     print_command_help, print_host_help,
 };
 
-use std::ffi::{CStr, OsString, c_char};
+use std::ffi::{OsString, c_char};
 use std::sync::OnceLock;
 
 /// Backend accessors needed to run the host CLI as a server command.
@@ -44,8 +44,12 @@ pub unsafe fn decode_c_string_lossy(ptr: *const c_char) -> String {
     if ptr.is_null() {
         return String::new();
     }
-    let cstr = unsafe { CStr::from_ptr(ptr) };
-    let bytes = cstr.to_bytes();
+    // Bounded scan to prevent buffer over-reads if NUL terminator is missing
+    let len = unsafe { goldsrc_sys::ffi::libc_strnlen(ptr, 4096) };
+    if len == 0 {
+        return String::new();
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, len) };
     if let Ok(s) = std::str::from_utf8(bytes) {
         s.to_string()
     } else {
@@ -274,11 +278,11 @@ mod tests {
         assert_eq!(suggest_subcommand("completely_unrelated", subcmds), None);
 
         let mut output = String::new();
-        let args_typo = vec![OsString::from("grs"), OsString::from("plugin")];
+        let args_typo = vec![OsString::from("grs"), OsString::from("plguins")];
         dispatch_host_command(args_typo, None, ("0.10.0", "abc", "x86"), |s| {
             output.push_str(s)
         });
-        assert!(output.contains("Unknown command 'plugin'. Did you mean 'plugins'?"));
+        assert!(output.contains("Unknown command 'plguins'. Did you mean 'plugins'?"));
     }
 
     #[test]
