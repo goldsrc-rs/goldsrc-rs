@@ -170,7 +170,9 @@ pub type MetamodBackend = EngineBackend;
 #[stitch_rs::adapter]
 pub struct MetamodAdapter;
 
-impl stitch_rs::Adapter for MetamodAdapter {}
+impl stitch_rs::Adapter for MetamodAdapter {
+    type TargetPort = ();
+}
 
 pub use goldsrc_core::call_engfunc;
 pub use goldsrc_core::call_engfunc_ret;

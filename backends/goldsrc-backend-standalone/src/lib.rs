@@ -37,7 +37,9 @@ pub type StandaloneBackend = EngineBackend;
 #[stitch_rs::adapter]
 pub struct StandaloneAdapter;
 
-impl stitch_rs::Adapter for StandaloneAdapter {}
+impl stitch_rs::Adapter for StandaloneAdapter {
+    type TargetPort = ();
+}
 
 static PRINT_QUEUE: goldsrc_core::backend::PrintQueue = goldsrc_core::backend::PrintQueue::new();
 
