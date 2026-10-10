@@ -166,6 +166,14 @@ use goldsrc_core::backend::EngineBackend;
 /// accessor and print queue. The backend is a thin adapter.
 pub type MetamodBackend = EngineBackend;
 
+/// Metamod adapter marking this backend as an SMA adapter.
+#[stitch_rs::adapter]
+pub struct MetamodAdapter;
+
+impl stitch_rs::Adapter for MetamodAdapter {
+    type TargetPort = ();
+}
+
 pub use goldsrc_core::call_engfunc;
 pub use goldsrc_core::call_engfunc_ret;
 

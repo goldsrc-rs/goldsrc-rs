@@ -1,0 +1,10 @@
+[package]
+name = "goldsrc-service-timer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Dual-mode tick-accurate task and timer service for GoldSrc.rs"
+
+[dependencies]
+goldsrc-api = { workspace = true }
+log = { workspace = true }

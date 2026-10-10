@@ -32,7 +32,7 @@ impl CommandSpec {
 pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "plugins",
-        aliases: &["pl"],
+        aliases: &["pl", "plugin"],
         category: "plugin:lifecycle",
         summary: "Manage WASM plugins (list, info, load, unload, reload, pause, unpause, cmds)",
         usage: "grs plugins <subcommand> [OPTIONS] [TARGET]",
@@ -77,7 +77,7 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "sessions",
-        aliases: &["sess"],
+        aliases: &["sess", "session"],
         category: "sys:runtime",
         summary: "Inspect and manage active player client sessions and userinfo overrides",
         usage: "grs sessions <list|info> [OPTIONS] [SLOT]",
@@ -101,7 +101,7 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "cvars",
-        aliases: &["cv"],
+        aliases: &["cv", "cvar"],
         category: "sys:runtime",
         summary: "Inspect and query engine console variables (cvars) and runtime overrides",
         usage: "grs cvars <list|info> [OPTIONS] [QUERY]",
@@ -124,7 +124,7 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "watchers",
-        aliases: &["w"],
+        aliases: &["w", "watcher"],
         category: "watcher:fs",
         summary: "Inspect and control filesystem watchers",
         usage: "grs watchers <list|pause|resume> [OPTIONS]",
@@ -153,8 +153,20 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         examples: &["grs cmd vip_add 1", "grs c kick 1"],
     },
     CommandSpec {
+        name: "exec",
+        aliases: &["ex"],
+        category: "exec:dispatch",
+        summary: "Execute declarative preset with atomic validation and reversible rollback",
+        usage: "grs exec <preset_name> [OPTIONS]",
+        options: &[(
+            "--restore / -r",
+            "Revert to the state snapshot captured before the last preset execution",
+        )],
+        examples: &["grs exec clanwar", "grs ex match_esl", "grs exec --restore"],
+    },
+    CommandSpec {
         name: "extensions",
-        aliases: &["ext"],
+        aliases: &["ext", "extension"],
         category: "sys:runtime",
         summary: "Inspect registered engine extensions (ReAPI, Metamod, Standalone, etc.)",
         usage: "grs extensions [list|info <name>]",
@@ -196,13 +208,14 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "help",
-        aliases: &["?"],
+        aliases: &["h", "?"],
         category: "sys:help",
         summary: "Display general help or specialized help for a command",
         usage: "grs help [COMMAND|NAMESPACE]",
         options: &[],
         examples: &[
             "grs help",
+            "grs h",
             "grs help plugins",
             "grs help sessions",
             "grs help cvars",

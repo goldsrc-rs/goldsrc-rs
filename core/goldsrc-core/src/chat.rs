@@ -3,9 +3,12 @@
 pub use goldsrc_service_chat::*;
 
 /// Adapter wrapping `PluginManager` into `ChatDispatcherContext`.
-pub struct PluginManagerChatContext<'a>(pub &'a mut goldsrc_host_wasm::PluginManager);
+pub struct PluginManagerChatDispatcher<'a>(pub &'a mut goldsrc_host_wasm::PluginManager);
 
-impl<'a> ChatDispatcherContext for PluginManagerChatContext<'a> {
+/// Backward compatibility alias for `PluginManagerChatDispatcher`.
+pub type PluginManagerChatContext<'a> = PluginManagerChatDispatcher<'a>;
+
+impl<'a> ChatDispatcherContext for PluginManagerChatDispatcher<'a> {
     fn dispatch_command(&mut self, cmd: &str, sender_idx: i32, args: &str) -> bool {
         self.0.dispatch_command(cmd, sender_idx, args)
     }
@@ -28,9 +31,9 @@ impl<'a> ChatDispatcherContext for PluginManagerChatContext<'a> {
     }
 }
 
-struct HostRuntimeChatContext;
+struct HostRuntimeChatDispatcher;
 
-impl ChatDispatcherContext for HostRuntimeChatContext {
+impl ChatDispatcherContext for HostRuntimeChatDispatcher {
     fn dispatch_command(&mut self, cmd: &str, sender_idx: i32, args: &str) -> bool {
         crate::host::HostRuntime::with_manager(|mgr| {
             mgr.map(|m| m.dispatch_command(cmd, sender_idx, args))
@@ -67,7 +70,7 @@ pub fn process_chat_message(
     raw_text: &str,
     scope: goldsrc_api::chat::ChatScope,
 ) -> bool {
-    let mut ctx = HostRuntimeChatContext;
+    let mut ctx = HostRuntimeChatDispatcher;
     goldsrc_service_chat::process_chat_message_with_context(Some(&mut ctx), sender, raw_text, scope)
 }
 
@@ -79,7 +82,7 @@ pub fn process_chat_message_with_manager(
     scope: goldsrc_api::chat::ChatScope,
 ) -> bool {
     if let Some(mgr) = manager {
-        let mut ctx = PluginManagerChatContext(mgr);
+        let mut ctx = PluginManagerChatDispatcher(mgr);
         goldsrc_service_chat::process_chat_message_with_context(
             Some(&mut ctx),
             sender,
@@ -98,10 +101,10 @@ pub fn evaluate_chat_triggers(
     raw_text: &str,
 ) -> bool {
     if let Some(mgr) = manager {
-        let mut ctx = PluginManagerChatContext(mgr);
+        let mut ctx = PluginManagerChatDispatcher(mgr);
         goldsrc_service_chat::evaluate_chat_triggers(Some(&mut ctx), sender, raw_text)
     } else {
-        let mut ctx = HostRuntimeChatContext;
+        let mut ctx = HostRuntimeChatDispatcher;
         goldsrc_service_chat::evaluate_chat_triggers(Some(&mut ctx), sender, raw_text)
     }
 }

@@ -79,12 +79,14 @@ impl PlaceholderRegistry {
                 aliases: vec!["player_name".to_string()],
                 capability: None,
             },
-            Arc::new(|caller: Player, call: &PlaceholderCall| {
+            Arc::new(|caller: Option<Player>, call: &PlaceholderCall| {
                 use goldsrc_api::ClientExt;
                 let target_player = resolve_target(caller, call);
-                target_player
-                    .name()
-                    .unwrap_or_else(|| format!("Player#{}", target_player.index()))
+                target_player.and_then(|p| p.name()).unwrap_or_else(|| {
+                    target_player
+                        .map(|p| format!("Player#{}", p.index()))
+                        .unwrap_or_else(|| "Server".to_string())
+                })
             }),
         );
 
@@ -98,10 +100,12 @@ impl PlaceholderRegistry {
                 aliases: vec!["player_ip".to_string()],
                 capability: None,
             },
-            Arc::new(|caller: Player, call: &PlaceholderCall| {
+            Arc::new(|caller: Option<Player>, call: &PlaceholderCall| {
                 use goldsrc_api::ClientExt;
                 let target_player = resolve_target(caller, call);
-                target_player.ip()
+                target_player
+                    .map(|p| p.ip())
+                    .unwrap_or_else(|| "127.0.0.1".to_string())
             }),
         );
 
@@ -115,10 +119,12 @@ impl PlaceholderRegistry {
                 aliases: vec!["id".to_string(), "steamid".to_string()],
                 capability: None,
             },
-            Arc::new(|caller: Player, call: &PlaceholderCall| {
+            Arc::new(|caller: Option<Player>, call: &PlaceholderCall| {
                 use goldsrc_api::ClientExt;
                 let target_player = resolve_target(caller, call);
-                target_player.auth_id()
+                target_player
+                    .map(|p| p.auth_id())
+                    .unwrap_or_else(|| "STEAM_ID_LAN".to_string())
             }),
         );
 
@@ -132,10 +138,12 @@ impl PlaceholderRegistry {
                 aliases: vec!["user_id".to_string()],
                 capability: None,
             },
-            Arc::new(|caller: Player, call: &PlaceholderCall| {
+            Arc::new(|caller: Option<Player>, call: &PlaceholderCall| {
                 use goldsrc_api::ClientExt;
                 let target_player = resolve_target(caller, call);
-                target_player.user_id().to_string()
+                target_player
+                    .map(|p| p.user_id().to_string())
+                    .unwrap_or_else(|| "0".to_string())
             }),
         );
 
@@ -149,10 +157,12 @@ impl PlaceholderRegistry {
                 aliases: vec!["hp".to_string()],
                 capability: None,
             },
-            Arc::new(|caller: Player, call: &PlaceholderCall| {
+            Arc::new(|caller: Option<Player>, call: &PlaceholderCall| {
                 use goldsrc_api::EntityExt;
                 let target_player = resolve_target(caller, call);
-                (target_player.health().current() as i32).to_string()
+                target_player
+                    .map(|p| (p.health().current() as i32).to_string())
+                    .unwrap_or_else(|| "100".to_string())
             }),
         );
 
@@ -166,10 +176,12 @@ impl PlaceholderRegistry {
                 aliases: vec!["ap".to_string()],
                 capability: None,
             },
-            Arc::new(|caller: Player, call: &PlaceholderCall| {
+            Arc::new(|caller: Option<Player>, call: &PlaceholderCall| {
                 use goldsrc_api::PlayerExt;
                 let target_player = resolve_target(caller, call);
-                (target_player.armorvalue() as i32).to_string()
+                target_player
+                    .map(|p| (p.armorvalue() as i32).to_string())
+                    .unwrap_or_else(|| "0".to_string())
             }),
         );
 
@@ -183,7 +195,7 @@ impl PlaceholderRegistry {
                 aliases: vec!["timestamp".to_string(), "time".to_string()],
                 capability: None,
             },
-            Arc::new(|_caller: Player, _call: &PlaceholderCall| {
+            Arc::new(|_caller: Option<Player>, _call: &PlaceholderCall| {
                 let now = std::time::SystemTime::now();
                 let duration = now
                     .duration_since(std::time::UNIX_EPOCH)
@@ -206,7 +218,7 @@ impl PlaceholderRegistry {
                 aliases: vec!["date".to_string()],
                 capability: None,
             },
-            Arc::new(|_caller: Player, _call: &PlaceholderCall| {
+            Arc::new(|_caller: Option<Player>, _call: &PlaceholderCall| {
                 let now = std::time::SystemTime::now();
                 let duration = now
                     .duration_since(std::time::UNIX_EPOCH)
@@ -253,7 +265,7 @@ impl PlaceholderRegistry {
     /// Resolves and formats a placeholder call string.
     pub fn evaluate_call(
         &self,
-        caller: Player,
+        caller: Option<Player>,
         call: &PlaceholderCall,
     ) -> Result<String, PlaceholderError> {
         let ident_lower = call.ident.to_lowercase();
@@ -307,12 +319,12 @@ impl PlaceholderRegistry {
     }
 }
 
-fn resolve_target(caller: Player, call: &PlaceholderCall) -> Player {
+fn resolve_target(caller: Option<Player>, call: &PlaceholderCall) -> Option<Player> {
     if let Some(target_str) = call.get_param("target", 0)
         && let Ok(slot) = target_str.parse::<i32>()
         && (1..=32).contains(&slot)
     {
-        return Player::new(slot);
+        return Some(Player::new(slot));
     }
     caller
 }
@@ -320,7 +332,7 @@ fn resolve_target(caller: Player, call: &PlaceholderCall) -> Player {
 /// Registers a custom placeholder provider with default metadata.
 pub fn register_placeholder<F>(name: &str, description: &str, handler: F)
 where
-    F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
+    F: Fn(Option<Player>, &PlaceholderCall) -> String + Send + Sync + 'static,
 {
     let mut reg = match PLACEHOLDER_REGISTRY.write() {
         Ok(r) => r,
@@ -345,7 +357,7 @@ pub fn register_placeholder_with_metadata<F>(
     metadata: PlaceholderMetadata,
     handler: F,
 ) where
-    F: Fn(Player, &PlaceholderCall) -> String + Send + Sync + 'static,
+    F: Fn(Option<Player>, &PlaceholderCall) -> String + Send + Sync + 'static,
 {
     let mut reg = match PLACEHOLDER_REGISTRY.write() {
         Ok(r) => r,
@@ -356,7 +368,11 @@ pub fn register_placeholder_with_metadata<F>(
 
 /// Dispatches a placeholder resolution request inside a WASM plugin.
 pub fn dispatch_local_placeholder(name: &str, caller_idx: i32, param: &str) -> Option<String> {
-    let caller = Player::new(caller_idx);
+    let caller = if (1..=32).contains(&caller_idx) {
+        Some(Player::new(caller_idx))
+    } else {
+        None
+    };
     let raw_expr = if param.is_empty() {
         name.to_string()
     } else {
@@ -373,12 +389,14 @@ pub fn dispatch_local_placeholder(name: &str, caller_idx: i32, param: &str) -> O
 /// Replaces all `{...}` placeholders with an optional dispatcher callback.
 pub fn format_placeholders_with_dispatcher<F>(
     template: &str,
-    caller: Player,
+    caller: impl Into<Option<Player>>,
     mut fallback_dispatcher: Option<F>,
 ) -> String
 where
     F: FnMut(&str, i32, &str) -> Option<String>,
 {
+    let caller = caller.into();
+    let caller_index = caller.map(|p| p.index()).unwrap_or(0);
     let mut out = String::with_capacity(template.len());
     let mut chars = template.chars().peekable();
 
@@ -424,7 +442,7 @@ where
                             .unwrap_or_default();
 
                         let resolved = if let Some(ref mut d) = fallback_dispatcher {
-                            d(&call.ident, caller.index(), param)
+                            d(&call.ident, caller_index, param)
                         } else {
                             let global_cb = {
                                 let lock = match PLUGIN_FALLBACK.read() {
@@ -433,7 +451,7 @@ where
                                 };
                                 lock.clone()
                             };
-                            global_cb.and_then(|cb| cb(&call.ident, caller.index(), param))
+                            global_cb.and_then(|cb| cb(&call.ident, caller_index, param))
                         };
 
                         if let Some(val) = resolved {
@@ -462,7 +480,7 @@ where
 }
 
 /// Replaces all `{...}` placeholders in `template` evaluated in the context of `caller`.
-pub fn format_placeholders(template: &str, caller: Player) -> String {
+pub fn format_placeholders(template: &str, caller: impl Into<Option<Player>>) -> String {
     format_placeholders_with_dispatcher::<fn(&str, i32, &str) -> Option<String>>(
         template, caller, None,
     )

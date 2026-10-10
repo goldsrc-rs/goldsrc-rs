@@ -565,44 +565,42 @@ impl PlayerIdentity {
 ///
 /// Immune to Slot Recycling Hazards: if player Alice in slot 1 disconnects and player Bob
 /// connects to slot 1, Bob will have a higher generation count, invalidating Alice's tokens.
+/// Scrooge Systems Mindset: packed into a transparent 64-bit register integer for zero-cost ABI passing.
+#[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PlayerSessionToken {
-    /// Slot index of the client (1..=32).
-    pub slot: i32,
-    /// Monotonically increasing connection generation counter.
-    pub generation: u64,
-    /// Engine user ID (`pfnGetPlayerUserId`) if known.
-    pub user_id: u32,
-}
+pub struct PlayerSessionToken(pub u64);
 
 impl PlayerSessionToken {
-    /// Creates a new session token.
+    const SLOT_MASK: u64 = 0xFF;
+    const GEN_MASK: u64 = 0xFFFF_FFFF;
+    const USER_ID_MASK: u64 = 0x00FF_FFFF;
+
+    /// Creates a new session token packed into a single 64-bit transparent register value.
     #[inline(always)]
     pub const fn new(slot: i32, generation: u64, user_id: u32) -> Self {
-        Self {
-            slot,
-            generation,
-            user_id,
-        }
+        let slot_u64 = (slot as u64) & Self::SLOT_MASK;
+        let gen_u64 = (generation & Self::GEN_MASK) << 8;
+        let uid_u64 = ((user_id as u64) & Self::USER_ID_MASK) << 40;
+        Self(slot_u64 | gen_u64 | uid_u64)
     }
 
     /// Slot index of the player (1..=32).
     #[inline(always)]
     pub const fn slot(&self) -> i32 {
-        self.slot
+        (self.0 & Self::SLOT_MASK) as i32
     }
 
     /// Generation counter for the connection.
     #[inline(always)]
     pub const fn generation(&self) -> u64 {
-        self.generation
+        (self.0 >> 8) & Self::GEN_MASK
     }
 
     /// Engine user ID if assigned.
     #[inline(always)]
     pub const fn user_id(&self) -> u32 {
-        self.user_id
+        ((self.0 >> 40) & Self::USER_ID_MASK) as u32
     }
 }
 

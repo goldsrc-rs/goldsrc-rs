@@ -224,13 +224,34 @@ interface api {
     /// Registers a custom placeholder in the host engine.
     host-register-placeholder: func(name: string, description: string) -> bool;
 
-    /// --- Extension Subsystem API ---
+    /// --- Extension & Feature Subsystem API ---
+
+    /// Checks if a 64-bit feature token is registered and active in the host engine.
+    host-has-feature: func(token: u64) -> bool;
 
     /// Checks if a named engine extension is available (optionally matching a SemVer constraint).
     host-is-extension-available: func(name: string, version-req: option<string>) -> bool;
 
     /// Retrieves the semantic version string of a named extension if registered and active.
     host-get-extension-version: func(name: string) -> option<string>;
+
+    /// --- Virtual File System (VFS) API ---
+
+    /// Directory entry metadata for host directory listings.
+    record dir-entry {
+        name: string,
+        is-dir: bool,
+        size: u64,
+    }
+
+    /// Reads UTF-8 text file from the sandboxed server / addon filesystem.
+    host-fs-read-text: func(path: string) -> result<string, string>;
+
+    /// Reads binary file bytes from the sandboxed server / addon filesystem.
+    host-fs-read-bytes: func(path: string) -> result<list<u8>, string>;
+
+    /// Lists entries in a directory from the sandboxed server / addon filesystem.
+    host-fs-list-dir: func(path: string) -> result<list<dir-entry>, string>;
 }
 
 world goldsrc-plugin {

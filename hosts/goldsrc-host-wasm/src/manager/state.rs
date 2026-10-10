@@ -386,8 +386,12 @@ impl api::Host for HostState {
 
     fn host_print_console(&mut self, player_index: i32, message: String) {
         if player_index <= 0 || !self.engine.entity_is_valid(player_index) {
-            self.engine
-                .server_print(&format!("[Console#{player_index}] {message}\n"));
+            let formatted = if message.ends_with('\n') {
+                message
+            } else {
+                format!("{message}\n")
+            };
+            self.engine.server_print(&formatted);
             return;
         }
         let formatted = if message.ends_with('\n') {
@@ -616,8 +620,10 @@ impl api::Host for HostState {
             )
         };
 
-        let text_bytes = text.as_bytes();
-        let len = text_bytes.len().min(128);
+        let mut len = text.len().min(128);
+        while len > 0 && !text.is_char_boundary(len) {
+            len -= 1;
+        }
         let safe_text = &text[..len];
 
         // Pack color into 0x00RRGGBB format expected by client VGUI director parser
@@ -718,6 +724,15 @@ impl api::Host for HostState {
         true
     }
 
+    fn host_has_feature(&mut self, token: u64) -> bool {
+        if let Ok(lock) = crate::FEATURE_QUERY_CB.read()
+            && let Some(cb) = *lock
+        {
+            return cb(token);
+        }
+        self.engine.has_feature(token)
+    }
+
     fn host_is_extension_available(&mut self, name: String, version_req: Option<String>) -> bool {
         self.engine
             .is_extension_available(&name, version_req.as_deref())
@@ -725,5 +740,45 @@ impl api::Host for HostState {
 
     fn host_get_extension_version(&mut self, name: String) -> Option<String> {
         self.engine.get_extension_version(&name)
+    }
+
+    fn host_fs_read_text(&mut self, path: String) -> Result<String, String> {
+        if let Ok(lock) = crate::VFS_READ_TEXT_CB.read() {
+            if let Some(cb) = *lock {
+                return cb(&self.plugin_name, &path);
+            }
+        }
+        Err("Host VFS not configured".to_string())
+    }
+
+    fn host_fs_read_bytes(&mut self, path: String) -> Result<Vec<u8>, String> {
+        if let Ok(lock) = crate::VFS_READ_BYTES_CB.read() {
+            if let Some(cb) = *lock {
+                return cb(&self.plugin_name, &path);
+            }
+        }
+        Err("Host VFS not configured".to_string())
+    }
+
+    fn host_fs_list_dir(
+        &mut self,
+        path: String,
+    ) -> Result<Vec<crate::bindings::goldsrc::engine::api::DirEntry>, String> {
+        if let Ok(lock) = crate::VFS_LIST_DIR_CB.read() {
+            if let Some(cb) = *lock {
+                let entries = cb(&self.plugin_name, &path)?;
+                return Ok(entries
+                    .into_iter()
+                    .map(
+                        |(name, is_dir, size)| crate::bindings::goldsrc::engine::api::DirEntry {
+                            name,
+                            is_dir,
+                            size,
+                        },
+                    )
+                    .collect());
+            }
+        }
+        Err("Host VFS not configured".to_string())
     }
 }

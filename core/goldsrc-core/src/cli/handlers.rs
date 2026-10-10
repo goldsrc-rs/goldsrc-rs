@@ -668,7 +668,12 @@ pub fn handle_sessions<F: FnMut(&str)>(spec: &CommandSpec, mut parser: lexopt::P
                     "lang" => out(&format!("{}\n", sess.lang().unwrap_or(""))),
                     "token" => {
                         let t = sess.token();
-                        out(&format!("{}:{}:{}\n", t.slot, t.generation, t.user_id));
+                        out(&format!(
+                            "{}:{}:{}\n",
+                            t.slot(),
+                            t.generation(),
+                            t.user_id()
+                        ));
                     }
                     custom_key => {
                         if let Some(val) = sess.get_userinfo(custom_key) {
@@ -689,9 +694,9 @@ pub fn handle_sessions<F: FnMut(&str)>(spec: &CommandSpec, mut parser: lexopt::P
                     "user_id": sess.user_id,
                     "generation": sess.generation,
                     "token": {
-                        "slot": sess.token().slot,
-                        "generation": sess.token().generation,
-                        "user_id": sess.token().user_id,
+                        "slot": sess.token().slot(),
+                        "generation": sess.token().generation(),
+                        "user_id": sess.token().user_id(),
                     },
                     "lang": sess.lang(),
                     "userinfo_overrides": sess.userinfo_overrides,
@@ -707,7 +712,9 @@ pub fn handle_sessions<F: FnMut(&str)>(spec: &CommandSpec, mut parser: lexopt::P
             let tok = sess.token();
             out(&format!(
                 "  Session Token: slot={}, gen={}, uid={}\n",
-                tok.slot, tok.generation, tok.user_id
+                tok.slot(),
+                tok.generation(),
+                tok.user_id()
             ));
             out(&format!(
                 "  Language:      {}\n",
@@ -908,4 +915,141 @@ pub fn handle_cvars<F: FnMut(&str)>(spec: &CommandSpec, mut parser: lexopt::Pars
             print_command_help(spec, out);
         }
     }
+}
+
+/// Handler for `grs exec <preset>` and `grs exec --restore`.
+pub fn handle_exec<F: FnMut(&str)>(
+    spec: &CommandSpec,
+    mut parser: lexopt::Parser,
+    manager: Option<&mut PluginManager>,
+    mut out: F,
+) {
+    let mut restore = false;
+    let mut preset_target: Option<String> = None;
+
+    while let Ok(Some(arg)) = parser.next() {
+        match arg {
+            Arg::Short('h') | Arg::Long("help") => {
+                print_command_help(spec, out);
+                return;
+            }
+            Arg::Long("restore") | Arg::Short('r') => {
+                restore = true;
+            }
+            Arg::Value(val) if preset_target.is_none() => {
+                preset_target = Some(val.to_string_lossy().into_owned());
+            }
+            _ => {}
+        }
+    }
+
+    if restore {
+        let Some(snapshot) = crate::preset::PresetEngine::take_snapshot() else {
+            out("[GoldSrc.rs] Error: No active state snapshot found to restore.\n");
+            return;
+        };
+
+        let mut cvars_reverted = 0;
+        let mut plugins_reverted = 0;
+
+        // Revert CVARs
+        if let Some(engine) = crate::host::HostRuntime::engine() {
+            for (cvar_name, original_val) in &snapshot.original_cvars {
+                engine.cvar_set_string(cvar_name, original_val);
+                cvars_reverted += 1;
+            }
+        }
+
+        // Revert plugin states
+        if let Some(mgr) = manager {
+            for (pl_name, was_paused) in &snapshot.original_plugin_states {
+                if *was_paused {
+                    let _ = mgr.pause_plugin_with_reason(
+                        pl_name,
+                        true,
+                        Some("Preset rollback".to_string()),
+                    );
+                } else {
+                    let _ = mgr.pause_plugin(pl_name, false);
+                }
+                plugins_reverted += 1;
+            }
+        }
+
+        out(&format!(
+            "[GoldSrc.rs] Successfully restored state from preset '{}' ({} cvars reverted, {} plugins reverted).\n",
+            snapshot.preset_name, cvars_reverted, plugins_reverted
+        ));
+        return;
+    }
+
+    let Some(target) = preset_target else {
+        out("[GoldSrc.rs] Usage: grs exec <preset_name> [--restore]\n");
+        return;
+    };
+
+    let backend = crate::host::HostRuntime::backend_type();
+    let presets_dir = crate::paths::PathResolver::framework_dir(backend).join("presets");
+
+    let resolved_path = crate::preset::PresetEngine::resolve_preset_path(&target, &presets_dir);
+    let manifest = match crate::preset::PresetEngine::load_manifest(&resolved_path) {
+        Ok(m) => m,
+        Err(e) => {
+            out(&format!("[GoldSrc.rs] Error loading preset: {e}\n"));
+            return;
+        }
+    };
+
+    // Capture pre-flight snapshot before mutations
+    let snapshot = crate::preset::PresetEngine::capture_snapshot(
+        &manifest,
+        |cvar| crate::host::HostRuntime::engine().and_then(|eng| eng.cvar_get_string(cvar)),
+        |pl| {
+            if let Some(ref mgr) = manager {
+                mgr.resolve_plugin_index(pl).ok().map(|idx| {
+                    matches!(
+                        mgr.get_plugins_info()[idx].status,
+                        goldsrc_host_wasm::PluginStatus::Paused { .. }
+                    )
+                })
+            } else {
+                None
+            }
+        },
+    );
+
+    crate::preset::PresetEngine::store_snapshot(snapshot);
+
+    let mut cvars_applied = 0;
+    if let Some(engine) = crate::host::HostRuntime::engine() {
+        for (cvar, val) in &manifest.cvars {
+            engine.cvar_set_string(cvar, val);
+            cvars_applied += 1;
+        }
+    }
+
+    let mut plugins_paused = 0;
+    let mut plugins_resumed = 0;
+
+    if let Some(mgr) = manager {
+        for pl in &manifest.plugins.pause {
+            if mgr
+                .pause_plugin_with_reason(pl, true, Some("Preset execution".to_string()))
+                .is_ok()
+            {
+                plugins_paused += 1;
+            }
+        }
+        for pl in &manifest.plugins.resume {
+            if mgr.pause_plugin(pl, false).is_ok() {
+                plugins_resumed += 1;
+            }
+        }
+    }
+
+    out(&format!(
+        "[GoldSrc.rs] Executed preset '{}' ({} cvars applied, {} plugins paused, {} plugins resumed).\n",
+        manifest.metadata.name, cvars_applied, plugins_paused, plugins_resumed
+    ));
+    out("  Run 'grs exec --restore' to return to previous state.\n");
 }

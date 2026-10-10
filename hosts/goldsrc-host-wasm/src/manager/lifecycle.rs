@@ -105,6 +105,15 @@ pub fn recalculate_dependency_states(
                                 break;
                             }
                         }
+                        goldsrc_api::Requirement::Feature { name } => {
+                            let token = goldsrc_api::FeatureToken::from_name(&name);
+                            if !engine_ops.has_feature(token.raw()) {
+                                missing_dep =
+                                    Some(format!("missing required game feature '{name}'"));
+                                break;
+                            }
+                        }
+                        goldsrc_api::Requirement::Backend { id: _ } => {}
                         _ => {}
                     }
                 }

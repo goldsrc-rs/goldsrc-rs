@@ -137,9 +137,9 @@ impl BanRegistry {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct MuteRecord {
-    pub slot: i32,
     pub expires_at: Option<Instant>,
     pub reason: String,
+    pub slot: i32,
 }
 
 /// In-memory player mute registry.
@@ -241,7 +241,13 @@ pub fn parse_duration(s: &str) -> Result<Option<Duration>, &'static str> {
     let count: u64 = num_str
         .parse()
         .map_err(|_| "Invalid numeric duration format")?;
-    Ok(Some(Duration::from_secs(count * multiplier)))
+    if count == 0 {
+        return Ok(None);
+    }
+    let secs = count
+        .checked_mul(multiplier)
+        .ok_or("Duration calculation overflow")?;
+    Ok(Some(Duration::from_secs(secs)))
 }
 
 /// Drops / kicks a connected player using the active game engine backend.
@@ -265,7 +271,7 @@ pub fn drop_client(slot: i32, reason: &str) {
     }
 }
 
-/// Resolves a player target by slot index, user ID (`#123`), or matching name prefix.
+/// Resolves a player target by slot index, user ID (`#123`), or matching name (exact first, prefix next, then substring).
 pub fn resolve_player_target(target: &str) -> Option<(i32, String, String)> {
     let engine = active_engine()?;
     let trimmed = target.trim();
@@ -293,8 +299,31 @@ pub fn resolve_player_target(target: &str) -> Option<(i32, String, String)> {
         return Some((slot, name, auth));
     }
 
-    // 3. Name match (case-insensitive substring or prefix)
     let query = trimmed.to_ascii_lowercase();
+
+    // 3a. Exact name match first (case-insensitive) - prevents hijacking e.g. "Admin" vs "AdminFake"
+    for slot in 1..=32 {
+        if engine.entity_is_valid(slot)
+            && let Some(name) = engine.player_name(slot)
+            && name.to_ascii_lowercase() == query
+        {
+            let auth = engine.player_auth_id(slot).unwrap_or_default();
+            return Some((slot, name, auth));
+        }
+    }
+
+    // 3b. Name prefix match
+    for slot in 1..=32 {
+        if engine.entity_is_valid(slot)
+            && let Some(name) = engine.player_name(slot)
+            && name.to_ascii_lowercase().starts_with(&query)
+        {
+            let auth = engine.player_auth_id(slot).unwrap_or_default();
+            return Some((slot, name, auth));
+        }
+    }
+
+    // 3c. Name substring match fallback
     for slot in 1..=32 {
         if engine.entity_is_valid(slot)
             && let Some(name) = engine.player_name(slot)
@@ -640,6 +669,8 @@ mod tests {
     fn test_parse_duration_units() {
         assert_eq!(parse_duration("0").unwrap(), None);
         assert_eq!(parse_duration("perm").unwrap(), None);
+        assert_eq!(parse_duration("0s").unwrap(), None);
+        assert_eq!(parse_duration("0m").unwrap(), None);
         assert_eq!(
             parse_duration("30s").unwrap(),
             Some(Duration::from_secs(30))
@@ -657,9 +688,21 @@ mod tests {
             Some(Duration::from_secs(86400))
         );
         assert_eq!(
+            parse_duration("1w").unwrap(),
+            Some(Duration::from_secs(604800))
+        );
+        assert_eq!(
             parse_duration("10").unwrap(),
             Some(Duration::from_secs(600))
         ); // default minutes
+
+        // Negative & malformed edge-cases
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration("abc").is_err());
+        assert!(parse_duration("-5m").is_err());
+        // Overflow protection check
+        assert!(parse_duration("18446744073709551615w").is_err());
+        assert!(parse_duration("9999999999999999999w").is_err());
     }
 
     #[test]

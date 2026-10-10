@@ -1,6 +1,6 @@
 //! Compile-time template preprocessor and variable expander.
 
-use crate::i18n::dict::DictAccess;
+use crate::dict::DictAccess;
 use std::collections::HashMap;
 
 /// Parsed macro call structure: `@{name(arg1, name2='val')}`.

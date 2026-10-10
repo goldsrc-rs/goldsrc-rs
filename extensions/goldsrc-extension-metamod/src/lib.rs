@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 /// Metamod plugin manager engine extension (`ext:metamod`).
 pub struct MetamodExtension {
-    active: bool,
     version: &'static str,
+    active: bool,
 }
 
 impl MetamodExtension {

@@ -7,16 +7,16 @@ pub use goldsrc_spi::identity::PlayerSessionToken;
 /// Ephemeral session state for a connected client slot (1..=32).
 #[derive(Debug, Clone)]
 pub struct ClientSession {
-    /// Slot index of the client (1..=32).
-    pub slot: i32,
     /// Monotonically increasing connection generation counter.
     pub generation: u64,
-    /// Engine user ID (`pfnGetPlayerUserId`) assigned by server.
-    pub user_id: u32,
     /// Overridden or cached userinfo key-value pairs (e.g. "_lang", "rate", "name").
     pub userinfo_overrides: HashMap<String, String>,
     /// Custom plugin/system metadata or tags associated with this session.
     pub metadata: HashMap<String, String>,
+    /// Slot index of the client (1..=32).
+    pub slot: i32,
+    /// Engine user ID (`pfnGetPlayerUserId`) assigned by server.
+    pub user_id: u32,
 }
 
 impl ClientSession {
@@ -112,10 +112,12 @@ impl ClientSessionManager {
     /// Verifies if a given generational token is still valid.
     pub fn is_token_valid(&self, token: PlayerSessionToken) -> bool {
         self.sessions
-            .get(&token.slot)
+            .get(&token.slot())
             .map(|sess| {
-                sess.generation == token.generation
-                    && (token.user_id == 0 || sess.user_id == 0 || sess.user_id == token.user_id)
+                sess.generation == token.generation()
+                    && (token.user_id() == 0
+                        || sess.user_id == 0
+                        || sess.user_id == token.user_id())
             })
             .unwrap_or(false)
     }
@@ -180,9 +182,9 @@ mod tests {
         // Alice connects to slot 1
         let alice_sess = mgr.on_connect(1, 1001);
         let alice_token = alice_sess.token();
-        assert_eq!(alice_token.slot, 1);
-        assert_eq!(alice_token.generation, 1);
-        assert_eq!(alice_token.user_id, 1001);
+        assert_eq!(alice_token.slot(), 1);
+        assert_eq!(alice_token.generation(), 1);
+        assert_eq!(alice_token.user_id(), 1001);
         assert!(mgr.is_token_valid(alice_token));
 
         // Alice disconnects
@@ -192,9 +194,9 @@ mod tests {
         // Bob connects to slot 1 (recycled slot)
         let bob_sess = mgr.on_connect(1, 1002);
         let bob_token = bob_sess.token();
-        assert_eq!(bob_token.slot, 1);
-        assert_eq!(bob_token.generation, 2);
-        assert_eq!(bob_token.user_id, 1002);
+        assert_eq!(bob_token.slot(), 1);
+        assert_eq!(bob_token.generation(), 2);
+        assert_eq!(bob_token.user_id(), 1002);
 
         // Bob's token is valid, but Alice's token is now completely invalid!
         assert!(mgr.is_token_valid(bob_token));

@@ -13,20 +13,22 @@ goldsrc-service-placeholders = { workspace = true }
 goldsrc-service-menu = { workspace = true }
 goldsrc-service-chat = { workspace = true }
 goldsrc-service-moderation = { workspace = true }
+goldsrc-service-watcher = { workspace = true }
+goldsrc-service-storage = { workspace = true }
+goldsrc-service-telemetry = { workspace = true }
+goldsrc-service-timer = { workspace = true }
+goldsrc-service-i18n = { workspace = true }
 goldsrc-host-wasm = { workspace = true }
 lexopt = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 log = { workspace = true }
-rusqlite = { workspace = true }
 crossbeam-channel = { workspace = true }
-notify = { workspace = true }
 libloading = { workspace = true }
 thiserror = { workspace = true }
 semver = { workspace = true }
 stitch-rs = { workspace = true }
-sysinfo = "0.39.6"
 
 [features]
 default = ["cli"]

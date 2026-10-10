@@ -10,6 +10,12 @@ members = [
     "services/goldsrc-service-menu",
     "services/goldsrc-service-chat",
     "services/goldsrc-service-moderation",
+    "services/goldsrc-service-watcher",
+    "services/goldsrc-service-storage",
+    "services/goldsrc-service-telemetry",
+    "services/goldsrc-service-timer",
+    "services/goldsrc-service-i18n",
+    "services/goldsrc-service-reports",
 ]
 default-members = [
     "core/goldsrc-core",
@@ -22,6 +28,12 @@ default-members = [
     "services/goldsrc-service-menu",
     "services/goldsrc-service-chat",
     "services/goldsrc-service-moderation",
+    "services/goldsrc-service-watcher",
+    "services/goldsrc-service-storage",
+    "services/goldsrc-service-telemetry",
+    "services/goldsrc-service-timer",
+    "services/goldsrc-service-i18n",
+    "services/goldsrc-service-reports",
 ]
 resolver = "3"
 
@@ -47,6 +59,12 @@ goldsrc-service-placeholders = { path = "services/goldsrc-service-placeholders",
 goldsrc-service-menu = { path = "services/goldsrc-service-menu", version = "0.20.0" }
 goldsrc-service-chat = { path = "services/goldsrc-service-chat", version = "0.20.0" }
 goldsrc-service-moderation = { path = "services/goldsrc-service-moderation", version = "0.20.0" }
+goldsrc-service-watcher = { path = "services/goldsrc-service-watcher", version = "0.20.0" }
+goldsrc-service-storage = { path = "services/goldsrc-service-storage", version = "0.20.0" }
+goldsrc-service-telemetry = { path = "services/goldsrc-service-telemetry", version = "0.20.0" }
+goldsrc-service-timer = { path = "services/goldsrc-service-timer", version = "0.20.0" }
+goldsrc-service-i18n = { path = "services/goldsrc-service-i18n", version = "0.20.0" }
+goldsrc-service-reports = { path = "services/goldsrc-service-reports", version = "0.20.0" }
 
 wasmtime = { version = "49.0", default-features = false, features = [
     "cranelift",
@@ -71,18 +89,23 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 crossbeam-channel = "0.5"
 semver = "1.0"
 stitch-rs = { git = "https://github.com/ulquiorracode/stitch-rs.git", branch = "main" }
+rustc-demangle = "0.1"
 
 [profile.dev]
 opt-level = 0
 debug = 1
 split-debuginfo = "unpacked"
 panic = "unwind"
+overflow-checks = true
 
 # NOTE: `panic` must stay "unwind" — `catch_ffi_panic` (catch_unwind) relies on
 # unwinding to stop Rust panics at the C-ABI boundary before they kill HLDS.
 [profile.release]
-lto = "thin"
+lto = false
 opt-level = "z"
 strip = "debuginfo"
 codegen-units = 16
 panic = "unwind"
+overflow-checks = true
+
+

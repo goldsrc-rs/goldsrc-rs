@@ -126,8 +126,8 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
     struct MockPluginConfig {
-        pub bonus_hp: i32,
         pub tag: String,
+        pub bonus_hp: i32,
         pub enabled: bool,
     }
 

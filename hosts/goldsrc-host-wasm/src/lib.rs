@@ -7,6 +7,8 @@
 
 /// Generated wasmtime bindings for the `goldsrc` WIT world.
 pub mod bindings;
+/// Crash diagnostics, symbol demangling, and reports.
+pub mod crash;
 /// Error taxonomy.
 pub mod error;
 /// Plugin lifecycle management and hot-reload.
@@ -16,6 +18,7 @@ pub mod pipeline;
 /// Loaded plugin instance and metadata types.
 pub mod plugin;
 
+pub use crash::{PluginCrashReport, format_crash_report};
 pub use error::{CommandError, HostError, LoadError};
 pub use manager::{CommandRegistry, PauseAllOutcome, PauseOutcome, PluginInfo, PluginManager};
 pub use pipeline::*;
@@ -30,6 +33,10 @@ pub type StorageFetchAddCallback = fn(&str, &str, i64) -> i64;
 pub type TranslateCallback = fn(&str, &str, &str, &str) -> String;
 pub type FormatPlaceholdersCallback = fn(i32, &str) -> String;
 pub type TimeCallback = fn() -> f32;
+pub type VfsReadTextCallback = fn(&str, &str) -> Result<String, String>;
+pub type VfsReadBytesCallback = fn(&str, &str) -> Result<Vec<u8>, String>;
+pub type VfsListDirCallback = fn(&str, &str) -> Result<Vec<(String, bool, u64)>, String>;
+pub type FeatureQueryCallback = fn(u64) -> bool;
 
 static PRINT_CALLBACK: std::sync::RwLock<Option<PrintCallback>> = std::sync::RwLock::new(None);
 static SHOW_MENU_CALLBACK: std::sync::RwLock<Option<ShowMenuCallback>> =
@@ -44,6 +51,38 @@ static TRANSLATE_CB: std::sync::RwLock<Option<TranslateCallback>> = std::sync::R
 static FORMAT_PLACEHOLDERS_CB: std::sync::RwLock<Option<FormatPlaceholdersCallback>> =
     std::sync::RwLock::new(None);
 static TIME_CB: std::sync::RwLock<Option<TimeCallback>> = std::sync::RwLock::new(None);
+pub(crate) static FEATURE_QUERY_CB: std::sync::RwLock<Option<FeatureQueryCallback>> =
+    std::sync::RwLock::new(None);
+pub(crate) static VFS_READ_TEXT_CB: std::sync::RwLock<Option<VfsReadTextCallback>> =
+    std::sync::RwLock::new(None);
+pub(crate) static VFS_READ_BYTES_CB: std::sync::RwLock<Option<VfsReadBytesCallback>> =
+    std::sync::RwLock::new(None);
+pub(crate) static VFS_LIST_DIR_CB: std::sync::RwLock<Option<VfsListDirCallback>> =
+    std::sync::RwLock::new(None);
+
+/// Set global callback for querying host game and runtime features.
+pub fn set_feature_query_callback(f: FeatureQueryCallback) {
+    if let Ok(mut lock) = FEATURE_QUERY_CB.write() {
+        *lock = Some(f);
+    }
+}
+
+/// Set global callbacks for host virtual filesystem (VFS) operations.
+pub fn set_vfs_callbacks(
+    read_text: VfsReadTextCallback,
+    read_bytes: VfsReadBytesCallback,
+    list_dir: VfsListDirCallback,
+) {
+    if let Ok(mut lock) = VFS_READ_TEXT_CB.write() {
+        *lock = Some(read_text);
+    }
+    if let Ok(mut lock) = VFS_READ_BYTES_CB.write() {
+        *lock = Some(read_bytes);
+    }
+    if let Ok(mut lock) = VFS_LIST_DIR_CB.write() {
+        *lock = Some(list_dir);
+    }
+}
 
 /// Set global callback for retrieving host uptime in seconds.
 pub fn set_time_callback(f: TimeCallback) {
@@ -166,10 +205,34 @@ pub fn clear_all_active_menu_owners() {
     }
 }
 
+static LOG_TOKEN_BUCKET: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(100);
+static LOG_LAST_REFILL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Print log message via host callback (engine server_print and unified logger).
 pub fn host_log(msg: &str) {
-    let bounded = if msg.len() > 4096 {
-        let mut end = 4096;
+    // Basic token bucket rate limiting (max 100 log messages per second across WASM guests)
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let last = LOG_LAST_REFILL.load(std::sync::atomic::Ordering::Relaxed);
+    if now_secs != last {
+        LOG_LAST_REFILL.store(now_secs, std::sync::atomic::Ordering::Relaxed);
+        LOG_TOKEN_BUCKET.store(100, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    let is_error = msg.starts_with("[ERROR] ");
+    if !is_error {
+        let prev = LOG_TOKEN_BUCKET.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        if prev == 0 {
+            // Out of tokens; silently throttle non-error spam to protect HLDS tickrate
+            return;
+        }
+    }
+
+    let max_len = if is_error { 16384 } else { 2048 };
+    let bounded = if msg.len() > max_len {
+        let mut end = max_len;
         while end > 0 && !msg.is_char_boundary(end) {
             end -= 1;
         }

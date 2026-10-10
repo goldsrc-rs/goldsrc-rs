@@ -118,6 +118,24 @@ impl NetworkMessageDispatcher {
         Self::send_say_text_preformatted(engine, receiver_index, sender_index, &payload);
     }
 
+    /// Strips color escape codes (\x01..\x04) if color chat is not supported by the active game mode.
+    #[inline]
+    pub fn sanitize_chat_colors<'a>(
+        payload: &'a str,
+        allow_colors: bool,
+    ) -> std::borrow::Cow<'a, str> {
+        if allow_colors || !payload.bytes().any(|b| (1..=4).contains(&b)) {
+            std::borrow::Cow::Borrowed(payload)
+        } else {
+            std::borrow::Cow::Owned(
+                payload
+                    .chars()
+                    .filter(|&c| c != '\x01' && c != '\x02' && c != '\x03' && c != '\x04')
+                    .collect(),
+            )
+        }
+    }
+
     /// Sends a preformatted `SayText` payload directly to the client.
     pub fn send_say_text_preformatted(
         engine: &dyn goldsrc_spi::engine::Engine,
@@ -135,15 +153,18 @@ impl NetworkMessageDispatcher {
             );
             // 1. Sender entity index for team color ^3 resolution
             engine.write_byte(sender_index);
-            // 2. Chat message payload (starts with \x02 / \x01 in CS 1.6 client)
-            let safe_msg = if payload.len() > SAFE_SAYTEXT_LIMIT {
+            // 2. Chat message payload (sanitized if game does not support color chat)
+            let allow_colors =
+                crate::features::has_feature(crate::features::canon::CSTRIKE_COLOR_CHAT);
+            let sanitized = Self::sanitize_chat_colors(payload, allow_colors);
+            let safe_msg = if sanitized.len() > SAFE_SAYTEXT_LIMIT {
                 let mut end = SAFE_SAYTEXT_LIMIT;
-                while end > 0 && !payload.is_char_boundary(end) {
+                while end > 0 && !sanitized.is_char_boundary(end) {
                     end -= 1;
                 }
-                &payload[..end]
+                &sanitized[..end]
             } else {
-                payload
+                &sanitized
             };
             engine.write_string(safe_msg);
             engine.message_end();
@@ -557,6 +578,7 @@ mod tests {
     #[test]
     fn test_dispatcher_send_say_text() {
         let engine = MockNetEngine::default();
+        // 1. Without CSTRIKE_COLOR_CHAT, colors are sanitized for vanilla GoldSrc
         NetworkMessageDispatcher::send_say_text(&engine, 2, 1, "Hello from team!");
 
         let msgs = engine.messages.lock().unwrap();
@@ -567,8 +589,19 @@ mod tests {
         assert_eq!(bytes[0], 1); // sender index
 
         let strings = engine.strings.lock().unwrap();
-        assert_eq!(strings[0], "\x01Hello from team!");
+        assert_eq!(strings[0], "Hello from team!");
         assert_eq!(*engine.ended.lock().unwrap(), 1);
+        drop(msgs);
+        drop(bytes);
+        drop(strings);
+
+        // 2. With CSTRIKE_COLOR_CHAT registered, color codes are preserved
+        crate::features::register_feature(crate::features::canon::CSTRIKE_COLOR_CHAT);
+        let engine2 = MockNetEngine::default();
+        NetworkMessageDispatcher::send_say_text(&engine2, 2, 1, "Hello from team!");
+        let strings2 = engine2.strings.lock().unwrap();
+        assert_eq!(strings2[0], "\x01Hello from team!");
+        crate::features::unregister_feature(crate::features::canon::CSTRIKE_COLOR_CHAT);
     }
 
     #[test]

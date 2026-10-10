@@ -33,6 +33,14 @@ use goldsrc_sys::{DLL_FUNCTIONS, enginefuncs_t, globalvars_t};
 /// accessor and print queue. The backend is a thin adapter.
 pub type StandaloneBackend = EngineBackend;
 
+/// Standalone adapter marking this backend as an SMA adapter.
+#[stitch_rs::adapter]
+pub struct StandaloneAdapter;
+
+impl stitch_rs::Adapter for StandaloneAdapter {
+    type TargetPort = ();
+}
+
 static PRINT_QUEUE: goldsrc_core::backend::PrintQueue = goldsrc_core::backend::PrintQueue::new();
 
 static BACKEND: StandaloneBackend = EngineBackend::new(engine_api::engfuncs, &PRINT_QUEUE);
@@ -118,13 +126,11 @@ impl goldsrc_core::api_registry::EntityHooks for StandaloneHooks {
         let ret = proxy::forward_spawn(edict);
         let index = unsafe { goldsrc_core::api_registry::edict_index(edict) };
         if index >= 0 {
-            let _ = goldsrc_core::hooks::entity_hooks().read().map(|reg| {
-                reg.dispatch_generic(
-                    goldsrc_api::gamedata::VTableFunc::Spawn,
-                    index,
-                    goldsrc_core::hooks::HookTiming::Post,
-                )
-            });
+            goldsrc_core::hooks::VTableBridge::dispatch_generic(
+                goldsrc_api::gamedata::VTableFunc::Spawn,
+                index,
+                goldsrc_core::hooks::HookTiming::Post,
+            );
         }
         ret
     }

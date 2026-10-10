@@ -47,18 +47,15 @@ impl CoreConfig {
 /// Hot-reload and file-system watcher configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatcherConfig {
-    /// Whether automatic hot-reload on `.wasm` modification is enabled.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-
     /// Debounce delay in milliseconds to avoid reading partially written files.
     #[serde(default = "default_debounce_ms")]
     pub debounce_ms: u64,
-
     /// Policy for when a `.wasm` file is deleted from disk.
     #[serde(default)]
     pub on_file_deleted: OnFileDeleted,
-
+    /// Whether automatic hot-reload on `.wasm` modification is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     /// Whether to watch `.toml` plugin config changes.
     #[serde(default = "default_true")]
     pub watch_configs: bool,
@@ -133,6 +130,10 @@ pub struct HostConfig {
     /// WASM runtime resource limits.
     #[serde(default)]
     pub runtime: RuntimeConfig,
+
+    /// Console pipeline preprocessor settings.
+    #[serde(default)]
+    pub pipeline: crate::config::ConsolePipelineConfig,
 }
 
 pub const MIN_DEBOUNCE_MS: u64 = 50;
@@ -187,6 +188,7 @@ impl HostConfig {
             logging: LogConfig::default(),
             watcher: WatcherConfig::default(),
             runtime: RuntimeConfig::default(),
+            pipeline: crate::config::ConsolePipelineConfig::default(),
         }
     }
 
@@ -200,11 +202,21 @@ impl HostConfig {
                     return cfg;
                 }
                 Err(e) => {
-                    log::warn!(
+                    let ts = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    let backup_path = path.with_extension(format!("corrupted.{ts}.toml"));
+                    let _ = std::fs::copy(&path, &backup_path);
+                    log::error!(
                         target: log_targets::CORE,
-                        "Failed to parse '{}': {e}. Using sanitized defaults.",
-                        path.display()
+                        "Failed to parse '{}': {e}. Preserved backup at '{}'. Running with safe in-memory defaults (original file NOT overwritten).",
+                        path.display(),
+                        backup_path.display()
                     );
+                    let mut default_cfg = HostConfig::default_for(backend);
+                    default_cfg.sanitize();
+                    return default_cfg;
                 }
             }
         }
@@ -212,7 +224,7 @@ impl HostConfig {
         let mut default_cfg = HostConfig::default_for(backend);
         default_cfg.sanitize();
 
-        // Write default configuration file if not present
+        // Write default configuration file ONLY if it did not exist initially
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -306,6 +318,7 @@ mod tests {
                 command_epoch_deadline: 10,
                 load_epoch_deadline: 50,
             },
+            pipeline: crate::config::ConsolePipelineConfig::default(),
         };
 
         cfg.sanitize();
