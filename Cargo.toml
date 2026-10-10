@@ -108,9 +108,4 @@ codegen-units = 16
 panic = "unwind"
 overflow-checks = true
 
-[patch."https://github.com/goldsrc-rs/goldsrc-sdk.git"]
-goldsrc-sys = { path = "../goldsrc-sdk-core/goldsrc-sys" }
-goldsrc-api = { path = "../goldsrc-sdk-core/goldsrc-api" }
-goldsrc-spi = { path = "../goldsrc-sdk-core/goldsrc-spi" }
-
 
