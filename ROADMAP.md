@@ -455,6 +455,14 @@ panic can crash HLDS, introduce a production-grade structured logger, and cleanl
   - **Reactive Orchestration Event**: emit `ModeChanged { from, to }` across EventBus notifying `menu_frontend`, `chat_director`, and gameplay plugins to adapt UI and rules.
   - **WASM Bridge**: export `host-config-exec(preset_path: string) -> result<_, string>` to `goldsrc.wit` enabling single-click mode switching from `administration` menus.
 
+- [ ] **Declarative `#[setting]` Engine & Cvar FFI Decoupling**:
+  - **Typed Plugin Configuration as Single Source of Truth**: Replace procedural cvar registration with typed declarative `#[setting]` macro attributes (`#[setting(name = "...", default = ..., bounds = ...)]`).
+  - **Cvar as SPI Adapter Boundary**: Decouple GoldSrc engine cvars into a pure external adapter/port. Cvars no longer store business state; they act strictly as engine console FFI bindings delegating mutations to the typed `Setting` registry.
+  - **Automatic TOML Binding & Hot Reload**: Auto-generate per-plugin settings schema in `configs/plugins/<name>.toml` with live synchronization and boundary checking.
+- [ ] **WASI Target Architecture (`wasip1` Core + `wasip2` Opt-In)**:
+  - Standardize `wasm32-wasip1` as the lean, high-performance default for game plugins.
+  - Optional opt-in flag in developer CLI (`grs build --target wasm32-wasip2`) for advanced component composition without runtime footprint penalties for simple plugins.
+
 ### 3. Monorepo & Ecosystem Decomposition
 
 - [ ] **`goldsrc` (Pure Plugin SDK)**:
