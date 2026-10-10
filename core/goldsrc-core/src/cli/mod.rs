@@ -240,6 +240,7 @@ mod tests {
         assert!(find_command_spec("ext").is_some());
         assert!(find_command_spec("e").is_none());
         assert!(find_command_spec("help").is_some());
+        assert!(find_command_spec("h").is_some());
         assert!(find_command_spec("?").is_some());
         assert!(find_command_spec("nonexistent").is_none());
         assert!(find_command_spec("foobar_xyz").is_none());

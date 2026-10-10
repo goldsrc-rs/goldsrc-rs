@@ -118,6 +118,32 @@ pub fn sanitize_vfs_redirection_path(raw: &str) -> Result<PathBuf, PipelineError
     Ok(PathBuf::from(trimmed))
 }
 
+/// Resolves a sanitized target path for writing redirected output (`>` / `>>`).
+///
+/// Places files into the framework root (`cstrike/goldsrc` or `cstrike/addons/goldsrc`)
+/// so that sandboxed WASM plugins (`cat`, `grep`, `ls`) can seamlessly see and access them.
+pub fn resolve_redirection_write_path(raw: &str) -> Result<PathBuf, PipelineError> {
+    let rel = sanitize_vfs_redirection_path(raw)?;
+    let backend = crate::host::HostRuntime::backend_type();
+    let fw_dir = crate::paths::PathResolver::framework_dir(backend);
+    if fw_dir.exists() {
+        Ok(fw_dir.join(rel))
+    } else {
+        Ok(rel)
+    }
+}
+
+/// Resolves a sanitized source path for reading redirected input (`<`).
+///
+/// Checks framework directory first, then fallback to current working directory.
+pub fn resolve_redirection_read_path(raw: &str) -> Result<PathBuf, PipelineError> {
+    let rel = sanitize_vfs_redirection_path(raw)?;
+    let backend = crate::host::HostRuntime::backend_type();
+    let fw_dir = crate::paths::PathResolver::framework_dir(backend);
+    let in_fw = fw_dir.join(&rel);
+    if in_fw.exists() { Ok(in_fw) } else { Ok(rel) }
+}
+
 /// Splits a raw command line string into tokens respecting single/double quotes.
 pub fn tokenize_command_line(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -363,7 +389,7 @@ impl ConsolePipelinePreprocessor {
                 if idx == 0
                     && let Some(Redirection::Input(ref source)) = cmd.redirection
                 {
-                    let path = sanitize_vfs_redirection_path(source)?;
+                    let path = resolve_redirection_read_path(source)?;
                     match std::fs::read_to_string(&path) {
                         Ok(content) => effective_input = Some(content),
                         Err(e) => {
@@ -381,13 +407,13 @@ impl ConsolePipelinePreprocessor {
                     // Check output redirection `>` or `>>`
                     match &cmd.redirection {
                         Some(Redirection::OutputTruncate(target)) => {
-                            let path = sanitize_vfs_redirection_path(target)?;
+                            let path = resolve_redirection_write_path(target)?;
                             if let Err(e) = std::fs::write(&path, &stdout) {
                                 print(&format!("[GoldSrc.rs] Failed to write '> {target}': {e}\n"));
                             }
                         }
                         Some(Redirection::OutputAppend(target)) => {
-                            let path = sanitize_vfs_redirection_path(target)?;
+                            let path = resolve_redirection_write_path(target)?;
                             use std::io::Write;
                             if let Ok(mut file) = std::fs::OpenOptions::new()
                                 .create(true)

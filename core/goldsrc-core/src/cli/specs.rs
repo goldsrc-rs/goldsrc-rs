@@ -208,13 +208,14 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "help",
-        aliases: &["?"],
+        aliases: &["h", "?"],
         category: "sys:help",
         summary: "Display general help or specialized help for a command",
         usage: "grs help [COMMAND|NAMESPACE]",
         options: &[],
         examples: &[
             "grs help",
+            "grs h",
             "grs help plugins",
             "grs help sessions",
             "grs help cvars",
