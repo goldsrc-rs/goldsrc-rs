@@ -132,52 +132,52 @@ impl api::Host for HostState {
     }
 
     fn host_player_name(&mut self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return None;
         }
         self.engine.player_name(index)
     }
     fn host_player_lang(&mut self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return None;
         }
         self.engine.player_lang(index)
     }
     fn host_player_team(&mut self, index: i32) -> i32 {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return 0;
         }
         self.engine.player_team(index)
     }
     fn host_player_armorvalue(&mut self, index: i32) -> f32 {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return 0.0;
         }
         self.engine.player_armorvalue(index)
     }
     fn host_player_set_armorvalue(&mut self, index: i32, armor: f32) {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return;
         }
         self.engine.player_set_armorvalue(index, armor);
     }
 
     fn host_player_auth_id(&mut self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return None;
         }
         self.engine.player_auth_id(index)
     }
 
     fn host_player_ip(&mut self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return None;
         }
         self.engine.player_ip(index)
     }
 
     fn host_player_user_id(&mut self, index: i32) -> i32 {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return 0;
         }
         self.engine.player_user_id(index) as i32
@@ -277,7 +277,8 @@ impl api::Host for HostState {
         }
 
         if player_index != 0
-            && (!(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index))
+            && (!goldsrc_api::PlayerSlot::VALID_RANGE.contains(&player_index)
+                || !self.engine.entity_is_valid(player_index))
         {
             self.engine
                 .server_print(&format!("[Chat to #{player_index}] {message}\n"));
@@ -349,7 +350,9 @@ impl api::Host for HostState {
         let dest = if player_index == 0 {
             goldsrc_spi::engine::MessageDest::All as i32
         } else {
-            if !(1..=32).contains(&player_index) || !self.engine.entity_is_valid(player_index) {
+            if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&player_index)
+                || !self.engine.entity_is_valid(player_index)
+            {
                 return;
             }
             goldsrc_spi::engine::MessageDest::One as i32

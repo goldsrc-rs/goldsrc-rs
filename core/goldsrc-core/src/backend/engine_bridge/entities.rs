@@ -42,7 +42,7 @@ impl EngineEntities for EngineBackend {
             if pedict.free != 0 {
                 return false;
             }
-            if (1..=32).contains(&index) {
+            if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
                 // GoldSrc engine: pev->flags & FL_CLIENT (1 << 3 = 8).
                 // Edict is a connected client only if FL_CLIENT is set.
                 if pedict.v.flags & FL_CLIENT == 0 {
@@ -97,7 +97,7 @@ impl EngineEntities for EngineBackend {
         if let Some(mut e) = self.get_player(index) {
             e.set(Health::current_only(health));
             // Synchronize HUD health display for human and bot players
-            if (1..=32).contains(&index) {
+            if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
                 let health_msg_id = self.reg_user_msg("Health", 1);
                 if health_msg_id > 0 && health_msg_id != 255 {
                     self.message_begin(MessageDest::One as i32, health_msg_id, None, Some(index));
@@ -133,7 +133,7 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_name(&self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) || !self.entity_is_valid(index) {
             return None;
         }
         unsafe {
@@ -166,7 +166,7 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_lang(&self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return None;
         }
         if let Some(session_lang) = crate::host::HostRuntime::with_sessions(|s| {
@@ -200,7 +200,7 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_team(&self, index: i32) -> i32 {
-        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) || !self.entity_is_valid(index) {
             return 0;
         }
         unsafe {
@@ -219,7 +219,7 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_auth_id(&self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) || !self.entity_is_valid(index) {
             return None;
         }
         unsafe {
@@ -242,7 +242,7 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_user_id(&self, index: i32) -> u32 {
-        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) || !self.entity_is_valid(index) {
             return 0;
         }
         unsafe {
@@ -265,7 +265,7 @@ impl EngineEntities for EngineBackend {
     }
 
     fn player_ip(&self, index: i32) -> Option<String> {
-        if !(1..=32).contains(&index) || !self.entity_is_valid(index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) || !self.entity_is_valid(index) {
             return None;
         }
         unsafe {
@@ -389,7 +389,7 @@ impl EngineEntities for EngineBackend {
         if let Some(mut p) = self.get_player(index) {
             p.set(Armor::new(armor));
             // Synchronize HUD armor display for human and bot players
-            if (1..=32).contains(&index) {
+            if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
                 let battery_msg_id = self.reg_user_msg("Battery", 2);
                 if battery_msg_id > 0 && battery_msg_id != 255 {
                     self.message_begin(MessageDest::One as i32, battery_msg_id, None, Some(index));
@@ -447,7 +447,9 @@ impl EngineEntities for EngineBackend {
     }
 
     fn set_client_listening(&self, receiver: i32, sender: i32, listen: bool) -> bool {
-        if !(1..=32).contains(&receiver) || !(1..=32).contains(&sender) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&receiver)
+            || !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&sender)
+        {
             return false;
         }
         unsafe {
@@ -465,7 +467,7 @@ impl EngineEntities for EngineBackend {
     }
 
     fn set_player_maxspeed(&self, index: i32, speed: f32) {
-        if !(1..=32).contains(&index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             return;
         }
         unsafe {

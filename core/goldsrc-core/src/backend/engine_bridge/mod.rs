@@ -55,7 +55,9 @@ impl EngineBackend {
             if edict.free != 0 {
                 return None;
             }
-            if (1..=32).contains(&index) && edict.v.flags & FL_CLIENT == 0 {
+            if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index)
+                && edict.v.flags & FL_CLIENT == 0
+            {
                 return None;
             }
             Some(Player::from_raw(index, edict))

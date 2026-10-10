@@ -657,7 +657,7 @@ pub unsafe extern "C" fn api_client_put_in_server(p_entity: *mut edict_t) {
             h.client_put_in_server(p_entity, index);
         }
         let index = unsafe { edict_index(p_entity) };
-        if (1..=32).contains(&index) {
+        if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             crate::hooks::dispatcher::emit(crate::host::HostEvent::Player {
                 slot: index,
                 event: crate::host::PlayerEvent::PutInServer,
@@ -678,7 +678,7 @@ pub unsafe extern "C" fn api_client_user_info_changed(
             h.client_user_info_changed(p_entity, index, infobuffer);
         }
         let index = unsafe { edict_index(p_entity) };
-        if (1..=32).contains(&index) {
+        if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index) {
             crate::hooks::dispatcher::emit(crate::host::HostEvent::Player {
                 slot: index,
                 event: crate::host::PlayerEvent::UserInfoChanged,

@@ -322,7 +322,7 @@ impl PlaceholderRegistry {
 fn resolve_target(caller: Option<Player>, call: &PlaceholderCall) -> Option<Player> {
     if let Some(target_str) = call.get_param("target", 0)
         && let Ok(slot) = target_str.parse::<i32>()
-        && (1..=32).contains(&slot)
+        && goldsrc_api::PlayerSlot::VALID_RANGE.contains(&slot)
     {
         return Some(Player::new(slot));
     }
@@ -368,7 +368,7 @@ pub fn register_placeholder_with_metadata<F>(
 
 /// Dispatches a placeholder resolution request inside a WASM plugin.
 pub fn dispatch_local_placeholder(name: &str, caller_idx: i32, param: &str) -> Option<String> {
-    let caller = if (1..=32).contains(&caller_idx) {
+    let caller = if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&caller_idx) {
         Some(Player::new(caller_idx))
     } else {
         None

@@ -311,7 +311,7 @@ impl HostRuntime {
         );
 
         goldsrc_host_wasm::set_format_placeholders_callback(|player_idx, text| {
-            let player = if (1..=32).contains(&player_idx) {
+            let player = if goldsrc_api::PlayerSlot::VALID_RANGE.contains(&player_idx) {
                 Some(goldsrc_api::Player::new(player_idx))
             } else {
                 None
