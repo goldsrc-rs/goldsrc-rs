@@ -48,9 +48,6 @@ jobs:
       - name: Install LLVM
         run: choco install llvm --no-progress -y
 
-      - name: Setup references (minimal CI)
-        run: python -m scripts setup --ci
-
       - name: Run clippy
         run: cargo clippy --target i686-pc-windows-msvc --workspace --locked -- -D warnings
 
@@ -92,9 +89,6 @@ jobs:
           TARGET_LIB="${CLANG_PATH:-$LLVM_LIB}"
           echo "Found libclang path: $TARGET_LIB"
           echo "LIBCLANG_PATH=$TARGET_LIB" >> $GITHUB_ENV
-
-      - name: Setup references (minimal CI)
-        run: python -m scripts setup --ci
 
       - name: Run clippy
         run: cargo clippy --target i686-unknown-linux-gnu --workspace --locked -- -D warnings
