@@ -130,6 +130,10 @@ pub struct HostConfig {
     /// WASM runtime resource limits.
     #[serde(default)]
     pub runtime: RuntimeConfig,
+
+    /// Console pipeline preprocessor settings.
+    #[serde(default)]
+    pub pipeline: crate::config::ConsolePipelineConfig,
 }
 
 pub const MIN_DEBOUNCE_MS: u64 = 50;
@@ -184,6 +188,7 @@ impl HostConfig {
             logging: LogConfig::default(),
             watcher: WatcherConfig::default(),
             runtime: RuntimeConfig::default(),
+            pipeline: crate::config::ConsolePipelineConfig::default(),
         }
     }
 
@@ -313,6 +318,7 @@ mod tests {
                 command_epoch_deadline: 10,
                 load_epoch_deadline: 50,
             },
+            pipeline: crate::config::ConsolePipelineConfig::default(),
         };
 
         cfg.sanitize();

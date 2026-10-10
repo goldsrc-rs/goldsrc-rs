@@ -1,10 +1,15 @@
 //! Host CLI dispatch, C-ABI bindings, and declarative commands for GoldSrc.rs.
 
 pub mod handlers;
+pub mod pipeline;
 pub mod response;
 pub mod router;
 pub mod specs;
 
+pub use pipeline::{
+    CommandDomain, ConsolePipelinePreprocessor, ExecutionPlan, PipeChain, PipelinedCommand,
+    Redirection,
+};
 pub use response::{CliResponse, CommandStatus};
 pub use router::dispatch_host_command;
 pub use specs::{
@@ -78,6 +83,52 @@ pub unsafe extern "C" fn handle_host_command() {
                 raw_args.push(OsString::from(decoded));
             }
         }
+        // Check if raw arguments contain pipeline operators (`|`, `&&`, `>`, `<`).
+        let raw_line = raw_args
+            .iter()
+            .map(|s| s.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        if ConsolePipelinePreprocessor::has_pipeline_operators(&raw_line) {
+            let backend_type = crate::host::HostRuntime::backend_type();
+            let config = crate::config::HostConfig::load_or_create(backend_type);
+            match ConsolePipelinePreprocessor::parse(
+                &raw_line,
+                CommandDomain::Server,
+                &config.pipeline,
+            ) {
+                Ok(plan) => {
+                    let _ = ConsolePipelinePreprocessor::execute_plan(
+                        &plan,
+                        CommandDomain::Server,
+                        |cmd_args, _piped_input| {
+                            let mut buf = String::new();
+                            let os_args: Vec<OsString> =
+                                cmd_args.iter().map(OsString::from).collect();
+                            dispatch_host_command(os_args, None, backend.version, |chunk| {
+                                buf.push_str(chunk);
+                            });
+                            let status = if buf.contains("[GoldSrc.rs] Error")
+                                || buf.contains("Unknown command")
+                            {
+                                CommandStatus::Error
+                            } else {
+                                CommandStatus::Success
+                            };
+                            (status, buf)
+                        },
+                        backend.print,
+                    );
+                    return;
+                }
+                Err(err) => {
+                    (backend.print)(&format!("[GoldSrc.rs] Pipeline syntax error: {err}\n"));
+                    return;
+                }
+            }
+        }
+
         // Dispatch directly; commands requiring PluginManager will acquire it with
         // narrow scope, preventing re-entrant deadlocks with WatcherService or HostRuntime.
         dispatch_host_command(raw_args, None, backend.version, backend.print);
@@ -173,7 +224,8 @@ mod tests {
         assert!(find_command_spec("w").is_some());
         assert!(find_command_spec("cmd").is_some());
         assert!(find_command_spec("c").is_some());
-        assert!(find_command_spec("exec").is_none());
+        assert!(find_command_spec("exec").is_some());
+        assert!(find_command_spec("ex").is_some());
         assert!(find_command_spec("status").is_some());
         assert!(find_command_spec("st").is_some());
         assert!(find_command_spec("s").is_none());
@@ -385,5 +437,36 @@ mod tests {
             out_cv.push_str(s);
         });
         assert!(out_cv.contains("Host Console Variables"));
+    }
+
+    #[test]
+    fn test_pipeline_dispatching_chain_execution() {
+        let cfg = crate::config::ConsolePipelineConfig::default();
+        let plan = ConsolePipelinePreprocessor::parse(
+            "grs version && grs cv list",
+            CommandDomain::Server,
+            &cfg,
+        )
+        .expect("Valid pipeline syntax");
+
+        let mut output = Vec::new();
+        let res = ConsolePipelinePreprocessor::execute_plan(
+            &plan,
+            CommandDomain::Server,
+            |cmd_args, _input| {
+                let mut buf = String::new();
+                let os_args: Vec<OsString> = cmd_args.iter().map(OsString::from).collect();
+                dispatch_host_command(os_args, None, ("0.20.0", "test_git", "x86_64"), |chunk| {
+                    buf.push_str(chunk);
+                });
+                (CommandStatus::Success, buf)
+            },
+            |line| output.push(line.to_string()),
+        );
+
+        assert!(res.is_ok());
+        assert_eq!(output.len(), 2);
+        assert!(output[0].contains("GoldSrc.rs Host v0.20.0"));
+        assert!(output[1].contains("Host Console Variables"));
     }
 }

@@ -21,6 +21,7 @@ pub mod net;
 pub mod paths;
 pub mod placeholders;
 pub mod plugins;
+pub mod preset;
 pub mod rules;
 pub mod session;
 pub mod storage;
@@ -47,6 +48,7 @@ pub use net::NetworkMessageDispatcher;
 pub use paths::PathResolver;
 pub use placeholders::{PlaceholderRegistry, format_placeholders};
 pub use plugins::PluginOrchestrator;
+pub use preset::{ExecOutcome, PresetEngine, PresetError, PresetManifest, PresetStateSnapshot};
 pub use storage::{Bucket, JsonFormat, SqliteStorageEngine, StorageFormat};
 pub use timer::TimerService;
 pub use watcher::{

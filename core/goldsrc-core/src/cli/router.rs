@@ -833,6 +833,11 @@ pub fn dispatch_host_command<F: FnMut(&str)>(
                 }
             });
         }
+        "exec" => {
+            with_manager_or_host(manager, |manager| {
+                handlers::handle_exec(spec, parser, manager, &mut out);
+            });
+        }
         "sessions" => {
             handlers::handle_sessions(spec, parser, out);
         }

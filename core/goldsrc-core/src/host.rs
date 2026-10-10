@@ -864,6 +864,11 @@ impl HostRuntime {
         }
     }
 
+    /// Returns the active backend type (Metamod or Standalone).
+    pub fn backend_type() -> BackendType {
+        BACKEND_TYPE.get().copied().unwrap_or(BackendType::Metamod)
+    }
+
     /// Run `f` with exclusive access to the host runtime's [`WatcherService`], if initialized.
     pub fn with_watcher_service<R>(
         f: impl FnOnce(Option<&mut crate::watcher::WatcherService>) -> R,

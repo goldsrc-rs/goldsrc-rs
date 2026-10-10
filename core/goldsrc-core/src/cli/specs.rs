@@ -153,6 +153,18 @@ pub const BUILTIN_COMMANDS: &[CommandSpec] = &[
         examples: &["grs cmd vip_add 1", "grs c kick 1"],
     },
     CommandSpec {
+        name: "exec",
+        aliases: &["ex"],
+        category: "exec:dispatch",
+        summary: "Execute declarative preset with atomic validation and reversible rollback",
+        usage: "grs exec <preset_name> [OPTIONS]",
+        options: &[(
+            "--restore / -r",
+            "Revert to the state snapshot captured before the last preset execution",
+        )],
+        examples: &["grs exec clanwar", "grs ex match_esl", "grs exec --restore"],
+    },
+    CommandSpec {
         name: "extensions",
         aliases: &["ext", "extension"],
         category: "sys:runtime",

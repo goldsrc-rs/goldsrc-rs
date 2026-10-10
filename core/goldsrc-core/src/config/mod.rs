@@ -3,10 +3,12 @@
 pub mod adapter;
 pub mod autonomous;
 pub mod host;
+pub mod pipeline;
 pub mod plugins;
 
 pub use adapter::ConfigBinder;
 pub use autonomous::{SelfHealingConfigEngine, deep_merge_toml};
+pub use pipeline::{ConsolePipelineConfig, PipelineDomainPolicy};
 
 pub use host::{
     CoreConfig, DEFAULT_COMMAND_EPOCH_DEADLINE, DEFAULT_DEBOUNCE_MS, DEFAULT_EVENT_EPOCH_DEADLINE,
