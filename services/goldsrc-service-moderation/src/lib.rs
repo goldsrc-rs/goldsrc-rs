@@ -280,7 +280,7 @@ pub fn resolve_player_target(target: &str) -> Option<(i32, String, String)> {
     if let Some(uid_str) = trimmed.strip_prefix('#')
         && let Ok(uid) = uid_str.parse::<u32>()
     {
-        for slot in 1..=32 {
+        for slot in goldsrc_api::PlayerSlot::all().map(|s| s.index()) {
             if engine.entity_is_valid(slot) && engine.player_user_id(slot) == uid {
                 let name = engine.player_name(slot).unwrap_or_default();
                 let auth = engine.player_auth_id(slot).unwrap_or_default();
@@ -289,9 +289,9 @@ pub fn resolve_player_target(target: &str) -> Option<(i32, String, String)> {
         }
     }
 
-    // 2. Direct slot index: 1..=32
+    // 2. Direct slot index: PlayerSlot::VALID_RANGE
     if let Ok(slot) = trimmed.parse::<i32>()
-        && (1..=32).contains(&slot)
+        && goldsrc_api::PlayerSlot::VALID_RANGE.contains(&slot)
         && engine.entity_is_valid(slot)
     {
         let name = engine.player_name(slot).unwrap_or_default();
@@ -302,7 +302,7 @@ pub fn resolve_player_target(target: &str) -> Option<(i32, String, String)> {
     let query = trimmed.to_ascii_lowercase();
 
     // 3a. Exact name match first (case-insensitive) - prevents hijacking e.g. "Admin" vs "AdminFake"
-    for slot in 1..=32 {
+    for slot in goldsrc_api::PlayerSlot::all().map(|s| s.index()) {
         if engine.entity_is_valid(slot)
             && let Some(name) = engine.player_name(slot)
             && name.to_ascii_lowercase() == query
@@ -313,7 +313,7 @@ pub fn resolve_player_target(target: &str) -> Option<(i32, String, String)> {
     }
 
     // 3b. Name prefix match
-    for slot in 1..=32 {
+    for slot in goldsrc_api::PlayerSlot::all().map(|s| s.index()) {
         if engine.entity_is_valid(slot)
             && let Some(name) = engine.player_name(slot)
             && name.to_ascii_lowercase().starts_with(&query)
@@ -324,7 +324,7 @@ pub fn resolve_player_target(target: &str) -> Option<(i32, String, String)> {
     }
 
     // 3c. Name substring match fallback
-    for slot in 1..=32 {
+    for slot in goldsrc_api::PlayerSlot::all().map(|s| s.index()) {
         if engine.entity_is_valid(slot)
             && let Some(name) = engine.player_name(slot)
             && name.to_ascii_lowercase().contains(&query)

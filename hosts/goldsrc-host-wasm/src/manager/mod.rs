@@ -1004,7 +1004,7 @@ mod tests {
 
     impl EngineEntities for MockMessageEngine {
         fn entity_is_valid(&self, index: i32) -> bool {
-            (1..=32).contains(&index)
+            goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index)
         }
         fn entity_classname(&self, _index: i32) -> Option<String> {
             None

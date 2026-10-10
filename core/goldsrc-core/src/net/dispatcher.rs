@@ -18,7 +18,9 @@ impl NetworkMessageDispatcher {
         target: PrintTarget,
         message: &str,
     ) {
-        if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&player_index)
+            || !engine.entity_is_valid(player_index)
+        {
             return;
         }
 
@@ -188,7 +190,8 @@ impl NetworkMessageDispatcher {
         {
             payload.push('\n');
         }
-        for idx in 1..=32 {
+        for slot in goldsrc_api::PlayerSlot::all() {
+            let idx = slot.index();
             if engine.entity_is_valid(idx) {
                 Self::send_text_msg_preformatted(engine, idx, msg_dest, &payload);
             }
@@ -208,7 +211,8 @@ impl NetworkMessageDispatcher {
         } else {
             formatted
         };
-        for idx in 1..=32 {
+        for slot in goldsrc_api::PlayerSlot::all() {
+            let idx = slot.index();
             if engine.entity_is_valid(idx) {
                 Self::send_say_text_preformatted(engine, idx, sender_index, &payload);
             }
@@ -221,8 +225,9 @@ impl NetworkMessageDispatcher {
         target_player: Option<i32>,
         fade: &goldsrc_api::hud::ScreenFade,
     ) {
-        if target_player.is_some_and(|idx| !(1..=32).contains(&idx) || !engine.entity_is_valid(idx))
-        {
+        if target_player.is_some_and(|idx| {
+            !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&idx) || !engine.entity_is_valid(idx)
+        }) {
             return;
         }
 
@@ -259,8 +264,9 @@ impl NetworkMessageDispatcher {
         headshot: bool,
         weapon_name: &str,
     ) {
-        if target_player.is_some_and(|idx| !(1..=32).contains(&idx) || !engine.entity_is_valid(idx))
-        {
+        if target_player.is_some_and(|idx| {
+            !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&idx) || !engine.entity_is_valid(idx)
+        }) {
             return;
         }
 
@@ -290,7 +296,9 @@ impl NetworkMessageDispatcher {
         weapon_id: i32,
         clip_ammo: i32,
     ) {
-        if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&player_index)
+            || !engine.entity_is_valid(player_index)
+        {
             return;
         }
 
@@ -320,7 +328,9 @@ impl NetworkMessageDispatcher {
         damage_bits: i32,
         origin: [f32; 3],
     ) {
-        if !(1..=32).contains(&player_index) || !engine.entity_is_valid(player_index) {
+        if !goldsrc_api::PlayerSlot::VALID_RANGE.contains(&player_index)
+            || !engine.entity_is_valid(player_index)
+        {
             return;
         }
 
@@ -430,7 +440,7 @@ mod tests {
 
     impl EngineEntities for MockNetEngine {
         fn entity_is_valid(&self, index: i32) -> bool {
-            (1..=32).contains(&index)
+            goldsrc_api::PlayerSlot::VALID_RANGE.contains(&index)
         }
         fn entity_classname(&self, _index: i32) -> Option<String> {
             None

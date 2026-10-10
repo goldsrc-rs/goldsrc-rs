@@ -348,9 +348,8 @@ pub fn process_chat_message_with_context(
             }
         }
         ChatTarget::All | ChatTarget::Team(TeamTarget::All) => {
-            for i in 1..=32 {
-                let target = Player::new(i);
-                if target.is_valid() && matches_lifestate(target, msg.scope.state) {
+            for target in goldsrc_api::client::Players::all() {
+                if matches_lifestate(target, msg.scope.state) {
                     for chunk in &chunks {
                         target.act(goldsrc_api::action::Print::chat(chunk));
                     }
@@ -358,10 +357,8 @@ pub fn process_chat_message_with_context(
             }
         }
         ChatTarget::Team(TeamTarget::SameTeam) => {
-            for i in 1..=32 {
-                let target = Player::new(i);
-                if target.is_valid()
-                    && target.get::<goldsrc_api::client::Team>() == sender_team
+            for target in goldsrc_api::client::Players::all() {
+                if target.get::<goldsrc_api::client::Team>() == sender_team
                     && matches_lifestate(target, msg.scope.state)
                 {
                     for chunk in &chunks {
@@ -371,10 +368,8 @@ pub fn process_chat_message_with_context(
             }
         }
         ChatTarget::Team(TeamTarget::OppositeTeam) => {
-            for i in 1..=32 {
-                let target = Player::new(i);
-                if target.is_valid()
-                    && is_opposite_team(sender_team, target.get::<goldsrc_api::client::Team>())
+            for target in goldsrc_api::client::Players::all() {
+                if is_opposite_team(sender_team, target.get::<goldsrc_api::client::Team>())
                     && matches_lifestate(target, msg.scope.state)
                 {
                     for chunk in &chunks {
@@ -389,10 +384,8 @@ pub fn process_chat_message_with_context(
                 map.get(channel.as_ref()).cloned()
             };
 
-            for i in 1..=32 {
-                let target = Player::new(i);
-                if target.is_valid()
-                    && matches_lifestate(target, msg.scope.state)
+            for target in goldsrc_api::client::Players::all() {
+                if matches_lifestate(target, msg.scope.state)
                     && resolver
                         .as_ref()
                         .is_some_and(|r| r.can_receive(channel, sender, target))

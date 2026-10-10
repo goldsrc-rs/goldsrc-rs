@@ -523,7 +523,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 [[package]]
 name = "goldsrc-api"
 version = "0.20.0"
-source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#ac767aeb9e7faaea62e5da308cee888f5b30f725"
+source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#a3dff170d38f42b5a4b32c4d2e50a1517a3cadd8"
 dependencies = [
  "goldsrc-spi",
  "goldsrc-sys",
@@ -744,7 +744,7 @@ dependencies = [
 [[package]]
 name = "goldsrc-spi"
 version = "0.20.0"
-source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#ac767aeb9e7faaea62e5da308cee888f5b30f725"
+source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#a3dff170d38f42b5a4b32c4d2e50a1517a3cadd8"
 dependencies = [
  "serde",
  "stitch-core",
@@ -754,7 +754,7 @@ dependencies = [
 [[package]]
 name = "goldsrc-sys"
 version = "0.20.0"
-source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#ac767aeb9e7faaea62e5da308cee888f5b30f725"
+source = "git+https://github.com/goldsrc-rs/goldsrc-sdk.git?branch=dev#a3dff170d38f42b5a4b32c4d2e50a1517a3cadd8"
 dependencies = [
  "bindgen",
 ]
