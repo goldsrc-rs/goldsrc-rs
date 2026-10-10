@@ -16,8 +16,9 @@ pub const DEFAULT_RELOAD_DEBOUNCE: Duration = Duration::from_millis(500);
 
 /// Normalizes a path into a canonicalized `PathBuf` with forward slashes and resolved dot components.
 pub fn normalize_path(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy().replace('\\', "/");
     let mut components = Vec::new();
-    for comp in path.components() {
+    for comp in Path::new(&s).components() {
         match comp {
             std::path::Component::CurDir => {}
             std::path::Component::ParentDir => {
