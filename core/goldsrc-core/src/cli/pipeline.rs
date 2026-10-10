@@ -99,6 +99,14 @@ pub fn sanitize_vfs_redirection_path(raw: &str) -> Result<PathBuf, PipelineError
         });
     }
 
+    // Explicit check for Windows drive prefixes (e.g. "C:\" or "C:") even when compiled on Unix
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return Err(PipelineError::PathEscapesSandbox {
+            path: trimmed.to_string(),
+        });
+    }
+
     for component in p.components() {
         match component {
             std::path::Component::ParentDir => {
